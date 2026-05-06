@@ -1,0 +1,107 @@
+# cb_redemption — 自动化可调搜索空间登记表
+#
+# 边界（颜色见 docs/plans/2026-05-07-self-loop-roadmap.md）：
+#   红：本仓所有 .py / verifier / 数据 / score 函数 — 永远人工
+#   黄：本文件结构（增 / 删 / 改字段）— 必须人工 PR
+#   绿：本文件 .current 字段 + optimizer_baseline.json — 机器可改
+#
+# 写入唯一入口：editor.py:update_value()
+# 越界 / 缺 expected_direction / 缺 reason / 未知 item_path → 直接 raise
+#
+# prior 字段是给后来者看的"为什么允许这样调"。空话别写。
+
+version: 1
+strategy: cb_redemption
+last_updated: '2026-05-07T00:00:00Z'
+
+parameters:                 # 数值权重 — CMA-ES 的搜索维度（与 optimizer.WEIGHT_RANGES 1:1）
+  - name: w_redeem_progress
+    current: 2.1997
+    range: [0.5, 5.0]
+    prior: 强赎触发率累计统计；越接近 100% 越临门一脚，符号必须为正。
+  - name: w_premium_ratio
+    current: -0.6910
+    range: [-5.0, -0.5]
+    prior: 转股溢价率越高，下修后转股越亏；符号必须为负，量纲与 progress 同级。
+  - name: w_remaining_size
+    current: -3.6818
+    range: [-4.0, -0.5]
+    prior: 剩余规模越大越难推动强赎博弈；符号负，但当前数据有中度污染（仅最新值），区间收窄。
+  - name: w_stock_momentum
+    current: 1.9357
+    range: [-1.0, 2.0]
+    prior: 5 日正股动量；趋势顺风时博弈胜率上升，但极端反转期可为负 — 区间双向。
+  - name: w_market_sentiment
+    current: -0.6313
+    range: [-1.0, 2.0]
+    prior: 市场情绪代理；牛市可推升，熊市可拖累 — 区间双向，符号让数据决定。
+
+factors:                    # 已注册的因子定义（status=frozen 的不可启用）
+  - name: redeem_progress
+    formula: 见 data.py:build_historical_snapshots() — 强赎触发日累计 / 触发窗口
+    prior: 直接对应强赎条款的 15/30 触发计数，定义干净。
+    status: active
+  - name: premium_ratio
+    formula: (转债现价 - 转股价值) / 转股价值
+    prior: 公开行情字段，无前视污染。
+    status: active
+  - name: remaining_size
+    formula: 见 data.py — cb_basic.remaining_size（仅最新值快照）
+    prior: 中度污染：缺历史 remain 序列，回测时早期事件用的是当下规模。
+    status: active
+  - name: stock_momentum
+    formula: 正股 5 日累计涨跌幅
+    prior: 公开行情，window 在 config.STOCK_MOMENTUM_WINDOW 内调整。
+    status: active
+  - name: market_sentiment
+    formula: 见 data.py — 转债等权指数 / 大盘代理
+    prior: 当前实现简化为单一指标；P1 后再考虑细化。
+    status: active
+  - name: ai_signal_score
+    formula: 历史 LLM 推断（已弃用）
+    status: frozen
+    reason: 前视污染 — 无 valid_from 时间戳；重启需先补时间戳列再走 PR。
+  - name: ai_reduction_score
+    formula: 历史 LLM 推断（已弃用）
+    status: frozen
+    reason: 同 ai_signal_score。
+  - name: ai_is_original
+    formula: 历史 LLM 二分类（已弃用）
+    status: frozen
+    reason: 同 ai_signal_score。
+
+thresholds:                 # logit prob 离散化的三档阈值
+  - name: action
+    current: 0.65
+    range: [0.4, 0.9]
+    prior: 进场阈值；过低噪声多，过高样本少 — 与 alert 之间需保留 ≥0.1 间隔（结构约束，机器不验，由 PR review 把关）。
+  - name: alert
+    current: 0.45
+    range: [0.2, 0.7]
+    prior: 预警档；高于 watch 低于 action，用于"看着但不动手"的中间池。
+  - name: watch
+    current: 0.25
+    range: [0.05, 0.5]
+    prior: 入观察池的最低门槛；过低会让候选池噪声爆炸。
+
+rules:                      # 硬规则（持有期 / 止盈止损 / 仓位）— 见 backtest.py:BacktestEngine
+  - name: hold_max_days
+    current: 15
+    range: [5, 30]
+    prior: 最大持有交易日；PEAD 60 天窗口里 ≥15 已捕获大部分漂移，再长资金占用过重。
+  - name: target_exit_pct
+    current: 10.0
+    range: [4.0, 25.0]
+    prior: 目标止盈百分比；与 stop_loss 的盈亏比应保持 >1，过高会错失利润。
+  - name: stop_loss_pct
+    current: -8.0
+    range: [-15.0, -3.0]
+    prior: 止损百分比（负值）；过紧噪声出局，过松回撤不可控。
+  - name: max_positions
+    current: 5
+    range: [1, 15]
+    prior: 同时持仓上限；与 top_k 联动，过大稀释 alpha，过小集中度风险高。
+  - name: top_k
+    current: 5
+    range: [1, 20]
+    prior: 每日候选池大小；必须 ≥ max_positions 才有补仓可选（结构约束，由 PR review 把关）。
