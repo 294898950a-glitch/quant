@@ -50,8 +50,11 @@ from __future__ import annotations
 import json
 import os
 import random
+import shutil
 import signal
 import subprocess
+import sys
+import tempfile
 import time
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -1132,12 +1135,79 @@ def _build_argparser() -> Any:
     mode.add_argument("--live", action="store_false", dest="dry_run")
     p.add_argument("--cooldown", type=float, default=DEFAULT_COOLDOWN_S)
     p.add_argument("--resume", action="store_true", default=False)
+    p.add_argument(
+        "--data-dir",
+        type=Path,
+        default=None,
+        help=(
+            "Directory for runtime artifacts (state.json, runs.jsonl, "
+            "outbox.jsonl, heartbeat, control.signal, sealed_pools.json, "
+            "tried_directions.jsonl). Defaults to data/cb_redemption/ in "
+            "live mode; in --dry-run mode defaults to a fresh tempfile.mkdtemp "
+            "directory so real data is never touched."
+        ),
+    )
+    p.add_argument(
+        "--yaml-path",
+        type=Path,
+        default=None,
+        help=(
+            "Path to tunable_space.yaml. Defaults to "
+            "strategies/cb_redemption/tunable_space.yaml in live mode; in "
+            "--dry-run mode the file is copied into the tmp data-dir so the "
+            "real yaml is never edited."
+        ),
+    )
     return p
 
 
 def main(argv: list[str] | None = None) -> int:
     args = _build_argparser().parse_args(argv)
+
+    data_dir = args.data_dir
+    yaml_path = args.yaml_path
+
+    if args.dry_run:
+        # Default: redirect everything into a fresh tmp dir so the real
+        # data/cb_redemption/ and tunable_space.yaml are untouched.
+        if data_dir is None:
+            data_dir = Path(tempfile.mkdtemp(prefix="cb_dryrun_"))
+        else:
+            data_dir = Path(data_dir)
+            data_dir.mkdir(parents=True, exist_ok=True)
+        if yaml_path is None:
+            src_yaml = editor_mod.DEFAULT_SPACE_FILE
+            dst_yaml = data_dir / "tunable_space.yaml"
+            if src_yaml.exists() and not dst_yaml.exists():
+                shutil.copy2(src_yaml, dst_yaml)
+            yaml_path = dst_yaml
+        else:
+            yaml_path = Path(yaml_path)
+        print(
+            f"[orchestrator] dry-run: writing to {data_dir}, yaml at {yaml_path}",
+            file=sys.stderr,
+        )
+        print(
+            f"[orchestrator] dry-run artifacts at: {data_dir}",
+            file=sys.stderr,
+        )
+    else:
+        if data_dir is None:
+            data_dir = DEFAULT_DATA_DIR
+        else:
+            data_dir = Path(data_dir)
+        if yaml_path is None:
+            yaml_path = editor_mod.DEFAULT_SPACE_FILE
+        else:
+            yaml_path = Path(yaml_path)
+        print(
+            f"[orchestrator] live: writing to {data_dir}, yaml at {yaml_path}",
+            file=sys.stderr,
+        )
+
     orch = Orchestrator(
+        data_dir=data_dir,
+        space_path=yaml_path,
         cooldown_s=args.cooldown,
         max_iterations=args.max_iterations,
         dry_run=args.dry_run,

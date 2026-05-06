@@ -466,3 +466,103 @@ def test_resume_restores_iteration(tmp_path: Path) -> None:
     o2.run()
     # Should run exactly 1 more iteration.
     assert o2.loop_state.iteration == 3
+
+
+# --------------------------------------------------------------------------- #
+# 14. CLI --dry-run defaults to a tmp data-dir and never writes to the real
+#     data/cb_redemption/ or the real tunable_space.yaml
+# --------------------------------------------------------------------------- #
+
+
+def test_dry_run_isolated_under_tmp_dir(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
+) -> None:
+    """Run orchestrator.main() in --dry-run with no --data-dir given.
+
+    Verify:
+      - It writes to a fresh tempfile.mkdtemp dir (created by the CLI).
+      - It does NOT touch the configured DEFAULT_DATA_DIR.
+      - It does NOT modify the real tunable_space.yaml on disk.
+      - stderr advertises the tmp data-dir path.
+    """
+    # Redirect tempfile.mkdtemp into tmp_path so we can inspect it.
+    captured: dict[str, Path] = {}
+
+    real_mkdtemp = orch_mod.tempfile.mkdtemp
+
+    def fake_mkdtemp(prefix: str = "tmp"):
+        d = tmp_path / f"{prefix}captured"
+        d.mkdir(parents=True, exist_ok=True)
+        captured["dir"] = d
+        return str(d)
+
+    monkeypatch.setattr(orch_mod.tempfile, "mkdtemp", fake_mkdtemp)
+
+    # Point DEFAULT_DATA_DIR at a tmp_path location and assert it is NOT
+    # touched (live mode would have written here; dry-run must not).
+    fake_default_data = tmp_path / "fake_default_data_cb_redemption"
+    monkeypatch.setattr(orch_mod, "DEFAULT_DATA_DIR", fake_default_data)
+
+    # Provide a valid yaml at the editor's DEFAULT_SPACE_FILE so the
+    # dry-run shutil.copy2 has a source to copy.
+    fake_default_yaml = tmp_path / "default_tunable_space.yaml"
+    _write_space_yaml(fake_default_yaml)
+    monkeypatch.setattr(orch_mod.editor_mod, "DEFAULT_SPACE_FILE", fake_default_yaml)
+
+    yaml_mtime_before = fake_default_yaml.stat().st_mtime_ns
+
+    # Force the run to use only the dry-fake verifier and a no-op
+    # hypothesizer so it does not need real warehouse data.
+    monkeypatch.setattr(
+        orch_mod.hypothesizer_mod,
+        "propose",
+        lambda **kw: None,
+    )
+    # Auditor: pretend healthy regardless of holdout (so loop runs cleanly).
+    from dataclasses import dataclass as _dc, field as _f
+
+    @_dc
+    class _Stub:
+        verdict: str = "healthy"
+        iteration: int = 0
+        window: int = 1
+        evidence: dict = _f(default_factory=dict)
+        veto: bool = False
+        veto_reason: str | None = None
+        text: str = ""
+
+        def to_dict(self):
+            return {
+                "verdict": self.verdict, "iteration": self.iteration,
+                "window": self.window, "evidence": self.evidence,
+                "veto": self.veto, "veto_reason": self.veto_reason,
+                "text": self.text,
+            }
+
+    monkeypatch.setattr(
+        orch_mod.auditor_mod,
+        "audit",
+        lambda runs_path, holdout_path, **kw: _Stub(),
+    )
+
+    # Run the CLI.
+    rc = orch_mod.main(["--dry-run", "--max-iterations", "2", "--cooldown", "0"])
+    assert rc == 0
+
+    # Tmp dir was created and used.
+    assert "dir" in captured
+    tmp_data_dir = captured["dir"]
+    assert (tmp_data_dir / "runs.jsonl").exists()
+    assert (tmp_data_dir / "tunable_space.yaml").exists()
+
+    # The fake "real" default data dir was never touched.
+    assert not fake_default_data.exists() or not any(fake_default_data.iterdir())
+
+    # The real default yaml was not modified (mtime unchanged — copy2
+    # may write to dst_yaml but we forbid editing src_yaml in place).
+    assert fake_default_yaml.stat().st_mtime_ns == yaml_mtime_before
+
+    # stderr mentions the tmp path so users can find their artifacts.
+    err = capsys.readouterr().err
+    assert str(tmp_data_dir) in err
+    assert "dry-run" in err
