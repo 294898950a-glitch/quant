@@ -48,6 +48,59 @@ _PARQUET_FILES = {
 
 SNAPSHOT_CACHE = WAREHOUSE_DIR / "strong_timeline_snapshots.parquet"
 
+
+# ---------------------------------------------------------------------------
+# Public read-only API: load_historical_snapshots
+#
+# 这是 verifier (backtest/optimizer) 唯一应该用的入口。
+# 直接读取持久化的 strong_timeline_snapshots.parquet —— 只读、无副作用。
+#
+# ⚠️ 时序污染审计（见 docs/plans/2026-05-07-verifier-audit.md）：
+#   - close, premium_ratio, stock_momentum, market_sentiment：干净
+#   - redeem_progress：干净（按 ann_date 严格过滤）
+#   - top1_ratio_*：干净（announcement_time + merge_asof backward）
+#   - remaining_size：⚠️ 中度污染（cb_basic 仅最新值，无历史 remain）
+#   - ai_signal_score / ai_reduction_score / ai_is_original：❌ 严重污染
+#       （ai_holder_signals.parquet 无日期列，是单点静态判断被广播到所有 t）
+# ---------------------------------------------------------------------------
+
+
+def load_historical_snapshots(
+    start: str = "20230101",
+    end: Optional[str] = None,
+) -> pd.DataFrame:
+    """读取已持久化的历史强赎因子快照。
+
+    严格只读：不触发任何重建。要重建用 ``build_historical_snapshots(force_rebuild=True)``。
+
+    Args:
+        start: 起始交易日 YYYYMMDD（含）
+        end:   结束交易日 YYYYMMDD（含），None = 不上限裁剪
+
+    Returns:
+        含 ``date, ts_code, bond_short_name, close, premium_ratio,
+        redeem_progress, remaining_size, stock_momentum, market_sentiment,
+        top1_ratio_latest, top1_ratio_slope, top1_ratio_drawdown,
+        ai_signal_score, ai_reduction_score, ai_is_original`` 的扁平表，
+        按 (date, ts_code) 升序。
+    """
+    if not SNAPSHOT_CACHE.exists():
+        raise FileNotFoundError(
+            f"历史快照不存在: {SNAPSHOT_CACHE}\n"
+            f"请先调用 build_historical_snapshots() 构建。"
+        )
+    df = pd.read_parquet(str(SNAPSHOT_CACHE))
+    df = df[df["date"] >= start]
+    if end is not None:
+        df = df[df["date"] <= end]
+    df = df.sort_values(["date", "ts_code"]).reset_index(drop=True)
+    logger.info(
+        f"📦 load_historical_snapshots: {len(df)} 行, "
+        f"{df['date'].nunique()} 交易日, "
+        f"{df['date'].min()} ~ {df['date'].max()}"
+    )
+    return df
+
 # ---------------------------------------------------------------------------
 # 底层加载（带 LRU 缓存）
 # ---------------------------------------------------------------------------
@@ -312,6 +365,9 @@ def build_historical_snapshots(
     name_map = basic.set_index("ts_code")["bond_short_name"].to_dict()
 
     # 预计算：remain_size 映射（用最新值，元转亿元）
+    # FIXME: lookahead leak — see docs/plans/2026-05-07-verifier-audit.md
+    # cb_basic 只有最新 remain_size，2023 年的真实 remain_size 应当 > 当前值（转股会减少剩余规模）。
+    # 修复方案：从 cb_call/conv_record 累加重建历史 remain_size 时间序列。
     size_map = (basic.set_index("ts_code")["remain_size"] / 1e8).to_dict()
     conv_price_map = basic.set_index("ts_code")["conv_price"].to_dict()
     stk_code_map = basic.set_index("ts_code")["stk_code"].to_dict()
@@ -527,6 +583,11 @@ def build_historical_snapshots(
         logger.info(f"📎 已合并 Holder 特征（逐报告时点）: top1_ratio_latest>0 = {n_holder} 行")
 
     # ── 合并 AI 持有人信号 (ai_holder_signals.parquet) ──
+    # FIXME: lookahead leak — see docs/plans/2026-05-07-verifier-audit.md
+    # ai_holder_signals.parquet 无日期列，是 LLM 一次性扫描"当前"持有人结构的静态判断；
+    # 这里把同一组 AI 标签广播到该 ts_code 的所有历史交易日 → 严重前视污染。
+    # 修复方案：每次披露持有人变更后重跑 LLM，给每条 AI 信号打 valid_from 时间戳，
+    #         然后用 merge_asof(direction="backward", by="ts_code") 接入。
     ai_path = WAREHOUSE_DIR / "ai_holder_signals.parquet"
     if ai_path.exists():
         ai = pd.read_parquet(str(ai_path))
