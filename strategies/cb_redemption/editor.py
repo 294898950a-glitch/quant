@@ -23,7 +23,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Iterator
 
-import yaml
+from ruamel.yaml import YAML
+
+# round-trip YAML 解析器：保留顶部注释、inline 注释、空行、缩进。
+# 写入时如果换成 ``yaml.safe_dump`` 会把 tunable_space.yaml 顶部说明块和每个
+# parameter 的 prior 注释吃掉，违背"yaml 里的 prior 字段就是给后来者看的"设计。
+_yaml = YAML(typ="rt")
+_yaml.preserve_quotes = True
+_yaml.indent(mapping=2, sequence=4, offset=2)
 
 # --------------------------------------------------------------------------- #
 # 默认路径
@@ -135,19 +142,16 @@ def _find_item(data: dict, section: str, name: str) -> dict:
     raise UnknownItemError(f"item_path={section}.{name} 在 yaml 中不存在")
 
 
-def _atomic_dump(path: Path, data: dict) -> None:
-    """tmp + rename 原子写，写过程中持目标文件的排他锁。"""
+def _atomic_dump(path: Path, data: Any) -> None:
+    """tmp + rename 原子写，写过程中持目标文件的排他锁。
+
+    使用 ruamel round-trip dump，保留 ``data`` 上挂着的注释 / 空行 / 引号风格。
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     with _locked(path, "a"):  # 先拿目标文件锁，避免并发 read_space 看到半成品
         with open(tmp, "w") as out:
-            yaml.safe_dump(
-                data,
-                out,
-                allow_unicode=True,
-                sort_keys=False,
-                default_flow_style=False,
-            )
+            _yaml.dump(data, out)
             out.flush()
         tmp.replace(path)
 
@@ -180,12 +184,16 @@ def _append_audit(
 
 
 def read_space(path: Path | str = DEFAULT_SPACE_FILE) -> dict:
-    """加载并校验 yaml；schema 不合规直接 raise SchemaError。"""
+    """加载并校验 yaml；schema 不合规直接 raise SchemaError。
+
+    返回值类型为 ruamel ``CommentedMap``（子类化 dict），与 ``dict`` 完全兼容；
+    上面挂着原文件的注释 / 空行，以便 :func:`_atomic_dump` 写回时复原。
+    """
     p = Path(path)
     if not p.exists():
         raise SchemaError(f"tunable_space.yaml 不存在: {p}")
     with _locked(p, "r") as f:
-        raw = yaml.safe_load(f)
+        raw = _yaml.load(f)
     return _validate_schema(raw)
 
 

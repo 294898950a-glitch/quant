@@ -207,3 +207,98 @@ def test_list_writable_returns_all_green_items(space_file: Path) -> None:
     assert "rules.hold_max_days" in paths
     # factors 章节不应出现（黄线，结构改动走 PR）
     assert not any(p.startswith("factors.") for p in paths)
+
+
+# --------------------------------------------------------------------------- #
+# Round-trip 注释 / 空行保留（ruamel.yaml 替换 PyYAML 的回归保护）
+# --------------------------------------------------------------------------- #
+
+
+_MINIMAL_YAML_WITH_COMMENTS = """\
+# top comment line A — explains the purpose of this file
+# top comment line B — second line of the header
+
+version: 1
+strategy: cb_redemption
+last_updated: '2026-05-07T00:00:00Z'
+
+parameters:
+  - name: w_redeem_progress
+    current: 2.1997
+    range: [0.5, 5.0]
+    prior: inline prior comment about why this knob is allowed  # tail-of-line note
+
+factors: []
+
+thresholds:
+  - name: action
+    current: 0.65
+    range: [0.0, 1.0]
+    prior: precision baseline knob
+
+rules:
+  - name: hold_max_days
+    current: 15
+    range: [1, 60]
+    prior: PEAD drift window cap
+"""
+
+
+@pytest.fixture
+def commented_space_file(tmp_path: Path) -> Path:
+    dst = tmp_path / "tunable_space.yaml"
+    dst.write_text(_MINIMAL_YAML_WITH_COMMENTS)
+    return dst
+
+
+def test_update_value_preserves_yaml_comments(
+    commented_space_file: Path, audit_log: Path
+) -> None:
+    """改完一个 .current 后，顶部注释和 inline 注释都必须仍在原始字节里。"""
+    update_value(
+        "parameters.w_redeem_progress",
+        new_value=2.5,
+        expected_direction="↑",
+        reason="comment preservation regression guard",
+        path=commented_space_file,
+        audit_log=audit_log,
+    )
+
+    raw = commented_space_file.read_text()
+    # 顶部注释（双行块）必须原样保留
+    assert "# top comment line A — explains the purpose of this file" in raw
+    assert "# top comment line B — second line of the header" in raw
+    # inline 注释（行尾的 # tail-of-line note）也必须保留
+    assert "# tail-of-line note" in raw
+    # 真的写进去了：
+    assert "current: 2.5" in raw
+
+
+def test_update_value_preserves_blank_lines(
+    commented_space_file: Path, audit_log: Path
+) -> None:
+    """改完一个 .current 后，原文件里的 section 间空行不能被吃掉。"""
+    # 原文件里的"显著"空行：
+    #   - 顶部 header 块之后、version 之前的那一行
+    #   - last_updated 之后、parameters 之前的那一行
+    #   - parameters 块之后、factors 之前的那一行
+    before = commented_space_file.read_text().splitlines()
+    blank_indices_before = {i for i, line in enumerate(before) if line == ""}
+    assert len(blank_indices_before) >= 3, "fixture 自身应至少有 3 条空行"
+
+    update_value(
+        "parameters.w_redeem_progress",
+        new_value=2.5,
+        expected_direction="↑",
+        reason="blank-line preservation regression guard",
+        path=commented_space_file,
+        audit_log=audit_log,
+    )
+
+    after = commented_space_file.read_text().splitlines()
+    blank_count_after = sum(1 for line in after if line == "")
+    # ruamel round-trip 应保留至少同等数量的空行（精确位置可能因 dump 略有偏移，
+    # 但绝不应像 PyYAML 那样被压成 0 条）。
+    assert blank_count_after >= len(blank_indices_before), (
+        f"空行被吃掉了：原 {len(blank_indices_before)} 条，写回后 {blank_count_after} 条"
+    )
