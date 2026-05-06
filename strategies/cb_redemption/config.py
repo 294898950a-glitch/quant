@@ -65,9 +65,8 @@ STOCK_MOMENTUM_WINDOW = 5             # 正股动量计算窗口（日）
 VOLUME_ANOMALY_RATIO = 2.0            # 成交量 / 20日均量 > 2.0 视为异常
 
 # === Logit 模型权重（供 optimizer 读写）===
-LOGIT_WEIGHTS = [2.1997, -0.6910, -3.6818, 1.9357, -0.6313, -0.5494, -0.1504, -0.4190]
-LOGIT_WEIGHT_NAMES = ["redeem_progress", "premium_ratio", "remaining_size", "stock_momentum", "market_sentiment",
-                      "ai_signal_score", "ai_reduction_score", "ai_is_original"]
+LOGIT_WEIGHTS = [2.1997, -0.6910, -3.6818, 1.9357, -0.6313]
+LOGIT_WEIGHT_NAMES = ["redeem_progress", "premium_ratio", "remaining_size", "stock_momentum", "market_sentiment"]
 
 # === 阈值（供 optimizer 读写）===
 DEFAULT_THRESHOLDS_CONFIG = {

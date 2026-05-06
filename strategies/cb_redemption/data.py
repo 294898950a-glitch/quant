@@ -60,8 +60,8 @@ SNAPSHOT_CACHE = WAREHOUSE_DIR / "strong_timeline_snapshots.parquet"
 #   - redeem_progress：干净（按 ann_date 严格过滤）
 #   - top1_ratio_*：干净（announcement_time + merge_asof backward）
 #   - remaining_size：⚠️ 中度污染（cb_basic 仅最新值，无历史 remain）
-#   - ai_signal_score / ai_reduction_score / ai_is_original：❌ 严重污染
-#       （ai_holder_signals.parquet 无日期列，是单点静态判断被广播到所有 t）
+#   - ai_signal_score / ai_reduction_score / ai_is_original：已移除（污染太重，
+#       重启需先打 valid_from 时间戳）
 # ---------------------------------------------------------------------------
 
 
@@ -80,9 +80,10 @@ def load_historical_snapshots(
     Returns:
         含 ``date, ts_code, bond_short_name, close, premium_ratio,
         redeem_progress, remaining_size, stock_momentum, market_sentiment,
-        top1_ratio_latest, top1_ratio_slope, top1_ratio_drawdown,
-        ai_signal_score, ai_reduction_score, ai_is_original`` 的扁平表，
+        top1_ratio_latest, top1_ratio_slope, top1_ratio_drawdown`` 的扁平表，
         按 (date, ts_code) 升序。
+        注：缓存的 parquet 仍可能含旧 ai_* 列（构建时未刷新），
+        verifier 调用方应只引用上面列出的字段。
     """
     if not SNAPSHOT_CACHE.exists():
         raise FileNotFoundError(
@@ -582,30 +583,11 @@ def build_historical_snapshots(
         n_holder = (result["top1_ratio_latest"] > 0).sum()
         logger.info(f"📎 已合并 Holder 特征（逐报告时点）: top1_ratio_latest>0 = {n_holder} 行")
 
-    # ── 合并 AI 持有人信号 (ai_holder_signals.parquet) ──
-    # FIXME: lookahead leak — see docs/plans/2026-05-07-verifier-audit.md
-    # ai_holder_signals.parquet 无日期列，是 LLM 一次性扫描"当前"持有人结构的静态判断；
-    # 这里把同一组 AI 标签广播到该 ts_code 的所有历史交易日 → 严重前视污染。
-    # 修复方案：每次披露持有人变更后重跑 LLM，给每条 AI 信号打 valid_from 时间戳，
-    #         然后用 merge_asof(direction="backward", by="ts_code") 接入。
-    ai_path = WAREHOUSE_DIR / "ai_holder_signals.parquet"
-    if ai_path.exists():
-        ai = pd.read_parquet(str(ai_path))
-        if "ts_code" in ai.columns:
-            # 编码为数值
-            signal_map = {"bullish": 1, "neutral": 0, "bearish": -1, "unknown": 0}
-            reduction_map = {"strong": 1, "moderate": 0.5, "none": 0, "accumulating": -1, "unknown": 0}
-            ai["ai_signal_score"] = ai["signal"].map(signal_map).fillna(0)
-            ai["ai_reduction_score"] = ai["reduction"].map(reduction_map).fillna(0)
-            ai["ai_is_original"] = ai["is_original"].map({True: 1, False: 0}).fillna(0)
-
-            # 按 ts_code 合并（AI信号是股票级，不是报告级）
-            ai_cols = ["ts_code", "ai_signal_score", "ai_reduction_score", "ai_is_original"]
-            result = result.merge(ai[ai_cols], on="ts_code", how="left")
-            for c in ["ai_signal_score", "ai_reduction_score", "ai_is_original"]:
-                result[c] = result[c].fillna(0)
-            n_ai = (result["ai_signal_score"] != 0).sum()
-            logger.info(f"🤖 已合并 AI 持有人信号: ai_signal≠0 = {n_ai} 行")
+    # AI 持有人信号 (ai_holder_signals.parquet) 已因前视污染移除：
+    # 该表无日期列、为 LLM 一次性扫描"当前"持有人结构的静态判断，
+    # 旧实现把同一组标签广播到 2.5 年所有交易日。重新启用需先打 valid_from
+    # 时间戳并用 merge_asof(direction="backward", by="ts_code") 接入。
+    # 详见 docs/plans/2026-05-07-verifier-audit.md。
 
     # 持久化缓存
     result.to_parquet(str(SNAPSHOT_CACHE), index=False)

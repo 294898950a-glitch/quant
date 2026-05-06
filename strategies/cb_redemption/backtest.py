@@ -119,16 +119,12 @@ def logit_prob(
     remaining_size: float,
     stock_momentum: float,
     market_sentiment: float,
-    ai_signal_score: float,
-    ai_reduction_score: float,
-    ai_is_original: float,
     weights: list[float],
 ) -> float:
-    """8 因子 Logit 评分（5 核心 + 3 AI 持有人信号）。"""
+    """5 因子 Logit 评分（AI 持有人因子已因前视污染移除，见 docs/plans/2026-05-07-verifier-audit.md）。"""
     factors = [
         redeem_progress, premium_ratio, remaining_size,
         stock_momentum, market_sentiment,
-        ai_signal_score, ai_reduction_score, ai_is_original,
     ]
     logit = sum(wi * fi for wi, fi in zip(weights, factors))
     if logit > 20:
@@ -143,7 +139,6 @@ def signal_rank(snapshot: pd.DataFrame, weights: list[float]) -> pd.Series:
     cols = [
         "redeem_progress", "premium_ratio", "remaining_size",
         "stock_momentum", "market_sentiment",
-        "ai_signal_score", "ai_reduction_score", "ai_is_original",
     ]
     # 缺列容错
     mat = np.zeros((len(snapshot), len(cols)), dtype=float)
@@ -188,7 +183,6 @@ def run_backtest_core(
     for c in [
         "redeem_progress", "premium_ratio", "remaining_size",
         "stock_momentum", "market_sentiment",
-        "ai_signal_score", "ai_reduction_score", "ai_is_original",
         "close", "bond_short_name",
     ]:
         if c not in snap.columns:

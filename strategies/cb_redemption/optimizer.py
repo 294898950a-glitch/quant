@@ -49,14 +49,11 @@ WEIGHT_RANGES = [
     (-4.0, -0.5),   # w2: remaining_size
     (-1.0, 2.0),    # w3: stock_momentum
     (-1.0, 2.0),    # w4: market_sentiment
-    (-2.0, 3.0),    # w5: ai_signal_score
-    (-2.0, 3.0),    # w6: ai_reduction_score
-    (-2.0, 3.0),    # w7: ai_is_original
 ]
 
-# CMA-ES 参数（8 维）
-# popsize = 4 + floor(3 * ln(n)) = 4 + 3*ln(8) ≈ 10.2 → 12
-CMA_POPSIZE = 12
+# CMA-ES 参数（5 维）
+# popsize = 4 + floor(3 * ln(n)) = 4 + 3*ln(5) ≈ 8.8 → 10
+CMA_POPSIZE = 10
 
 
 # =============================================================================
