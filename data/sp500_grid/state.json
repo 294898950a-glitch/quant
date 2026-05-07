@@ -1,0 +1,12 @@
+{
+  "state": "stopped",
+  "iteration": 0,
+  "since_iso": "2026-05-07T05:24:52Z",
+  "last_verdict": null,
+  "paused_reason": null,
+  "none_streak": 0,
+  "stagnant_streak": 0,
+  "recovery_attempt": 0,
+  "current_pool_id": null,
+  "iters_in_current_pool": 0
+}
