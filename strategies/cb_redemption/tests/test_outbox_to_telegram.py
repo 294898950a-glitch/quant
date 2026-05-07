@@ -363,3 +363,81 @@ def test_drain_queue_keeps_failures(tmp_path: Path) -> None:
     leftover = queue_path.read_text().strip().splitlines()
     assert len(leftover) == 1
     assert json.loads(leftover[0])["text"] == "msg-2"
+
+
+# --------------------------------------------------------------------------- #
+# FilterState — noise reduction
+# --------------------------------------------------------------------------- #
+
+
+def test_filter_first_row_sends_then_repeats_skip() -> None:
+    f = otg.FilterState(heartbeat_every=20, oos_delta=0.05)
+    row = {"iteration": 1, "phase": "stagnant", "verdict": "stagnant",
+           "oos_sharpe": 0.0, "state": "running"}
+    assert f.should_send(row) is True   # first one: state transition (None->running)
+    f.mark_sent(row)
+    # exact same shape, next iter: nothing changed
+    row2 = dict(row); row2["iteration"] = 2
+    assert f.should_send(row2) is False
+    row3 = dict(row); row3["iteration"] = 3
+    assert f.should_send(row3) is False
+
+
+def test_filter_verdict_transition_sends() -> None:
+    f = otg.FilterState()
+    f.mark_sent({"iteration": 1, "verdict": "healthy", "state": "running",
+                 "oos_sharpe": 0.0})
+    row = {"iteration": 2, "verdict": "data_mining", "state": "running",
+           "oos_sharpe": 0.0}
+    assert f.should_send(row) is True
+
+
+def test_filter_pool_attached_always_sends() -> None:
+    f = otg.FilterState()
+    f.mark_sent({"iteration": 1, "verdict": "healthy", "state": "running",
+                 "oos_sharpe": 0.0})
+    row = {"iteration": 0, "phase": "pool_attached", "pool_id": 0, "n_events": 25}
+    assert f.should_send(row) is True
+
+
+def test_filter_paused_always_sends() -> None:
+    f = otg.FilterState()
+    f.mark_sent({"iteration": 5, "phase": "stagnant", "verdict": "stagnant",
+                 "state": "running", "oos_sharpe": 0.0})
+    row = {"iteration": 6, "phase": "paused", "state": "paused",
+           "paused_reason": "stagnant 5 in a row"}
+    assert f.should_send(row) is True
+
+
+def test_filter_oos_delta_triggers_send() -> None:
+    f = otg.FilterState(oos_delta=0.05)
+    f.mark_sent({"iteration": 1, "verdict": "healthy", "state": "running",
+                 "oos_sharpe": 0.10})
+    # tiny change: skip
+    assert f.should_send({"iteration": 2, "verdict": "healthy",
+                          "state": "running", "oos_sharpe": 0.12}) is False
+    # big change: send
+    assert f.should_send({"iteration": 3, "verdict": "healthy",
+                          "state": "running", "oos_sharpe": 0.20}) is True
+
+
+def test_filter_heartbeat_every_n() -> None:
+    f = otg.FilterState(heartbeat_every=10)
+    f.mark_sent({"iteration": 1, "verdict": "stagnant", "state": "running",
+                 "oos_sharpe": 0.0})
+    # 5 unchanged iters: skip
+    for i in range(2, 10):
+        assert f.should_send({"iteration": i, "verdict": "stagnant",
+                              "state": "running", "oos_sharpe": 0.0}) is False
+    # iter 10: heartbeat fires
+    assert f.should_send({"iteration": 10, "verdict": "stagnant",
+                          "state": "running", "oos_sharpe": 0.0}) is True
+
+
+def test_filter_error_field_always_sends() -> None:
+    f = otg.FilterState()
+    f.mark_sent({"iteration": 1, "verdict": "healthy", "state": "running",
+                 "oos_sharpe": 0.0})
+    row = {"iteration": 2, "phase": "git_commit_error",
+           "error": "git commit returned 128"}
+    assert f.should_send(row) is True

@@ -307,18 +307,95 @@ class OutboxTailer:
 
 
 # --------------------------------------------------------------------------- #
+# Filter — only forward "interesting" lines
+# --------------------------------------------------------------------------- #
+
+
+# Phases we always push (state transitions, milestones, errors)
+_ALWAYS_PHASES = {
+    "paused", "stopped", "vetoed",
+    "pool_attached", "pool_sealed",
+    "git_commit_error",
+}
+
+
+class FilterState:
+    """Decide whether each outbox row is worth a telegram push.
+
+    Stateful across rows in one process. Forwards only:
+      - phase in _ALWAYS_PHASES
+      - any 'error' field present
+      - state transition (state field differs from last sent)
+      - verdict transition (verdict field differs from last sent)
+      - oos_sharpe changed by >= delta from last sent
+      - every Nth iteration as a quiet heartbeat
+    """
+
+    def __init__(self, heartbeat_every: int = 20, oos_delta: float = 0.05) -> None:
+        self.heartbeat_every = max(1, heartbeat_every)
+        self.oos_delta = oos_delta
+        self.last_sent_state: str | None = None
+        self.last_sent_verdict: str | None = None
+        self.last_sent_oos: float | None = None
+        self.last_sent_iter: int | None = None
+
+    def should_send(self, row: dict[str, Any]) -> bool:
+        phase = str(row.get("phase") or "").lower()
+        if phase in _ALWAYS_PHASES:
+            return True
+        if row.get("error"):
+            return True
+
+        state = row.get("state")
+        verdict = row.get("verdict")
+        oos = row.get("oos_sharpe")
+        it = row.get("iteration")
+
+        # Transitions are interesting.
+        if state is not None and state != self.last_sent_state:
+            return True
+        if verdict is not None and verdict != self.last_sent_verdict:
+            return True
+
+        # Significant OOS movement.
+        if isinstance(oos, (int, float)) and isinstance(self.last_sent_oos, (int, float)):
+            if abs(float(oos) - float(self.last_sent_oos)) >= self.oos_delta:
+                return True
+
+        # Heartbeat every Nth iteration even if nothing else changed.
+        if isinstance(it, int) and it > 0 and it % self.heartbeat_every == 0:
+            return True
+
+        return False
+
+    def mark_sent(self, row: dict[str, Any]) -> None:
+        if "state" in row and row["state"] is not None:
+            self.last_sent_state = row["state"]
+        if "verdict" in row and row["verdict"] is not None:
+            self.last_sent_verdict = row["verdict"]
+        if isinstance(row.get("oos_sharpe"), (int, float)):
+            self.last_sent_oos = float(row["oos_sharpe"])
+        if isinstance(row.get("iteration"), int):
+            self.last_sent_iter = row["iteration"]
+
+
+# --------------------------------------------------------------------------- #
 # Main
 # --------------------------------------------------------------------------- #
 
 
-def _handle_line(line: str, relay: TelegramRelay) -> None:
+def _handle_line(line: str, relay: TelegramRelay, filt: FilterState | None = None) -> None:
     try:
         row = json.loads(line)
     except Exception as exc:
         LOG.warning("skipping malformed json line: %s", exc)
         return
+    if filt is not None and not filt.should_send(row):
+        LOG.debug("filter: skipping iter=%s phase=%s", row.get("iteration"), row.get("phase"))
+        return
     text = format_message(row)
-    relay.send(text)
+    if relay.send(text) and filt is not None:
+        filt.mark_sent(row)
 
 
 def build_arg_parser() -> argparse.ArgumentParser:
@@ -343,6 +420,18 @@ def build_arg_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--log-level", default="INFO", help="DEBUG/INFO/WARNING/ERROR"
+    )
+    p.add_argument(
+        "--no-filter", action="store_true",
+        help="Disable noise filter (push every outbox row; default: filter)",
+    )
+    p.add_argument(
+        "--heartbeat-every", type=int, default=20,
+        help="Push every Nth iteration even if nothing changed (default 20)",
+    )
+    p.add_argument(
+        "--oos-delta", type=float, default=0.05,
+        help="Push when oos_sharpe shifts by >= this from last sent (default 0.05)",
     )
     return p
 
@@ -388,6 +477,19 @@ def main(argv: list[str] | None = None) -> int:
         poll_secs=args.poll_secs,
     )
 
+    filt: FilterState | None = None
+    if not args.no_filter:
+        filt = FilterState(
+            heartbeat_every=args.heartbeat_every,
+            oos_delta=args.oos_delta,
+        )
+        LOG.info(
+            "filter on: heartbeat=%d oos_delta=%.3f (use --no-filter to push everything)",
+            args.heartbeat_every, args.oos_delta,
+        )
+    else:
+        LOG.info("filter off: pushing every row")
+
     def _shutdown(signum: int, _frame: Any) -> None:
         LOG.info("received signal %d, shutting down", signum)
         tailer.stop()
@@ -396,7 +498,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, _shutdown)
 
     try:
-        tailer.run(lambda line: _handle_line(line, relay))
+        tailer.run(lambda line: _handle_line(line, relay, filt))
     except Exception as exc:
         LOG.error("tailer crashed: %s", exc)
     finally:
