@@ -325,6 +325,15 @@ class Orchestrator:
         self.outbox_path = self.data_dir / "outbox.jsonl"
         self.control_path = self.data_dir / "control.signal"
 
+        # 数据新鲜度 marker — 由 ``scripts/refresh_warehouse.py`` 写。在 dry-run 下，
+        # tmp data_dir 通常不存在该文件，auditor 会因 last_refresh_path 不存在而
+        # 跳过 freshness 检查（冷启动容忍）。
+        self.last_refresh_path = self.data_dir / "last_refresh.json"
+
+        # editor 写每次 update_value 的审计记录的目标路径。把它放进 data_dir 而不是
+        # repo 根的 logs/，以便 dry-run 不污染仓库。
+        self.editor_audit_path = self.data_dir / "editor_writes.jsonl"
+
         # Injection — verifier
         if verifier_fn is None:
             verifier_fn = _default_dry_verifier if self.dry_run else _default_live_verifier
@@ -695,13 +704,24 @@ class Orchestrator:
     ) -> bool:
         """Wrap editor.update_value, swallow errors, return success bool."""
         try:
-            self._editor_update_fn(
-                item_path=item_path,
-                new_value=new_value,
-                expected_direction=expected_direction,
-                reason=reason,
-                path=self.space_path,
-            )
+            try:
+                self._editor_update_fn(
+                    item_path=item_path,
+                    new_value=new_value,
+                    expected_direction=expected_direction,
+                    reason=reason,
+                    path=self.space_path,
+                    audit_log_path=self.editor_audit_path,
+                )
+            except TypeError:
+                # Injected editor stubs may not accept audit_log_path; degrade.
+                self._editor_update_fn(
+                    item_path=item_path,
+                    new_value=new_value,
+                    expected_direction=expected_direction,
+                    reason=reason,
+                    path=self.space_path,
+                )
             return True
         except Exception as exc:
             self._outbox(
@@ -860,7 +880,19 @@ class Orchestrator:
         # 5. Audit (uses runs.jsonl + previously-written records).
         audit_report = None
         try:
-            audit_report = self._auditor_fn(self.runs_path, self.holdout_path)
+            audit_report = self._auditor_fn(
+                self.runs_path,
+                self.holdout_path,
+                last_refresh_path=self.last_refresh_path,
+            )
+        except TypeError:
+            # Allow injected stubs that don't accept the new kwarg.
+            try:
+                audit_report = self._auditor_fn(
+                    self.runs_path, self.holdout_path
+                )
+            except Exception as exc:
+                self._outbox(phase="auditor_error", iteration=it, error=str(exc))
         except Exception as exc:
             self._outbox(phase="auditor_error", iteration=it, error=str(exc))
 

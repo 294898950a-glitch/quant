@@ -274,6 +274,89 @@ def test_update_value_preserves_yaml_comments(
     assert "current: 2.5" in raw
 
 
+# --------------------------------------------------------------------------- #
+# audit_log_path 参数化（Orchestrator 把 editor 审计日志收进 data_dir）
+# --------------------------------------------------------------------------- #
+
+
+def test_update_value_default_audit_log_falls_back_to_repo_root(
+    space_file: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """不传 audit_log / audit_log_path 时，写到 DEFAULT_AUDIT_LOG（向下兼容）。"""
+    # 把 DEFAULT_AUDIT_LOG monkeypatch 到 tmp_path/logs/... 以免污染 repo 根。
+    fake_default = tmp_path / "fake_repo_root_logs" / "editor_writes.jsonl"
+    from strategies.cb_redemption import editor as editor_mod
+
+    monkeypatch.setattr(editor_mod, "DEFAULT_AUDIT_LOG", fake_default)
+
+    update_value(
+        "parameters.w_redeem_progress",
+        new_value=2.5,
+        expected_direction="↑",
+        reason="default audit_log fallback test",
+        path=space_file,
+        # 不传 audit_log / audit_log_path
+    )
+
+    assert fake_default.exists()
+    rec = json.loads(fake_default.read_text().strip().splitlines()[0])
+    assert rec["item_path"] == "parameters.w_redeem_progress"
+    assert rec["new_value"] == 2.5
+
+
+def test_update_value_audit_log_path_redirects_writes(
+    space_file: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """传 audit_log_path 时写到那里；同时不动默认路径。"""
+    fake_default = tmp_path / "fake_repo_root_logs" / "editor_writes.jsonl"
+    from strategies.cb_redemption import editor as editor_mod
+
+    monkeypatch.setattr(editor_mod, "DEFAULT_AUDIT_LOG", fake_default)
+
+    custom = tmp_path / "data_dir_under_orchestrator" / "editor_writes.jsonl"
+    update_value(
+        "parameters.w_redeem_progress",
+        new_value=2.5,
+        expected_direction="↑",
+        reason="audit_log_path redirect test",
+        path=space_file,
+        audit_log_path=custom,
+    )
+
+    assert custom.exists()
+    rec = json.loads(custom.read_text().strip().splitlines()[0])
+    assert rec["item_path"] == "parameters.w_redeem_progress"
+    # 默认路径必须未被创建。
+    assert not fake_default.exists(), (
+        "audit_log_path 应只写到自定义路径，DEFAULT_AUDIT_LOG 不应被触碰"
+    )
+
+
+def test_update_value_audit_log_path_takes_precedence_over_audit_log(
+    space_file: Path, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    """audit_log_path 优先于 audit_log（旧别名）。"""
+    fake_default = tmp_path / "fake_repo_root_logs" / "editor_writes.jsonl"
+    from strategies.cb_redemption import editor as editor_mod
+
+    monkeypatch.setattr(editor_mod, "DEFAULT_AUDIT_LOG", fake_default)
+
+    new_path = tmp_path / "new" / "editor_writes.jsonl"
+    old_path = tmp_path / "old" / "editor_writes.jsonl"
+    update_value(
+        "parameters.w_redeem_progress",
+        new_value=2.5,
+        expected_direction="↑",
+        reason="precedence test",
+        path=space_file,
+        audit_log=old_path,
+        audit_log_path=new_path,
+    )
+    assert new_path.exists()
+    assert not old_path.exists()
+    assert not fake_default.exists()
+
+
 def test_update_value_preserves_blank_lines(
     commented_space_file: Path, audit_log: Path
 ) -> None:

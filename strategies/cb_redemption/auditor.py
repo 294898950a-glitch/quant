@@ -36,6 +36,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -61,6 +62,10 @@ HEALTHY_IMPROVEMENT = 0.0
 
 #: Minimum reduction in is_oos_gap required for healthy (gap shrinks).
 HEALTHY_GAP_SHRINK = 0.0
+
+#: Default freshness threshold (days). data 比 snapshot_summary.max_date 老
+#: 超过这么多天就 veto。可被 :func:`audit` 调用方覆盖。
+DEFAULT_MAX_DATA_AGE_DAYS = 7
 
 
 # --------------------------------------------------------------------------- #
@@ -166,6 +171,59 @@ def _check_holdout_compliance(holdout_pool_path: Path | None) -> bool:
     return any(p.get("first_read_at") is not None for p in pools)
 
 
+def _read_last_refresh(
+    last_refresh_path: Path | None,
+) -> tuple[int | None, str | None, int | None]:
+    """读 ``last_refresh.json``，返回 ``(freshness_days, ts_iso, exit_code)``。
+
+    - ``last_refresh_path`` 为 None 或文件不存在 → ``(None, None, None)``。
+    - 文件无 ``snapshot_summary.max_date`` 或解析失败 → ``freshness_days=None``，
+      仍尽量带回 ``ts_iso`` / ``exit_code``（供 :func:`audit` 决策）。
+    - ``freshness_days = (today_utc - max_date).days``，向下取整。
+    """
+    if last_refresh_path is None:
+        return None, None, None
+    if not last_refresh_path.exists():
+        return None, None, None
+    try:
+        with open(last_refresh_path, "r", encoding="utf-8") as f:
+            payload = json.load(f)
+    except (json.JSONDecodeError, OSError):
+        return None, None, None
+
+    ts_iso = payload.get("ts_iso") if isinstance(payload, dict) else None
+    exit_code_raw = payload.get("exit_code") if isinstance(payload, dict) else None
+    exit_code: int | None
+    try:
+        exit_code = int(exit_code_raw) if exit_code_raw is not None else None
+    except (TypeError, ValueError):
+        exit_code = None
+
+    snapshot = (payload.get("snapshot_summary") if isinstance(payload, dict) else None) or {}
+    max_date_raw = snapshot.get("max_date") if isinstance(snapshot, dict) else None
+    if not max_date_raw:
+        return None, ts_iso, exit_code
+
+    # max_date 可能是 'YYYY-MM-DD' 或 'YYYYMMDD' 等字符串。
+    s = str(max_date_raw).strip()
+    parsed: datetime | None = None
+    for fmt in ("%Y-%m-%d", "%Y%m%d", "%Y-%m-%dT%H:%M:%S", "%Y-%m-%dT%H:%M:%SZ"):
+        try:
+            parsed = datetime.strptime(s, fmt)
+            break
+        except ValueError:
+            continue
+    if parsed is None:
+        return None, ts_iso, exit_code
+
+    parsed = parsed.replace(tzinfo=timezone.utc)
+    today = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
+    delta_days = (today - parsed.replace(hour=0, minute=0, second=0, microsecond=0)).days
+    if delta_days < 0:
+        delta_days = 0
+    return delta_days, ts_iso, exit_code
+
+
 def _classify(
     is_sharpe: list[float],
     oos_sharpe: list[float],
@@ -235,6 +293,21 @@ def _compose_text(
     lines.append(
         f"holdout_compliance={evidence.get('holdout_compliance', False)}."
     )
+    # data freshness 行 — 三种状态: 没 marker / 有 max_date / 仅有 marker。
+    freshness_days = evidence.get("data_freshness_days")
+    last_exit = evidence.get("last_refresh_exit_code")
+    last_iso = evidence.get("last_refresh_iso")
+    if freshness_days is None and last_iso is None and last_exit is None:
+        lines.append(
+            "data_freshness: marker not present (cold start / manual run)."
+        )
+    else:
+        parts = [f"data_freshness_days={freshness_days}"]
+        if last_iso is not None:
+            parts.append(f"last_refresh_iso={last_iso}")
+        if last_exit is not None:
+            parts.append(f"last_refresh_exit_code={last_exit}")
+        lines.append("data_freshness: " + ", ".join(parts) + ".")
     if evidence.get("rolling_window_stability") is None:
         lines.append(
             "rolling_window_stability: not implemented in P1 "
@@ -254,7 +327,9 @@ def _compose_text(
 def audit(
     runs_path: Path,
     holdout_pool_path: Path,
+    last_refresh_path: Path | None = None,
     window: int = 10,
+    max_data_age_days: int = DEFAULT_MAX_DATA_AGE_DAYS,
 ) -> AuditReport:
     """Audit the trajectory in ``runs_path`` over the last ``window`` runs.
 
@@ -265,30 +340,89 @@ def audit(
     holdout_pool_path : Path
         Path to ``sealed_pools.json``. Pass a non-existent path if no
         holdout layer is configured — that will be flagged as a veto.
+    last_refresh_path : Path | None
+        Optional path to ``last_refresh.json`` written by
+        ``scripts/refresh_warehouse.py``. When supplied:
+
+        - ``exit_code != 0``        → veto (last refresh failed).
+        - ``snapshot_summary.max_date`` 距今 > ``max_data_age_days`` 天 → veto。
+
+        ``None`` 或文件不存在 → 不 veto（冷启动 / 手动跑容忍）。
     window : int
         Number of most-recent runs to examine.
+    max_data_age_days : int
+        Days threshold for the freshness veto. Default
+        :data:`DEFAULT_MAX_DATA_AGE_DAYS`.
 
     Returns
     -------
     AuditReport
+
+    Notes
+    -----
+    Veto priority (when multiple conditions trigger simultaneously, the
+    earliest one wins as ``veto_reason``):
+
+        1. ``holdout_compliance=False``
+        2. data freshness (refresh failed OR data stale)
+        3. ``verdict == "data_mining"``
+        4. ``verdict == "diverging"``
     """
     if window < 1:
         raise ValueError(f"window must be >= 1, got {window}")
 
     runs = _read_runs(runs_path)
 
-    # Cold start — too little data to issue any opinion.
+    # ---------- 数据新鲜度 ---------- #
+    freshness_days, last_refresh_iso, last_refresh_exit = _read_last_refresh(
+        last_refresh_path
+    )
+    # 是否有 marker 这件事决定 evidence 是否带 freshness 字段。
+    has_marker = (
+        last_refresh_path is not None and last_refresh_path.exists()
+    )
+    freshness_evidence: dict[str, Any] = {}
+    if has_marker:
+        freshness_evidence = {
+            "data_freshness_days": freshness_days,
+            "last_refresh_iso": last_refresh_iso,
+            "last_refresh_exit_code": last_refresh_exit,
+        }
+
+    # 计算 freshness veto（不立刻施加，holdout 优先级更高，留给后面 merge）。
+    freshness_veto_reason: str | None = None
+    if has_marker:
+        if last_refresh_exit is not None and last_refresh_exit != 0:
+            freshness_veto_reason = (
+                f"last refresh failed (exit_code={last_refresh_exit}); "
+                "data may be stale"
+            )
+        elif (
+            freshness_days is not None and freshness_days > max_data_age_days
+        ):
+            freshness_veto_reason = (
+                f"data is {freshness_days} days stale "
+                f"(threshold: {max_data_age_days})"
+            )
+
+    # ---------- Cold start ---------- #
     if len(runs) < COLD_START_MIN_RUNS:
+        # 即使在冷启动期，freshness 仍然 veto（data marker 已存在则要看）。
+        # holdout 在冷启动期不强制（保持原行为）。
+        cold_evidence: dict[str, Any] = {}
+        cold_evidence.update(freshness_evidence)
+        veto = freshness_veto_reason is not None
         return AuditReport(
             verdict="healthy",
             iteration=runs[-1].get("iteration", 0) if runs else 0,
             window=len(runs),
-            evidence={},
-            veto=False,
-            veto_reason=None,
+            evidence=cold_evidence,
+            veto=veto,
+            veto_reason=freshness_veto_reason,
             text=(
                 f"Cold start: only {len(runs)} run(s) on record "
                 f"(need >= {COLD_START_MIN_RUNS}); no verdict issued."
+                + (f" VETO: {freshness_veto_reason}" if veto else "")
             ),
         )
 
@@ -318,14 +452,21 @@ def audit(
             "rolling_window_stability": None,
             "holdout_compliance": holdout_ok,
         }
-        veto = not holdout_ok
-        veto_reason = (
-            "holdout_compliance=False — sealed_pools.json missing or no "
-            "pool has been read; OOS evaluation is bypassing the holdout "
-            "guard (red line)."
-            if veto
-            else None
-        )
+        evidence.update(freshness_evidence)
+        # 优先级: holdout > freshness > 其它
+        if not holdout_ok:
+            veto = True
+            veto_reason: str | None = (
+                "holdout_compliance=False — sealed_pools.json missing or no "
+                "pool has been read; OOS evaluation is bypassing the holdout "
+                "guard (red line)."
+            )
+        elif freshness_veto_reason is not None:
+            veto = True
+            veto_reason = freshness_veto_reason
+        else:
+            veto = False
+            veto_reason = None
         return AuditReport(
             verdict="healthy",
             iteration=recent[-1].get("iteration", 0),
@@ -348,10 +489,11 @@ def audit(
         "rolling_window_stability": None,
         "holdout_compliance": holdout_ok,
     }
+    evidence.update(freshness_evidence)
 
-    # Veto rules.
+    # Veto rules — priority: holdout > freshness > data_mining > diverging.
     veto = False
-    veto_reason: str | None = None
+    veto_reason = None
     if not holdout_ok:
         veto = True
         veto_reason = (
@@ -359,6 +501,9 @@ def audit(
             "pool has been read; OOS evaluation is bypassing the holdout "
             "guard (red line)."
         )
+    elif freshness_veto_reason is not None:
+        veto = True
+        veto_reason = freshness_veto_reason
     elif verdict == "data_mining":
         veto = True
         veto_reason = (

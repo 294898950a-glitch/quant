@@ -474,6 +474,54 @@ def test_resume_restores_iteration(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
+def test_editor_audit_log_lives_inside_data_dir(tmp_path: Path) -> None:
+    """When the orchestrator triggers an edit, ``editor_writes.jsonl`` must
+    land inside ``data_dir`` — NOT in the repo root ``logs/`` directory.
+
+    This protects dry-runs (and any sandboxed run) from polluting the
+    repository's ``logs/`` directory.
+    """
+    @dataclass
+    class StubHypo:
+        item_path: str = "parameters.w_premium_ratio"
+        new_value: float = -0.6
+        expected_direction: str = "oos_sharpe up by reducing weight"
+        reason: str = "stub: shrink large weight 10% toward zero"
+        confidence: str = "low"
+        source: str = "rules"
+
+        def to_dict(self) -> dict:
+            return {
+                "item_path": self.item_path,
+                "new_value": self.new_value,
+                "expected_direction": self.expected_direction,
+                "reason": self.reason,
+                "confidence": self.confidence,
+                "source": self.source,
+            }
+
+    counter = {"n": 0}
+
+    def hypo_fn(**kw):
+        counter["n"] += 1
+        if counter["n"] == 1:
+            return StubHypo()
+        return None
+
+    o = _make_orchestrator(tmp_path, max_iterations=2, hypothesizer_fn=hypo_fn)
+    o.run()
+
+    # The editor audit log MUST be inside data_dir.
+    expected = tmp_path / "data" / "editor_writes.jsonl"
+    assert expected.exists(), (
+        f"editor_writes.jsonl should live under data_dir; expected at {expected}"
+    )
+
+    rec = json.loads(expected.read_text().strip().splitlines()[0])
+    assert rec["item_path"] == "parameters.w_premium_ratio"
+    assert rec["new_value"] == -0.6
+
+
 def test_dry_run_isolated_under_tmp_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys
 ) -> None:

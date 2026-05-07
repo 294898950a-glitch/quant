@@ -203,7 +203,8 @@ def update_value(
     expected_direction: str,
     reason: str,
     path: Path | str = DEFAULT_SPACE_FILE,
-    audit_log: Path | str = DEFAULT_AUDIT_LOG,
+    audit_log: Path | str | None = None,
+    audit_log_path: Path | str | None = None,
 ) -> dict:
     """更新一个条目的 ``current`` 值。
 
@@ -213,7 +214,9 @@ def update_value(
         3. ``expected_direction`` 必须为非空字符串。
         4. ``reason`` 必须为非空字符串。
 
-    成功写入后追加一行进 ``logs/editor_writes.jsonl``。
+    成功写入后追加一行进 ``audit_log_path``。两个参数都为 ``None`` 时，
+    回退到 :data:`DEFAULT_AUDIT_LOG`（仓库根的 ``logs/editor_writes.jsonl``）
+    以保持向下兼容。``audit_log_path`` 优先于 ``audit_log``。
     """
     if not isinstance(expected_direction, str) or not expected_direction.strip():
         raise MissingRationaleError("expected_direction 必须是非空 str")
@@ -235,8 +238,19 @@ def update_value(
     data["last_updated"] = _utcnow_iso()
 
     _atomic_dump(Path(path), data)
+
+    # Resolve which audit log path to use: audit_log_path 优先；其次 audit_log；
+    # 都没传 → 默认仓库根的 logs/editor_writes.jsonl。
+    resolved_audit_log: Path
+    if audit_log_path is not None:
+        resolved_audit_log = Path(audit_log_path)
+    elif audit_log is not None:
+        resolved_audit_log = Path(audit_log)
+    else:
+        resolved_audit_log = DEFAULT_AUDIT_LOG
+
     _append_audit(
-        Path(audit_log),
+        resolved_audit_log,
         item_path=item_path,
         old_value=old_value,
         new_value=new_value,
