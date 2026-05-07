@@ -30,6 +30,18 @@ parameters:                # 数值可调，CMA-ES 搜索维度，顺序固定
     current: 0.10
     range: [0.03, 0.25]
     prior: 单格资金占比。10% × 10 格 = 100% 满仓；太高难补仓，太低收益薄。
+  - name: trend_short_window
+    current: 20
+    range: [5, 60]
+    prior: 短期均线窗口。短则跟随趋势快但噪音多,长则迟钝但稳。
+  - name: trend_long_window
+    current: 60
+    range: [30, 200]
+    prior: 长期均线窗口,作为趋势基准。
+  - name: vol_atr_skip_pct
+    current: 0.03
+    range: [0.005, 0.10]
+    prior: ATR/close 超过该比例时禁开新仓。值越大越宽容(几乎不过滤),越小越保守。
 
 factors: []                # grid 没有因子概念，空表
 
@@ -40,3 +52,15 @@ rules:
     current: 0.0003
     range: [0.0001, 0.0010]
     prior: 单边手续费。压低看真实收益上限；但低于 1bp 不现实（印花税 + 佣金）。
+  - name: trend_filter_enabled
+    current: 1
+    range: [0, 1]
+    prior: 0=关闭趋势过滤,1=开启。开启时正股 SMA-short < SMA-long 暂停开新仓。
+  - name: vol_filter_enabled
+    current: 1
+    range: [0, 1]
+    prior: 0=关闭波动过滤,1=开启。
+  - name: vol_atr_window
+    current: 14
+    range: [5, 30]
+    prior: ATR 计算窗口(交易日)。

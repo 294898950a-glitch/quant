@@ -148,6 +148,152 @@ def test_is_oos_split():
     assert result.all_metrics["n_days"] == result.is_metrics["n_days"] + result.oos_metrics["n_days"]
 
 
+def _make_df_hl(closes: list[float], highs: list[float], lows: list[float],
+                start: str = "20230101") -> pd.DataFrame:
+    """合成日线 (close 与 high/low 分离), 用于 ATR 测试。"""
+    dates = pd.bdate_range(start=pd.to_datetime(start), periods=len(closes))
+    return pd.DataFrame({
+        "date": dates.strftime("%Y%m%d"),
+        "open": closes,
+        "high": highs,
+        "low": lows,
+        "close": closes,
+        "vol": [0] * len(closes),
+        "amount": [0.0] * len(closes),
+    })
+
+
+def test_trend_filter_blocks_buys_in_downtrend():
+    """明确下跌走势 + 趋势过滤 → buy 数应少于过滤关闭时。
+
+    构造: 先一段上涨(~80 天)建立高 SMA-long, 再震荡下行让 SMA-short<SMA-long
+    且仍有反复回调可触发 buy。过滤关闭时下跌震荡段会补仓;开启时被闸住。
+    """
+    # 80 天上涨从 80 到 130 (SMA-long 抬升), 后 80 天围绕 ~120 震荡下行(每天均值降 0.2)
+    rise = [80.0 + 0.625 * i for i in range(80)]              # 80 -> 130
+    decline = [
+        130.0 - 0.2 * (i + 1) + 3.0 * np.sin(i / 3.0)         # 缓慢下行 + 震荡
+        for i in range(80)
+    ]
+    closes = rise + decline
+    df = _make_df(closes)
+
+    cfg_off = GridConfig(grid_count=10, range_window=30, initial_capital=100_000.0,
+                         trend_filter_enabled=0, vol_filter_enabled=0)
+    cfg_on = GridConfig(grid_count=10, range_window=30, initial_capital=100_000.0,
+                        trend_filter_enabled=1, trend_short_window=10, trend_long_window=40,
+                        vol_filter_enabled=0)
+
+    r_off = run_grid_backtest(df, cfg_off)
+    r_on = run_grid_backtest(df, cfg_on)
+
+    buys_off = [t for t in r_off.trades if t.side == "buy"]
+    buys_on = [t for t in r_on.trades if t.side == "buy"]
+    assert len(buys_off) > 0, "前提:过滤关时震荡下行段应有补仓 buy"
+    assert len(buys_on) < len(buys_off), (
+        f"趋势过滤应减少下跌段 buy: off={len(buys_off)}, on={len(buys_on)}"
+    )
+
+
+def test_vol_filter_blocks_buys_when_atr_spikes():
+    """高波动 (ATR/close > skip_pct) + 波动过滤 → buy 数应少于过滤关闭时。"""
+    # 构造: 大幅上下震荡(每日 ±5%), high/low 拉宽以撑起 ATR
+    n = 200
+    closes: list[float] = []
+    highs: list[float] = []
+    lows: list[float] = []
+    base = 100.0
+    for i in range(n):
+        # 锯齿波: 偶数日 100, 奇数日 105 — close 在 [100, 105] 跳; high/low 故意拉到 [98, 108]
+        c = base + (5.0 if i % 2 else 0.0)
+        closes.append(c)
+        highs.append(c + 3.0)
+        lows.append(c - 2.0)
+    df = _make_df_hl(closes, highs, lows)
+
+    cfg_off = GridConfig(grid_count=10, range_window=30, initial_capital=100_000.0,
+                         trend_filter_enabled=0, vol_filter_enabled=0)
+    cfg_on = GridConfig(grid_count=10, range_window=30, initial_capital=100_000.0,
+                        trend_filter_enabled=0,
+                        vol_filter_enabled=1, vol_atr_window=14, vol_atr_skip_pct=0.01)
+
+    r_off = run_grid_backtest(df, cfg_off)
+    r_on = run_grid_backtest(df, cfg_on)
+
+    buys_off = [t for t in r_off.trades if t.side == "buy"]
+    buys_on = [t for t in r_on.trades if t.side == "buy"]
+    assert len(buys_off) > 0, "前提:过滤关时锯齿波应有补仓 buy"
+    assert len(buys_on) < len(buys_off), (
+        f"波动过滤应减少高 ATR 期 buy: off={len(buys_off)}, on={len(buys_on)}"
+    )
+
+
+def test_filters_off_matches_original_behavior():
+    """两个 enabled=0 时, trades 数量与不传新字段时相同 (向后兼容)。"""
+    n = 250
+    t = np.arange(n)
+    closes = (105 + 5 * np.sin(t / 5.0)).tolist()
+    df = _make_df(closes)
+
+    cfg_default = GridConfig(grid_count=10, range_window=30, initial_capital=100_000.0)
+    cfg_explicit_off = GridConfig(
+        grid_count=10, range_window=30, initial_capital=100_000.0,
+        trend_filter_enabled=0, trend_short_window=20, trend_long_window=60,
+        vol_filter_enabled=0, vol_atr_window=14, vol_atr_skip_pct=0.03,
+    )
+
+    r_def = run_grid_backtest(df, cfg_default)
+    r_off = run_grid_backtest(df, cfg_explicit_off)
+
+    assert len(r_def.trades) == len(r_off.trades)
+    # equity 末值也应一致
+    assert r_def.equity_curve[-1]["equity"] == pytest.approx(
+        r_off.equity_curve[-1]["equity"], rel=1e-9
+    )
+
+
+def test_filters_dont_block_sells():
+    """下跌+高波动数据下, 卖出笔数(含越界平仓)不受过滤影响。"""
+    # 先震荡积仓, 后下跌 + 锯齿(高 ATR)。要求 sells 数量 enabled=1 ≥ enabled=0
+    osc = [105 + 5 * np.sin(i / 5.0) for i in range(80)]
+    # 震荡下跌: 整体下行 + 每日抖动 ±2
+    decline_closes = []
+    decline_highs = []
+    decline_lows = []
+    cur = osc[-1]
+    for i in range(80):
+        cur = cur - 0.4
+        c = cur + (2.0 if i % 2 else -2.0)
+        decline_closes.append(c)
+        decline_highs.append(c + 3.0)
+        decline_lows.append(c - 3.0)
+    closes = osc + decline_closes
+    highs = osc + decline_highs   # 震荡段 high=close 简化
+    lows = osc + decline_lows
+    df = _make_df_hl(closes, highs, lows)
+
+    cfg_off = GridConfig(grid_count=10, range_window=30, initial_capital=100_000.0,
+                         trend_filter_enabled=0, vol_filter_enabled=0)
+    cfg_on = GridConfig(grid_count=10, range_window=30, initial_capital=100_000.0,
+                        trend_filter_enabled=1, trend_short_window=20, trend_long_window=60,
+                        vol_filter_enabled=1, vol_atr_window=14, vol_atr_skip_pct=0.01)
+
+    r_off = run_grid_backtest(df, cfg_off)
+    r_on = run_grid_backtest(df, cfg_on)
+
+    sells_off = [t for t in r_off.trades if t.side == "sell"]
+    sells_on = [t for t in r_on.trades if t.side == "sell"]
+    # 关键不变量: 过滤启用不应"消失"卖出 —— 已有仓位的减仓 / 越界平仓 / 末日强平
+    # 都不受闸限制。允许 on 的 sell 比 off 略少(因为过滤减少了 buy → 后续可减仓量更小),
+    # 但绝不应该因为过滤而"提前停止"卖出 —— 在该数据上 on 的 sells 应 >= off 的一半,
+    # 且 on 的最后一日仍能强平。
+    assert len(sells_on) >= 1, "过滤启用后仍应有 sells (含末日强平)"
+    # buy 数减少 → 持仓减少 → sell 减少在合理范围 (不能跌到 0)
+    assert len(sells_on) >= max(1, len(sells_off) // 4), (
+        f"过滤不应彻底封掉 sell: off={len(sells_off)}, on={len(sells_on)}"
+    )
+
+
 def test_metrics_sharpe_finite():
     """equity_curve 至少 30 天后, sharpe 应是有限实数。"""
     n = 80

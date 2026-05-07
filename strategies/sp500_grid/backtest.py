@@ -47,6 +47,13 @@ class GridConfig:
     initial_capital: float = 100_000.0
     position_per_grid: float = 0.10            # 每格使用 10% 当前现金
     fee_pct: float = 0.0003                    # 单边手续费 3 bp
+    # ------ 过滤器开关（int 而非 bool, 兼容 yaml editor / CMA-ES round） ------
+    trend_filter_enabled: int = 0              # 0=关 1=开;sma_short<sma_long 暂停建仓
+    trend_short_window: int = 20               # 短均线窗口
+    trend_long_window: int = 60                # 长均线窗口
+    vol_filter_enabled: int = 0                # 0=关 1=开;ATR/close>skip 暂停建仓
+    vol_atr_window: int = 14                   # ATR 窗口（交易日）
+    vol_atr_skip_pct: float = 0.03             # ATR/close 阈值,>该值禁开新仓
 
 
 @dataclass
@@ -100,6 +107,60 @@ def _grid_levels(low: float, high: float, n: int) -> np.ndarray:
     return np.linspace(low, high, n + 1)
 
 
+def _compute_can_open(
+    closes: np.ndarray,
+    highs: np.ndarray,
+    lows: np.ndarray,
+    i: int,
+    cfg: "GridConfig",
+) -> bool:
+    """计算第 i 日是否允许开新仓（向下穿格 buy）。
+
+    规则:
+    - trend_filter_enabled: SMA(short) < SMA(long) → False
+    - vol_filter_enabled:   ATR(window) / close > vol_atr_skip_pct → False
+    - 历史窗口不足以算 SMA/ATR 时 → True (降级开放, 与未启用过滤的旧行为兼容)
+    - 两个开关均 0 → 直接 True
+    """
+    can_open = True
+
+    close = float(closes[i]) if i < len(closes) else 0.0
+    if close <= 0:
+        return True  # 异常价格不阻断
+
+    if int(cfg.trend_filter_enabled or 0) == 1:
+        short_w = max(1, int(cfg.trend_short_window))
+        long_w = max(1, int(cfg.trend_long_window))
+        # 需要 long_w 根（含当日, 含=简化, 与"当日已知收盘"一致）
+        if i + 1 >= long_w and i + 1 >= short_w:
+            sma_short = float(np.mean(closes[i + 1 - short_w: i + 1]))
+            sma_long = float(np.mean(closes[i + 1 - long_w: i + 1]))
+            if sma_short < sma_long:
+                can_open = False
+        # 数据不足 → 不阻断（降级开放）
+
+    if int(cfg.vol_filter_enabled or 0) == 1:
+        atr_w = max(1, int(cfg.vol_atr_window))
+        # ATR 用 true range, 需要前一日收盘. 至少 atr_w+1 根历史含当日
+        if i + 1 >= atr_w + 1:
+            tr_list: list[float] = []
+            for j in range(i + 1 - atr_w, i + 1):
+                if j <= 0:
+                    tr_list.append(float(highs[j] - lows[j]))
+                else:
+                    h = float(highs[j])
+                    lo = float(lows[j])
+                    pc = float(closes[j - 1])
+                    tr_list.append(max(h - lo, abs(h - pc), abs(lo - pc)))
+            atr = float(np.mean(tr_list)) if tr_list else 0.0
+            atr_pct = atr / close if close > 0 else 0.0
+            if atr_pct > float(cfg.vol_atr_skip_pct):
+                can_open = False
+        # 数据不足 → 不阻断
+
+    return can_open
+
+
 def _level_index(price: float, levels: np.ndarray) -> int:
     """price 落在网格中的位置: <levels[0] -> -1; >levels[-1] -> len(levels); 否则 0..len-1。
 
@@ -131,6 +192,15 @@ def run_grid_backtest(prices: pd.DataFrame, cfg: GridConfig) -> GridResult:
     df = prices.sort_values("date").reset_index(drop=True)
     dates = df["date"].astype(str).tolist()
     closes = df["close"].to_numpy(dtype=float)
+    # ATR 需要 high/low; 缺失时用 close 填补（朴素降级, 等价于 TR=0 不阻断）
+    if "high" in df.columns:
+        highs = df["high"].to_numpy(dtype=float)
+    else:
+        highs = closes.copy()
+    if "low" in df.columns:
+        lows = df["low"].to_numpy(dtype=float)
+    else:
+        lows = closes.copy()
     n = len(df)
 
     cash = float(cfg.initial_capital)
@@ -151,6 +221,10 @@ def run_grid_backtest(prices: pd.DataFrame, cfg: GridConfig) -> GridResult:
         low, high = _compute_range(closes, i, cfg.range_window, cfg.range_method)
         levels = _grid_levels(low, high, cfg.grid_count)
         cur_idx = _level_index(close, levels)
+
+        # 1.5) 过滤闸: 仅决定本日是否允许"开新仓"(向下穿格 buy)
+        # 卖出 / 越界平仓不受影响 —— 已有仓位继续按格线减仓 / 越界止损止盈始终生效
+        can_open = _compute_can_open(closes, highs, lows, i, cfg)
 
         # 2) 触发成交 (跨越格线)
         if (
@@ -177,8 +251,8 @@ def run_grid_backtest(prices: pd.DataFrame, cfg: GridConfig) -> GridResult:
                 # 穿越方向 (基于 prev close 与今日 close 的相对位置, 用 levels)
                 # 用 prev_close 重投到当前 levels 上, 算跨越数
                 prev_idx_on_cur = _level_index(prev_close, levels)
-                if cur_idx < prev_idx_on_cur:
-                    # 向下: 每穿一格 buy 一次
+                if cur_idx < prev_idx_on_cur and can_open:
+                    # 向下: 每穿一格 buy 一次（仅在 can_open=True 时执行;闸关则跳过, 不计 trade）
                     crossings = prev_idx_on_cur - cur_idx
                     for k in range(crossings):
                         # 第 k 次穿过的格线 (从上往下) = levels[prev_idx_on_cur - k]
