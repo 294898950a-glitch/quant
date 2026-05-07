@@ -1166,19 +1166,46 @@ class Orchestrator:
         except Exception as exc:
             self._outbox(phase="memory_error", iteration=it, error=str(exc))
 
-        # 9. Outbox.
+        # 9. Outbox — enrich with reason / audit text / OOS trade context so
+        #    each telegram push tells the user *why*, not just iter+verdict.
         oos_sharpe = None
+        oos_trades = None
+        oos_return = None
         try:
-            oos_sharpe = float(getattr(result, "oos_metrics", {}).get("sharpe", 0.0))
+            oos_m = getattr(result, "oos_metrics", {}) or {}
+            oos_sharpe = float(oos_m.get("sharpe", 0.0))
+            oos_trades = int(oos_m.get("total_trades", oos_m.get("trades", 0)) or 0)
+            ret = oos_m.get("total_return", oos_m.get("avg_return", None))
+            oos_return = float(ret) if ret is not None else None
         except Exception:
-            oos_sharpe = None
+            pass
+
+        hypo_reason = None
+        hypo_confidence = None
+        if hypothesis_attempt:
+            hypo_reason = hypothesis_attempt.get("reason")
+            hypo_confidence = hypothesis_attempt.get("confidence")
+
+        audit_text = None
+        if audit_report is not None:
+            try:
+                audit_text = getattr(audit_report, "text", None)
+                if audit_text and len(audit_text) > 240:
+                    audit_text = audit_text[:237] + "..."
+            except Exception:
+                audit_text = None
 
         self._outbox(
             iteration=it,
             phase=phase,
             verdict=verdict,
             oos_sharpe=oos_sharpe,
+            oos_trades=oos_trades,
+            oos_return=oos_return,
             change_summary=change_summary,
+            hypothesis_reason=hypo_reason,
+            hypothesis_confidence=hypo_confidence,
+            audit_text=audit_text,
             paused_reason=self.loop_state.paused_reason,
             state=self.loop_state.state,
         )

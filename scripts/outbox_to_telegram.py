@@ -56,7 +56,16 @@ HTTP_TIMEOUT = 10.0
 
 
 def format_message(row: dict[str, Any], label: str | None = None) -> str:
-    """Turn one outbox row into a short markdown message for Telegram."""
+    """Turn one outbox row into a multi-line telegram message.
+
+    Includes (when present in the row):
+      - oos_sharpe / oos_trades / oos_return — current OOS slice context
+      - change_summary — what was edited this iter
+      - hypothesis_reason — why (LLM or rule rationale)
+      - hypothesis_confidence — low/medium/high
+      - audit_text — auditor's human summary (truncated upstream to ~240 chars)
+      - paused_reason / error — only when applicable
+    """
     iteration = row.get("iteration", "?")
     verdict = row.get("verdict") or row.get("phase") or "n/a"
     state = row.get("state") or ""
@@ -65,21 +74,39 @@ def format_message(row: dict[str, Any], label: str | None = None) -> str:
     error = row.get("error")
 
     oos_raw = row.get("oos_sharpe")
-    if isinstance(oos_raw, (int, float)):
-        oos_str = f"{float(oos_raw):.2f}"
-    else:
-        oos_str = "n/a"
+    oos_str = f"{float(oos_raw):.2f}" if isinstance(oos_raw, (int, float)) else "n/a"
+
+    oos_trades = row.get("oos_trades")
+    oos_return = row.get("oos_return")
+    extras = []
+    if isinstance(oos_trades, int) and oos_trades:
+        extras.append(f"{oos_trades} trades")
+    if isinstance(oos_return, (int, float)):
+        extras.append(f"return {oos_return:+.2f}%")
+    oos_ctx = f" ({', '.join(extras)})" if extras else ""
 
     bang = ""
     state_lower = str(state).lower()
     if state_lower in {"paused", "error"} or "error" in str(verdict).lower():
-        bang = "❗ "  # red exclamation
+        bang = "❗ "
 
     label_prefix = f"[{label}] " if label else ""
-    head = f"{bang}{label_prefix}iter={iteration} | {verdict} | OOS={oos_str}"
+    head = f"{bang}{label_prefix}iter={iteration} | {verdict} | OOS={oos_str}{oos_ctx}"
     parts = [head]
+
     if change_summary:
-        parts.append(f"change: {change_summary}")
+        conf = row.get("hypothesis_confidence")
+        conf_tag = f", conf={conf}" if conf else ""
+        parts.append(f"change: {change_summary}{conf_tag}")
+
+    reason = row.get("hypothesis_reason")
+    if reason:
+        parts.append(f"reason: {reason}")
+
+    audit_text = row.get("audit_text")
+    if audit_text:
+        parts.append(f"audit: {audit_text}")
+
     if state:
         line = f"state: {state}"
         if paused_reason:

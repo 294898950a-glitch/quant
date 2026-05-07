@@ -441,3 +441,43 @@ def test_filter_error_field_always_sends() -> None:
     row = {"iteration": 2, "phase": "git_commit_error",
            "error": "git commit returned 128"}
     assert f.should_send(row) is True
+
+
+# --------------------------------------------------------------------------- #
+# format_message — enriched fields
+# --------------------------------------------------------------------------- #
+
+
+def test_format_includes_oos_trades_and_return() -> None:
+    row = {"iteration": 8, "verdict": "healthy", "oos_sharpe": -0.31,
+           "oos_trades": 15, "oos_return": -0.42, "state": "running",
+           "change_summary": "changed grid_count from 10 to 12 (llm)",
+           "hypothesis_reason": "高频成交摩擦消耗 alpha",
+           "hypothesis_confidence": "medium"}
+    msg = otg.format_message(row, label="sp500-grid")
+    assert "[sp500-grid]" in msg
+    assert "iter=8" in msg
+    assert "OOS=-0.31" in msg
+    assert "15 trades" in msg
+    assert "return -0.42%" in msg
+    assert "change: changed grid_count from 10 to 12 (llm), conf=medium" in msg
+    assert "reason: 高频成交摩擦消耗 alpha" in msg
+
+
+def test_format_omits_extras_when_absent() -> None:
+    """Backward compat — old outbox rows without enriched fields still render."""
+    row = {"iteration": 5, "verdict": "healthy", "oos_sharpe": 0.5,
+           "state": "running", "change_summary": "no-change"}
+    msg = otg.format_message(row, label="cb")
+    assert "iter=5" in msg
+    assert "trades" not in msg  # no oos_trades field -> no trade context
+    assert "reason:" not in msg  # no hypothesis_reason field -> no reason line
+    assert "audit:" not in msg
+
+
+def test_format_audit_text_renders() -> None:
+    row = {"iteration": 4, "verdict": "data_mining", "oos_sharpe": -1.81,
+           "state": "running", "change_summary": "recovery attempt 1",
+           "audit_text": "OOS sharpe 连续3轮下降 + IS sharpe 反向上升 → 挖数据嫌疑"}
+    msg = otg.format_message(row)
+    assert "audit: OOS sharpe 连续3轮下降" in msg
