@@ -55,65 +55,146 @@ HTTP_TIMEOUT = 10.0
 # --------------------------------------------------------------------------- #
 
 
-def format_message(row: dict[str, Any], label: str | None = None) -> str:
-    """Turn one outbox row into a multi-line telegram message.
+# 中文翻译表 — 给 telegram 用,不影响 git/runs.jsonl 的英文内部表示
+_VERDICT_ZH = {
+    "healthy": "正常",
+    "data_mining": "疑似挖数据",
+    "stagnant": "停滞无进展",
+    "diverging": "持续恶化",
+}
+_STATE_ZH = {
+    "running": "运行中",
+    "paused": "暂停",
+    "stopped": "已停止",
+    "recovering": "恢复中",
+}
+_PHASE_ZH = {
+    "healthy": "正常",
+    "recovering": "恢复中",
+    "stagnant": "停滞",
+    "paused": "暂停",
+    "stopped": "已停止",
+    "pool_attached": "接入新样本池",
+    "pool_sealed": "封闭样本池",
+    "git_commit_error": "提交失败",
+    "verifier_error": "回测出错",
+    "judge_error": "诊断出错",
+    "auditor_error": "审计出错",
+    "memory_error": "记录出错",
+    "hypothesizer_error": "出主意出错",
+    "editor_error": "改参数出错",
+}
+_CONFIDENCE_ZH = {"low": "低", "medium": "中", "high": "高"}
+_SOURCE_ZH = {"llm": "大模型", "rules": "内置规则"}
+# 参数中文名 — 跨策略集中管理
+_PARAM_NAME_ZH = {
+    # sp500_grid
+    "parameters.grid_count": "网格数",
+    "parameters.range_window": "区间窗口(天)",
+    "parameters.position_per_grid": "单格仓位",
+    "rules.fee_pct": "手续费率",
+    # cb_redemption
+    "parameters.w_redeem_progress": "强赎进度权重",
+    "parameters.w_premium_ratio": "溢价率权重",
+    "parameters.w_remaining_size": "剩余规模权重",
+    "parameters.w_stock_momentum": "正股动量权重",
+    "parameters.w_market_sentiment": "市场情绪权重",
+    "thresholds.action": "买入阈值",
+    "thresholds.alert": "预警阈值",
+    "thresholds.watch": "观察阈值",
+    "rules.hold_max_days": "最长持有天数",
+    "rules.target_exit_pct": "止盈百分比",
+    "rules.stop_loss_pct": "止损百分比",
+    "rules.max_positions": "最大仓位数",
+    "rules.top_k": "候选数",
+}
 
-    Includes (when present in the row):
-      - oos_sharpe / oos_trades / oos_return — current OOS slice context
-      - change_summary — what was edited this iter
-      - hypothesis_reason — why (LLM or rule rationale)
-      - hypothesis_confidence — low/medium/high
-      - audit_text — auditor's human summary (truncated upstream to ~240 chars)
-      - paused_reason / error — only when applicable
-    """
+
+def _zh_param(item_path: str) -> str:
+    """item_path → 中文名;落空回退原 path 末段。"""
+    if not item_path:
+        return "?"
+    if item_path in _PARAM_NAME_ZH:
+        return _PARAM_NAME_ZH[item_path]
+    # 回退:取末段
+    return item_path.split(".")[-1]
+
+
+def format_message(row: dict[str, Any], label: str | None = None) -> str:
+    """outbox 一行 → 多行中文 telegram 消息。"""
     iteration = row.get("iteration", "?")
-    verdict = row.get("verdict") or row.get("phase") or "n/a"
-    state = row.get("state") or ""
+    verdict_raw = row.get("verdict") or row.get("phase") or "n/a"
+    verdict = _VERDICT_ZH.get(verdict_raw, _PHASE_ZH.get(verdict_raw, verdict_raw))
+    state_raw = row.get("state") or ""
+    state = _STATE_ZH.get(state_raw, state_raw)
     paused_reason = row.get("paused_reason")
     change_summary = row.get("change_summary") or ""
     error = row.get("error")
 
+    # 头部:OOS 夏普 + trades + return
     oos_raw = row.get("oos_sharpe")
-    oos_str = f"{float(oos_raw):.2f}" if isinstance(oos_raw, (int, float)) else "n/a"
-
+    oos_str = f"{float(oos_raw):.2f}" if isinstance(oos_raw, (int, float)) else "?"
     oos_trades = row.get("oos_trades")
     oos_return = row.get("oos_return")
     extras = []
     if isinstance(oos_trades, int) and oos_trades:
-        extras.append(f"{oos_trades} trades")
+        extras.append(f"{oos_trades} 笔交易")
     if isinstance(oos_return, (int, float)):
-        extras.append(f"return {oos_return:+.2f}%")
+        extras.append(f"收益 {oos_return:+.2f}%")
     oos_ctx = f" ({', '.join(extras)})" if extras else ""
 
     bang = ""
-    state_lower = str(state).lower()
-    if state_lower in {"paused", "error"} or "error" in str(verdict).lower():
+    state_lower = str(state_raw).lower()
+    if state_lower in {"paused", "error"} or "error" in str(verdict_raw).lower():
         bang = "❗ "
-
     label_prefix = f"[{label}] " if label else ""
-    head = f"{bang}{label_prefix}iter={iteration} | {verdict} | OOS={oos_str}{oos_ctx}"
+    head = f"{bang}{label_prefix}第 {iteration} 轮 | {verdict} | 测试段夏普 {oos_str}{oos_ctx}"
     parts = [head]
 
-    if change_summary:
-        conf = row.get("hypothesis_confidence")
-        conf_tag = f", conf={conf}" if conf else ""
-        parts.append(f"change: {change_summary}{conf_tag}")
+    # 改动 — 优先用结构化字段(可翻译参数名),否则用 change_summary 原文
+    item_path = row.get("change_item_path")
+    new_value = row.get("change_new_value")
+    old_value = row.get("change_old_value")
+    source_raw = row.get("change_source")
+    source_zh = _SOURCE_ZH.get(source_raw, source_raw) if source_raw else None
+    conf_zh = _CONFIDENCE_ZH.get(row.get("hypothesis_confidence"))
+    if item_path and new_value is not None:
+        zh_name = _zh_param(item_path)
+        change_line = f"改动: {zh_name}"
+        if old_value is not None:
+            change_line += f" 从 {old_value} → {new_value}"
+        else:
+            change_line += f" → {new_value}"
+        tags = []
+        if source_zh:
+            tags.append(source_zh)
+        if conf_zh:
+            tags.append(f"信心{conf_zh}")
+        if tags:
+            change_line += f" ({','.join(tags)})"
+        parts.append(change_line)
+    elif change_summary and change_summary != "no-change":
+        # 回退:恢复路径之类没有结构化字段
+        parts.append(f"改动: {change_summary}")
 
+    # LLM/规则的理由
     reason = row.get("hypothesis_reason")
     if reason:
-        parts.append(f"reason: {reason}")
+        parts.append(f"原因: {reason}")
 
+    # 审计员的话
     audit_text = row.get("audit_text")
     if audit_text:
-        parts.append(f"audit: {audit_text}")
+        parts.append(f"审计: {audit_text}")
 
+    # 状态
     if state:
-        line = f"state: {state}"
+        line = f"状态: {state}"
         if paused_reason:
-            line += f" ({paused_reason})"
+            line += f"(原因: {paused_reason})"
         parts.append(line)
     if error:
-        parts.append(f"error: {error}")
+        parts.append(f"出错: {error}")
     return "\n".join(parts)
 
 

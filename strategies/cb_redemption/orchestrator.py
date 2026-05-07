@@ -1182,9 +1182,25 @@ class Orchestrator:
 
         hypo_reason = None
         hypo_confidence = None
+        hypo_item_path = None
+        hypo_new_value = None
+        hypo_old_value = None
+        hypo_source = None
         if hypothesis_attempt:
             hypo_reason = hypothesis_attempt.get("reason")
             hypo_confidence = hypothesis_attempt.get("confidence")
+            hypo_item_path = hypothesis_attempt.get("item_path")
+            hypo_new_value = hypothesis_attempt.get("new_value")
+            hypo_source = hypothesis_attempt.get("source")
+            # old_value isn't in hypothesis_attempt directly — pull from
+            # change_summary "from X to Y" pattern when present.
+            try:
+                import re as _re
+                m = _re.search(r"from (\S+) to ", change_summary or "")
+                if m:
+                    hypo_old_value = m.group(1)
+            except Exception:
+                pass
 
         audit_text = None
         if audit_report is not None:
@@ -1203,6 +1219,10 @@ class Orchestrator:
             oos_trades=oos_trades,
             oos_return=oos_return,
             change_summary=change_summary,
+            change_item_path=hypo_item_path,
+            change_new_value=hypo_new_value,
+            change_old_value=hypo_old_value,
+            change_source=hypo_source,
             hypothesis_reason=hypo_reason,
             hypothesis_confidence=hypo_confidence,
             audit_text=audit_text,

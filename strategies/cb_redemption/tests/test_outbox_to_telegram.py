@@ -119,11 +119,11 @@ def test_format_message_basic() -> None:
         "state": "running",
     }
     msg = otg.format_message(row)
-    assert "iter=5" in msg
+    assert "第 5 轮" in msg
     assert "accepted" in msg
-    assert "OOS=1.23" in msg
-    assert "change: bumped w_redeem" in msg
-    assert "state: running" in msg
+    assert "测试段夏普 1.23" in msg
+    assert "改动: bumped w_redeem" in msg
+    assert "状态: 运行中" in msg
     assert not msg.startswith("❗")
 
 
@@ -137,7 +137,7 @@ def test_format_message_paused_gets_bang() -> None:
     }
     msg = otg.format_message(row)
     assert msg.startswith("❗")
-    assert "OOS=n/a" in msg
+    assert "测试段夏普 ?" in msg
     assert "max_recovery_attempts" in msg
 
 
@@ -179,7 +179,7 @@ def test_tail_single_new_line_sends_once(tmp_path: Path) -> None:
     assert len(client.calls) == 1
     payload = client.calls[0]["json"]
     assert payload["chat_id"] == "6403706808"
-    assert "iter=1" in payload["text"]
+    assert "第 1 轮" in payload["text"]
     assert "accepted" in payload["text"]
 
 
@@ -258,11 +258,14 @@ def test_from_start_resends_history(tmp_path: Path) -> None:
     t.join()
 
     assert len(client.calls) == 5
-    iters = [
-        json.loads(c["json"]["text"].split("\n")[0]
-                   .split("|")[0].split("=")[1])
-        for c in client.calls
-    ]
+    # Head format now: "第 N 轮 | ..." — pull the digits between 第 and 轮
+    import re as _re
+    iters = []
+    for c in client.calls:
+        head = c["json"]["text"].split("\n")[0]
+        m = _re.search(r"第 (\d+) 轮", head)
+        assert m, f"head missing iteration: {head}"
+        iters.append(int(m.group(1)))
     assert iters == [0, 1, 2, 3, 4]
 
 
@@ -300,7 +303,7 @@ def test_multiple_appended_lines_in_order(tmp_path: Path) -> None:
     assert len(client.calls) == 4
     texts = [c["json"]["text"] for c in client.calls]
     for i, txt in enumerate(texts):
-        assert f"iter={i}" in txt
+        assert f"第 {i} 轮" in txt
 
 
 # --------------------------------------------------------------------------- #
@@ -451,17 +454,24 @@ def test_filter_error_field_always_sends() -> None:
 def test_format_includes_oos_trades_and_return() -> None:
     row = {"iteration": 8, "verdict": "healthy", "oos_sharpe": -0.31,
            "oos_trades": 15, "oos_return": -0.42, "state": "running",
-           "change_summary": "changed grid_count from 10 to 12 (llm)",
+           "change_summary": "changed parameters.grid_count from 10 to 12 (llm)",
+           "change_item_path": "parameters.grid_count",
+           "change_old_value": "10",
+           "change_new_value": 12,
+           "change_source": "llm",
            "hypothesis_reason": "高频成交摩擦消耗 alpha",
            "hypothesis_confidence": "medium"}
     msg = otg.format_message(row, label="sp500-grid")
     assert "[sp500-grid]" in msg
-    assert "iter=8" in msg
-    assert "OOS=-0.31" in msg
-    assert "15 trades" in msg
-    assert "return -0.42%" in msg
-    assert "change: changed grid_count from 10 to 12 (llm), conf=medium" in msg
-    assert "reason: 高频成交摩擦消耗 alpha" in msg
+    assert "第 8 轮" in msg
+    assert "测试段夏普 -0.31" in msg
+    assert "15 笔交易" in msg
+    assert "收益 -0.42%" in msg
+    assert "改动: 网格数" in msg
+    assert "10" in msg and "12" in msg
+    assert "大模型" in msg
+    assert "信心中" in msg
+    assert "原因: 高频成交摩擦消耗 alpha" in msg
 
 
 def test_format_omits_extras_when_absent() -> None:
@@ -469,10 +479,10 @@ def test_format_omits_extras_when_absent() -> None:
     row = {"iteration": 5, "verdict": "healthy", "oos_sharpe": 0.5,
            "state": "running", "change_summary": "no-change"}
     msg = otg.format_message(row, label="cb")
-    assert "iter=5" in msg
-    assert "trades" not in msg  # no oos_trades field -> no trade context
-    assert "reason:" not in msg  # no hypothesis_reason field -> no reason line
-    assert "audit:" not in msg
+    assert "第 5 轮" in msg
+    assert "笔交易" not in msg  # no oos_trades field -> no trade context
+    assert "原因:" not in msg  # no hypothesis_reason field -> no reason line
+    assert "审计:" not in msg
 
 
 def test_format_audit_text_renders() -> None:
@@ -480,4 +490,4 @@ def test_format_audit_text_renders() -> None:
            "state": "running", "change_summary": "recovery attempt 1",
            "audit_text": "OOS sharpe 连续3轮下降 + IS sharpe 反向上升 → 挖数据嫌疑"}
     msg = otg.format_message(row)
-    assert "audit: OOS sharpe 连续3轮下降" in msg
+    assert "审计: OOS sharpe 连续3轮下降" in msg
