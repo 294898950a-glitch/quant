@@ -27,6 +27,7 @@ from strategies.cb_redemption.orchestrator import (
     MAX_RECOVERY_ATTEMPTS,
     Orchestrator,
     POOL_ROTATE_AFTER,
+    STOP_APPROVAL_TIMEOUT_SEC,
 )
 
 
@@ -264,7 +265,10 @@ def test_veto_triggers_recovery_attempt1_revert(tmp_path: Path) -> None:
 # --------------------------------------------------------------------------- #
 
 
-def test_three_recovery_failures_paused(tmp_path: Path) -> None:
+def test_recovery_exhausted_enters_pending_stop_approval_not_paused(
+    tmp_path: Path,
+) -> None:
+    """3 recovery attempts all fail → pending_stop_approval (NOT paused)."""
     # Auditor always vetos.
     auditor_fn = lambda runs_path, holdout_path, **kw: StubAuditReport(
         verdict="data_mining", veto=True, veto_reason="forced veto"
@@ -278,11 +282,28 @@ def test_three_recovery_failures_paused(tmp_path: Path) -> None:
     o = _make_orchestrator(tmp_path, max_iterations=10, auditor_fn=auditor_fn)
     o._editor_update_fn = failing_editor_update
 
-    # No prior healthy run → attempt 1 returns None, attempt 2 also fails
-    # (editor blocked), attempt 3 also fails. After three attempts: paused.
     final = o.run()
-    assert final.state == "paused"
+    # New behaviour: instead of unconditional pause, the loop asks the
+    # user for stop approval and waits for a reply (or timeout).
+    assert final.state == "pending_stop_approval"
     assert final.paused_reason and "recovery exhausted" in final.paused_reason
+    assert final.recovery_attempt == MAX_RECOVERY_ATTEMPTS
+    assert final.pending_since_iso is not None
+
+    # The outbox must contain a stop_approval_requested row with the
+    # actionable options string telegram users will see.
+    obx = [
+        json.loads(l)
+        for l in (tmp_path / "data" / "outbox.jsonl").read_text().splitlines()
+    ]
+    requests = [r for r in obx if r.get("phase") == "stop_approval_requested"]
+    assert len(requests) == 1
+    req = requests[0]
+    assert req["state"] == "pending_stop_approval"
+    assert "approval_deadline_iso" in req
+    assert "options" in req
+    assert "stop" in req["options"] and "continue" in req["options"]
+    assert "shift" in req["options"]
 
 
 # --------------------------------------------------------------------------- #
@@ -988,3 +1009,248 @@ def test_orchestrator_strategy_agnostic_recovery_uses_real_param_names(
         assert not any(n and n.startswith("parameters.w_") for n in names), (
             f"recovery wrote cb-shaped names: {names}"
         )
+
+
+# --------------------------------------------------------------------------- #
+# 21. pending_stop_approval + control.signal=stop → paused (truly halt)
+# --------------------------------------------------------------------------- #
+
+
+def _force_into_pending(tmp_path: Path, *, max_iterations: int = 10) -> Orchestrator:
+    """Helper: build an orchestrator where the very first iter wedges the
+    loop into pending_stop_approval (auditor always vetos + editor blocked)."""
+    auditor_fn = lambda runs_path, holdout_path, **kw: StubAuditReport(
+        verdict="data_mining", veto=True, veto_reason="forced veto for tests"
+    )
+
+    def failing_editor_update(*, item_path, new_value, expected_direction, reason, path):
+        raise RuntimeError("blocked")
+
+    o = _make_orchestrator(tmp_path, max_iterations=max_iterations, auditor_fn=auditor_fn)
+    o._editor_update_fn = failing_editor_update
+    return o
+
+
+def test_pending_approval_stop_signal_pauses(tmp_path: Path) -> None:
+    """In pending_stop_approval, control.signal=stop → paused (not stopped)."""
+    o = _force_into_pending(tmp_path, max_iterations=4)
+    final = o.run()
+    assert final.state == "pending_stop_approval"
+
+    # Now simulate the user replying "stop" and resume the daemon.
+    with open(o.control_path, "w") as f:
+        f.write("stop")
+
+    # Build a fresh orchestrator over the same dirs so the loop wakes up
+    # and sees the control signal — this mimics the long-running daemon
+    # picking up the file on its next poll iteration.
+    o2 = _make_orchestrator(
+        tmp_path,
+        max_iterations=2,
+        auditor_fn=lambda runs_path, holdout_path, **kw: StubAuditReport(
+            verdict="data_mining", veto=True, veto_reason="forced"
+        ),
+    )
+    o2.resume()
+    assert o2.loop_state.state == "pending_stop_approval"
+    final2 = o2.run()
+    # User-approved halt: daemon flips to ``paused`` (kept alive for resume),
+    # NOT ``stopped`` (which would exit the process).
+    assert final2.state == "paused"
+    assert final2.paused_reason == "user approved stop after veto"
+
+
+def test_pending_approval_continue_signal_resumes_running(tmp_path: Path) -> None:
+    """control.signal=continue clears pending state and resumes running."""
+    o = _force_into_pending(tmp_path, max_iterations=4)
+    o.run()
+    assert o.loop_state.state == "pending_stop_approval"
+
+    # User replies "continue" — orchestrator should resume on next wake.
+    with open(o.control_path, "w") as f:
+        f.write("continue")
+
+    # Use a healthy auditor on the next run so the loop doesn't immediately
+    # re-enter recovery; this isolates the transition under test.
+    o2 = _make_orchestrator(
+        tmp_path,
+        max_iterations=1,
+        auditor_fn=lambda runs_path, holdout_path, **kw: StubAuditReport(),
+    )
+    o2.resume()
+    assert o2.loop_state.state == "pending_stop_approval"
+    final = o2.run()
+    assert final.state in {"running", "paused"}
+    # After "continue" the recovery counter should be reset.
+    assert final.recovery_attempt == 0
+    # pending_since_iso must be cleared.
+    assert final.pending_since_iso is None
+
+
+def test_pending_approval_shift_signal_triggers_auto_shift(tmp_path: Path) -> None:
+    """control.signal=shift resets every writable param to its range midpoint
+    and resumes running."""
+    o = _force_into_pending(tmp_path, max_iterations=4)
+    o.run()
+    assert o.loop_state.state == "pending_stop_approval"
+
+    # Restore the editor (un-block writes) so the auto-shift can actually
+    # land its updates on the yaml.
+    o2 = _make_orchestrator(
+        tmp_path,
+        max_iterations=1,
+        auditor_fn=lambda runs_path, holdout_path, **kw: StubAuditReport(),
+    )
+    o2.resume()
+    assert o2.loop_state.state == "pending_stop_approval"
+
+    with open(o2.control_path, "w") as f:
+        f.write("shift")
+
+    final = o2.run()
+    assert final.state in {"running", "paused"}
+    assert final.recovery_attempt == 0
+
+    # Check the yaml: every parameter should now sit at the midpoint of
+    # its range (per the helper-written fixture).
+    with open(o2.space_path, "r", encoding="utf-8") as f:
+        space = yaml.safe_load(f)
+    for sect in ("parameters", "thresholds", "rules"):
+        for it in space[sect]:
+            lo, hi = it["range"]
+            mid = (lo + hi) / 2
+            cur = it["current"]
+            if isinstance(cur, int) and not isinstance(cur, bool):
+                assert cur == int(round(mid)), (
+                    f"{sect}.{it['name']} expected midpoint int {int(round(mid))}, got {cur}"
+                )
+            else:
+                assert abs(float(cur) - float(mid)) < 1e-6, (
+                    f"{sect}.{it['name']} expected midpoint {mid}, got {cur}"
+                )
+
+    # Outbox must include an auto_shift row.
+    obx = [
+        json.loads(l)
+        for l in (o2.data_dir / "outbox.jsonl").read_text().splitlines()
+    ]
+    shifts = [r for r in obx if r.get("phase") == "auto_shift"]
+    assert shifts, "expected at least one auto_shift outbox row"
+    assert "reset" in shifts[-1]["change_summary"]
+
+
+def test_pending_approval_timeout_triggers_auto_shift(tmp_path: Path) -> None:
+    """30-min timeout in pending_stop_approval auto-shifts and resumes."""
+    o = _force_into_pending(tmp_path, max_iterations=4)
+    o.run()
+    assert o.loop_state.state == "pending_stop_approval"
+
+    # Backdate pending_since_iso so the timeout check fires immediately.
+    state_path = o.state_path
+    raw = json.loads(state_path.read_text())
+    # 31 minutes ago (well past the 30-min default).
+    raw["pending_since_iso"] = "2020-01-01T00:00:00Z"
+    state_path.write_text(json.dumps(raw))
+
+    # Resume with healthy auditor so we don't bounce right back into pending.
+    o2 = _make_orchestrator(
+        tmp_path,
+        max_iterations=2,
+        auditor_fn=lambda runs_path, holdout_path, **kw: StubAuditReport(),
+    )
+    o2.resume()
+    assert o2.loop_state.state == "pending_stop_approval"
+    assert o2.loop_state.pending_since_iso == "2020-01-01T00:00:00Z"
+
+    final = o2.run()
+    # Timeout should have flipped to auto-shift then running. With a healthy
+    # auditor we expect the loop to actually execute iterations.
+    assert final.state in {"running", "paused"}
+    assert final.pending_since_iso is None
+    assert final.recovery_attempt == 0
+
+    # An auto_shift row tagged with the timeout reason must be in outbox.
+    obx = [
+        json.loads(l)
+        for l in (o2.data_dir / "outbox.jsonl").read_text().splitlines()
+    ]
+    shifts = [r for r in obx if r.get("phase") == "auto_shift"]
+    assert shifts, "auto_shift row missing after timeout"
+
+
+def test_holdout_exhausted_still_truly_pauses(tmp_path: Path) -> None:
+    """pools_remaining()==[] is still a real ``paused``, NOT pending_stop_approval."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    pool_path = data_dir / "sealed_pools.json"
+    pool_path.write_text(json.dumps({"pools": []}))
+
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=3,
+        holdout_remaining_fn=lambda path: [],
+    )
+    o.holdout_path = pool_path
+    final = o.run()
+    # OOS exhaustion is a hard stop — the user MUST refresh holdout pools
+    # manually; auto-shift would be meaningless.
+    assert final.state == "paused"
+    assert final.paused_reason == "all holdout pools exhausted"
+    assert final.pending_since_iso is None
+
+
+def test_auto_shift_resets_streaks(tmp_path: Path) -> None:
+    """_do_auto_shift() zeros stagnant_streak / recovery_attempt / none_streak."""
+    o = _make_orchestrator(tmp_path, max_iterations=1)
+
+    # Simulate a state where all three streaks are non-zero.
+    o.loop_state.stagnant_streak = 4
+    o.loop_state.recovery_attempt = 3
+    o.loop_state.none_streak = 4
+
+    ok = o._do_auto_shift()
+    assert ok is True
+    assert o.loop_state.stagnant_streak == 0
+    assert o.loop_state.recovery_attempt == 0
+    assert o.loop_state.none_streak == 0
+
+    # Auto-shift should have written every writable param to its midpoint.
+    with open(o.space_path, "r", encoding="utf-8") as f:
+        space = yaml.safe_load(f)
+    for sect in ("parameters", "thresholds", "rules"):
+        for it in space[sect]:
+            lo, hi = it["range"]
+            mid = (lo + hi) / 2
+            cur = it["current"]
+            if isinstance(cur, int) and not isinstance(cur, bool):
+                assert cur == int(round(mid))
+            else:
+                assert abs(float(cur) - float(mid)) < 1e-6
+
+
+def test_state_json_pending_since_iso_legacy_compat(tmp_path: Path) -> None:
+    """Legacy state.json files (no pending_since_iso) load to None."""
+    legacy = {
+        "state": "running",
+        "iteration": 9,
+        "since_iso": "2026-05-07T00:00:00Z",
+        "last_verdict": "healthy",
+        "paused_reason": None,
+        "none_streak": 0,
+        "stagnant_streak": 0,
+        "recovery_attempt": 0,
+        # NB: no pending_since_iso, no current_pool_id
+    }
+    legacy_state = LoopState.from_dict(legacy)
+    assert legacy_state.pending_since_iso is None
+    assert legacy_state.current_pool_id is None
+    assert legacy_state.iteration == 9
+
+    # Round-trip preserves None.
+    re_parsed = LoopState.from_dict(legacy_state.to_dict())
+    assert re_parsed.pending_since_iso is None
+
+
+def test_stop_approval_timeout_default_is_30_minutes() -> None:
+    """Sanity: the documented default timeout actually ships as 1800 seconds."""
+    assert STOP_APPROVAL_TIMEOUT_SEC == 1800

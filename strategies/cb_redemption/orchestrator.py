@@ -26,13 +26,26 @@ State transitions
 
 ::
 
-    states  : running | recovering | paused | stopped
-    running     -> recovering   audit veto
-    recovering  -> running      attempt passed
-    recovering  -> paused       3 attempts exhausted
-    running     -> paused       stagnant or hypothesizer dry or holdout dry
-    paused      -> running      control.signal=resume
-    *           -> stopped      SIGTERM / control.signal=stop
+    states  : running | recovering | pending_stop_approval | paused | stopped
+    running                 -> recovering   audit veto
+    recovering              -> running      attempt passed
+    recovering              -> pending_stop_approval   3 attempts exhausted
+    pending_stop_approval   -> paused       control.signal=stop
+    pending_stop_approval   -> running      control.signal=continue (clear veto)
+    pending_stop_approval   -> running      control.signal=shift (auto-shift then continue)
+    pending_stop_approval   -> running      30-minute timeout (default auto-shift)
+    running                 -> paused       holdout dry (pools_remaining()==[])
+    paused                  -> running      control.signal=resume
+    *                       -> paused       control.signal=stop (pause-style)
+    *                       -> stopped      SIGTERM / control.signal=stop (graceful exit)
+
+The orchestrator is **self-healing by default**: every adverse audit
+verdict triggers an automated recovery cascade, and even after the
+cascade fails it asks the user for permission to stop rather than
+unconditionally pausing. If the user does not reply within
+:data:`STOP_APPROVAL_TIMEOUT_SEC` (30 minutes by default) the loop
+auto-shifts every writable parameter to the midpoint of its registered
+range and resumes — exploring a fresh region instead of freezing.
 
 Files written under ``data/cb_redemption/``:
 
@@ -57,7 +70,7 @@ import sys
 import tempfile
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -93,6 +106,15 @@ MAX_STAGNANT_STREAK = 5
 
 #: Number of recovery attempts before giving up and pausing.
 MAX_RECOVERY_ATTEMPTS = 3
+
+#: After all recovery attempts fail, the orchestrator enters
+#: ``pending_stop_approval`` and pushes a telegram asking the user to
+#: confirm a halt. If no reply arrives within this many seconds, the
+#: loop auto-shifts to range midpoints and resumes on its own. 30 min
+#: is short enough for the user to actually answer yet long enough that
+#: a brief absence won't auto-shift away from a configuration the user
+#: still wants to inspect.
+STOP_APPROVAL_TIMEOUT_SEC = 1800
 
 #: Number of iterations to spend on a single holdout pool before
 #: sealing it and rotating to the next one. Each rotation consumes a
@@ -252,7 +274,8 @@ def _default_live_verifier(
 
 @dataclass
 class LoopState:
-    state: str = "running"  # running | recovering | paused | stopped
+    #: One of: ``running | recovering | pending_stop_approval | paused | stopped``.
+    state: str = "running"
     iteration: int = 0
     since_iso: str = ""
     last_verdict: str | None = None
@@ -268,6 +291,11 @@ class LoopState:
     #: When this reaches :data:`POOL_ROTATE_AFTER` the orchestrator
     #: seals the pool and rotates to the next remaining one.
     iters_in_current_pool: int = 0
+    #: ISO timestamp the loop entered ``pending_stop_approval`` (``None``
+    #: in any other state). Used to detect the 30-minute timeout that
+    #: triggers an auto-shift. Missing in legacy state.json files —
+    #: ``from_dict`` defaults to ``None``.
+    pending_since_iso: str | None = None
 
     def to_dict(self) -> dict:
         return {
@@ -281,6 +309,7 @@ class LoopState:
             "recovery_attempt": self.recovery_attempt,
             "current_pool_id": self.current_pool_id,
             "iters_in_current_pool": self.iters_in_current_pool,
+            "pending_since_iso": self.pending_since_iso,
         }
 
     @classmethod
@@ -293,6 +322,9 @@ class LoopState:
                 cpi = int(cpi_raw)
             except (TypeError, ValueError):
                 cpi = None
+        # pending_since_iso may be missing in older state.json; treat as None.
+        psi_raw = d.get("pending_since_iso", None)
+        psi: str | None = psi_raw if isinstance(psi_raw, str) and psi_raw else None
         return cls(
             state=d.get("state", "running"),
             iteration=int(d.get("iteration", 0)),
@@ -304,6 +336,7 @@ class LoopState:
             recovery_attempt=int(d.get("recovery_attempt", 0)),
             current_pool_id=cpi,
             iters_in_current_pool=int(d.get("iters_in_current_pool", 0)),
+            pending_since_iso=psi,
         )
 
 
@@ -488,7 +521,9 @@ class Orchestrator:
     def _read_control(self) -> str | None:
         """Read control.signal once and atomically clear it.
 
-        Returns one of ``pause | resume | stop | force-iter`` or ``None``.
+        Returns one of ``pause | resume | stop | force-iter | continue |
+        shift`` or ``None``. ``continue`` and ``shift`` are only meaningful
+        while the FSM sits in ``pending_stop_approval``.
         """
         if not self.control_path.exists():
             return None
@@ -505,7 +540,7 @@ class Orchestrator:
         if not cmd:
             return None
         cmd = cmd.lower()
-        if cmd in {"pause", "resume", "stop", "force-iter"}:
+        if cmd in {"pause", "resume", "stop", "force-iter", "continue", "shift"}:
             return cmd
         return None
 
@@ -872,21 +907,51 @@ class Orchestrator:
             # Control signal handling (always honoured at top of loop).
             cmd = self._read_control()
             if cmd == "stop":
-                self._enter_stopped("control.signal=stop")
-                break
-            if cmd == "pause":
+                # Pending state? then "stop" is the user approving the
+                # halt that the loop just requested → real paused (not
+                # stopped) so the daemon stays alive for resume.
+                if self.loop_state.state == "pending_stop_approval":
+                    self._enter_paused("user approved stop after veto")
+                else:
+                    self._enter_stopped("control.signal=stop")
+                    break
+            elif cmd == "pause":
                 self._enter_paused("control.signal=pause")
                 # don't break; sit in paused waiting for next control
-            if cmd == "resume" and self.loop_state.state == "paused":
+            elif cmd == "resume" and self.loop_state.state == "paused":
                 self.loop_state.state = "running"
                 self.loop_state.paused_reason = None
                 self.loop_state.since_iso = _utcnow_iso()
                 self._save_state()
+            elif cmd == "continue" and self.loop_state.state == "pending_stop_approval":
+                # User overrides the veto: clear pending, keep current
+                # params, resume running (next audit will re-decide).
+                self._resume_from_pending("control.signal=continue")
+            elif cmd == "shift" and self.loop_state.state == "pending_stop_approval":
+                # User asks for an immediate auto-shift, then resume.
+                self._do_auto_shift()
+                self._resume_from_pending("control.signal=shift")
 
             # Honour SIGUSR1 / control=force-iter
             force_now = bool(_force_iter or cmd == "force-iter")
             if _force_iter:
                 _force_iter = False
+
+            # ----- Pending-stop-approval handling -----
+            # Before any iteration runs, check whether the 30-min deadline
+            # has elapsed; if so the loop auto-shifts and resumes itself
+            # without waiting for the user.
+            if self.loop_state.state == "pending_stop_approval":
+                if self._pending_timed_out():
+                    self._do_auto_shift()
+                    self._resume_from_pending("auto-shift after 30min timeout")
+                else:
+                    # Still waiting on the user — heartbeat + sleep + poll.
+                    self._write_heartbeat()
+                    if self.max_iterations is not None:
+                        break
+                    self._sleep_fn(min(self.cooldown_s, 1.0))
+                    continue
 
             # If paused, just heartbeat + sleep + loop (do NOT run iteration).
             if self.loop_state.state in {"paused", "stopped"}:
@@ -1124,8 +1189,15 @@ class Orchestrator:
             phase = "recovering"
             change_summary, recovered = self._do_recovery()
             if not recovered:
-                # Not recovered → paused.
-                self._enter_paused(f"recovery exhausted after veto: {audit_report.veto_reason}")
+                # Stay in ``recovering`` so the next iteration retries with
+                # a higher ``recovery_attempt``. Only after MAX_RECOVERY_ATTEMPTS
+                # cumulative failures do we ask the user to halt.
+                if self.loop_state.recovery_attempt >= MAX_RECOVERY_ATTEMPTS:
+                    self._enter_pending_stop_approval(
+                        f"recovery exhausted after veto: {audit_report.veto_reason}"
+                    )
+                else:
+                    self.loop_state.state = "recovering"
         elif verdict == "stagnant":
             self.loop_state.stagnant_streak += 1
             phase = "stagnant"
@@ -1385,6 +1457,8 @@ class Orchestrator:
         self.loop_state.state = "paused"
         self.loop_state.paused_reason = reason
         self.loop_state.since_iso = _utcnow_iso()
+        # Leaving pending_stop_approval — clear the timer.
+        self.loop_state.pending_since_iso = None
         self._save_state()
         self._outbox(
             phase="paused",
@@ -1393,6 +1467,160 @@ class Orchestrator:
             paused_reason=reason,
             state="paused",
         )
+
+    def _enter_pending_stop_approval(self, reason: str) -> None:
+        """Transition into ``pending_stop_approval``: ask the user, keep timer.
+
+        Sets ``pending_since_iso`` to *now* so the run loop can detect the
+        :data:`STOP_APPROVAL_TIMEOUT_SEC` deadline. Pushes a structured
+        outbox row that the telegram pusher renders as an actionable
+        prompt (``options`` field enumerates the recognised replies).
+        """
+        if self.loop_state.state == "stopped":
+            return
+        self.loop_state.state = "pending_stop_approval"
+        self.loop_state.paused_reason = reason
+        now_iso = _utcnow_iso()
+        self.loop_state.since_iso = now_iso
+        self.loop_state.pending_since_iso = now_iso
+        self._save_state()
+
+        # Compute deadline = now + STOP_APPROVAL_TIMEOUT_SEC for the user.
+        deadline_dt = datetime.now(timezone.utc) + timedelta(
+            seconds=STOP_APPROVAL_TIMEOUT_SEC
+        )
+        deadline_iso = deadline_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+        self._outbox(
+            phase="stop_approval_requested",
+            iteration=self.loop_state.iteration,
+            verdict=self.loop_state.last_verdict,
+            paused_reason=reason,
+            state="pending_stop_approval",
+            approval_deadline_iso=deadline_iso,
+            options=(
+                "reply 'stop' to halt / 'continue' to override veto / "
+                "'shift' to reset params and continue / "
+                "no reply = auto-shift after 30min"
+            ),
+        )
+
+    def _pending_timed_out(self) -> bool:
+        """True iff we've sat in pending_stop_approval ≥ timeout seconds."""
+        if self.loop_state.state != "pending_stop_approval":
+            return False
+        if not self.loop_state.pending_since_iso:
+            return False
+        try:
+            since_dt = datetime.strptime(
+                self.loop_state.pending_since_iso, "%Y-%m-%dT%H:%M:%SZ"
+            ).replace(tzinfo=timezone.utc)
+        except ValueError:
+            # Corrupt timestamp → treat as not timed out (fail-safe: keep
+            # waiting rather than auto-shift on garbage data).
+            return False
+        elapsed = (datetime.now(timezone.utc) - since_dt).total_seconds()
+        return elapsed >= STOP_APPROVAL_TIMEOUT_SEC
+
+    def _do_auto_shift(self) -> bool:
+        """Reset every writable item to the midpoint of its registered range.
+
+        Used as the default action after :data:`STOP_APPROVAL_TIMEOUT_SEC`
+        elapses, or on demand when the user replies ``shift``. Each item
+        is updated via :func:`editor.update_value` so the audit log
+        captures who/why. Per-item failures are logged but do not stop
+        the cascade — one out-of-range or unknown item must not pin the
+        whole loop.
+
+        Side effects on :class:`LoopState`:
+
+        - ``stagnant_streak`` / ``recovery_attempt`` / ``none_streak`` → 0
+        - leaves ``pending_since_iso`` cleared by the caller's transition
+
+        Returns ``True`` on success (at least one item written), ``False``
+        if there were no writable items at all.
+        """
+        items = self._list_writable()
+        if not items:
+            self._outbox(
+                phase="auto_shift",
+                iteration=self.loop_state.iteration,
+                change_summary="auto-shift: no writable items found",
+                state="running",
+            )
+            return False
+
+        edited = 0
+        failed = 0
+        for it in items:
+            cur = it.get("current")
+            rng = it.get("range") or []
+            if len(rng) != 2:
+                failed += 1
+                continue
+            lo, hi = rng[0], rng[1]
+            try:
+                mid = (float(lo) + float(hi)) / 2.0
+            except (TypeError, ValueError):
+                failed += 1
+                continue
+            # Round int-typed params to the nearest int.
+            if isinstance(cur, int) and not isinstance(cur, bool):
+                new_val: Any = int(round(mid))
+            elif isinstance(cur, float):
+                new_val = round(mid, 4)
+            else:
+                # Treat other numeric currents (or None) as float.
+                try:
+                    new_val = round(float(mid), 4)
+                except (TypeError, ValueError):
+                    failed += 1
+                    continue
+
+            ok = self._apply_single_edit(
+                item_path=it["item_path"],
+                new_value=new_val,
+                expected_direction="auto-shift reset to midpoint",
+                reason=(
+                    "exhausted current direction; resetting to range "
+                    "midpoint to explore fresh region"
+                ),
+            )
+            if ok:
+                edited += 1
+            else:
+                failed += 1
+
+        # Reset the streaks regardless of partial failures — we're
+        # deliberately abandoning the prior trajectory.
+        self.loop_state.stagnant_streak = 0
+        self.loop_state.recovery_attempt = 0
+        self.loop_state.none_streak = 0
+
+        change_summary = (
+            f"auto-shift: reset {edited} params to range midpoints"
+            + (f" ({failed} failed)" if failed else "")
+        )
+        self._outbox(
+            phase="auto_shift",
+            iteration=self.loop_state.iteration,
+            change_summary=change_summary,
+            state="running",
+        )
+        return edited > 0
+
+    def _resume_from_pending(self, reason: str) -> None:
+        """Leave ``pending_stop_approval`` and go back to ``running``.
+
+        Clears the pending timer + paused_reason so the next iteration
+        starts on a clean trajectory.
+        """
+        self.loop_state.state = "running"
+        self.loop_state.paused_reason = None
+        self.loop_state.pending_since_iso = None
+        self.loop_state.since_iso = _utcnow_iso()
+        self.loop_state.recovery_attempt = 0
+        self._save_state()
 
     def _enter_stopped(self, reason: str) -> None:
         self.loop_state.state = "stopped"
@@ -1521,5 +1749,6 @@ __all__ = [
     "MAX_NONE_STREAK",
     "MAX_STAGNANT_STREAK",
     "MAX_RECOVERY_ATTEMPTS",
+    "STOP_APPROVAL_TIMEOUT_SEC",
     "main",
 ]
