@@ -55,7 +55,7 @@ HTTP_TIMEOUT = 10.0
 # --------------------------------------------------------------------------- #
 
 
-def format_message(row: dict[str, Any]) -> str:
+def format_message(row: dict[str, Any], label: str | None = None) -> str:
     """Turn one outbox row into a short markdown message for Telegram."""
     iteration = row.get("iteration", "?")
     verdict = row.get("verdict") or row.get("phase") or "n/a"
@@ -75,7 +75,8 @@ def format_message(row: dict[str, Any]) -> str:
     if state_lower in {"paused", "error"} or "error" in str(verdict).lower():
         bang = "❗ "  # red exclamation
 
-    head = f"{bang}iter={iteration} | {verdict} | OOS={oos_str}"
+    label_prefix = f"[{label}] " if label else ""
+    head = f"{bang}{label_prefix}iter={iteration} | {verdict} | OOS={oos_str}"
     parts = [head]
     if change_summary:
         parts.append(f"change: {change_summary}")
@@ -384,7 +385,8 @@ class FilterState:
 # --------------------------------------------------------------------------- #
 
 
-def _handle_line(line: str, relay: TelegramRelay, filt: FilterState | None = None) -> None:
+def _handle_line(line: str, relay: TelegramRelay, filt: FilterState | None = None,
+                 label: str | None = None) -> None:
     try:
         row = json.loads(line)
     except Exception as exc:
@@ -393,7 +395,7 @@ def _handle_line(line: str, relay: TelegramRelay, filt: FilterState | None = Non
     if filt is not None and not filt.should_send(row):
         LOG.debug("filter: skipping iter=%s phase=%s", row.get("iteration"), row.get("phase"))
         return
-    text = format_message(row)
+    text = format_message(row, label=label)
     if relay.send(text) and filt is not None:
         filt.mark_sent(row)
 
@@ -432,6 +434,10 @@ def build_arg_parser() -> argparse.ArgumentParser:
     p.add_argument(
         "--oos-delta", type=float, default=0.05,
         help="Push when oos_sharpe shifts by >= this from last sent (default 0.05)",
+    )
+    p.add_argument(
+        "--label", default=None,
+        help="Prefix every message head with [LABEL] (e.g. 'sp500-grid'); default: no prefix",
     )
     return p
 
@@ -498,7 +504,7 @@ def main(argv: list[str] | None = None) -> int:
     signal.signal(signal.SIGINT, _shutdown)
 
     try:
-        tailer.run(lambda line: _handle_line(line, relay, filt))
+        tailer.run(lambda line: _handle_line(line, relay, filt, label=args.label))
     except Exception as exc:
         LOG.error("tailer crashed: %s", exc)
     finally:
