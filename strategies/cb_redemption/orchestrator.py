@@ -100,7 +100,12 @@ MAX_RECOVERY_ATTEMPTS = 3
 #: the loop pauses with ``"all holdout pools exhausted"``.
 POOL_ROTATE_AFTER = 30
 
-# 5-factor names — must match :func:`backtest.signal_rank` ordering.
+# Default factor names for cb_redemption — kept for backward compat with
+# tests that import :data:`FACTOR_NAMES` directly. The orchestrator itself
+# does NOT hardcode these any more: at every iteration it pulls the live
+# yaml via ``editor.read_space`` and rebuilds ``param_paths`` /
+# ``factor_names`` from the actual ``parameters`` / ``factors`` lists. Any
+# strategy whose yaml conforms to the editor schema can plug in.
 FACTOR_NAMES = (
     "redeem_progress",
     "premium_ratio",
@@ -109,7 +114,8 @@ FACTOR_NAMES = (
     "market_sentiment",
 )
 
-# tunable_space parameter names matching FACTOR_NAMES (same order).
+# Default param paths matching FACTOR_NAMES (same order). Same caveat:
+# kept for backward compat; live code paths use the dynamic version.
 PARAM_PATHS = tuple(f"parameters.w_{n}" for n in FACTOR_NAMES)
 
 
@@ -545,27 +551,53 @@ class Orchestrator:
     # Core helpers
     # ------------------------------------------------------------------ #
 
-    def _read_current_params(self) -> tuple[list[float], dict, dict]:
-        """Pull (weights, thresholds, rules) out of tunable_space.yaml.
+    def _read_space_dynamic(self) -> tuple[list[str], list[str], list[float], dict, dict]:
+        """Pull (param_paths, factor_names, weights, thresholds, rules) out of yaml.
 
-        Always reads via the injected editor.read_space so tests can stub.
+        Strategy-agnostic. ``param_paths[i]`` matches ``weights[i]`` 1:1 by
+        the order of ``parameters`` in the yaml. ``factor_names`` reflects
+        the live ``factors`` section (may be empty). All reads go through
+        the injected ``editor_read_fn`` so tests can stub.
+
+        Falls back to the cb-style legacy defaults (5 weights named after
+        :data:`FACTOR_NAMES`) only when the yaml cannot be read at all —
+        this keeps very early dry-run tests against missing files alive.
         """
         try:
             data = self._editor_read_fn(self.space_path)
         except Exception:
-            # Fallback: zero weights + empty dicts (only relevant when space
-            # file is missing, e.g. very early dry-run tests).
-            return [0.0] * len(FACTOR_NAMES), {}, {}
+            # Fallback: cb-shaped defaults. Only relevant when the space
+            # file is missing entirely.
+            return (
+                list(PARAM_PATHS),
+                list(FACTOR_NAMES),
+                [0.0] * len(FACTOR_NAMES),
+                {},
+                {},
+            )
 
-        params_by_name = {p["name"]: p for p in data.get("parameters", [])}
-        weights = [
-            float(params_by_name.get(f"w_{name}", {}).get("current", 0.0))
-            for name in FACTOR_NAMES
-        ]
+        params = list(data.get("parameters", []) or [])
+        param_paths = [f"parameters.{p['name']}" for p in params]
+        weights = [float(p.get("current", 0.0)) for p in params]
+
+        factors = list(data.get("factors", []) or [])
+        factor_names = [f["name"] for f in factors if "name" in f]
+
         thresholds = {
-            t["name"]: t.get("current") for t in data.get("thresholds", [])
+            t["name"]: t.get("current") for t in (data.get("thresholds", []) or [])
         }
-        rules = {r["name"]: r.get("current") for r in data.get("rules", [])}
+        rules = {r["name"]: r.get("current") for r in (data.get("rules", []) or [])}
+        return param_paths, factor_names, weights, thresholds, rules
+
+    def _read_current_params(self) -> tuple[list[float], dict, dict]:
+        """Backward-compat shim around :meth:`_read_space_dynamic`.
+
+        Returns ``(weights, thresholds, rules)`` — callers that also need
+        the live ``param_paths`` / ``factor_names`` should use
+        :meth:`_read_space_dynamic` directly. Kept because external tests
+        / scripts might call it.
+        """
+        _, _, weights, thresholds, rules = self._read_space_dynamic()
         return weights, thresholds, rules
 
     def _list_writable(self) -> list[dict]:
@@ -628,12 +660,15 @@ class Orchestrator:
 
         Searches runs.jsonl backwards for ``audit.verdict == "healthy"``;
         returns a one-line description on success, ``None`` if nothing to
-        revert to.
+        revert to. Strategy-agnostic — derives the live ``param_paths``
+        from the yaml and only accepts a healthy run whose recorded
+        ``weights`` length matches.
         """
         try:
             runs = self._memory_read_fn(self.runs_path)
         except Exception:
             return None
+        param_paths, _, _, _, _ = self._read_space_dynamic()
         for rec in reversed(runs):
             audit = rec.audit if hasattr(rec, "audit") else (rec.get("audit") if isinstance(rec, dict) else None)
             if not audit:
@@ -642,10 +677,11 @@ class Orchestrator:
                 continue
             params = rec.params if hasattr(rec, "params") else rec.get("params", {})
             weights = params.get("weights", [])
-            if not weights or len(weights) != len(FACTOR_NAMES):
+            if not weights or len(weights) != len(param_paths):
                 continue
             return self._apply_weights(
                 weights,
+                param_paths,
                 "revert to last healthy iteration",
                 rule_no=None,
             )
@@ -729,10 +765,20 @@ class Orchestrator:
             return None
         return f"shrink {edited} weights 20% toward 0: " + "; ".join(details[:3])
 
-    def _apply_weights(self, weights: list[float], reason: str, rule_no: int | None) -> str | None:
-        """Apply a full weight-vector update via per-item editor calls."""
+    def _apply_weights(
+        self,
+        weights: list[float],
+        param_paths: list[str],
+        reason: str,
+        rule_no: int | None,
+    ) -> str | None:
+        """Apply a full weight-vector update via per-item editor calls.
+
+        ``param_paths`` is derived from the live yaml so the editor calls
+        target the actual parameter names of whichever strategy is loaded.
+        """
         applied = 0
-        for path, val in zip(PARAM_PATHS, weights):
+        for path, val in zip(param_paths, weights):
             ok = self._apply_single_edit(
                 item_path=path,
                 new_value=float(val),
@@ -991,8 +1037,14 @@ class Orchestrator:
         """Execute one full loop iteration. Always commits + outboxes + saves."""
         it = self.loop_state.iteration
 
-        # 1. Read current params.
-        weights, thresholds, rules = self._read_current_params()
+        # 1. Read current params (strategy-agnostic — names come from yaml).
+        (
+            param_paths,
+            factor_names,
+            weights,
+            thresholds,
+            rules,
+        ) = self._read_space_dynamic()
 
         # 2. Run verifier — pass oos_event_ids if a holdout pool is attached.
         oos_ids = self._current_pool_event_ids
@@ -1014,10 +1066,21 @@ class Orchestrator:
                 all_metrics={"sharpe": 0.0, "win_rate": 0.0, "total_trades": 0},
             )
 
-        # 3. Diagnose.
+        # 3. Diagnose. ``factor_names`` is pulled from yaml so each
+        #    strategy's judge sees the right names; if the strategy has
+        #    no factors (e.g. pure-grid), pad with synthetic ``f_i``
+        #    placeholders so cb judge's len(weights)==len(factor_names)
+        #    invariant holds regardless of yaml shape.
         diagnosis = None
+        if len(factor_names) == len(weights):
+            judge_factor_names = list(factor_names)
+        else:
+            judge_factor_names = [
+                factor_names[i] if i < len(factor_names) else f"f_{i}"
+                for i in range(len(weights))
+            ]
         try:
-            diagnosis = self._judge_fn(result, list(weights), list(FACTOR_NAMES))
+            diagnosis = self._judge_fn(result, list(weights), judge_factor_names)
         except Exception as exc:
             self._outbox(phase="judge_error", iteration=it, error=str(exc))
 

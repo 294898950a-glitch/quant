@@ -357,6 +357,70 @@ def test_update_value_audit_log_path_takes_precedence_over_audit_log(
     assert not fake_default.exists()
 
 
+# --------------------------------------------------------------------------- #
+# Strategy-agnostic schema (editor must accept ANY non-empty strategy str)
+# --------------------------------------------------------------------------- #
+
+
+def test_read_space_accepts_arbitrary_strategy_name(tmp_path: Path) -> None:
+    """editor 不绑死任何具体 strategy；只要 strategy 字段是非空 str 即可。"""
+    p = tmp_path / "tunable_space.yaml"
+    p.write_text(
+        yaml.safe_dump(
+            {
+                "version": 1,
+                "strategy": "some_other_strategy",  # not 'cb_redemption'
+                "last_updated": "2026-05-07T00:00:00Z",
+                "parameters": [
+                    {"name": "x", "current": 1.0, "range": [0.0, 5.0],
+                     "prior": "x"},
+                ],
+                "factors": [],
+                "thresholds": [],
+                "rules": [],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        )
+    )
+    data = read_space(p)
+    assert data["strategy"] == "some_other_strategy"
+
+
+def test_read_space_rejects_non_string_strategy(tmp_path: Path) -> None:
+    """strategy 必须是非空字符串；空 / None / int 都该 raise。"""
+    p = tmp_path / "tunable_space.yaml"
+    for bad in ("", "   ", None, 42):
+        p.write_text(
+            yaml.safe_dump(
+                {
+                    "version": 1,
+                    "strategy": bad,
+                    "last_updated": "2026-05-07T00:00:00Z",
+                    "parameters": [],
+                    "factors": [],
+                    "thresholds": [],
+                    "rules": [],
+                },
+                allow_unicode=True,
+                sort_keys=False,
+            )
+        )
+        with pytest.raises(SchemaError):
+            read_space(p)
+
+
+def test_read_space_loads_real_sp500_grid_yaml() -> None:
+    """生产 yaml smoke：sp500_grid 也能直接被同一个 editor 加载（strategy-agnostic）。"""
+    sp500_yaml = Path(__file__).resolve().parents[2] / "sp500_grid" / "tunable_space.yaml"
+    if not sp500_yaml.exists():
+        pytest.skip("sp500_grid/tunable_space.yaml not present in this checkout")
+    data = read_space(sp500_yaml)
+    assert data["strategy"] == "sp500_grid"
+    assert any(p["name"] == "grid_count" for p in data["parameters"])
+    assert any(p["name"] == "range_window" for p in data["parameters"])
+
+
 def test_update_value_preserves_blank_lines(
     commented_space_file: Path, audit_log: Path
 ) -> None:

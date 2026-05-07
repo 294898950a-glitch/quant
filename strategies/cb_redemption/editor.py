@@ -94,13 +94,21 @@ def _locked(path: Path, mode: str) -> Iterator:
 
 
 def _validate_schema(data: Any) -> dict:
-    """最小可用 schema 校验。不做强类型 — 留给人工 PR。"""
+    """最小可用 schema 校验。不做强类型 — 留给人工 PR。
+
+    本模块是 strategy-agnostic 的：``strategy`` 字段只校验"非空字符串",
+    不绑死任何具体策略名（cb_redemption / sp500_grid / 其它）。具体值由各
+    策略的 yaml 自己写,框架不挑。
+    """
     if not isinstance(data, dict):
         raise SchemaError("yaml 顶层必须是 mapping")
     if data.get("version") != 1:
         raise SchemaError(f"unsupported version: {data.get('version')!r}, expected 1")
-    if data.get("strategy") != "cb_redemption":
-        raise SchemaError(f"strategy 字段必须为 'cb_redemption'，得到 {data.get('strategy')!r}")
+    strategy = data.get("strategy")
+    if not isinstance(strategy, str) or not strategy.strip():
+        raise SchemaError(
+            f"strategy 字段必须为非空字符串，得到 {strategy!r}"
+        )
     for section in _LIST_SECTIONS:
         items = data.get(section)
         if not isinstance(items, list):

@@ -29,3 +29,9 @@ Thumbs.db
 .clinerules-*
 logs/*.jsonl
 .claude/
+data/*/runs.jsonl
+data/*/outbox.jsonl
+data/*/heartbeat
+data/*/tried_directions.jsonl
+data/*/editor_writes.jsonl
+data/*/control.signal

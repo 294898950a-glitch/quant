@@ -831,3 +831,160 @@ def test_state_json_persists_pool_fields(tmp_path: Path) -> None:
     assert legacy_state.current_pool_id is None
     assert legacy_state.iters_in_current_pool == 0
     assert legacy_state.iteration == 7
+
+
+# --------------------------------------------------------------------------- #
+# 20. Strategy-agnostic: orchestrator works with a non-cb yaml (no factors,
+#     custom parameter names, custom strategy field). The change_summary in
+#     the outbox must use the REAL yaml parameter names — not cb's.
+# --------------------------------------------------------------------------- #
+
+
+def _write_arbitrary_strategy_yaml(path: Path) -> None:
+    """Drop a non-cb yaml: 3 custom params, no factors, custom thresholds."""
+    payload = {
+        "version": 1,
+        "strategy": "imaginary_strategy",
+        "last_updated": "2026-05-07T00:00:00Z",
+        "parameters": [
+            {"name": "alpha", "current": 1.0, "range": [0.0, 5.0],
+             "prior": "x"},
+            {"name": "beta", "current": 2.0, "range": [0.0, 5.0],
+             "prior": "x"},
+            {"name": "gamma", "current": 3.0, "range": [0.0, 5.0],
+             "prior": "x"},
+        ],
+        "factors": [],  # no factors at all
+        "thresholds": [],
+        "rules": [
+            {"name": "fee", "current": 0.001, "range": [0.0, 0.01], "prior": "x"},
+        ],
+    }
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        yaml.safe_dump(payload, f, allow_unicode=True, sort_keys=False)
+
+
+def test_orchestrator_strategy_agnostic_outbox_uses_real_param_names(
+    tmp_path: Path,
+) -> None:
+    """非 cb 的 yaml 也能跑；outbox 的 change_summary 用真实参数名,不是 cb 的 w_*."""
+    space = tmp_path / "tunable_space.yaml"
+    _write_arbitrary_strategy_yaml(space)
+    data_dir = tmp_path / "data"
+
+    @dataclass
+    class StubHypo:
+        item_path: str = "parameters.beta"
+        new_value: float = 2.5
+        expected_direction: str = "↑"
+        reason: str = "stub"
+        confidence: str = "low"
+        source: str = "rules"
+
+        def to_dict(self) -> dict:
+            return {
+                "item_path": self.item_path,
+                "new_value": self.new_value,
+                "expected_direction": self.expected_direction,
+                "reason": self.reason,
+                "confidence": self.confidence,
+                "source": self.source,
+            }
+
+    captured_factor_names: list[list[str]] = []
+
+    def judge_fn(result, weights, factor_names):
+        captured_factor_names.append(list(factor_names))
+        # len(weights) must equal len(factor_names) for cb judge
+        assert len(weights) == len(factor_names)
+        return {
+            "is_oos_gap_sharpe": 0.05,
+            "is_oos_gap_winrate": 1.0,
+            "weak_factors": [],
+            "weakness_text": "stub",
+        }
+
+    counter = {"n": 0}
+
+    def hypo_fn(**kw):
+        counter["n"] += 1
+        return StubHypo() if counter["n"] == 1 else None
+
+    o = Orchestrator(
+        data_dir=data_dir,
+        space_path=space,
+        cooldown_s=0.0,
+        max_iterations=2,
+        dry_run=True,
+        hypothesizer_fn=hypo_fn,
+        judge_fn=judge_fn,
+        auditor_fn=lambda runs_path, holdout_path, **kw: StubAuditReport(),
+        sleep_fn=lambda _s: None,
+        holdout_remaining_fn=lambda path: [0, 1],
+        commit_fn=lambda msg: True,
+    )
+    final = o.run()
+    assert final.iteration == 2
+
+    # weights had len 3 (alpha/beta/gamma) and judge got len-3 factor_names.
+    assert captured_factor_names
+    assert len(captured_factor_names[0]) == 3
+
+    # outbox change_summary uses the REAL param name, not cb's w_*.
+    rows = [
+        json.loads(l)
+        for l in (data_dir / "outbox.jsonl").read_text().splitlines()
+        if "change_summary" in l
+    ]
+    summaries = " | ".join(r.get("change_summary", "") for r in rows)
+    assert "parameters.beta" in summaries
+    assert "w_redeem_progress" not in summaries
+    assert "w_premium_ratio" not in summaries
+
+    # yaml on disk: beta.current actually got updated.
+    with open(space, "r", encoding="utf-8") as f:
+        loaded = yaml.safe_load(f)
+    beta = next(p for p in loaded["parameters"] if p["name"] == "beta")
+    assert beta["current"] == pytest.approx(2.5)
+
+
+def test_orchestrator_strategy_agnostic_recovery_uses_real_param_names(
+    tmp_path: Path,
+) -> None:
+    """recovery attempt 3 (shrink weights) 必须收缩 yaml 真实参数,不能撞 cb 名字."""
+    space = tmp_path / "tunable_space.yaml"
+    _write_arbitrary_strategy_yaml(space)
+    data_dir = tmp_path / "data"
+
+    # Auditor always vetos so recovery cascade runs.
+    auditor_fn = lambda runs_path, holdout_path, **kw: StubAuditReport(
+        verdict="data_mining", veto=True, veto_reason="forced veto"
+    )
+
+    o = Orchestrator(
+        data_dir=data_dir,
+        space_path=space,
+        cooldown_s=0.0,
+        max_iterations=3,
+        dry_run=True,
+        hypothesizer_fn=lambda **kw: None,
+        judge_fn=lambda r, w, n: {"weak_factors": [], "weakness_text": ""},
+        auditor_fn=auditor_fn,
+        sleep_fn=lambda _s: None,
+        holdout_remaining_fn=lambda path: [0, 1],
+        commit_fn=lambda msg: True,
+    )
+    o.run()
+
+    # editor_writes.jsonl should record edits to the real params.
+    audit_log = data_dir / "editor_writes.jsonl"
+    if audit_log.exists():
+        recorded = [
+            json.loads(l) for l in audit_log.read_text().splitlines()
+        ]
+        names = {r.get("item_path") for r in recorded}
+        # No cb name should leak into a strategy that has none.
+        assert not any(n and n.startswith("parameters.w_") for n in names), (
+            f"recovery wrote cb-shaped names: {names}"
+        )
