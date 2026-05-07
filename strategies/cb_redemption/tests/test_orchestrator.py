@@ -26,6 +26,7 @@ from strategies.cb_redemption.orchestrator import (
     MAX_NONE_STREAK,
     MAX_RECOVERY_ATTEMPTS,
     Orchestrator,
+    POOL_ROTATE_AFTER,
 )
 
 
@@ -444,7 +445,7 @@ def test_holdout_exhausted_pauses(tmp_path: Path) -> None:
     o.holdout_path = pool_path
     final = o.run()
     assert final.state == "paused"
-    assert final.paused_reason == "holdout pools exhausted"
+    assert final.paused_reason == "all holdout pools exhausted"
 
 
 # --------------------------------------------------------------------------- #
@@ -614,3 +615,219 @@ def test_dry_run_isolated_under_tmp_dir(
     err = capsys.readouterr().err
     assert str(tmp_data_dir) in err
     assert "dry-run" in err
+
+
+# --------------------------------------------------------------------------- #
+# 15. Holdout pool integration: first iter attaches pool 0
+# --------------------------------------------------------------------------- #
+
+
+def _seed_real_sealed_pools(data_dir: Path, n_pools: int = 4) -> Path:
+    """Write a real ``sealed_pools.json`` so :mod:`holdout` can read/seal it.
+
+    Uses :func:`holdout.slice_oos_into_pools` directly with a small
+    synthetic events DataFrame so the file structure matches production.
+    """
+    import pandas as pd
+
+    from strategies.cb_redemption import holdout as holdout_mod
+
+    data_dir.mkdir(parents=True, exist_ok=True)
+    pool_path = data_dir / "sealed_pools.json"
+    # Build n_pools * 4 fake events so pool sizes are non-trivial.
+    events = pd.DataFrame(
+        {
+            "event_id": [f"11{i:04d}_2025-{(i % 12) + 1:02d}-15" for i in range(n_pools * 4)],
+        }
+    )
+    holdout_mod.slice_oos_into_pools(
+        events,
+        event_id_col="event_id",
+        n_pools=n_pools,
+        seed=42,
+        pool_file=pool_path,
+        split_at="2025-01-01",
+    )
+    return pool_path
+
+
+def test_first_iter_attaches_pool_0(tmp_path: Path) -> None:
+    """Initial iter must attach pool 0 and mark it read in sealed_pools.json."""
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    o = _make_orchestrator(tmp_path, max_iterations=1)
+    # Point the orchestrator at the real pool file we just wrote.
+    o.holdout_path = pool_path
+
+    final = o.run()
+    assert final.iteration == 1
+    assert final.current_pool_id == 0
+    assert final.iters_in_current_pool == 1
+
+    # Inspect the on-disk pool state.
+    with open(pool_path, "r", encoding="utf-8") as f:
+        pools = json.load(f)
+    pool0 = next(p for p in pools["pools"] if p["id"] == 0)
+    assert pool0["read_count"] == 1
+    assert pool0["first_read_at"] is not None
+    assert pool0["sealed_at"] is None  # not yet rotated past
+
+    # Outbox should record pool_attached for pool 0 with the right event count.
+    obx = [
+        json.loads(l)
+        for l in (data_dir / "outbox.jsonl").read_text().splitlines()
+    ]
+    attaches = [r for r in obx if r.get("phase") == "pool_attached"]
+    assert len(attaches) == 1
+    assert attaches[0]["pool_id"] == 0
+    assert attaches[0]["n_events"] == len(pool0["event_ids"])
+
+
+# --------------------------------------------------------------------------- #
+# 16. Holdout pool integration: rotates after POOL_ROTATE_AFTER iters
+# --------------------------------------------------------------------------- #
+
+
+def test_pool_rotates_after_threshold(tmp_path: Path) -> None:
+    """After POOL_ROTATE_AFTER+1 iters pool 0 is sealed and pool 1 attached."""
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    # Provide a hypothesis on every iter so the none-streak pause does
+    # not trip before we reach the rotation threshold.
+    @dataclass
+    class StubHypo:
+        item_path: str = "parameters.w_premium_ratio"
+        new_value: float = -0.7
+        expected_direction: str = "neutral"
+        reason: str = "stub: identity nudge to keep loop running"
+        confidence: str = "low"
+        source: str = "rules"
+
+        def to_dict(self) -> dict:
+            return {
+                "item_path": self.item_path,
+                "new_value": self.new_value,
+                "expected_direction": self.expected_direction,
+                "reason": self.reason,
+                "confidence": self.confidence,
+                "source": self.source,
+            }
+
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=POOL_ROTATE_AFTER + 1,
+        hypothesizer_fn=lambda **kw: StubHypo(),
+    )
+    o.holdout_path = pool_path
+
+    final = o.run()
+    assert final.iteration == POOL_ROTATE_AFTER + 1
+    # We've spent 1 iter on pool 1 after rotating.
+    assert final.current_pool_id == 1
+    assert final.iters_in_current_pool == 1
+
+    with open(pool_path, "r", encoding="utf-8") as f:
+        pools = json.load(f)
+    pool0 = next(p for p in pools["pools"] if p["id"] == 0)
+    pool1 = next(p for p in pools["pools"] if p["id"] == 1)
+    assert pool0["sealed_at"] is not None  # sealed at rotation
+    assert pool0["read_count"] == 1
+    assert pool1["read_count"] == 1
+    assert pool1["sealed_at"] is None  # currently attached
+
+
+# --------------------------------------------------------------------------- #
+# 17. Holdout pools exhausted (pools_remaining → []) → paused with explicit reason
+# --------------------------------------------------------------------------- #
+
+
+def test_pools_exhausted_pauses(tmp_path: Path) -> None:
+    """When pools_remaining returns [] the loop pauses with the expected reason."""
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    # We need a sealed_pools.json file present so _holdout_path_configured
+    # returns True; contents do not matter because we override the
+    # remaining_fn to always return [].
+    pool_path = data_dir / "sealed_pools.json"
+    pool_path.write_text(json.dumps({"pools": []}))
+
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=3,
+        holdout_remaining_fn=lambda path: [],
+    )
+    o.holdout_path = pool_path
+    final = o.run()
+    assert final.state == "paused"
+    assert final.paused_reason == "all holdout pools exhausted"
+    # No iter should have run because attach failed up-front.
+    assert final.iteration == 0
+    # current_pool_id stays None — never attached.
+    assert final.current_pool_id is None
+
+
+# --------------------------------------------------------------------------- #
+# 18. oos_event_ids is forwarded to the verifier on every iter
+# --------------------------------------------------------------------------- #
+
+
+def test_verifier_receives_oos_event_ids_from_pool(tmp_path: Path) -> None:
+    """When a pool is attached, the verifier receives its event_ids set."""
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    seen_ids: list[set[str] | None] = []
+
+    def capturing_verifier(weights, thresholds, rules, oos_event_ids=None):
+        seen_ids.append(oos_event_ids)
+        return FakeBacktestResult()
+
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=2,
+        verifier_fn=capturing_verifier,
+    )
+    o.holdout_path = pool_path
+    o.run()
+
+    # Both iters should have received the same non-empty set (pool 0).
+    assert len(seen_ids) == 2
+    assert seen_ids[0] is not None and len(seen_ids[0]) > 0
+    assert seen_ids[1] == seen_ids[0]
+
+
+# --------------------------------------------------------------------------- #
+# 19. state.json round-trip: current_pool_id and iters_in_current_pool persist
+# --------------------------------------------------------------------------- #
+
+
+def test_state_json_persists_pool_fields(tmp_path: Path) -> None:
+    """current_pool_id + iters_in_current_pool round-trip through state.json."""
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    o1 = _make_orchestrator(tmp_path, max_iterations=2)
+    o1.holdout_path = pool_path
+    o1.run()
+
+    raw = json.loads((data_dir / "state.json").read_text())
+    assert raw["current_pool_id"] == 0
+    assert raw["iters_in_current_pool"] == 2
+
+    # Old-state compat: load a state.json missing the new fields.
+    legacy = {
+        "state": "running",
+        "iteration": 7,
+        "since_iso": "2026-05-07T00:00:00Z",
+        "last_verdict": "healthy",
+        "paused_reason": None,
+        "none_streak": 0,
+        "stagnant_streak": 0,
+        "recovery_attempt": 0,
+    }
+    legacy_state = LoopState.from_dict(legacy)
+    assert legacy_state.current_pool_id is None
+    assert legacy_state.iters_in_current_pool == 0
+    assert legacy_state.iteration == 7

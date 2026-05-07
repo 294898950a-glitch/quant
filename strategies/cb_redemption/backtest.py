@@ -7,6 +7,8 @@
   接受外部 DataFrame，无副作用，便于 IS/OOS 切分、滚动窗口、子线程并行
 - ``BacktestEngine`` 保留为薄壳，向下兼容 optimizer.py 的现有接口
 - IS / OOS 切分：IS = 2023-01-01 ~ 2024-12-31，OOS = 2025-01-01 起
+- ``oos_event_ids`` 参数：当 orchestrator 从 holdout pool 读到当前可用事件集
+  时传进来；OOS metrics 只在该子集上重算，IS metrics 与 all_metrics 不变。
 - ⚠️ 因子时序污染审计见 ``docs/plans/2026-05-07-verifier-audit.md``
 
 Usage:
@@ -22,7 +24,8 @@ import logging
 import math
 import time
 from dataclasses import dataclass, asdict, field
-from typing import Any
+from pathlib import Path
+from typing import Any, Iterable
 
 import numpy as np
 import pandas as pd
@@ -32,6 +35,10 @@ from strategies.cb_redemption.data import (
     build_historical_snapshots,
     load_historical_snapshots,
 )
+
+# 仓库根，用来定位 cb_warehouse/cb_basic.parquet 做 bond_id ↔ ts_code 映射。
+_REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+DEFAULT_CB_BASIC_PATH = _REPO_ROOT / "data" / "cb_warehouse" / "cb_basic.parquet"
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +159,57 @@ def signal_rank(snapshot: pd.DataFrame, weights: list[float]) -> pd.Series:
 
 
 # ---------------------------------------------------------------------------
+# Holdout pool helpers — bond_id (6位) ↔ ts_code (XXXXXX.SH/SZ)
+# ---------------------------------------------------------------------------
+
+
+def _resolve_pool_to_ts_codes(
+    oos_event_ids: Iterable[str],
+    cb_basic_path: Path = DEFAULT_CB_BASIC_PATH,
+) -> set[str]:
+    """把 ``{bond_id}_{meeting_date}`` 形式的 event_id 集合解析成 ts_code 集合。
+
+    - event_id 取 ``split("_")[0]`` 作为 6 位 bond_id（来自 events CSV）。
+    - 通过 ``cb_warehouse/cb_basic.parquet`` 的 ``ts_code`` 列做匹配
+      （ts_code 形如 ``"110063.SH"`` / ``"123234.SZ"``，前 6 位即 bond_id）。
+    - 如果 cb_basic.parquet 不存在，回退到"按前缀拼后缀"的启发式：
+      bond_id 以 ``11/10/12`` 开头判定为 SH，其它为 SZ（仅作 fallback；
+      正确路径仍是读 parquet）。
+    """
+    bond_ids: set[str] = set()
+    for eid in oos_event_ids:
+        if not eid:
+            continue
+        head = str(eid).split("_", 1)[0].strip()
+        if head:
+            bond_ids.add(head)
+
+    if not bond_ids:
+        return set()
+
+    if cb_basic_path.exists():
+        try:
+            basic = pd.read_parquet(cb_basic_path, columns=["ts_code"])
+            ts_codes = basic["ts_code"].astype(str)
+            # 取前 6 位匹配 bond_id
+            mask = ts_codes.str[:6].isin(bond_ids)
+            return set(ts_codes[mask].tolist())
+        except Exception:
+            pass  # 落到 fallback
+
+    # Fallback: 启发式拼后缀。SH: 11x/10x/110/113；SZ: 12x/127/128/123 等。
+    out: set[str] = set()
+    for bid in bond_ids:
+        if not bid.isdigit() or len(bid) != 6:
+            continue
+        if bid.startswith(("11", "10")):
+            out.add(f"{bid}.SH")
+        else:
+            out.add(f"{bid}.SZ")
+    return out
+
+
+# ---------------------------------------------------------------------------
 # 纯函数核心 — run_backtest_core
 # ---------------------------------------------------------------------------
 
@@ -161,6 +219,7 @@ def run_backtest_core(
     weights: list[float],
     thresholds: dict[str, float],
     cfg: BacktestConfig,
+    oos_event_ids: set[str] | None = None,
 ) -> BacktestResult:
     """严格时序回测的纯函数实现。
 
@@ -174,6 +233,14 @@ def run_backtest_core(
       4. 剩余空位按 score 降序补仓（top_k 候选池，最多 max_positions 持仓）
       5. 持仓天数 +1
       6. 末日强制平仓
+
+    ``oos_event_ids``
+        当 orchestrator 从当前 attached holdout pool 读到的事件集合
+        （元素形如 ``"{bond_id}_{meeting_date}"``）。
+        - ``None``（默认）→ 旧行为，OOS 用全部 OOS 区间内的 trades 计算。
+        - 非 None → 把 set 解析成 ts_code 子集，``oos_metrics`` 只统计
+          OOS 区间内 ts_code 落在该子集的 trades（IS / all 不变）。
+        - 空 set → ``oos_metrics`` 必然为零交易（用于 sanity check）。
     """
     if snapshots.empty:
         return BacktestResult()
@@ -270,6 +337,11 @@ def run_backtest_core(
     # 计算 IS / OOS / 全样本指标
     is_trades = [t for t in trades if IS_START <= t.entry_date <= IS_END]
     oos_trades = [t for t in trades if t.entry_date >= OOS_START]
+
+    # holdout pool 过滤：仅作用于 oos_metrics
+    if oos_event_ids is not None:
+        pool_ts_codes = _resolve_pool_to_ts_codes(oos_event_ids)
+        oos_trades = [t for t in oos_trades if t.cb_code in pool_ts_codes]
 
     return BacktestResult(
         trades=trades,

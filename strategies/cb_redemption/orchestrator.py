@@ -94,6 +94,12 @@ MAX_STAGNANT_STREAK = 5
 #: Number of recovery attempts before giving up and pausing.
 MAX_RECOVERY_ATTEMPTS = 3
 
+#: Number of iterations to spend on a single holdout pool before
+#: sealing it and rotating to the next one. Each rotation consumes a
+#: pool permanently — when ``holdout.pools_remaining()`` returns ``[]``
+#: the loop pauses with ``"all holdout pools exhausted"``.
+POOL_ROTATE_AFTER = 30
+
 # 5-factor names — must match :func:`backtest.signal_rank` ordering.
 FACTOR_NAMES = (
     "redeem_progress",
@@ -182,10 +188,18 @@ class FakeBacktestResult:
         }
 
 
-def _default_dry_verifier(weights: list[float], thresholds: dict, rules: dict) -> FakeBacktestResult:
+def _default_dry_verifier(
+    weights: list[float],
+    thresholds: dict,
+    rules: dict,
+    oos_event_ids: set[str] | None = None,
+) -> FakeBacktestResult:
     """Deterministic-ish fake backtest: small drift on weight changes.
 
     Not random — same input → same output, so dry runs are reproducible.
+    ``oos_event_ids`` is accepted (and ignored numerically) so the dry
+    verifier shares the live signature; tests inspecting the call args
+    can still see whether the orchestrator passed a pool through.
     """
     s = sum(abs(w) for w in weights) or 1.0
     base = 0.3 + min(0.3, 0.05 * s)
@@ -201,7 +215,12 @@ def _default_dry_verifier(weights: list[float], thresholds: dict, rules: dict) -
 # --------------------------------------------------------------------------- #
 
 
-def _default_live_verifier(weights: list[float], thresholds: dict, rules: dict) -> Any:
+def _default_live_verifier(
+    weights: list[float],
+    thresholds: dict,
+    rules: dict,
+    oos_event_ids: set[str] | None = None,
+) -> Any:
     """Adapter: pull snapshots, build BacktestConfig, run pure core."""
     from strategies.cb_redemption import backtest as backtest_mod
     from strategies.cb_redemption import data as data_mod
@@ -215,7 +234,9 @@ def _default_live_verifier(weights: list[float], thresholds: dict, rules: dict) 
         top_k=int(rules.get("top_k", 5)),
         alert_threshold=float(thresholds.get("alert", 0.45)),
     )
-    return backtest_mod.run_backtest_core(snap, weights, thresholds, cfg)
+    return backtest_mod.run_backtest_core(
+        snap, weights, thresholds, cfg, oos_event_ids=oos_event_ids
+    )
 
 
 # --------------------------------------------------------------------------- #
@@ -233,6 +254,14 @@ class LoopState:
     none_streak: int = 0
     stagnant_streak: int = 0
     recovery_attempt: int = 0  # 0 = not in recovery; 1..3 = which attempt
+    # ---- holdout pool attachment ----
+    #: id of the pool whose event_ids are currently feeding OOS metrics.
+    #: ``None`` until the very first iter attaches pool 0.
+    current_pool_id: int | None = None
+    #: number of iterations already spent against ``current_pool_id``.
+    #: When this reaches :data:`POOL_ROTATE_AFTER` the orchestrator
+    #: seals the pool and rotates to the next remaining one.
+    iters_in_current_pool: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -244,10 +273,20 @@ class LoopState:
             "none_streak": self.none_streak,
             "stagnant_streak": self.stagnant_streak,
             "recovery_attempt": self.recovery_attempt,
+            "current_pool_id": self.current_pool_id,
+            "iters_in_current_pool": self.iters_in_current_pool,
         }
 
     @classmethod
     def from_dict(cls, d: dict) -> "LoopState":
+        # current_pool_id may be missing in older state.json; treat as None.
+        cpi_raw = d.get("current_pool_id", None)
+        cpi: int | None = None
+        if cpi_raw is not None:
+            try:
+                cpi = int(cpi_raw)
+            except (TypeError, ValueError):
+                cpi = None
         return cls(
             state=d.get("state", "running"),
             iteration=int(d.get("iteration", 0)),
@@ -257,6 +296,8 @@ class LoopState:
             none_streak=int(d.get("none_streak", 0)),
             stagnant_streak=int(d.get("stagnant_streak", 0)),
             recovery_attempt=int(d.get("recovery_attempt", 0)),
+            current_pool_id=cpi,
+            iters_in_current_pool=int(d.get("iters_in_current_pool", 0)),
         )
 
 
@@ -294,6 +335,8 @@ class Orchestrator:
         memory_search_fn: Callable | None = None,
         auditor_fn: Callable | None = None,
         holdout_remaining_fn: Callable | None = None,
+        holdout_read_fn: Callable | None = None,
+        holdout_seal_fn: Callable | None = None,
         sleep_fn: Callable[[float], None] | None = None,
         # optional state seeds
         runs_path: Path | None = None,
@@ -361,6 +404,14 @@ class Orchestrator:
 
         # Injection — holdout
         self._holdout_remaining_fn = holdout_remaining_fn or holdout_mod.pools_remaining
+        self._holdout_read_fn = holdout_read_fn or holdout_mod.read_pool
+        self._holdout_seal_fn = holdout_seal_fn or holdout_mod.seal_pool
+
+        # in-memory cache of the event_id set for the currently-attached
+        # pool (recovered from holdout file on attach; not persisted in
+        # state.json — we re-derive on resume by re-reading the pool file
+        # if needed).
+        self._current_pool_event_ids: set[str] | None = None
 
         # Injection — sleep
         self._sleep_fn = sleep_fn or time.sleep
@@ -807,21 +858,18 @@ class Orchestrator:
                 # don't increment iters_done — paused doesn't "spend" an iter
                 continue
 
-            # ----- Pre-iteration safety: holdout exhausted? -----
-            if self._holdout_path_configured():
-                try:
-                    remaining = self._holdout_remaining_fn(self.holdout_path)
-                except Exception:
-                    remaining = None
-                if remaining is not None and len(remaining) == 0:
-                    self._enter_paused("holdout pools exhausted")
-                    self._write_heartbeat()
-                    self._sleep_fn(min(self.cooldown_s, 1.0))
-                    continue
+            # ----- Pre-iteration: attach / rotate holdout pool -----
+            pause_reason = self._maybe_rotate_pool()
+            if pause_reason is not None:
+                self._enter_paused(pause_reason)
+                self._write_heartbeat()
+                self._sleep_fn(min(self.cooldown_s, 1.0))
+                continue
 
             # ============== ONE ITERATION ==============
             self.loop_state.iteration += 1
             iters_done += 1
+            self.loop_state.iters_in_current_pool += 1
             outcome = self._run_iteration()
             self._write_heartbeat(force=True)
             self._save_state()
@@ -844,6 +892,98 @@ class Orchestrator:
         return self.holdout_path.exists()
 
     # ------------------------------------------------------------------ #
+    # Holdout pool attach / rotate
+    # ------------------------------------------------------------------ #
+
+    def _maybe_rotate_pool(self) -> str | None:
+        """Attach pool 0 on first run; rotate after POOL_ROTATE_AFTER iters.
+
+        Returns:
+            ``None`` if attachment proceeded normally (or holdout file
+            isn't configured at all). Returns a string reason if the loop
+            must pause because all pools are exhausted.
+        """
+        if not self._holdout_path_configured():
+            return None  # no holdout file → skip (test envs)
+
+        need_attach = (
+            self.loop_state.current_pool_id is None
+            or self.loop_state.iters_in_current_pool >= POOL_ROTATE_AFTER
+            or self._current_pool_event_ids is None  # cold-resume
+        )
+        if not need_attach:
+            return None
+
+        # If we already have a pool attached, seal it before rotating.
+        if (
+            self.loop_state.current_pool_id is not None
+            and self.loop_state.iters_in_current_pool >= POOL_ROTATE_AFTER
+        ):
+            old_id = self.loop_state.current_pool_id
+            try:
+                self._holdout_seal_fn(old_id, pool_file=self.holdout_path)
+                self._outbox(
+                    phase="pool_sealed",
+                    iteration=self.loop_state.iteration,
+                    pool_id=old_id,
+                    iters_spent=self.loop_state.iters_in_current_pool,
+                )
+            except Exception as exc:
+                self._outbox(
+                    phase="holdout_seal_error",
+                    iteration=self.loop_state.iteration,
+                    pool_id=old_id,
+                    error=str(exc),
+                )
+
+        # Find next available pool.
+        try:
+            remaining = list(self._holdout_remaining_fn(self.holdout_path))
+        except Exception as exc:
+            self._outbox(
+                phase="holdout_remaining_error",
+                iteration=self.loop_state.iteration,
+                error=str(exc),
+            )
+            remaining = []
+
+        # If we're rotating (not initial attach) and the only "remaining"
+        # pool is the one we just sealed, treat as exhausted.
+        if self.loop_state.current_pool_id is not None:
+            remaining = [
+                p for p in remaining if p != self.loop_state.current_pool_id
+            ]
+
+        if not remaining:
+            return "all holdout pools exhausted"
+
+        new_id = remaining[0]
+        try:
+            event_ids = list(
+                self._holdout_read_fn(new_id, pool_file=self.holdout_path)
+            )
+        except Exception as exc:
+            self._outbox(
+                phase="holdout_read_error",
+                iteration=self.loop_state.iteration,
+                pool_id=new_id,
+                error=str(exc),
+            )
+            # Treat read failure as exhaustion to fail safe.
+            return f"holdout read failed for pool {new_id}: {exc}"
+
+        self.loop_state.current_pool_id = int(new_id)
+        self.loop_state.iters_in_current_pool = 0
+        self._current_pool_event_ids = set(event_ids)
+        self._outbox(
+            phase="pool_attached",
+            iteration=self.loop_state.iteration,
+            pool_id=int(new_id),
+            n_events=len(event_ids),
+        )
+        return None
+
+    # ------------------------------------------------------------------ #
     # One iteration
     # ------------------------------------------------------------------ #
 
@@ -854,9 +994,17 @@ class Orchestrator:
         # 1. Read current params.
         weights, thresholds, rules = self._read_current_params()
 
-        # 2. Run verifier.
+        # 2. Run verifier — pass oos_event_ids if a holdout pool is attached.
+        oos_ids = self._current_pool_event_ids
         try:
-            result = self._verifier_fn(weights, thresholds, rules)
+            try:
+                result = self._verifier_fn(
+                    weights, thresholds, rules, oos_event_ids=oos_ids
+                )
+            except TypeError:
+                # Older injected verifier stubs don't accept the kwarg —
+                # degrade gracefully so existing tests keep passing.
+                result = self._verifier_fn(weights, thresholds, rules)
         except Exception as exc:
             # Fall back to a "no metrics" fake — keeps loop alive.
             self._outbox(phase="verifier_error", iteration=it, error=str(exc))
