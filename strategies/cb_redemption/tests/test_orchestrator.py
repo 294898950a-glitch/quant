@@ -1251,9 +1251,9 @@ def test_state_json_pending_since_iso_legacy_compat(tmp_path: Path) -> None:
     assert re_parsed.pending_since_iso is None
 
 
-def test_stop_approval_timeout_default_is_30_minutes() -> None:
-    """Sanity: the documented default timeout actually ships as 1800 seconds."""
-    assert STOP_APPROVAL_TIMEOUT_SEC == 1800
+def test_stop_approval_timeout_default_is_60_seconds() -> None:
+    """Sanity: per user request 2026-05-08, default timeout is 60s (was 1800)."""
+    assert STOP_APPROVAL_TIMEOUT_SEC == 60
 
 
 def test_stagnant_max_streak_enters_pending_stop_approval_not_paused(

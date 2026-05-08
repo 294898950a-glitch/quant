@@ -33,7 +33,7 @@ State transitions
     pending_stop_approval   -> paused       control.signal=stop
     pending_stop_approval   -> running      control.signal=continue (clear veto)
     pending_stop_approval   -> running      control.signal=shift (auto-shift then continue)
-    pending_stop_approval   -> running      30-minute timeout (default auto-shift)
+    pending_stop_approval   -> running      60-second timeout (default auto-shift)
     running                 -> paused       holdout dry (pools_remaining()==[])
     paused                  -> running      control.signal=resume
     *                       -> paused       control.signal=stop (pause-style)
@@ -43,7 +43,7 @@ The orchestrator is **self-healing by default**: every adverse audit
 verdict triggers an automated recovery cascade, and even after the
 cascade fails it asks the user for permission to stop rather than
 unconditionally pausing. If the user does not reply within
-:data:`STOP_APPROVAL_TIMEOUT_SEC` (30 minutes by default) the loop
+:data:`STOP_APPROVAL_TIMEOUT_SEC` (60 seconds by default) the loop
 auto-shifts every writable parameter to the midpoint of its registered
 range and resumes — exploring a fresh region instead of freezing.
 
@@ -110,11 +110,11 @@ MAX_RECOVERY_ATTEMPTS = 3
 #: After all recovery attempts fail, the orchestrator enters
 #: ``pending_stop_approval`` and pushes a telegram asking the user to
 #: confirm a halt. If no reply arrives within this many seconds, the
-#: loop auto-shifts to range midpoints and resumes on its own. 30 min
-#: is short enough for the user to actually answer yet long enough that
-#: a brief absence won't auto-shift away from a configuration the user
-#: still wants to inspect.
-STOP_APPROVAL_TIMEOUT_SEC = 1800
+#: loop auto-shifts to range midpoints and resumes on its own. 60 seconds
+#: per user request 2026-05-08: 'don't wait 30 min, if I don't reply within
+#: 1 min just keep going'. Short enough that the loop won't sit idle, long
+#: enough for a quick reply.
+STOP_APPROVAL_TIMEOUT_SEC = 60
 
 #: Number of iterations to spend on a single holdout pool before
 #: sealing it and rotating to the next one. Each rotation consumes a
@@ -292,7 +292,7 @@ class LoopState:
     #: seals the pool and rotates to the next remaining one.
     iters_in_current_pool: int = 0
     #: ISO timestamp the loop entered ``pending_stop_approval`` (``None``
-    #: in any other state). Used to detect the 30-minute timeout that
+    #: in any other state). Used to detect the 60-second timeout that
     #: triggers an auto-shift. Missing in legacy state.json files —
     #: ``from_dict`` defaults to ``None``.
     pending_since_iso: str | None = None
@@ -938,13 +938,13 @@ class Orchestrator:
                 _force_iter = False
 
             # ----- Pending-stop-approval handling -----
-            # Before any iteration runs, check whether the 30-min deadline
+            # Before any iteration runs, check whether the 60-second deadline
             # has elapsed; if so the loop auto-shifts and resumes itself
             # without waiting for the user.
             if self.loop_state.state == "pending_stop_approval":
                 if self._pending_timed_out():
                     self._do_auto_shift()
-                    self._resume_from_pending("auto-shift after 30min timeout")
+                    self._resume_from_pending("auto-shift after 60s timeout")
                 else:
                     # Still waiting on the user — heartbeat + sleep + poll.
                     self._write_heartbeat()
@@ -1508,7 +1508,7 @@ class Orchestrator:
             options=(
                 "reply 'stop' to halt / 'continue' to override veto / "
                 "'shift' to reset params and continue / "
-                "no reply = auto-shift after 30min"
+                "no reply = auto-shift after 60s"
             ),
         )
 
