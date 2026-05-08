@@ -1259,13 +1259,35 @@ def test_stop_approval_timeout_default_is_60_seconds() -> None:
 def test_stagnant_max_streak_enters_pending_stop_approval_not_paused(
     tmp_path: Path,
 ) -> None:
-    """User feedback: stagnant 5 should also go through approval gate.
+    """User feedback: stagnant N should also go through approval gate.
 
     Old behavior: stagnant_streak hits MAX_STAGNANT_STREAK -> _enter_paused()
     unilaterally. User pushed back: 'don't stop without asking'. New behavior:
     same approval gate as audit-veto + recovery exhausted.
+
+    Note: we feed a stub hypothesis on every iter so the none-streak guard
+    (MAX_NONE_STREAK=5) doesn't pause us before the stagnant streak fires.
     """
     from strategies.cb_redemption.orchestrator import MAX_STAGNANT_STREAK
+
+    @dataclass
+    class StubHypo:
+        item_path: str = "parameters.w_premium_ratio"
+        new_value: float = -0.7
+        expected_direction: str = "neutral"
+        reason: str = "stub: identity-ish nudge to keep none_streak at 0"
+        confidence: str = "low"
+        source: str = "rules"
+
+        def to_dict(self) -> dict:
+            return {
+                "item_path": self.item_path,
+                "new_value": self.new_value,
+                "expected_direction": self.expected_direction,
+                "reason": self.reason,
+                "confidence": self.confidence,
+                "source": self.source,
+            }
 
     auditor_fn = lambda runs_path, holdout_path, **kw: StubAuditReport(
         verdict="stagnant", veto=False, veto_reason=None
@@ -1274,9 +1296,218 @@ def test_stagnant_max_streak_enters_pending_stop_approval_not_paused(
         tmp_path,
         max_iterations=MAX_STAGNANT_STREAK + 1,
         auditor_fn=auditor_fn,
+        hypothesizer_fn=lambda **kw: StubHypo(),
     )
     final = o.run()
     assert final.state == "pending_stop_approval", (
         f"expected pending_stop_approval after stagnant streak, got {final.state}"
     )
     assert "stagnant" in (final.paused_reason or "").lower()
+
+
+# --------------------------------------------------------------------------- #
+# Layer 8.5 — sanity_checker integration tests
+# --------------------------------------------------------------------------- #
+
+
+def _make_stub_sanity(verdict: str = "ok", layer: str = "rules"):
+    """Build a SanityReport-shaped stub callable for sanity_check_fn injection."""
+    from strategies.cb_redemption.sanity_checker import SanityReport
+
+    def stub(*args, **kwargs):
+        return SanityReport(
+            verdict=verdict,
+            score={"ok": 10.0, "warn": 4.0, "fatal": 0.0}[verdict],
+            issues=([] if verdict == "ok" else [
+                {"severity": verdict, "code": "stub", "message": "stub issue"},
+            ]),
+            advice=("advice text" if verdict != "ok" else None),
+            summary="stub sanity summary >= 10 chars",
+            layer=layer,
+        )
+    return stub
+
+
+def test_sanity_fatal_triggers_auto_shift_skips_verifier(tmp_path: Path) -> None:
+    """When sanity_checker returns verdict=fatal, the orchestrator must
+    auto-shift and skip the verifier for that iteration."""
+    verifier_calls = {"n": 0}
+
+    def counting_verifier(weights, thresholds, rules, oos_event_ids=None):
+        verifier_calls["n"] += 1
+        return FakeBacktestResult()
+
+    # Sanity reports fatal on iter 1, ok thereafter.
+    sanity_calls = {"n": 0}
+
+    def stub_sanity(**kw):
+        from strategies.cb_redemption.sanity_checker import SanityReport
+        sanity_calls["n"] += 1
+        if sanity_calls["n"] == 1:
+            return SanityReport(
+                verdict="fatal",
+                score=0.0,
+                issues=[{"severity": "fatal", "code": "x", "message": "msg"}],
+                advice="restructure params",
+                summary="fatal stub for iter 1 — long enough summary text",
+                layer="rules",
+            )
+        return SanityReport(
+            verdict="ok",
+            score=10.0,
+            issues=[],
+            advice=None,
+            summary="ok stub for later iters",
+            layer="rules",
+        )
+
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=2,
+        verifier_fn=counting_verifier,
+    )
+    o._sanity_check_fn = stub_sanity
+    final = o.run()
+    # Iter 1 was fatal → verifier skipped; iter 2 was ok → verifier ran.
+    assert verifier_calls["n"] == 1
+    assert sanity_calls["n"] == 2
+
+    # Outbox must contain a sanity_fatal phase row.
+    obx = [
+        json.loads(l)
+        for l in (tmp_path / "data" / "outbox.jsonl").read_text().splitlines()
+    ]
+    fatal_rows = [r for r in obx if r.get("phase") == "sanity_fatal"]
+    assert len(fatal_rows) == 1
+    assert "fatal" in fatal_rows[0].get("paused_reason", "").lower() or \
+           "msg" in str(fatal_rows[0].get("sanity", {}))
+
+    # Auto-shift outbox row should also exist (triggered by sanity fatal).
+    shifts = [r for r in obx if r.get("phase") == "auto_shift"]
+    assert shifts, "auto_shift row missing after sanity fatal"
+    assert final.iteration == 2
+
+
+def test_sanity_llm_only_runs_on_trigger_events(tmp_path: Path) -> None:
+    """LLM body of sanity_checker is invoked only on trigger events:
+
+      - cold start (iter 1)
+      - just-rotated holdout pool
+      - just-after-auto-shift
+      - audit verdict=data_mining
+      - every LLM_PERIODIC_GUARD_ITERS iters as a heartbeat
+
+    Run 25 normal iters + 1 forced auto-shift; the LLM body should be
+    called exactly:
+      1 startup + 1 periodic (iter 21) + 1 auto-shift = 3
+    """
+    from strategies.cb_redemption import sanity_checker as sc_mod
+    use_llm_log: list[bool] = []
+
+    @dataclass
+    class StubHypo:
+        item_path: str = "parameters.w_premium_ratio"
+        new_value: float = -0.7
+        expected_direction: str = "neutral"
+        reason: str = "stub: keep none_streak at 0 across many iters"
+        confidence: str = "low"
+        source: str = "rules"
+
+        def to_dict(self) -> dict:
+            return {
+                "item_path": self.item_path,
+                "new_value": self.new_value,
+                "expected_direction": self.expected_direction,
+                "reason": self.reason,
+                "confidence": self.confidence,
+                "source": self.source,
+            }
+
+    def stub_sanity(**kw):
+        use_llm_log.append(bool(kw.get("use_llm")))
+        return sc_mod.SanityReport(
+            verdict="ok",
+            score=10.0,
+            issues=[],
+            advice=None,
+            summary="ok stub long enough summary",
+            layer="rules+llm" if kw.get("use_llm") else "rules",
+        )
+
+    # Healthy auditor; the loop just hums along.
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=25,
+        hypothesizer_fn=lambda **kw: StubHypo(),
+    )
+    o._sanity_check_fn = stub_sanity
+    o.run()
+
+    # Trigger an auto-shift then run one more iter (a single extra iteration
+    # — max_iterations is per-run() call, not cumulative).
+    o._do_auto_shift()
+    o.max_iterations = 1  # next run() does exactly 1 more iter.
+    o.run()
+
+    # use_llm pattern across 26 iters:
+    #   iter 1   : True  (cold start sets _iters_since_llm_sanity=0)
+    #   iter 2..21: False  (counter ticks up to 20)
+    #   iter 22  : True   (counter == LLM_PERIODIC_GUARD_ITERS → fire)
+    #   iter 23..25: False (counter resets to 0, ticks again)
+    #   iter 26  : True   (auto-shift flag set by _do_auto_shift)
+    assert len(use_llm_log) == 26
+    true_iters = [i + 1 for i, v in enumerate(use_llm_log) if v]
+    # First call is cold start → True.
+    assert true_iters[0] == 1
+    # Last call corresponds to the auto-shift trigger.
+    assert true_iters[-1] == 26
+    # Periodic guard fires the iteration AFTER counter hits the threshold:
+    # iter 1 sets it to 0, then iters 2..21 tick it 1..20, iter 22 sees
+    # >=20 and fires.
+    assert (2 + sc_mod.LLM_PERIODIC_GUARD_ITERS) in true_iters
+    # Total True count: cold-start + periodic + auto-shift = 3.
+    assert len(true_iters) == 3, (
+        f"expected exactly 3 LLM-true iters, got {true_iters}"
+    )
+
+
+def test_sanity_warn_logs_but_continues(tmp_path: Path) -> None:
+    """verdict=warn must NOT skip the verifier; verifier still runs and
+    outbox carries a sanity_warn row alongside the regular iteration row."""
+    verifier_calls = {"n": 0}
+
+    def counting_verifier(weights, thresholds, rules, oos_event_ids=None):
+        verifier_calls["n"] += 1
+        return FakeBacktestResult()
+
+    def stub_sanity(**kw):
+        from strategies.cb_redemption.sanity_checker import SanityReport
+        return SanityReport(
+            verdict="warn",
+            score=4.0,
+            issues=[{"severity": "warn", "code": "x", "message": "msg"}],
+            advice="advice text",
+            summary="warn stub long enough summary",
+            layer="rules",
+        )
+
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=2,
+        verifier_fn=counting_verifier,
+    )
+    o._sanity_check_fn = stub_sanity
+    final = o.run()
+    # Verifier ran on every iter — warn does not block.
+    assert verifier_calls["n"] == 2
+    assert final.iteration == 2
+
+    obx = [
+        json.loads(l)
+        for l in (tmp_path / "data" / "outbox.jsonl").read_text().splitlines()
+    ]
+    warns = [r for r in obx if r.get("phase") == "sanity_warn"]
+    assert len(warns) == 2  # one per iteration
+
+    # No sanity_fatal rows.
+    assert not [r for r in obx if r.get("phase") == "sanity_fatal"]

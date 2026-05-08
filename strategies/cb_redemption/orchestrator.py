@@ -83,6 +83,7 @@ from strategies.cb_redemption import holdout as holdout_mod
 from strategies.cb_redemption import hypothesizer as hypothesizer_mod
 from strategies.cb_redemption import judge as judge_mod
 from strategies.cb_redemption import memory as memory_mod
+from strategies.cb_redemption import sanity_checker as sanity_checker_mod
 
 
 # --------------------------------------------------------------------------- #
@@ -101,8 +102,10 @@ HEARTBEAT_INTERVAL_S = 30.0
 MAX_NONE_STREAK = 5
 
 #: Auditor verdict ``stagnant`` for this many rows triggers exploration
-#: (which we model as also a paused state until external review).
-MAX_STAGNANT_STREAK = 5
+#: (which we model as a pending_stop_approval until the user replies, with
+#: a 60s default-auto-shift fallback). Bumped from 5 → 10 (2026-05-08) so
+#: the loop has more room to find a marginal improvement before bailing.
+MAX_STAGNANT_STREAK = 10
 
 #: Number of recovery attempts before giving up and pausing.
 MAX_RECOVERY_ATTEMPTS = 3
@@ -376,6 +379,7 @@ class Orchestrator:
         holdout_remaining_fn: Callable | None = None,
         holdout_read_fn: Callable | None = None,
         holdout_seal_fn: Callable | None = None,
+        sanity_check_fn: Callable | None = None,
         sleep_fn: Callable[[float], None] | None = None,
         # optional state seeds
         runs_path: Path | None = None,
@@ -446,6 +450,9 @@ class Orchestrator:
         self._holdout_read_fn = holdout_read_fn or holdout_mod.read_pool
         self._holdout_seal_fn = holdout_seal_fn or holdout_mod.seal_pool
 
+        # Injection — sanity_checker (layer 8.5 — pre-verifier input gate).
+        self._sanity_check_fn = sanity_check_fn or sanity_checker_mod.check
+
         # in-memory cache of the event_id set for the currently-attached
         # pool (recovered from holdout file on attach; not persisted in
         # state.json — we re-derive on resume by re-reading the pool file
@@ -466,6 +473,15 @@ class Orchestrator:
         )
 
         self._last_heartbeat_ts = 0.0
+
+        # Sanity-checker bookkeeping (NOT persisted — re-derived from
+        # state.json + outbox on resume). ``-1`` for "never done" so the
+        # very first iteration after process start always invokes the LLM
+        # body of the sanity_checker.
+        self._iters_since_llm_sanity: int = -1
+        self._just_auto_shifted: bool = False
+        self._just_pool_rotated: bool = False
+        self._last_sanity_report: sanity_checker_mod.SanityReport | None = None
 
     # ------------------------------------------------------------------ #
     # State persistence
@@ -1086,12 +1102,98 @@ class Orchestrator:
         self.loop_state.current_pool_id = int(new_id)
         self.loop_state.iters_in_current_pool = 0
         self._current_pool_event_ids = set(event_ids)
+        # Tell the sanity-checker trigger heuristic that the data shape
+        # just changed — next iteration should re-evaluate via LLM.
+        self._just_pool_rotated = True
         self._outbox(
             phase="pool_attached",
             iteration=self.loop_state.iteration,
             pool_id=int(new_id),
             n_events=len(event_ids),
         )
+        return None
+
+    # ------------------------------------------------------------------ #
+    # Sanity-checker triggers (layer 8.5)
+    # ------------------------------------------------------------------ #
+
+    def _should_run_llm_sanity(self) -> bool:
+        """Decide whether the upcoming sanity check should call the LLM.
+
+        Five conditions; any one of them yields True, otherwise False:
+
+        1. **Cold start** — ``_iters_since_llm_sanity < 0`` (loop just started
+           or process restarted).
+        2. **Just auto-shifted** — params were reset to midpoints; the input
+           shape is genuinely new and worth a second opinion.
+        3. **Just rotated holdout pool** — the data shape just changed
+           underneath the loop.
+        4. **Last audit said data_mining** — auditor flagged trajectory
+           drift; LLM is asked to confirm before continuing.
+        5. **Periodic guard** — at most every
+           :data:`sanity_checker.LLM_PERIODIC_GUARD_ITERS` iterations the
+           LLM is invoked even without a trigger event, so a slow drift
+           into bad shape eventually gets caught.
+        """
+        # 1. cold start
+        if self._iters_since_llm_sanity < 0:
+            return True
+        # 2. auto-shift flag (cleared on read so it only fires once)
+        if self._just_auto_shifted:
+            self._just_auto_shifted = False
+            return True
+        # 3. pool-rotation flag (cleared on read so it only fires once)
+        if self._just_pool_rotated:
+            self._just_pool_rotated = False
+            return True
+        # 4. data_mining verdict from previous audit
+        if self.loop_state.last_verdict == "data_mining":
+            return True
+        # 5. periodic guard
+        if self._iters_since_llm_sanity >= sanity_checker_mod.LLM_PERIODIC_GUARD_ITERS:
+            return True
+        return False
+
+    def _read_strategy_meta(self) -> tuple[str, str | None]:
+        """Pull ``strategy`` + optional ``asset_hint`` from the yaml.
+
+        Falls back to ``("unknown", None)`` if the yaml can't be read; the
+        sanity-checker still runs but the LLM prompt loses some context.
+        """
+        try:
+            data = self._editor_read_fn(self.space_path)
+        except Exception:
+            return "unknown", None
+        strat = data.get("strategy", "unknown") if isinstance(data, dict) else "unknown"
+        hint_raw = data.get("asset_hint") if isinstance(data, dict) else None
+        if isinstance(hint_raw, str) and hint_raw.strip():
+            asset_hint: str | None = hint_raw.strip()
+        else:
+            asset_hint = None
+        return str(strat), asset_hint
+
+    def _last_diagnosis_dict(self) -> dict | None:
+        """Most recent diagnosis from runs.jsonl, or ``None`` if no runs yet.
+
+        Used as input to the sanity-checker LLM so it can see what the
+        judge said about the previous run.
+        """
+        try:
+            runs = self._memory_read_fn(self.runs_path, last_n=1)
+        except Exception:
+            return None
+        if not runs:
+            return None
+        rec = runs[-1]
+        diag = rec.diagnosis if hasattr(rec, "diagnosis") else (
+            rec.get("diagnosis") if isinstance(rec, dict) else None
+        )
+        if diag is None:
+            return None
+        if hasattr(diag, "to_dict"):
+            return diag.to_dict()
+        if isinstance(diag, dict):
+            return diag
         return None
 
     # ------------------------------------------------------------------ #
@@ -1110,6 +1212,82 @@ class Orchestrator:
             thresholds,
             rules,
         ) = self._read_space_dynamic()
+
+        # 1.5. Sanity-check the (params + data shape) BEFORE the verifier
+        #      runs. Hard rules every iter; LLM only on trigger events.
+        #      A ``fatal`` verdict aborts this iteration — auto-shifts the
+        #      writable surface and skips ahead, saving a holdout iter and
+        #      keeping bad shapes out of the auditor's trajectory window.
+        should_run_llm = self._should_run_llm_sanity()
+        strategy_name, asset_hint = self._read_strategy_meta()
+        try:
+            recent_runs_for_sanity = self._memory_read_fn(self.runs_path, last_n=5)
+        except Exception:
+            recent_runs_for_sanity = []
+        last_diag = self._last_diagnosis_dict()
+        try:
+            sanity_report = self._sanity_check_fn(
+                writable_items=self._list_writable(),
+                pool_size=(
+                    len(self._current_pool_event_ids)
+                    if self._current_pool_event_ids
+                    else None
+                ),
+                recent_runs=recent_runs_for_sanity,
+                diagnosis=last_diag,
+                strategy_name=strategy_name,
+                asset_hint=asset_hint,
+                use_llm=should_run_llm,
+            )
+        except Exception as exc:
+            # Sanity layer must never block the loop — degrade to no-op.
+            self._outbox(phase="sanity_error", iteration=it, error=str(exc))
+            sanity_report = sanity_checker_mod.SanityReport(
+                verdict="ok",
+                score=10.0,
+                issues=[],
+                advice=None,
+                summary=f"sanity_checker raised {type(exc).__name__}; treated as ok",
+                layer="rules",
+            )
+        self._last_sanity_report = sanity_report
+        # Update the LLM-cooldown counter. ``should_run_llm`` reflects the
+        # heuristic decision at the top of this iter; if it was True we
+        # reset, otherwise we increment.
+        if should_run_llm:
+            self._iters_since_llm_sanity = 0
+        else:
+            self._iters_since_llm_sanity += 1
+
+        if sanity_report.verdict == "fatal":
+            # Skip the verifier this round. Push a structured outbox row,
+            # then auto-shift to escape the bad region. The next iter
+            # starts on a fresh surface.
+            self._outbox(
+                phase="sanity_fatal",
+                iteration=it,
+                paused_reason=sanity_report.summary,
+                audit_text=sanity_report.advice or "",
+                sanity=sanity_report.to_dict(),
+                state=self.loop_state.state,
+            )
+            self._do_auto_shift()
+            self._save_state()
+            return {
+                "iteration": it,
+                "phase": "sanity_fatal",
+                "verdict": sanity_report.verdict,
+                "change_summary": "sanity_fatal: auto-shift triggered, verifier skipped",
+            }
+        elif sanity_report.verdict == "warn":
+            # Continue but flag in outbox so the user/operator can spot it.
+            self._outbox(
+                phase="sanity_warn",
+                iteration=it,
+                audit_text=sanity_report.advice or "",
+                sanity=sanity_report.to_dict(),
+                state=self.loop_state.state,
+            )
 
         # 2. Run verifier — pass oos_event_ids if a holdout pool is attached.
         oos_ids = self._current_pool_event_ids
@@ -1614,6 +1792,10 @@ class Orchestrator:
             change_summary=change_summary,
             state="running",
         )
+        # Tell the sanity-checker trigger heuristic that we just abandoned
+        # the prior trajectory — the next iteration's input is genuinely
+        # new and worth an LLM second opinion.
+        self._just_auto_shifted = True
         return edited > 0
 
     def _resume_from_pending(self, reason: str) -> None:

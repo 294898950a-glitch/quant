@@ -16,6 +16,10 @@
 version: 1
 strategy: sp500_grid
 last_updated: '2026-05-07T12:00:00Z'
+# asset_hint 用于体检员 (sanity_checker) 的 LLM prompt — 描述当前标的形态,
+# 帮助 LLM 判断"参数 + 标的 + 数据形状"组合是否合理 (例: 网格策略上单边趋势
+# 资产 + filter 全关 = 不合理). 仅作为提示, 不参与回测计算.
+asset_hint: "美国大盘 ETF (SPY 影子, 513500.SH); 长期上行趋势, 偶尔小幅震荡"
 
 parameters:                # 数值可调，CMA-ES 搜索维度，顺序固定
   - name: grid_count
