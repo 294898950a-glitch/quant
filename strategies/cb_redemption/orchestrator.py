@@ -1202,7 +1202,14 @@ class Orchestrator:
             self.loop_state.stagnant_streak += 1
             phase = "stagnant"
             if self.loop_state.stagnant_streak >= MAX_STAGNANT_STREAK:
-                self._enter_paused("stagnant for too many iterations")
+                # Don't unilaterally pause — go through the same approval gate
+                # as audit-veto so the user can override. If user doesn't
+                # reply within STOP_APPROVAL_TIMEOUT_SEC, the loop auto-shifts
+                # all writable params to range midpoints and resumes.
+                self._enter_pending_stop_approval(
+                    f"stagnant for {MAX_STAGNANT_STREAK} consecutive iterations — "
+                    f"loop has nothing fresh to try in current direction"
+                )
             else:
                 # Try to propose anyway (treat stagnant as a soft signal).
                 hypothesis_attempt, change_summary = self._do_propose(

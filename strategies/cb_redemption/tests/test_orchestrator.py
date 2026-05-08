@@ -1254,3 +1254,29 @@ def test_state_json_pending_since_iso_legacy_compat(tmp_path: Path) -> None:
 def test_stop_approval_timeout_default_is_30_minutes() -> None:
     """Sanity: the documented default timeout actually ships as 1800 seconds."""
     assert STOP_APPROVAL_TIMEOUT_SEC == 1800
+
+
+def test_stagnant_max_streak_enters_pending_stop_approval_not_paused(
+    tmp_path: Path,
+) -> None:
+    """User feedback: stagnant 5 should also go through approval gate.
+
+    Old behavior: stagnant_streak hits MAX_STAGNANT_STREAK -> _enter_paused()
+    unilaterally. User pushed back: 'don't stop without asking'. New behavior:
+    same approval gate as audit-veto + recovery exhausted.
+    """
+    from strategies.cb_redemption.orchestrator import MAX_STAGNANT_STREAK
+
+    auditor_fn = lambda runs_path, holdout_path, **kw: StubAuditReport(
+        verdict="stagnant", veto=False, veto_reason=None
+    )
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=MAX_STAGNANT_STREAK + 1,
+        auditor_fn=auditor_fn,
+    )
+    final = o.run()
+    assert final.state == "pending_stop_approval", (
+        f"expected pending_stop_approval after stagnant streak, got {final.state}"
+    )
+    assert "stagnant" in (final.paused_reason or "").lower()
