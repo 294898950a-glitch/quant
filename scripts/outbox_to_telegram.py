@@ -2,8 +2,23 @@
 """
 Outbox -> Telegram relay.
 
-Tails ``data/cb_redemption/outbox.jsonl`` and forwards each new line to a
-Telegram chat as a short markdown message.
+Tails ``data/<strategy>/outbox.jsonl`` and forwards a *small* subset of new
+lines to a Telegram chat as a short, plain-language message.
+
+Default behaviour is **silent**: routine iteration rows (healthy / stagnant /
+recovering / parameter tweaks / sanity warnings) are skipped. Only a handful of
+real *events* trigger a push:
+
+    1. New data segment attached       (phase=pool_attached)
+    2. Data segment finished           (phase=pool_sealed)
+    3. System wants to stop, asks user (phase=stop_approval_requested
+                                        OR state first enters
+                                        ``pending_stop_approval``)
+    4. Hard error                      (phase contains 'error' or is
+                                        ``sanity_fatal``; or row has 'error'
+                                        field set)
+    5. Significant score shift         (|oos_sharpe - last_sent_oos| >= 0.5)
+    6. Real stop                       (state enters paused/stopped)
 
 Reads:
   - ``TELEGRAM_BOT_TOKEN`` (or whichever env var passed via ``--token-env``)
@@ -16,7 +31,7 @@ Behaviour:
     (useful for smoke testing).
   - Polls the file size every ``--poll-secs`` seconds (default 2). When the
     file grows, reads the new bytes, splits on newline, and pushes each
-    complete JSON line to Telegram.
+    *worth-pushing* JSON line to Telegram.
   - File rotation / truncation handling: if size shrinks, we re-open and seek
     back to current offset clamped to new size.
   - On Telegram API failure (non-2xx or transport error) retries 3 times with
@@ -34,6 +49,7 @@ import argparse
 import json
 import logging
 import os
+import re
 import signal
 import sys
 import time
@@ -51,44 +67,19 @@ HTTP_TIMEOUT = 10.0
 
 
 # --------------------------------------------------------------------------- #
-# Formatting
+# Formatting — plain-language event messages
 # --------------------------------------------------------------------------- #
+#
+# Design rule: messages MUST NOT contain trader jargon like 夏普 / OOS / IS /
+# verdict / phase / stagnant / data_mining / recovering / healthy / audit /
+# raw english trace. The format_message dispatcher uses the row's
+# phase/state to pick a friendly template, then strips/avoids those words.
 
-
-# 中文翻译表 — 给 telegram 用,不影响 git/runs.jsonl 的英文内部表示
-_VERDICT_ZH = {
-    "healthy": "正常",
-    "data_mining": "疑似挖数据",
-    "stagnant": "停滞无进展",
-    "diverging": "持续恶化",
-}
-_STATE_ZH = {
-    "running": "运行中",
-    "paused": "暂停",
-    "stopped": "已停止",
-    "recovering": "恢复中",
-}
-_PHASE_ZH = {
-    "healthy": "正常",
-    "recovering": "恢复中",
-    "stagnant": "停滞",
-    "paused": "暂停",
-    "stopped": "已停止",
-    "pool_attached": "接入新样本池",
-    "pool_sealed": "封闭样本池",
-    "git_commit_error": "提交失败",
-    "verifier_error": "回测出错",
-    "judge_error": "诊断出错",
-    "auditor_error": "审计出错",
-    "memory_error": "记录出错",
-    "hypothesizer_error": "出主意出错",
-    "editor_error": "改参数出错",
-}
-_CONFIDENCE_ZH = {"low": "低", "medium": "中", "high": "高"}
-_SOURCE_ZH = {"llm": "大模型", "rules": "内置规则"}
-# 参数中文名 — 跨策略集中管理
+# Parameter-name → human-readable Chinese (best-effort; falls back to the
+# bare last segment of the dotted path if the strategy uses something we
+# haven't catalogued yet).
 _PARAM_NAME_ZH = {
-    # sp500_grid
+    # sp500_grid / csi500_grid / yzm_grid — same shape
     "parameters.grid_count": "网格数",
     "parameters.range_window": "区间窗口(天)",
     "parameters.position_per_grid": "单格仓位",
@@ -110,92 +101,223 @@ _PARAM_NAME_ZH = {
 }
 
 
-def _zh_param(item_path: str) -> str:
-    """item_path → 中文名;落空回退原 path 末段。"""
+def _zh_param(item_path: str | None) -> str:
     if not item_path:
-        return "?"
-    if item_path in _PARAM_NAME_ZH:
-        return _PARAM_NAME_ZH[item_path]
-    # 回退:取末段
-    return item_path.split(".")[-1]
+        return "参数"
+    return _PARAM_NAME_ZH.get(item_path, item_path.split(".")[-1])
 
 
-def format_message(row: dict[str, Any], label: str | None = None) -> str:
-    """outbox 一行 → 多行中文 telegram 消息。"""
-    iteration = row.get("iteration", "?")
-    verdict_raw = row.get("verdict") or row.get("phase") or "n/a"
-    verdict = _VERDICT_ZH.get(verdict_raw, _PHASE_ZH.get(verdict_raw, verdict_raw))
-    state_raw = row.get("state") or ""
-    state = _STATE_ZH.get(state_raw, state_raw)
-    paused_reason = row.get("paused_reason")
-    change_summary = row.get("change_summary") or ""
-    error = row.get("error")
+def _label_prefix(label: str | None) -> str:
+    return f"[{label}] " if label else ""
 
-    # 头部:OOS 夏普 + trades + return
-    oos_raw = row.get("oos_sharpe")
-    oos_str = f"{float(oos_raw):.2f}" if isinstance(oos_raw, (int, float)) else "?"
-    oos_trades = row.get("oos_trades")
-    oos_return = row.get("oos_return")
-    extras = []
-    if isinstance(oos_trades, int) and oos_trades:
-        extras.append(f"{oos_trades} 笔交易")
-    if isinstance(oos_return, (int, float)):
-        extras.append(f"收益 {oos_return:+.2f}%")
-    oos_ctx = f" ({', '.join(extras)})" if extras else ""
 
-    bang = ""
-    state_lower = str(state_raw).lower()
-    if state_lower in {"paused", "error"} or "error" in str(verdict_raw).lower():
-        bang = "❗ "
-    label_prefix = f"[{label}] " if label else ""
-    head = f"{bang}{label_prefix}第 {iteration} 轮 | {verdict} | 测试段夏普 {oos_str}{oos_ctx}"
+def _first_sentence(text: str | None, max_chars: int = 50) -> str:
+    """Take the first sentence (cut at first ./。/!/?/!/?) up to max_chars.
+
+    Returns "" if no usable text. Falls back to the head if no terminator
+    found within the limit.
+    """
+    if not text:
+        return ""
+    s = str(text).strip()
+    if not s:
+        return ""
+    # Find first sentence terminator within the first ~max_chars*2 chars.
+    cut_re = re.compile(r"[.。!?!?;；\n]")
+    head = s[: max_chars * 3]
+    m = cut_re.search(head)
+    if m:
+        s = head[: m.start()].strip()
+    if len(s) > max_chars:
+        s = s[: max_chars].rstrip() + "…"
+    return s
+
+
+def _humanise_paused_reason(reason: str | None) -> str:
+    """Translate orchestrator-internal reason strings to plain Chinese.
+
+    Covers the well-known ones; falls back to the raw string (already short).
+    """
+    if not reason:
+        return "(原因未知)"
+    r = str(reason)
+    table = [
+        ("all holdout pools exhausted", "隔离样本袋全用完了"),
+        ("holdout dry", "隔离样本袋全用完了"),
+        ("max_recovery_attempts", "试了几种修法都没救回来"),
+        ("max recovery attempts", "试了几种修法都没救回来"),
+        ("user approved stop", "用户确认了停止"),
+        ("user-approved stop", "用户确认了停止"),
+        ("control.signal=pause", "用户手动按了暂停"),
+        ("control.signal=stop", "用户手动按了停止"),
+        ("user requested stop", "用户请求停止"),
+        ("hypothesizer returned None", "参数搜光了, 没想出新方向"),
+        ("no untouched", "参数搜光了, 没想出新方向"),
+        ("hypothesizer", "参数搜光了, 没想出新方向"),
+        ("editor blocked", "改参数被卡住"),
+        ("editor", "改参数被卡住"),
+        ("auditor veto", "审计否决了"),
+        ("auditor", "审计否决了"),
+        ("3 stagnant", "连续几轮没进展"),
+        ("stagnant", "连续几轮没进展"),
+    ]
+    low = r.lower()
+    for needle, zh in table:
+        if needle.lower() in low:
+            return zh
+    # Fallback: keep it short.
+    return r if len(r) < 60 else r[:57] + "…"
+
+
+def _fmt_pool_attached(row: dict[str, Any], label: str | None) -> str:
+    pool_id = row.get("pool_id")
+    n_events = row.get("n_events")
+    head = f"📍 {_label_prefix(label)}换到新一段历史"
     parts = [head]
+    if pool_id is not None:
+        parts.append(f"   段编号: 第 {pool_id} 段")
+    if isinstance(n_events, int) and n_events > 0:
+        parts.append(f"   共 {n_events} 个交易日")
+    return "\n".join(parts)
 
-    # 改动 — 优先用结构化字段(可翻译参数名),否则用 change_summary 原文
+
+def _fmt_pool_sealed(row: dict[str, Any], label: str | None) -> str:
+    pool_id = row.get("pool_id")
+    iters = row.get("iters_spent")
+    seg_no_txt = f"第 {pool_id + 1} 段" if isinstance(pool_id, int) else "当前段"
+    iters_txt = f"(共 {iters} 轮调参)" if isinstance(iters, int) and iters > 0 else ""
+    head = f"📊 {_label_prefix(label)}{seg_no_txt}跑完{iters_txt}".rstrip()
+    return head + "\n   跑完了, 自动接下一段"
+
+
+def _fmt_stop_approval(row: dict[str, Any], label: str | None) -> str:
+    reason = _humanise_paused_reason(row.get("paused_reason"))
+    head = f"⚠️ {_label_prefix(label)}系统想停下"
+    parts = [
+        head,
+        f"   原因: {reason}",
+        "   1 分钟内回我:",
+        "     stop = 真停",
+        "     continue = 别停, 接着跑当前方向",
+        "     shift = 重置参数, 从新位置探索",
+        "   不回复 → 自动 shift 重置继续",
+    ]
+    return "\n".join(parts)
+
+
+def _fmt_error(row: dict[str, Any], label: str | None) -> str:
+    err_raw = row.get("error") or row.get("paused_reason") or row.get("phase") or "未知错误"
+    err = str(err_raw)
+    if len(err) > 120:
+        err = err[:117] + "…"
+    head = f"❌ {_label_prefix(label)}出问题了"
+    return f"{head}\n   {err}"
+
+
+def _fmt_paused(row: dict[str, Any], label: str | None) -> str:
+    reason = _humanise_paused_reason(row.get("paused_reason"))
+    head = f"🛑 {_label_prefix(label)}系统真停了"
+    return f"{head}\n   原因: {reason}"
+
+
+def _fmt_score_jump(
+    row: dict[str, Any],
+    prev_row: dict[str, Any] | None,
+    label: str | None,
+) -> str:
+    """Significant score change. We pull the LAST sent score from FilterState
+    via ``prev_row`` (a tiny synthesised dict)."""
+    cur = row.get("oos_sharpe")
+    prev = (prev_row or {}).get("oos_sharpe")
+    cur_f = float(cur) if isinstance(cur, (int, float)) else None
+    prev_f = float(prev) if isinstance(prev, (int, float)) else None
+    direction_up = (
+        cur_f is not None and prev_f is not None and cur_f > prev_f
+    )
+
+    if direction_up:
+        head = f"📈 {_label_prefix(label)}成绩跳了一档(变好) — 注意!"
+    else:
+        head = f"📉 {_label_prefix(label)}成绩突然变差"
+
+    parts = [head]
+    if prev_f is not None and cur_f is not None:
+        parts.append(f"   上次: {prev_f:+.2f} → 现在: {cur_f:+.2f}")
+    elif cur_f is not None:
+        parts.append(f"   现在: {cur_f:+.2f}")
+
+    # Recent change description, if structured fields are present.
     item_path = row.get("change_item_path")
     new_value = row.get("change_new_value")
     old_value = row.get("change_old_value")
-    source_raw = row.get("change_source")
-    source_zh = _SOURCE_ZH.get(source_raw, source_raw) if source_raw else None
-    conf_zh = _CONFIDENCE_ZH.get(row.get("hypothesis_confidence"))
     if item_path and new_value is not None:
-        zh_name = _zh_param(item_path)
-        change_line = f"改动: {zh_name}"
-        if old_value is not None:
-            change_line += f" 从 {old_value} → {new_value}"
+        zh = _zh_param(item_path)
+        if old_value is not None and old_value != new_value:
+            parts.append(f"   最近改的: {zh} 从 {old_value} → {new_value}")
         else:
-            change_line += f" → {new_value}"
-        tags = []
-        if source_zh:
-            tags.append(source_zh)
-        if conf_zh:
-            tags.append(f"信心{conf_zh}")
-        if tags:
-            change_line += f" ({','.join(tags)})"
-        parts.append(change_line)
-    elif change_summary and change_summary != "no-change":
-        # 回退:恢复路径之类没有结构化字段
-        parts.append(f"改动: {change_summary}")
+            parts.append(f"   最近改的: {zh} → {new_value}")
 
-    # LLM/规则的理由
-    reason = row.get("hypothesis_reason")
+    # First sentence of the LLM/rule reason.
+    reason = _first_sentence(row.get("hypothesis_reason"), max_chars=50)
     if reason:
-        parts.append(f"原因: {reason}")
+        parts.append(f"   说明: {reason}")
 
-    # 审计员的话
-    audit_text = row.get("audit_text")
-    if audit_text:
-        parts.append(f"审计: {audit_text}")
-
-    # 状态
-    if state:
-        line = f"状态: {state}"
-        if paused_reason:
-            line += f"(原因: {paused_reason})"
-        parts.append(line)
-    if error:
-        parts.append(f"出错: {error}")
     return "\n".join(parts)
+
+
+# Phases the orchestrator emits when something errored out.
+_ERROR_PHASES = {
+    "sanity_fatal",
+    "sanity_error",
+    "git_commit_error",
+    "verifier_error",
+    "judge_error",
+    "auditor_error",
+    "memory_error",
+    "hypothesizer_error",
+    "editor_error",
+    "holdout_seal_error",
+    "holdout_remaining_error",
+    "holdout_read_error",
+}
+
+
+def _is_error_row(row: dict[str, Any]) -> bool:
+    if row.get("error"):
+        return True
+    phase = str(row.get("phase") or "").lower()
+    if phase in _ERROR_PHASES:
+        return True
+    if "error" in phase:
+        return True
+    return False
+
+
+def format_message(
+    row: dict[str, Any],
+    label: str | None = None,
+    prev_row: dict[str, Any] | None = None,
+) -> str:
+    """Pick the right friendly template based on row contents.
+
+    ``prev_row`` provides the previous *sent* row (for score-jump messages
+    that need the prior oos_sharpe). FilterState owns and supplies it.
+    """
+    phase = str(row.get("phase") or "")
+    state = str(row.get("state") or "")
+
+    if phase == "pool_attached":
+        return _fmt_pool_attached(row, label)
+    if phase == "pool_sealed":
+        return _fmt_pool_sealed(row, label)
+    if phase == "stop_approval_requested" or state == "pending_stop_approval":
+        return _fmt_stop_approval(row, label)
+    if _is_error_row(row):
+        return _fmt_error(row, label)
+    if state in {"paused", "stopped"}:
+        return _fmt_paused(row, label)
+    # FilterState only routes here for a real score jump.
+    return _fmt_score_jump(row, prev_row, label)
 
 
 # --------------------------------------------------------------------------- #
@@ -416,76 +538,115 @@ class OutboxTailer:
 
 
 # --------------------------------------------------------------------------- #
-# Filter — only forward "interesting" lines
+# Filter — only forward 6 event categories
 # --------------------------------------------------------------------------- #
 
 
-# Phases we always push (state transitions, milestones, errors)
+# Phases that are *always* worth pushing (data segment milestones, real
+# errors, structured stop-approval requests).
 _ALWAYS_PHASES = {
-    "paused", "stopped", "vetoed",
-    "pool_attached", "pool_sealed",
+    "pool_attached",
+    "pool_sealed",
+    "stop_approval_requested",
+    "sanity_fatal",
     "git_commit_error",
+    "verifier_error",
+    "judge_error",
+    "auditor_error",
+    "memory_error",
+    "hypothesizer_error",
+    "editor_error",
+    "holdout_seal_error",
+    "holdout_remaining_error",
+    "holdout_read_error",
 }
 
 
 class FilterState:
-    """Decide whether each outbox row is worth a telegram push.
+    """Decide whether each outbox row is worth a Telegram push.
 
-    Stateful across rows in one process. Forwards only:
-      - phase in _ALWAYS_PHASES
-      - any 'error' field present
-      - state transition (state field differs from last sent)
-      - verdict transition (verdict field differs from last sent)
-      - oos_sharpe changed by >= delta from last sent
-      - every Nth iteration as a quiet heartbeat
+    Default policy: silent. Forward only when one of the 6 events fires:
+
+      1. phase ∈ _ALWAYS_PHASES  (segment milestones, structured errors)
+      2. row['error'] truthy     (any error path)
+      3. state first transitions into 'pending_stop_approval'
+      4. state first transitions into 'paused' or 'stopped'
+      5. |oos_sharpe - last_sent_oos| >= oos_delta (significant score shift)
+      6. heartbeat_every > 0 AND iter % heartbeat_every == 0  (off by default)
+
+    Routine healthy / stagnant / recovering / sanity_warn / sanity-pool-stats
+    rows are dropped.
     """
 
-    def __init__(self, heartbeat_every: int = 20, oos_delta: float = 0.05) -> None:
-        self.heartbeat_every = max(1, heartbeat_every)
+    def __init__(
+        self,
+        heartbeat_every: int = 0,
+        oos_delta: float = 0.5,
+    ) -> None:
+        self.heartbeat_every = max(0, heartbeat_every)
         self.oos_delta = oos_delta
         self.last_sent_state: str | None = None
-        self.last_sent_verdict: str | None = None
         self.last_sent_oos: float | None = None
         self.last_sent_iter: int | None = None
+        # Snapshot of the last *sent* row, used by score-jump formatter to
+        # show "上次 → 现在" deltas.
+        self.last_sent_row: dict[str, Any] | None = None
 
     def should_send(self, row: dict[str, Any]) -> bool:
-        phase = str(row.get("phase") or "").lower()
+        phase = str(row.get("phase") or "")
+        state = str(row.get("state") or "")
+
+        # 1. Always-push phases.
         if phase in _ALWAYS_PHASES:
             return True
+
+        # 2. Any error-bearing row.
         if row.get("error"):
             return True
+        if "error" in phase.lower():
+            return True
 
-        state = row.get("state")
-        verdict = row.get("verdict")
+        # 3. First entry into pending_stop_approval.
+        if state == "pending_stop_approval" and self.last_sent_state != "pending_stop_approval":
+            return True
+
+        # 4. First entry into paused/stopped (skips repeated paused heartbeats).
+        if state in {"paused", "stopped"} and self.last_sent_state not in {"paused", "stopped"}:
+            return True
+
+        # 5. Significant score shift.
         oos = row.get("oos_sharpe")
-        it = row.get("iteration")
-
-        # Transitions are interesting.
-        if state is not None and state != self.last_sent_state:
-            return True
-        if verdict is not None and verdict != self.last_sent_verdict:
-            return True
-
-        # Significant OOS movement.
         if isinstance(oos, (int, float)) and isinstance(self.last_sent_oos, (int, float)):
             if abs(float(oos) - float(self.last_sent_oos)) >= self.oos_delta:
                 return True
 
-        # Heartbeat every Nth iteration even if nothing else changed.
-        if isinstance(it, int) and it > 0 and it % self.heartbeat_every == 0:
+        # 6. Optional heartbeat (default OFF).
+        it = row.get("iteration")
+        if (
+            self.heartbeat_every > 0
+            and isinstance(it, int)
+            and it > 0
+            and it % self.heartbeat_every == 0
+            and it != self.last_sent_iter
+        ):
             return True
 
         return False
 
     def mark_sent(self, row: dict[str, Any]) -> None:
         if "state" in row and row["state"] is not None:
-            self.last_sent_state = row["state"]
-        if "verdict" in row and row["verdict"] is not None:
-            self.last_sent_verdict = row["verdict"]
+            self.last_sent_state = str(row["state"])
         if isinstance(row.get("oos_sharpe"), (int, float)):
             self.last_sent_oos = float(row["oos_sharpe"])
         if isinstance(row.get("iteration"), int):
             self.last_sent_iter = row["iteration"]
+        # Snapshot only the fields the score-jump formatter cares about.
+        snap_keys = (
+            "iteration", "oos_sharpe", "oos_trades", "oos_return",
+            "change_item_path", "change_new_value", "change_old_value",
+            "hypothesis_reason",
+        )
+        self.last_sent_row = {k: row.get(k) for k in snap_keys}
 
 
 # --------------------------------------------------------------------------- #
@@ -493,17 +654,25 @@ class FilterState:
 # --------------------------------------------------------------------------- #
 
 
-def _handle_line(line: str, relay: TelegramRelay, filt: FilterState | None = None,
-                 label: str | None = None) -> None:
+def _handle_line(
+    line: str,
+    relay: TelegramRelay,
+    filt: FilterState | None = None,
+    label: str | None = None,
+) -> None:
     try:
         row = json.loads(line)
     except Exception as exc:
         LOG.warning("skipping malformed json line: %s", exc)
         return
     if filt is not None and not filt.should_send(row):
-        LOG.debug("filter: skipping iter=%s phase=%s", row.get("iteration"), row.get("phase"))
+        LOG.debug(
+            "filter: skipping iter=%s phase=%s state=%s",
+            row.get("iteration"), row.get("phase"), row.get("state"),
+        )
         return
-    text = format_message(row, label=label)
+    prev_row = filt.last_sent_row if filt is not None else None
+    text = format_message(row, label=label, prev_row=prev_row)
     if relay.send(text) and filt is not None:
         filt.mark_sent(row)
 
@@ -536,16 +705,16 @@ def build_arg_parser() -> argparse.ArgumentParser:
         help="Disable noise filter (push every outbox row; default: filter)",
     )
     p.add_argument(
-        "--heartbeat-every", type=int, default=20,
-        help="Push every Nth iteration even if nothing changed (default 20)",
+        "--heartbeat-every", type=int, default=0,
+        help="Push every Nth iteration even if nothing changed (default 0 = OFF)",
     )
     p.add_argument(
-        "--oos-delta", type=float, default=0.05,
-        help="Push when oos_sharpe shifts by >= this from last sent (default 0.05)",
+        "--oos-delta", type=float, default=0.5,
+        help="Push when score shifts by >= this from last sent (default 0.5)",
     )
     p.add_argument(
         "--label", default=None,
-        help="Prefix every message head with [LABEL] (e.g. 'sp500-grid'); default: no prefix",
+        help="Prefix every message head with [LABEL] (e.g. 'sp500-grid')",
     )
     return p
 
