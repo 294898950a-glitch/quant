@@ -538,3 +538,121 @@ def test_rules_returns_none_when_nothing_triggers(
     )
 
     assert h is None
+
+
+# --------------------------------------------------------------------------- #
+# Pool stats injection (no-label invariant)
+# --------------------------------------------------------------------------- #
+
+
+def test_pool_stats_in_prompt(
+    writable_items, clean_diagnosis, tried_path, runs_path, space_path
+):
+    """When ``pool_stats`` is forwarded to ``propose``, the LLM user
+    message must contain the raw-number block — and **must not** contain
+    any market-state labels (the framework lets the LLM judge, but
+    refuses to hand-feed it priors).
+    """
+    captured: dict[str, str] = {}
+
+    def fake_call(api_key, system_prompt, user_prompt):
+        captured["system"] = system_prompt
+        captured["user"] = user_prompt
+        # Return a perfectly valid hypothesis so the LLM path succeeds.
+        return json.dumps(
+            {
+                "item_path": "parameters.w_premium_ratio",
+                "new_value": -1.0,
+                "expected_direction": "oos_sharpe up by >=0.02",
+                "reason": "在统计描述里看到累计涨跌为负, 收紧 |w_premium_ratio| 期望 oos_sharpe 上升",
+                "confidence": "medium",
+            }
+        )
+
+    pool_stats = {
+        "sample_n": 130,
+        "trend_pct": -0.12,
+        "slope_per_day": -0.0005,
+        "vol_daily": 0.015,
+        "range_pct": 0.35,
+    }
+
+    h = propose(
+        writable_items=writable_items,
+        recent_runs=[],
+        diagnosis=clean_diagnosis,
+        tried_directions=[],
+        llm_client=fake_call,
+        space_path=space_path,
+        runs_path=runs_path,
+        tried_path=tried_path,
+        pool_stats=pool_stats,
+    )
+
+    assert h is not None
+    assert h.source == "llm"
+
+    # Required raw-number markers appear in the user prompt.
+    user = captured["user"]
+    assert "累计涨跌" in user
+    assert "日波动率" in user
+    assert "区间宽度" in user
+    assert "样本数" in user
+    # And the prompt visibly includes the actual numbers.
+    assert "-12.0%" in user  # trend_pct rendered as percent
+    assert "1.50%" in user   # vol_daily rendered as percent
+    assert "130" in user     # sample_n
+
+    # No market-state labels in any part of the prompt — the framework
+    # contract is "let the LLM judge", not "hand it a label".
+    full_prompt = captured["system"] + "\n" + captured["user"]
+    forbidden_lower = ("bull", "bear", "ranging", "volatile", "dead")
+    forbidden_chinese = ("牛市", "熊市", "震荡")
+    low = full_prompt.lower()
+    for token in forbidden_lower:
+        assert token not in low, (
+            f"forbidden label {token!r} leaked into prompt: {captured!r}"
+        )
+    for token in forbidden_chinese:
+        assert token not in full_prompt, (
+            f"forbidden label {token!r} leaked into prompt: {captured!r}"
+        )
+
+
+def test_pool_stats_none_omits_section(
+    writable_items, clean_diagnosis, tried_path, runs_path, space_path
+):
+    """When ``pool_stats`` is omitted (cb_redemption case), the user
+    message must NOT contain the stats header — backwards-compat for
+    strategies without a price loader.
+    """
+    captured: dict[str, str] = {}
+
+    def fake_call(api_key, system_prompt, user_prompt):
+        captured["user"] = user_prompt
+        return json.dumps(
+            {
+                "item_path": "parameters.w_premium_ratio",
+                "new_value": -1.0,
+                "expected_direction": "oos_sharpe up by >=0.02",
+                "reason": "把 |w_premium_ratio| 缩小测试 pool_stats 为 None 时 prompt 不含统计描述",
+                "confidence": "low",
+            }
+        )
+
+    h = propose(
+        writable_items=writable_items,
+        recent_runs=[],
+        diagnosis=clean_diagnosis,
+        tried_directions=[],
+        llm_client=fake_call,
+        space_path=space_path,
+        runs_path=runs_path,
+        tried_path=tried_path,
+        # pool_stats omitted on purpose
+    )
+
+    assert h is not None
+    user = captured["user"]
+    # Header introduced by _format_pool_stats_section must be absent.
+    assert "当前数据切片的统计描述" not in user

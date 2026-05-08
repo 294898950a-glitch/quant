@@ -119,6 +119,12 @@ class RunRecord:
 
     ``backtest`` is intentionally typed as ``dict`` so this module does
     not import ``backtest.py``; callers pass ``BacktestResult.to_dict()``.
+
+    ``pool_stats`` carries the raw numerical description of the data
+    slice the iteration ran on (see :mod:`pool_stats`). It is purely
+    informational — never labels, just numbers — so future audits can
+    reconstruct what the data looked like without re-loading parquet.
+    Optional and ``None`` for strategies that do not wire the loader in.
     """
 
     run_id: str
@@ -131,6 +137,7 @@ class RunRecord:
     hypothesis_attempt: dict | None = None
     audit: dict | None = None
     git_commit: str | None = None
+    pool_stats: dict | None = None
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -148,6 +155,7 @@ class RunRecord:
             hypothesis_attempt=d.get("hypothesis_attempt"),
             audit=d.get("audit"),
             git_commit=d.get("git_commit"),
+            pool_stats=d.get("pool_stats"),
         )
 
 

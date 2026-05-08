@@ -533,14 +533,51 @@ def _summarise_tried(tried_directions: list[dict]) -> list[dict]:
     return out
 
 
+def _format_pool_stats_section(pool_stats: dict | None) -> str:
+    """Render the raw-statistic block appended to the user message.
+
+    Pure formatting: numbers in, Chinese lines out. **Must not** introduce
+    market-state labels (bull/bear/ranging/volatile/dead, 牛/熊/震荡)
+    here or in the surrounding instructions — the framework's stated
+    contract is that the LLM is the one that judges, not the prompt.
+
+    Returns an empty string if ``pool_stats`` is None or empty so the
+    user message stays clean for cb_redemption-style strategies that
+    don't supply stats.
+    """
+    if not pool_stats:
+        return ""
+    lines = [
+        f"累计涨跌: {float(pool_stats.get('trend_pct', 0.0)):+.1%}",
+        f"日斜率: {float(pool_stats.get('slope_per_day', 0.0)):+.4f}%",
+        f"日波动率: {float(pool_stats.get('vol_daily', 0.0)):.2%}",
+        f"区间宽度: {float(pool_stats.get('range_pct', 0.0)):.1%}",
+        f"样本数: {int(pool_stats.get('sample_n', 0))}",
+    ]
+    return (
+        "\n\n## 当前数据切片的统计描述\n"
+        + "\n".join(f"- {l}" for l in lines)
+        + "\n\n请从这些原始数字判断当前市况, 据此给参数建议. "
+        + "不要默认任何标签 — 这些数字本身就是事实."
+    )
+
+
 def _build_user_prompt(
     writable_items: list[dict],
     recent_runs: list[Any],
     diagnosis: dict,
     tried_directions: list[dict],
     prev_error: str | None,
+    pool_stats: dict | None = None,
 ) -> str:
-    """Pack all inputs into one prompt body."""
+    """Pack all inputs into one prompt body.
+
+    The optional ``pool_stats`` argument carries a label-free numeric
+    description of the currently-attached holdout pool; if supplied it
+    is appended as a separate human-readable section after the JSON
+    payload so the LLM sees both the raw machine-friendly facts and a
+    quick-read summary.
+    """
     payload = {
         "writable_items": writable_items,
         "recent_runs": [_summarise_run(r) for r in (recent_runs or [])],
@@ -548,12 +585,13 @@ def _build_user_prompt(
         "tried_directions": _summarise_tried(tried_directions),
     }
     body = json.dumps(payload, ensure_ascii=False)
+    pool_block = _format_pool_stats_section(pool_stats)
     if prev_error:
         return (
             f"上一轮你的输出被拒绝, 原因: {prev_error}\n"
-            f"请重出一份合规 JSON。输入数据如下:\n{body}"
+            f"请重出一份合规 JSON。输入数据如下:\n{body}{pool_block}"
         )
-    return f"输入数据 (JSON):\n{body}"
+    return f"输入数据 (JSON):\n{body}{pool_block}"
 
 
 def _default_llm_call(
@@ -629,6 +667,7 @@ def propose_via_llm(
     tried_path: Path,
     llm_call: Callable[[str, str, str], str] | None = None,
     max_retries: int = 2,
+    pool_stats: dict | None = None,
 ) -> Hypothesis | None:
     """Try to extract a valid hypothesis from the LLM.
 
@@ -641,6 +680,11 @@ def propose_via_llm(
     max_retries : int
         Number of *additional* attempts after the first call (so
         ``max_retries=2`` → up to 3 calls in total).
+    pool_stats : dict, optional
+        Raw numerical description of the currently-attached holdout
+        pool (see :mod:`pool_stats`). When supplied, the prompt
+        includes a small Chinese summary so the LLM can use the
+        numbers for its market read. **No labels** — only digits.
 
     Returns
     -------
@@ -660,7 +704,12 @@ def propose_via_llm(
 
     for attempt in range(max_retries + 1):
         user_prompt = _build_user_prompt(
-            writable_items, recent_runs, diagnosis, tried_directions, last_error
+            writable_items,
+            recent_runs,
+            diagnosis,
+            tried_directions,
+            last_error,
+            pool_stats=pool_stats,
         )
         try:
             raw = llm_call(api_key, system_prompt, user_prompt)
@@ -701,6 +750,7 @@ def propose(
     runs_path: Path = memory_mod.DEFAULT_RUNS_FILE,
     tried_path: Path = memory_mod.DEFAULT_ATTEMPTS_FILE,
     max_llm_retries: int = 2,
+    pool_stats: dict | None = None,
 ) -> Hypothesis | None:
     """Top-level hypothesizer entry. Never raises.
 
@@ -727,6 +777,11 @@ def propose(
         layers and reserved for future use.
     max_llm_retries : int
         Forwarded to :func:`propose_via_llm`.
+    pool_stats : dict, optional
+        Raw numbers describing the current holdout pool (see
+        :mod:`pool_stats`). Forwarded to the LLM prompt. ``None`` (the
+        default) is the cb_redemption case — that strategy does not
+        wire a price loader, so the prompt is unchanged.
     """
     # Path A — LLM. Fully wrapped in try/except: contract says we never raise.
     try:
@@ -738,6 +793,7 @@ def propose(
             tried_path=tried_path,
             llm_call=llm_client,
             max_retries=max_llm_retries,
+            pool_stats=pool_stats,
         )
         if h is not None:
             return h

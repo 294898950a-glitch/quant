@@ -83,6 +83,7 @@ from strategies.cb_redemption import holdout as holdout_mod
 from strategies.cb_redemption import hypothesizer as hypothesizer_mod
 from strategies.cb_redemption import judge as judge_mod
 from strategies.cb_redemption import memory as memory_mod
+from strategies.cb_redemption import pool_stats as pool_stats_mod
 from strategies.cb_redemption import sanity_checker as sanity_checker_mod
 
 
@@ -380,6 +381,16 @@ class Orchestrator:
         holdout_read_fn: Callable | None = None,
         holdout_seal_fn: Callable | None = None,
         sanity_check_fn: Callable | None = None,
+        # Optional: callable taking the current pool's event_ids and
+        # returning an OHLC DataFrame (must contain a ``close`` column).
+        # When supplied, the orchestrator computes raw pool statistics on
+        # every pool attach / rotate and feeds the resulting dict into the
+        # hypothesizer prompt (see :mod:`pool_stats`). Default ``None`` —
+        # statistic-aware prompting is opt-in per strategy. The wiring
+        # point is each strategy's ``orchestrator_main.py`` (cb_redemption
+        # itself does not enable it because event_ids are bond-id-based,
+        # not date-based).
+        pool_prices_loader_fn: Callable[[set[str] | list[str]], Any] | None = None,
         sleep_fn: Callable[[float], None] | None = None,
         # optional state seeds
         runs_path: Path | None = None,
@@ -453,11 +464,24 @@ class Orchestrator:
         # Injection — sanity_checker (layer 8.5 — pre-verifier input gate).
         self._sanity_check_fn = sanity_check_fn or sanity_checker_mod.check
 
+        # Injection — pool prices loader (layer 9.5 — raw pool statistics).
+        # ``None`` means we skip stat computation entirely; cb_redemption
+        # never wires this in (no daily-bar concept on bond events) and
+        # the grid orchestrators each provide their own.
+        self._pool_prices_loader_fn = pool_prices_loader_fn
+
         # in-memory cache of the event_id set for the currently-attached
         # pool (recovered from holdout file on attach; not persisted in
         # state.json — we re-derive on resume by re-reading the pool file
         # if needed).
         self._current_pool_event_ids: set[str] | None = None
+
+        # in-memory cache of the most recent :class:`pool_stats.PoolStats`
+        # for the attached pool. Refreshed every pool attach / rotate;
+        # ``None`` until first computation succeeds (or always ``None`` if
+        # ``pool_prices_loader_fn`` was not supplied). Forwarded into the
+        # hypothesizer prompt and into the RunRecord.
+        self._current_pool_stats: pool_stats_mod.PoolStats | None = None
 
         # Injection — sleep
         self._sleep_fn = sleep_fn or time.sleep
@@ -679,6 +703,16 @@ class Orchestrator:
         if "trades" in bt_dict:
             bt_dict["trades"] = []
 
+        # Capture the raw pool stats (if computed this rotation cycle) so
+        # downstream auditing has the same numerical shape the
+        # hypothesizer saw at decision time. Stored as a plain dict —
+        # never labels.
+        pool_stats_dict = (
+            self._current_pool_stats.to_dict()
+            if self._current_pool_stats is not None
+            else None
+        )
+
         return memory_mod.RunRecord(
             run_id=f"run-{iteration:06d}",
             iteration=iteration,
@@ -700,6 +734,7 @@ class Orchestrator:
                 else audit_report
             ),
             git_commit=git_commit,
+            pool_stats=pool_stats_dict,
         )
 
     # ------------------------------------------------------------------ #
@@ -1111,6 +1146,36 @@ class Orchestrator:
             pool_id=int(new_id),
             n_events=len(event_ids),
         )
+
+        # Compute raw pool statistics (label-free numbers only — the
+        # framework refuses to bake in priors like "+10% = bull"). The
+        # block is wrapped end-to-end so a loader bug never paralyses the
+        # loop; failure → drop stats and continue.
+        self._current_pool_stats = None
+        if self._pool_prices_loader_fn is not None:
+            try:
+                pool_prices = self._pool_prices_loader_fn(
+                    self._current_pool_event_ids
+                )
+                if pool_prices is not None and len(pool_prices) > 0:
+                    self._current_pool_stats = pool_stats_mod.compute_pool_stats(
+                        pool_prices
+                    )
+                    self._outbox(
+                        phase="pool_stats",
+                        iteration=self.loop_state.iteration,
+                        pool_id=int(new_id),
+                        stats=self._current_pool_stats.to_dict(),
+                    )
+            except Exception as exc:
+                self._current_pool_stats = None
+                self._outbox(
+                    phase="pool_stats_error",
+                    iteration=self.loop_state.iteration,
+                    pool_id=int(new_id),
+                    error=str(exc),
+                )
+
         return None
 
     # ------------------------------------------------------------------ #
@@ -1521,6 +1586,13 @@ class Orchestrator:
 
         diag_dict = diagnosis.to_dict() if hasattr(diagnosis, "to_dict") else (diagnosis or {})
 
+        # Pack the latest raw pool stats (if any) for the hypothesizer
+        # prompt. Pure numbers — no labels — so the LLM gets the facts
+        # and judges market shape itself.
+        pool_stats_dict = (
+            self._current_pool_stats.to_dict() if self._current_pool_stats else None
+        )
+
         try:
             hypo = self._hypothesizer_fn(
                 writable_items=writable,
@@ -1528,11 +1600,28 @@ class Orchestrator:
                 diagnosis=diag_dict,
                 tried_directions=tried_dirs,
                 tried_path=self.attempts_path,
+                pool_stats=pool_stats_dict,
             )
         except TypeError:
-            # Allow simpler injected signatures (no kwargs).
+            # Allow simpler injected signatures (no kwargs / older sig).
+            # Try once more with pool_stats stripped, then fall back to
+            # positional. Tests can inject either shape.
             try:
-                hypo = self._hypothesizer_fn(writable, recent_runs, diag_dict, tried_dirs)
+                hypo = self._hypothesizer_fn(
+                    writable_items=writable,
+                    recent_runs=recent_runs,
+                    diagnosis=diag_dict,
+                    tried_directions=tried_dirs,
+                    tried_path=self.attempts_path,
+                )
+            except TypeError:
+                try:
+                    hypo = self._hypothesizer_fn(
+                        writable, recent_runs, diag_dict, tried_dirs
+                    )
+                except Exception as exc:
+                    self._outbox(phase="hypothesizer_error", iteration=self.loop_state.iteration, error=str(exc))
+                    hypo = None
             except Exception as exc:
                 self._outbox(phase="hypothesizer_error", iteration=self.loop_state.iteration, error=str(exc))
                 hypo = None

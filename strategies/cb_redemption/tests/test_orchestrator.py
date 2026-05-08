@@ -1511,3 +1511,154 @@ def test_sanity_warn_logs_but_continues(tmp_path: Path) -> None:
 
     # No sanity_fatal rows.
     assert not [r for r in obx if r.get("phase") == "sanity_fatal"]
+
+
+# --------------------------------------------------------------------------- #
+# Pool stats (Layer 9.5) — raw numeric description of attached pool
+# --------------------------------------------------------------------------- #
+
+
+def test_pool_stats_computed_when_pool_rotates(tmp_path: Path) -> None:
+    """When ``pool_prices_loader_fn`` is supplied and a pool attaches,
+    the orchestrator should compute :class:`pool_stats.PoolStats`,
+    cache it on ``self._current_pool_stats``, and emit a
+    ``phase=pool_stats`` outbox row.
+    """
+    import pandas as pd
+
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    # Loader returns 50 rising bars (clearly trend > 0) regardless of the
+    # event_ids — keeps the test self-contained.
+    def loader(event_ids):
+        # Verify the orchestrator passes a non-empty set/list of strings.
+        assert event_ids is not None
+        ids = list(event_ids)
+        assert len(ids) > 0
+        return pd.DataFrame(
+            {"close": [100.0 + i for i in range(50)]}
+        )
+
+    o = _make_orchestrator(tmp_path, max_iterations=1)
+    o.holdout_path = pool_path
+    o._pool_prices_loader_fn = loader
+
+    final = o.run()
+    assert final.iteration == 1
+
+    # Cached on the instance.
+    assert o._current_pool_stats is not None
+    cached = o._current_pool_stats.to_dict()
+    assert cached["sample_n"] == 50
+    assert cached["trend_pct"] > 0.0  # rising data → positive trend
+    # Five canonical fields, no extras.
+    assert set(cached) == {
+        "sample_n", "trend_pct", "slope_per_day", "vol_daily", "range_pct",
+    }
+
+    # Outbox carries the pool_stats row.
+    obx = [
+        json.loads(l)
+        for l in (data_dir / "outbox.jsonl").read_text().splitlines()
+    ]
+    stats_rows = [r for r in obx if r.get("phase") == "pool_stats"]
+    assert len(stats_rows) == 1
+    assert stats_rows[0]["pool_id"] == 0
+    assert stats_rows[0]["stats"]["sample_n"] == 50
+    # Critical invariant: outbox must contain only numbers, no labels.
+    serialized = json.dumps(stats_rows[0])
+    for forbidden in ("bull", "bear", "ranging", "volatile", "牛", "熊", "震荡"):
+        assert forbidden not in serialized.lower() and forbidden not in serialized
+
+
+def test_pool_stats_passed_to_hypothesizer(tmp_path: Path) -> None:
+    """The hypothesizer must be invoked with ``pool_stats`` populated."""
+    import pandas as pd
+
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    captured: list[dict | None] = []
+
+    def hypo_fn(**kw):
+        captured.append(kw.get("pool_stats"))
+        return None  # no edit, but call still recorded
+
+    def loader(event_ids):
+        # Falling data — negative trend so we can verify the dict is real.
+        return pd.DataFrame({"close": [100.0 - i for i in range(40)]})
+
+    o = _make_orchestrator(
+        tmp_path,
+        max_iterations=2,
+        hypothesizer_fn=hypo_fn,
+    )
+    o.holdout_path = pool_path
+    o._pool_prices_loader_fn = loader
+
+    o.run()
+
+    assert len(captured) >= 1
+    # First call after pool 0 attached should carry stats.
+    first = captured[0]
+    assert isinstance(first, dict)
+    assert first["sample_n"] == 40
+    assert first["trend_pct"] < 0.0  # falling data
+    # Set of keys stable.
+    assert set(first) == {
+        "sample_n", "trend_pct", "slope_per_day", "vol_daily", "range_pct",
+    }
+
+
+def test_pool_stats_loader_failure_does_not_break_loop(tmp_path: Path) -> None:
+    """A loader that raises must NOT abort the iteration; ``_current_pool_stats``
+    falls back to ``None`` and the outbox carries ``pool_stats_error``.
+    """
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    def broken_loader(event_ids):
+        raise RuntimeError("synthetic loader failure")
+
+    o = _make_orchestrator(tmp_path, max_iterations=1)
+    o.holdout_path = pool_path
+    o._pool_prices_loader_fn = broken_loader
+
+    final = o.run()
+    assert final.iteration == 1
+    assert o._current_pool_stats is None
+
+    obx = [
+        json.loads(l)
+        for l in (data_dir / "outbox.jsonl").read_text().splitlines()
+    ]
+    errors = [r for r in obx if r.get("phase") == "pool_stats_error"]
+    assert len(errors) == 1
+    assert "synthetic loader failure" in errors[0]["error"]
+    # Loop continues — should also have a normal iter outbox row.
+    assert any(r.get("phase") == "pool_stats_error" for r in obx)
+
+
+def test_run_record_carries_pool_stats(tmp_path: Path) -> None:
+    """Each :class:`memory.RunRecord` should embed the pool_stats dict."""
+    import pandas as pd
+
+    data_dir = tmp_path / "data"
+    pool_path = _seed_real_sealed_pools(data_dir)
+
+    def loader(event_ids):
+        return pd.DataFrame({"close": [100.0 + i * 0.5 for i in range(60)]})
+
+    o = _make_orchestrator(tmp_path, max_iterations=1)
+    o.holdout_path = pool_path
+    o._pool_prices_loader_fn = loader
+
+    o.run()
+
+    runs = (data_dir / "runs.jsonl").read_text().strip().splitlines()
+    assert len(runs) == 1
+    rec = json.loads(runs[0])
+    assert "pool_stats" in rec
+    assert rec["pool_stats"] is not None
+    assert rec["pool_stats"]["sample_n"] == 60

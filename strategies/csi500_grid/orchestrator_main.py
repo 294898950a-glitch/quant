@@ -31,6 +31,9 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Iterable
+
+import pandas as pd
 
 from strategies.cb_redemption.orchestrator import (
     DEFAULT_COOLDOWN_S,
@@ -48,6 +51,34 @@ _REPO_ROOT = _HERE.parent.parent
 
 DEFAULT_DATA_DIR = _REPO_ROOT / "data" / "csi500_grid"
 DEFAULT_YAML_PATH = _HERE / "tunable_space.yaml"
+DEFAULT_PRICES_PARQUET = _REPO_ROOT / "data" / "csi500_grid" / "raw" / "510500_daily.parquet"
+
+
+# --------------------------------------------------------------------------- #
+# Pool prices loader
+# --------------------------------------------------------------------------- #
+
+
+def _build_pool_prices_loader(parquet_path: Path):
+    """Return a callable ``event_ids -> DataFrame`` for the pool stats layer.
+
+    Mirrors :func:`strategies.sp500_grid.orchestrator_main._build_pool_prices_loader`:
+    grid event_ids ARE date strings, so we read the daily parquet once
+    and filter on ``date isin event_ids``. Empty / missing parquet is a
+    no-op; the orchestrator wraps the call so a parquet glitch never
+    paralyses the loop.
+    """
+
+    def _loader(event_ids: Iterable[str]) -> pd.DataFrame:
+        if not parquet_path.exists():
+            return pd.DataFrame(columns=["date", "close"])
+        df = pd.read_parquet(parquet_path)
+        ids = {str(x) for x in (event_ids or [])}
+        if not ids:
+            return df.iloc[0:0]
+        return df[df["date"].astype(str).isin(ids)].sort_values("date").reset_index(drop=True)
+
+    return _loader
 
 
 # --------------------------------------------------------------------------- #
@@ -123,6 +154,9 @@ def main(argv: list[str] | None = None) -> int:
         # editor / hypothesizer / auditor / memory 全走默认值（真实模块）。
         # 唯一 DI 是 verifier —— 用 csi500_grid 自己的回测,而不是 cb 的。
         verifier_fn=grid_verifier,
+        # 第 9 个角色:pool_stats 层把当前 pool 的 K 线归约成 5 个数字
+        # (无任何 bull/bear/震荡 标签), 再交给出主意者让 LLM 自己判断.
+        pool_prices_loader_fn=_build_pool_prices_loader(DEFAULT_PRICES_PARQUET),
     )
     if args.resume:
         orch.resume()
@@ -138,4 +172,6 @@ __all__ = [
     "main",
     "DEFAULT_DATA_DIR",
     "DEFAULT_YAML_PATH",
+    "DEFAULT_PRICES_PARQUET",
+    "_build_pool_prices_loader",
 ]

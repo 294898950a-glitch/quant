@@ -31,6 +31,9 @@ import shutil
 import sys
 import tempfile
 from pathlib import Path
+from typing import Iterable
+
+import pandas as pd
 
 from strategies.cb_redemption.orchestrator import (
     DEFAULT_COOLDOWN_S,
@@ -48,6 +51,37 @@ _REPO_ROOT = _HERE.parent.parent
 
 DEFAULT_DATA_DIR = _REPO_ROOT / "data" / "sp500_grid"
 DEFAULT_YAML_PATH = _HERE / "tunable_space.yaml"
+DEFAULT_PRICES_PARQUET = _REPO_ROOT / "data" / "sp500_grid" / "raw" / "513500_daily.parquet"
+
+
+# --------------------------------------------------------------------------- #
+# Pool prices loader
+# --------------------------------------------------------------------------- #
+
+
+def _build_pool_prices_loader(parquet_path: Path):
+    """Return a callable ``event_ids -> DataFrame`` for the pool stats layer.
+
+    The grid strategies' event_id IS the bar's date string, so we just
+    read the daily parquet once and filter by ``date isin event_ids``
+    on every call. Returns an empty DataFrame if the parquet does not
+    exist (test envs often don't seed real data).
+
+    Errors are NOT swallowed here — the orchestrator wraps the call in a
+    defensive try/except so a transient parquet issue degrades to "no
+    pool stats this round" rather than crashing the loop.
+    """
+
+    def _loader(event_ids: Iterable[str]) -> pd.DataFrame:
+        if not parquet_path.exists():
+            return pd.DataFrame(columns=["date", "close"])
+        df = pd.read_parquet(parquet_path)
+        ids = {str(x) for x in (event_ids or [])}
+        if not ids:
+            return df.iloc[0:0]
+        return df[df["date"].astype(str).isin(ids)].sort_values("date").reset_index(drop=True)
+
+    return _loader
 
 
 # --------------------------------------------------------------------------- #
@@ -123,6 +157,10 @@ def main(argv: list[str] | None = None) -> int:
         # editor / hypothesizer / auditor / memory 全走默认值（真实模块）。
         # 唯一 DI 是 verifier —— 用 sp500_grid 自己的回测,而不是 cb 的。
         verifier_fn=grid_verifier,
+        # 第 9 个角色:把当前 pool 的原始 K 线交给 pool_stats 层算几个数字
+        # (累计涨跌/日斜率/日波动率/区间宽度/样本数), 再喂给出主意者. 不打
+        # 任何 bull/bear 标签 — 让 LLM 自己看数字判断.
+        pool_prices_loader_fn=_build_pool_prices_loader(DEFAULT_PRICES_PARQUET),
     )
     if args.resume:
         orch.resume()
@@ -138,4 +176,6 @@ __all__ = [
     "main",
     "DEFAULT_DATA_DIR",
     "DEFAULT_YAML_PATH",
+    "DEFAULT_PRICES_PARQUET",
+    "_build_pool_prices_loader",
 ]
