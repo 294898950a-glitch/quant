@@ -1,0 +1,46 @@
+# yzm_grid — 自动化可调搜索空间登记表
+#
+# 边界（颜色见 docs/plans/2026-05-07-self-loop-roadmap.md）：
+#   红：本仓所有 .py / verifier / 数据 — 永远人工
+#   黄：本文件结构（增 / 删 / 改字段）— 必须人工 PR
+#   绿：本文件 .current 字段 — 机器可改
+#
+# 写入唯一入口：strategies/yzm_grid/orchestrator_main.py 注入的 editor adapter。
+#
+# 备注（initial_capital 的处理）：
+#   editor.py 不识别 status: frozen 字段，且本仓 yaml 的 strategy 字段被 cb 的
+#   editor 硬校验为 'cb_redemption'，所以 yzm 用自带的 mini-editor。
+#   initial_capital 直接写死在 verifier 里（100_000.0），不放进搜索空间——
+#   它只做 normalization，搜索它没意义。
+
+version: 1
+strategy: yzm_grid
+last_updated: '2026-05-09T00:00:00Z'
+# asset_hint 用于体检员 (sanity_checker) 的 LLM prompt — 描述当前标的形态,
+# 帮助 LLM 判断"参数 + 标的 + 数据形状"组合是否合理 (例: 网格策略上单边趋势
+# 资产 + filter 全关 = 不合理). 仅作为提示, 不参与回测计算.
+asset_hint: "伊之密 300415.SZ; 精密机械单股, 中盘, 波动比 ETF 大"
+
+parameters:                # 数值可调，CMA-ES 搜索维度，顺序固定
+  - name: grid_count
+    current: 10
+    range: [5, 30]
+    prior: 网格数。多则单格利润小但成交频繁，少则单格利润大但震荡可能踏空。
+  - name: range_window
+    current: 60
+    range: [20, 200]
+    prior: 滚动区间窗口长度（交易日）。短则区间敏感、跟得紧波动；长则稳但反应慢。
+  - name: position_per_grid
+    current: 0.10
+    range: [0.03, 0.25]
+    prior: 单格资金占比。10% × 10 格 = 100% 满仓；太高难补仓，太低收益薄。
+
+factors: []                # grid 没有因子概念，空表
+
+thresholds: []             # grid 没有信号阈值，空表
+
+rules:
+  - name: fee_pct
+    current: 0.0003
+    range: [0.0001, 0.0010]
+    prior: 单边手续费。压低看真实收益上限；但低于 1bp 不现实（印花税 + 佣金）。
