@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import pytest
 
-from strategies.cb_redemption.backtest import (
+from strategies.cb_redemption.result_types import (
     BacktestResult,
     TradeRecord,
 )
@@ -248,40 +248,6 @@ def test_dimension_mismatch_raises(fake_result):
         diagnose(fake_result, [1.0, 2.0], FACTOR_NAMES)
 
 
-# --------------------------------------------------------------------------- #
-# 真实 backtest 通路（数据存在才跑）
-# --------------------------------------------------------------------------- #
-
-
-def test_diagnose_against_real_backtest():
-    """跑一次真实 backtest 入口，验证 judge 能正常诊断。
-
-    若历史快照不存在 → 跳过，不让 CI 因数据缺失炸掉。
-    """
-    from strategies.cb_redemption import config
-    from strategies.cb_redemption.backtest import (
-        BacktestConfig,
-        run_backtest_core,
-    )
-
-    try:
-        from strategies.cb_redemption.data import load_historical_snapshots
-        snapshots = load_historical_snapshots("20230101", "20260424")
-    except (FileNotFoundError, Exception) as exc:
-        pytest.skip(f"历史快照不可用，跳过真实回测诊断：{exc}")
-
-    if snapshots is None or len(snapshots) == 0:
-        pytest.skip("历史快照为空")
-
-    cfg = BacktestConfig(alert_threshold=config.DEFAULT_THRESHOLDS_CONFIG.get("alert", 0.6))
-    result = run_backtest_core(
-        snapshots, config.LOGIT_WEIGHTS, config.DEFAULT_THRESHOLDS_CONFIG, cfg
-    )
-
-    diag = diagnose(result, config.LOGIT_WEIGHTS, FACTOR_NAMES)
-    assert isinstance(diag, Diagnosis)
-    assert diag.weakness_text
-    assert len(diag.factor_contributions) == len(config.LOGIT_WEIGHTS)
-    # 不出建议
-    for forbidden in ["建议", "应该", "推荐"]:
-        assert forbidden not in diag.weakness_text
+# test_diagnose_against_real_backtest 已删除：依赖的 cb_redemption strategy
+# 已废弃(backtest.py / data.py / config.py 都不再存在)。judge 用的类型契约
+# 改由 sp500_grid / csi500_grid 端的 verifier 集成测试覆盖。

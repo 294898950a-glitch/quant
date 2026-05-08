@@ -24,7 +24,7 @@ from dataclasses import dataclass, field, asdict
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:  # pragma: no cover
-    from strategies.cb_redemption.backtest import BacktestResult, TradeRecord
+    from strategies.cb_redemption.result_types import BacktestResult, TradeRecord
 
 
 WEAK_FACTOR_THRESHOLD = 0.1

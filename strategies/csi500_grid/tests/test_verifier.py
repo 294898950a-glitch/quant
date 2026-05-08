@@ -6,7 +6,7 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
-from strategies.cb_redemption.backtest import BacktestResult, TradeRecord
+from strategies.cb_redemption.result_types import BacktestResult, TradeRecord
 from strategies.csi500_grid.verifier import (
     INITIAL_CAPITAL,
     _grid_metrics_to_cb_metrics,

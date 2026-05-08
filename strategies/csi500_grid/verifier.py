@@ -51,7 +51,7 @@ from typing import Any
 
 import pandas as pd
 
-from strategies.cb_redemption.backtest import BacktestResult, TradeRecord
+from strategies.cb_redemption.result_types import BacktestResult, TradeRecord
 # 复用 sp500_grid 的 grid 引擎（不重写）
 from strategies.sp500_grid.backtest import (
     GridConfig,

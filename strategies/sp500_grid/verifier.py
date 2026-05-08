@@ -48,7 +48,7 @@ from typing import Any
 
 import pandas as pd
 
-from strategies.cb_redemption.backtest import BacktestResult, TradeRecord
+from strategies.cb_redemption.result_types import BacktestResult, TradeRecord
 from strategies.sp500_grid.backtest import (
     GridConfig,
     GridResult,
