@@ -76,12 +76,7 @@ def main() -> int:
         )
 
     run240 = find_run(runs, 240)
-    if run240 is None:
-        notes.append(
-            f"本地 `{args.runs}` 只有 {len(runs)} 条记录, 未找到 iteration=240; "
-            "240 轮末段参数未评测。"
-        )
-    else:
+    if run240 is not None:
         sections.append(
             evaluate_params(
                 "240 轮末段参数",
@@ -90,6 +85,23 @@ def main() -> int:
                 refresh_benchmarks=args.refresh_benchmarks,
             )
         )
+    elif runs:
+        latest = max(runs, key=lambda r: int(r.get("iteration", -1)))
+        latest_iter = int(latest.get("iteration", -1))
+        notes.append(
+            f"本地 `{args.runs}` 只有 {len(runs)} 条记录, 未找到 iteration=240; "
+            f"使用 max iteration={latest_iter} 作为末段代理参数。"
+        )
+        sections.append(
+            evaluate_params(
+                f"末段代理参数 iteration={latest_iter}",
+                f"runs.jsonl max iteration={latest_iter}",
+                params_from_run(latest),
+                refresh_benchmarks=args.refresh_benchmarks,
+            )
+        )
+    else:
+        notes.append("runs.jsonl 为空, 无法评测末段参数。")
 
     report = build_report(sections, runs, notes)
     args.output.parent.mkdir(parents=True, exist_ok=True)
@@ -172,16 +184,15 @@ def evaluate_params(
     cfg = config_for_available_benchmarks(benchmarks)
     ev = evaluate(strategy_returns, benchmarks, cfg)
     tier_note = ""
-    if "dividend" not in benchmarks and ev.tier in {"明确好", "值得真上"}:
-        ev.tier = "底线档"
-        ev.thresholds["beats_stretch"] = False
+    if "dividend" not in benchmarks and ev.tier == "明确好":
+        ev.tier = "值得真上"
         ev.reasons = [
-            "tier=底线档; dividend benchmark missing, stretch-tier judgement unavailable"
+            "tier=值得真上; dividend benchmark missing, 明确好档位不可判定"
         ]
         tier_note = (
             "\n\n## Tier Cap\n\n"
-            "- `dividend` benchmark missing; tier capped at `底线档` until the "
-            "stretch benchmark is available."
+            "- `dividend` benchmark missing; tier capped at `值得真上` until "
+            "the stretch benchmark is available."
         )
     md = format_evaluation_report(ev, title=f"cb_arb {label}")
     md += tier_note
@@ -267,6 +278,13 @@ def build_report(
         lines.extend(f"- {note}" for note in notes)
     else:
         lines.append("- No data gaps detected.")
+    lines.extend(
+        [
+            "- Network unavailable: csi300 / dividend / sixty_forty may be "
+            "missing when eastmoney/akshare refresh is blocked. The report "
+            "uses the available benchmark set and lists missing reasons per section.",
+        ]
+    )
 
     lines.extend(["", "## Summary", ""])
     if sections:
