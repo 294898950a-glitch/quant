@@ -1,0 +1,13 @@
+{
+  "state": "running",
+  "iteration": 3,
+  "since_iso": "2026-05-09T08:17:11Z",
+  "last_verdict": "healthy",
+  "paused_reason": null,
+  "none_streak": 0,
+  "stagnant_streak": 0,
+  "recovery_attempt": 0,
+  "current_pool_id": 0,
+  "iters_in_current_pool": 3,
+  "pending_since_iso": null
+}

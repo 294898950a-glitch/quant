@@ -1,0 +1,86 @@
+# cb_arb — 可转债横截面套利策略
+#
+# 边界 (颜色见 docs/plans/2026-05-07-self-loop-roadmap.md):
+#   红: strategies/cb_arb/ 全部 .py / cb_pricer / 数据 — 永远人工
+#   黄: 本文件结构 (增 / 删 / 改字段) — 必须人工 PR
+#   绿: 本文件 .current 字段 — 机器可改
+#
+# 写入唯一入口: strategies/cb_arb/orchestrator_main.py 注入的 editor.
+#
+# 策略核心:
+#   横截面排名信号 — 每日对全集 CB 算理论价 (BS + 债底), 拿市场价/理论价偏离率
+#   排名, 买排名最低 (相对最便宜) 的, 卖排名跑过 sell_pct 的. 不需要宏观滤镜,
+#   排名自动适应市场冷热.
+
+version: 1
+strategy: cb_arb
+last_updated: '2026-05-09T08:18:29Z'
+asset_hint: "中国可转债市场全集 (~700 只活跃), 散户参与高 / 流动性差异大 / 系统性溢价 5-25 元"
+
+parameters:
+  - name: vol_window_days
+    current: 60
+    range: [20, 120]
+    prior: 历史波动率窗口. 短则跟随快但噪音多, 长则稳但反应慢
+  - name: vol_multiplier
+    current: 1.0
+    range: [0.6, 1.5]
+    prior: HV 估计偏置. 实现波动率通常低估隐含, 略加倍可校正
+  - name: rank_buy_pct
+    current: 0.10
+    range: [0.02, 0.30]
+    prior: 横截面排名前 X% 最便宜的纳入买入候选. 收紧则集中度高, 放宽则参与广
+  - name: rank_sell_pct
+    current: 0.50
+    range: [0.30, 0.80]
+    prior: 持仓排名跑到 X% 后(相对贵)就卖
+  - name: max_position_pct
+    current: 0.03
+    range: [0.01, 0.08]
+    prior: 单只仓位上限
+  - name: max_holdings
+    current: 30
+    range: [10, 50]
+    prior: 同时最多持几只
+  - name: max_holding_days
+    current: 90
+    range: [30, 180]
+    prior: 持仓最长天数, 防永远不收敛
+  - name: stop_loss_pct
+    current: -0.08
+    range: [-0.15, -0.03]
+    prior: 单只浮亏止损
+  - name: min_remaining_size
+    current: 72900000.0
+    range: [50000000, 500000000]
+    prior: 剩余规模下限(用 issue_size 代理). 防流动性陷阱
+  - name: min_avg_amount
+    current: 1000000
+    range: [500000, 10000000]
+    prior: 20 日均成交额下限. 进出得去
+  - name: credit_spread_aaa_bp
+    current: 50
+    range: [20, 200]
+    prior: AAA 评级用的信用利差(bp). 决定债底折现率
+  - name: credit_spread_aa_bp
+    current: 150
+    range: [50, 400]
+    prior: AA 评级用的信用利差(bp)
+
+factors: []
+
+thresholds: []
+
+rules:
+  - name: rating_floor_int
+    current: 2
+    range: [0, 5]
+    prior: 评级下限编号 (0=A, 1=A+, 2=AA-, 3=AA, 4=AA+, 5=AAA). 越高越保守
+  - name: fee_pct
+    current: 0.0003
+    range: [0.0001, 0.001]
+    prior: 单边手续费率
+  - name: initial_capital
+    current: 1000000
+    range: [500000, 5000000]
+    prior: 总资金 100 万固定 (status=frozen 不参与搜索)
