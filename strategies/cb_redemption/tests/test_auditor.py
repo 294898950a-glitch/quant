@@ -60,6 +60,18 @@ def _make_run(iteration: int, is_sharpe: float, oos_sharpe: float) -> dict:
     }
 
 
+def _with_cumulative(rec: dict, *, sharpe: float, excess_return: float = 0.0) -> dict:
+    rec = json.loads(json.dumps(rec))
+    rec["backtest"]["cumulative_metrics"] = {
+        "sharpe": sharpe,
+        "total_return": excess_return,
+        "excess_return": excess_return,
+        "max_drawdown": -0.05,
+        "n_days": 100,
+    }
+    return rec
+
+
 def _write_runs(path: Path, records: list[dict]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
@@ -180,6 +192,22 @@ def test_continuously_rising_oos_is_healthy(runs_path, pool_path_ok):
     assert report.evidence["rolling_window_stability"] is None
     assert report.evidence["oos_sharpe_trend"] == [0.5, 0.7, 0.9, 1.1]
     assert report.iteration == 4
+
+
+def test_auditor_prefers_cumulative_metrics_when_present(runs_path, pool_path_ok):
+    """Single-pool OOS is flat, but cumulative trajectory is improving."""
+    runs = [
+        _with_cumulative(_make_run(1, is_sharpe=1.2, oos_sharpe=0.1), sharpe=0.5),
+        _with_cumulative(_make_run(2, is_sharpe=1.1, oos_sharpe=0.1), sharpe=0.7),
+        _with_cumulative(_make_run(3, is_sharpe=1.05, oos_sharpe=0.1), sharpe=1.0),
+    ]
+    _write_runs(runs_path, runs)
+
+    report = audit(runs_path, pool_path_ok, window=10)
+
+    assert report.verdict == "healthy"
+    assert report.evidence["using_cumulative_metrics"] is True
+    assert report.evidence["oos_sharpe_trend"] == [0.5, 0.7, 1.0]
 
 
 def test_is_up_oos_flat_gap_widening_is_data_mining_with_veto(

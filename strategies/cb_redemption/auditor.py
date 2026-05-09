@@ -141,7 +141,14 @@ def _read_runs(runs_path: Path) -> list[dict]:
 def _safe_metric(record: dict, kind: str, key: str) -> float | None:
     """Read ``record["backtest"][kind][key]`` defensively."""
     bt = record.get("backtest") or {}
-    block = bt.get(kind) or {}
+    if kind == "oos_metrics":
+        cumulative = bt.get("cumulative_metrics") or {}
+        if key in cumulative:
+            block = cumulative
+        else:
+            block = bt.get(kind) or {}
+    else:
+        block = bt.get(kind) or {}
     val = block.get(key)
     if val is None:
         return None
@@ -169,6 +176,15 @@ def _check_holdout_compliance(holdout_pool_path: Path | None) -> bool:
     if not pools:
         return False
     return any(p.get("first_read_at") is not None for p in pools)
+
+
+def _uses_cumulative_metrics(records: list[dict]) -> bool:
+    """True if at least one record carries cumulative metrics."""
+    for rec in records:
+        bt = rec.get("backtest") or {}
+        if isinstance(bt.get("cumulative_metrics"), dict) and bt["cumulative_metrics"]:
+            return True
+    return False
 
 
 def _read_last_refresh(
@@ -451,6 +467,7 @@ def audit(
             "oos_improvement": 0.0,
             "rolling_window_stability": None,
             "holdout_compliance": holdout_ok,
+            "using_cumulative_metrics": _uses_cumulative_metrics(recent),
         }
         evidence.update(freshness_evidence)
         # 优先级: holdout > freshness > 其它
@@ -488,6 +505,7 @@ def audit(
         # sharpe. Out of scope for P1 — needs the backtest engine.
         "rolling_window_stability": None,
         "holdout_compliance": holdout_ok,
+        "using_cumulative_metrics": _uses_cumulative_metrics(recent),
     }
     evidence.update(freshness_evidence)
 

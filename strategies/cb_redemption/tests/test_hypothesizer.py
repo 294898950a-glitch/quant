@@ -17,6 +17,8 @@ import pytest
 from strategies.cb_redemption import memory as memory_mod
 from strategies.cb_redemption.hypothesizer import (
     Hypothesis,
+    _build_user_prompt,
+    _summarise_run,
     propose,
     propose_via_llm,
     propose_via_rules,
@@ -166,6 +168,34 @@ def test_llm_returns_valid_json(
     d = h.to_dict()
     assert d["source"] == "llm"
     assert d["new_value"] == -1.0
+
+
+def test_recent_run_summary_prefers_cumulative_metrics(clean_diagnosis):
+    rec = {
+        "iteration": 7,
+        "backtest": {
+            "oos_metrics": {
+                "sharpe": -0.2,
+                "total_return": -0.03,
+                "excess_return": -0.01,
+            },
+            "cumulative_metrics": {
+                "sharpe": 0.8,
+                "total_return": 0.12,
+                "excess_return": 0.06,
+            },
+        },
+    }
+
+    summary = _summarise_run(rec)
+    assert summary["cumulative_excess_return"] == 0.06
+    assert summary["cumulative_total_return"] == 0.12
+    assert summary["cumulative_sharpe"] == 0.8
+    assert summary["oos_excess_return"] == -0.01
+
+    prompt = _build_user_prompt([], [rec], clean_diagnosis, [], None)
+    assert "cumulative_excess_return" in prompt
+    assert "主反馈信号" in prompt
 
 
 def test_llm_returns_garbage_falls_back_to_rules(

@@ -522,10 +522,9 @@ def _build_system_prompt() -> str:
 def _summarise_run(rec: Any) -> dict:
     """Strip a RunRecord-shaped dict to fields useful for prompting.
 
-    Includes ``excess_return`` (策略 - CB 等权指数, 真 alpha 信号) alongside
-    sharpe / total_return so the LLM can compare both. ``excess_return`` is
-    the framework's primary optimisation target — sharpe is shown for
-    context but should not drive decisions.
+    Includes cumulative metrics (when present) ahead of single-pool OOS metrics.
+    ``cumulative_excess_return`` is the framework's primary optimisation target;
+    single-pool sharpe / return remain context only.
     """
     if hasattr(rec, "to_dict"):
         rec = rec.to_dict()
@@ -535,9 +534,18 @@ def _summarise_run(rec: Any) -> dict:
     is_m = bt.get("is_metrics") or {}
     oos_m = bt.get("oos_metrics") or {}
     all_m = bt.get("all_metrics") or {}
+    cum_m = bt.get("cumulative_metrics") or {}
     return {
         "iteration": rec.get("iteration"),
-        # 重点关注 excess_return — 真 alpha
+        # 主信号: 跨池累计 excess_return — 真 alpha 轨迹
+        "cumulative_excess_return": cum_m.get(
+            "excess_return", oos_m.get("excess_return")
+        ),
+        "cumulative_total_return": cum_m.get(
+            "total_return", oos_m.get("total_return")
+        ),
+        "cumulative_sharpe": cum_m.get("sharpe", oos_m.get("sharpe")),
+        # 单池 OOS: 辅助上下文
         "oos_excess_return": oos_m.get("excess_return"),
         "is_excess_return": is_m.get("excess_return"),
         "all_excess_return": all_m.get("excess_return"),
@@ -606,9 +614,9 @@ def _format_recent_runs_focus(summarised: list[dict]) -> str:
     lines: list[str] = []
     for r in summarised[-5:]:
         it = r.get("iteration")
-        sh = r.get("oos_sharpe")
-        tr = r.get("oos_total_return")
-        ex = r.get("oos_excess_return")
+        sh = r.get("cumulative_sharpe")
+        tr = r.get("cumulative_total_return")
+        ex = r.get("cumulative_excess_return")
         # 渲染: 缺失字段显示为 ?
         sh_s = f"{float(sh):.3f}" if isinstance(sh, (int, float)) else "?"
         tr_s = (
@@ -618,14 +626,15 @@ def _format_recent_runs_focus(summarised: list[dict]) -> str:
             f"{float(ex) * 100:+.2f}%" if isinstance(ex, (int, float)) else "?"
         )
         lines.append(
-            f"  iter {it}: sharpe={sh_s}, total_return={tr_s}, "
-            f"excess_return={ex_s}  ← 重点关注 excess_return"
+            f"  iter {it}: cumulative_sharpe={sh_s}, "
+            f"cumulative_total_return={tr_s}, "
+            f"cumulative_excess_return={ex_s}  ← 主看累计超额"
         )
     return (
-        "\n\n## 最近 N 轮回顾 (excess_return = 真 alpha)\n"
+        "\n\n## 最近 N 轮回顾 (cumulative_excess_return = 主反馈信号)\n"
         + "\n".join(lines)
-        + "\n\n注: sharpe 高但 excess_return 接近 0 = 没跑赢基准, 不是好结果. "
-        + "目标是 excess_return 持续上升."
+        + "\n\n注: 单池 sharpe 高但累计超额接近 0 = 没持续跑赢基准, 不是好结果. "
+        + "目标是 cumulative_excess_return 持续上升."
     )
 
 
