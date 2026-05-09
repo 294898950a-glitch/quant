@@ -595,6 +595,8 @@ def _run_backtest_core(
             all_metrics=dict(empty_m),
             is_metrics=dict(empty_m),
             oos_metrics=dict(empty_m),
+            cumulative_metrics=dict(empty_m),
+            equity_curve=pd.Series(dtype=float),
             date_range=("", ""),
         )
 
@@ -932,11 +934,25 @@ def _run_backtest_core(
             oos_curve, oos_trades, oos_base, index_dates=oos_dates
         )
 
+    cumulative_curve = [(d, e) for d, e in equity_history if d >= OOS_START]
+    cumulative_trades = [t for t in trades if t.entry_date >= OOS_START]
+    cumulative_dates = [d for d, _ in cumulative_curve]
+    cumulative_base = cumulative_curve[0][1] if cumulative_curve else cfg.initial_capital
+    cumulative_m = _compute_metrics(
+        cumulative_curve,
+        cumulative_trades,
+        cumulative_base,
+        index_dates=cumulative_dates,
+    )
+    equity_series = _equity_history_to_series(equity_history)
+
     return BacktestResult(
         trades=trades,
         all_metrics=all_m,
         is_metrics=is_m,
         oos_metrics=oos_m,
+        cumulative_metrics=cumulative_m,
+        equity_curve=equity_series,
         date_range=(days_to_run[0], days_to_run[-1]),
     )
 
@@ -956,6 +972,15 @@ def _compute_equity(
             px = pos.entry_price
         eq += pos.qty * float(px)
     return eq
+
+
+def _equity_history_to_series(equity_history: list[tuple[str, float]]) -> pd.Series:
+    """Convert internal equity tuples to a date-indexed pandas Series."""
+    if not equity_history:
+        return pd.Series(dtype=float)
+    idx = pd.to_datetime([d for d, _ in equity_history], format="%Y%m%d")
+    vals = [float(e) for _, e in equity_history]
+    return pd.Series(vals, index=idx, name="equity")
 
 
 def prev_prices(holdings: dict[str, _Position]) -> dict[str, float]:

@@ -405,6 +405,13 @@ def test_returns_BacktestResult_shape(monkeypatch):
         assert "total_trades" in m
         assert "total_return" in m
         assert "max_drawdown" in m
+    assert isinstance(result.cumulative_metrics, dict)
+    assert "excess_return" in result.cumulative_metrics
+    assert isinstance(result.equity_curve, pd.Series)
+    assert not result.equity_curve.empty
+    serialised = result.to_dict()
+    assert "cumulative_metrics" in serialised
+    assert "equity_curve" not in serialised
 
 
 def test_cb_style_5arg_call_works(monkeypatch):

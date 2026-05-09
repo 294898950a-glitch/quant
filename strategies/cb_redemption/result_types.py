@@ -27,6 +27,7 @@ judge / orchestrator: import from this module,不依赖任何具体策略。
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass
@@ -77,6 +78,11 @@ class BacktestResult:
     all_metrics : dict
         全样本绩效(包含 ``sharpe`` / ``win_rate`` / ``total_trades`` /
         ``avg_return`` / ``total_return`` 等关键字)。
+    cumulative_metrics : dict
+        跨段累计绩效。Step 2 起用于给 hypothesizer / auditor 一个比单池
+        OOS 更稳定的主反馈信号；旧 verifier 可留空。
+    equity_curve : Any | None
+        可选的日度权益曲线。用于内存内评测 / 后续报告，不写入 runs.jsonl。
     is_metrics : dict
         样本内绩效(默认 IS = 2023-01-01 ~ 2024-12-31)。
     oos_metrics : dict
@@ -89,4 +95,21 @@ class BacktestResult:
     all_metrics: dict = field(default_factory=dict)
     is_metrics: dict = field(default_factory=dict)
     oos_metrics: dict = field(default_factory=dict)
+    cumulative_metrics: dict = field(default_factory=dict)
+    equity_curve: Any | None = None
     date_range: tuple[str, str] = ("", "")
+
+    def to_dict(self) -> dict:
+        """Serialisable run-record shape.
+
+        ``equity_curve`` is intentionally excluded: it can be large and may be
+        a pandas object. Persist derived ``cumulative_metrics`` instead.
+        """
+        return {
+            "is_metrics": dict(self.is_metrics),
+            "oos_metrics": dict(self.oos_metrics),
+            "all_metrics": dict(self.all_metrics),
+            "cumulative_metrics": dict(self.cumulative_metrics),
+            "trades": [],
+            "date_range": list(self.date_range),
+        }
