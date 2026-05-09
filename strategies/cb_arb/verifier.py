@@ -108,6 +108,7 @@ _CB_DAILY_CACHE: pd.DataFrame | None = None
 _CB_CALL_CACHE: pd.DataFrame | None = None
 _STK_DAILY_CACHE: pd.DataFrame | None = None
 _TRADING_DAYS_CACHE: list[str] | None = None
+_CB_INDEX_CACHE: pd.Series | None = None
 
 
 def _load_cb_basic() -> pd.DataFrame:
@@ -171,15 +172,54 @@ def _load_trading_days() -> list[str]:
     return _TRADING_DAYS_CACHE
 
 
+def _get_cb_index() -> pd.Series:
+    """全市场 CB 等权日均价序列, index by trade_date.
+
+    用作"持有 CB 不动"的基准曲线 — 每日全集 close 的算术均值.
+    模块级缓存, 启动时一次性计算.
+    """
+    global _CB_INDEX_CACHE
+    if _CB_INDEX_CACHE is not None:
+        return _CB_INDEX_CACHE
+    daily = _load_cb_daily()
+    avg = daily.groupby("trade_date")["close"].mean()
+    _CB_INDEX_CACHE = avg.sort_index()
+    return _CB_INDEX_CACHE
+
+
+def _index_total_return(start_date: str, end_date: str) -> float:
+    """CB 等权指数在 [start_date, end_date] 内的总收益率.
+
+    取区间内首尾两个有效日均价计算. 如果区间为空或无数据返回 0.0.
+    """
+    if not start_date or not end_date or start_date > end_date:
+        return 0.0
+    try:
+        idx = _get_cb_index()
+    except Exception:
+        return 0.0
+    if idx is None or idx.empty:
+        return 0.0
+    sub = idx[(idx.index >= start_date) & (idx.index <= end_date)]
+    if sub.empty or len(sub) < 2:
+        return 0.0
+    base = float(sub.iloc[0])
+    end = float(sub.iloc[-1])
+    if not (math.isfinite(base) and math.isfinite(end)) or base <= 0:
+        return 0.0
+    return end / base - 1.0
+
+
 def reset_cache() -> None:
     """主要给测试用 — 强制重新读取."""
     global _CB_BASIC_CACHE, _CB_DAILY_CACHE, _CB_CALL_CACHE
-    global _STK_DAILY_CACHE, _TRADING_DAYS_CACHE
+    global _STK_DAILY_CACHE, _TRADING_DAYS_CACHE, _CB_INDEX_CACHE
     _CB_BASIC_CACHE = None
     _CB_DAILY_CACHE = None
     _CB_CALL_CACHE = None
     _STK_DAILY_CACHE = None
     _TRADING_DAYS_CACHE = None
+    _CB_INDEX_CACHE = None
 
 
 # --------------------------------------------------------------------------- #
@@ -376,8 +416,16 @@ def _compute_metrics(
     equity_curve: list[tuple[str, float]],
     trades: list[TradeRecord],
     initial_capital: float,
+    index_dates: list[str] | None = None,
 ) -> dict:
-    """从 equity_curve 和 trades 算 sharpe / total_return / max_drawdown / win_rate."""
+    """从 equity_curve 和 trades 算 sharpe / total_return / max_drawdown / win_rate.
+
+    当 ``index_dates`` 给定时, ``excess_return`` = 策略段总收益 -
+    CB 等权指数在同期 (按给定日期取首尾)的总收益. ``index_dates`` 不传或为空
+    时, fallback 用 ``equity_curve`` 的首尾日.
+
+    新增字段 ``excess_return`` 不破坏现有 sharpe/total_return 等其它字段, 只是新增.
+    """
     n_days = len(equity_curve)
     if n_days == 0:
         return {
@@ -386,6 +434,7 @@ def _compute_metrics(
             "total_trades": 0,
             "total_return": 0.0,
             "max_drawdown": 0.0,
+            "excess_return": 0.0,
             "n_days": 0,
         }
     eq = np.array([e for _, e in equity_curve], dtype=float)
@@ -410,12 +459,26 @@ def _compute_metrics(
     wins = sum(1 for t in trades if t.pnl_pct > 0)
     win_rate = (wins / n_trades) if n_trades > 0 else 0.0
 
+    # excess_return = 策略段总收益 - 同期 CB 等权指数总收益
+    if index_dates is not None and len(index_dates) >= 2:
+        d_lo, d_hi = index_dates[0], index_dates[-1]
+    elif n_days >= 2:
+        d_lo = equity_curve[0][0]
+        d_hi = equity_curve[-1][0]
+    else:
+        d_lo = d_hi = ""
+    idx_ret = _index_total_return(d_lo, d_hi)
+    excess_return = float(total_return - idx_ret)
+    if not math.isfinite(excess_return):
+        excess_return = 0.0
+
     return {
         "sharpe": round(sharpe, 4),
         "win_rate": round(win_rate, 4),
         "total_trades": n_trades,
         "total_return": round(total_return, 6),
         "max_drawdown": round(max_drawdown, 6),
+        "excess_return": round(excess_return, 6),
         "n_days": n_days,
     }
 
@@ -524,14 +587,14 @@ def _run_backtest_core(
     days_to_run, pool_set = _restrict_dates_for_pool(trading_days, oos_event_ids)
     if not days_to_run:
         # 空池 — 直接返回空结果
+        empty_m = {"sharpe": 0.0, "win_rate": 0.0, "total_trades": 0,
+                   "total_return": 0.0, "max_drawdown": 0.0,
+                   "excess_return": 0.0, "n_days": 0}
         return BacktestResult(
             trades=[],
-            all_metrics={"sharpe": 0.0, "win_rate": 0.0, "total_trades": 0,
-                         "total_return": 0.0, "max_drawdown": 0.0, "n_days": 0},
-            is_metrics={"sharpe": 0.0, "win_rate": 0.0, "total_trades": 0,
-                        "total_return": 0.0, "max_drawdown": 0.0, "n_days": 0},
-            oos_metrics={"sharpe": 0.0, "win_rate": 0.0, "total_trades": 0,
-                         "total_return": 0.0, "max_drawdown": 0.0, "n_days": 0},
+            all_metrics=dict(empty_m),
+            is_metrics=dict(empty_m),
+            oos_metrics=dict(empty_m),
             date_range=("", ""),
         )
 
@@ -838,22 +901,36 @@ def _run_backtest_core(
     holdings.clear()
 
     # ---- 算 metrics: all / IS / OOS / (pool subset) ----
-    all_m = _compute_metrics(equity_history, trades, cfg.initial_capital)
+    # excess_return 用对应段的实际日期 (而不是 fallback 用 curve 首尾) — 保证
+    # pool 子集场景下 oos_event_ids 过滤后的指数对齐.
+    all_dates = [d for d, _ in equity_history]
+    all_m = _compute_metrics(
+        equity_history, trades, cfg.initial_capital, index_dates=all_dates
+    )
     is_curve = [(d, e) for d, e in equity_history if d <= IS_END]
     is_trades = [t for t in trades if t.entry_date <= IS_END]
-    is_m = _compute_metrics(is_curve, is_trades, cfg.initial_capital)
+    is_dates = [d for d, _ in is_curve]
+    is_m = _compute_metrics(
+        is_curve, is_trades, cfg.initial_capital, index_dates=is_dates
+    )
 
     if pool_set:
         pool_curve = [(d, e) for d, e in equity_history if d in pool_set]
         pool_trades = [t for t in trades if t.entry_date in pool_set]
+        pool_dates = sorted(d for d, _ in pool_curve)
         # 起始 base = pool_curve[0] 的前一日 equity (近似 cur)
         pool_base = pool_curve[0][1] if pool_curve else cfg.initial_capital
-        oos_m = _compute_metrics(pool_curve, pool_trades, pool_base)
+        oos_m = _compute_metrics(
+            pool_curve, pool_trades, pool_base, index_dates=pool_dates
+        )
     else:
         oos_curve = [(d, e) for d, e in equity_history if d >= OOS_START]
         oos_trades = [t for t in trades if t.entry_date >= OOS_START]
+        oos_dates = [d for d, _ in oos_curve]
         oos_base = oos_curve[0][1] if oos_curve else cfg.initial_capital
-        oos_m = _compute_metrics(oos_curve, oos_trades, oos_base)
+        oos_m = _compute_metrics(
+            oos_curve, oos_trades, oos_base, index_dates=oos_dates
+        )
 
     return BacktestResult(
         trades=trades,
@@ -894,4 +971,6 @@ __all__ = [
     "OOS_START",
     "DEFAULT_YAML_PATH",
     "reset_cache",
+    "_get_cb_index",
+    "_index_total_return",
 ]

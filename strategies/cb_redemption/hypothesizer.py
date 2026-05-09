@@ -99,7 +99,9 @@ DIRECTION_WORDS = (
 )
 
 # Metric vocabulary surfaced in diagnosis / backtest dicts. Used to validate
-# expected_direction has *some* metric anchor.
+# expected_direction has *some* metric anchor. ``excess_return`` is the
+# framework's primary optimisation target — strategy total return minus the
+# CB equal-weight index over the same dates.
 METRIC_WORDS = (
     "sharpe",
     "is_sharpe",
@@ -112,12 +114,15 @@ METRIC_WORDS = (
     "avg_return",
     "pnl",
     "return",
+    "excess_return",
+    "alpha",
     "gap",
     "stability",
     "trades",
     "胜率",
     "回撤",
     "收益",
+    "超额",
     "夏普",
 )
 
@@ -487,14 +492,26 @@ def _build_system_prompt() -> str:
     """System prompt: role + strict output contract."""
     return (
         "你是量化策略自循环框架的『出主意者』(hypothesizer)。你的唯一任务是看历史回测、最新诊断和已尝试方向, "
-        "提出下一步要修改 tunable_space.yaml 中的哪一项数值, 以期 oos_sharpe 改善。"
+        "提出下一步要修改 tunable_space.yaml 中的哪一项数值, 以期 **excess_return** (超额收益) 改善。"
         "\n\n"
+        "## 核心目标 (重要)\n"
+        "你的核心目标是最大化 **excess_return** = 策略 OOS 总收益 - 同期可转债等权指数收益, "
+        "**不是** sharpe (得分) 或单纯 total_return.\n"
+        "\n"
+        "excess_return 反映你真正比『持有 CB 不动』多赚的部分 — 这是真 alpha. "
+        "sharpe 高但 excess_return 接近 0 说明只是『不动』而已, 没有任何超额价值.\n"
+        "\n"
+        "历史数据显示该策略空间里, 激进版本 (单只仓位大、放宽信号、持仓多) 反而能吃到更多 alpha; "
+        "过度保守版本会把 alpha 缩到很小. 不要默认『减仓 = 风险低 = 好』, "
+        "请基于实际 excess_return 变化决定方向.\n"
+        "\n"
+        "## 输出契约\n"
         "严格输出 JSON 对象 (response_format=json_object), 必须含且仅含以下键:\n"
         '  - item_path (string): 形如 "parameters.w_premium_ratio", 必须在用户传入的 writable_items 列表中.\n'
         "  - new_value (number/bool/string): 必须落在该 item_path 的 range 闭区间内.\n"
-        '  - expected_direction (string): 必须同时含指标名 (sharpe/oos_sharpe/winrate/drawdown 等) 和方向词 '
-        '(up/down/raise/lower/提高/降低/↑/↓ 等), 例: "oos_sharpe up by >=0.02".\n'
-        "  - reason (string): >=30 字符, 解释为什么这么改, 引用诊断里的具体数字.\n"
+        '  - expected_direction (string): 必须同时含指标名 (excess_return/sharpe/oos_sharpe/winrate/drawdown 等) 和方向词 '
+        '(up/down/raise/lower/提高/降低/↑/↓ 等), 优先用 excess_return, 例: "excess_return up by >=0.02".\n'
+        "  - reason (string): >=30 字符, 解释为什么这么改, 引用诊断里的具体数字 (重点引 excess_return).\n"
         '  - confidence (string): "low" | "medium" | "high".\n'
         "\n"
         "禁止: 输出多个候选; 输出 markdown / 代码块 / 解释; 修改 writable_items 之外的项; "
@@ -503,18 +520,35 @@ def _build_system_prompt() -> str:
 
 
 def _summarise_run(rec: Any) -> dict:
-    """Strip a RunRecord-shaped dict to fields useful for prompting."""
+    """Strip a RunRecord-shaped dict to fields useful for prompting.
+
+    Includes ``excess_return`` (策略 - CB 等权指数, 真 alpha 信号) alongside
+    sharpe / total_return so the LLM can compare both. ``excess_return`` is
+    the framework's primary optimisation target — sharpe is shown for
+    context but should not drive decisions.
+    """
     if hasattr(rec, "to_dict"):
         rec = rec.to_dict()
     if not isinstance(rec, dict):
         return {}
     bt = rec.get("backtest") or {}
+    is_m = bt.get("is_metrics") or {}
+    oos_m = bt.get("oos_metrics") or {}
+    all_m = bt.get("all_metrics") or {}
     return {
         "iteration": rec.get("iteration"),
-        "is_sharpe": ((bt.get("is_metrics") or {}).get("sharpe")),
-        "oos_sharpe": ((bt.get("oos_metrics") or {}).get("sharpe")),
-        "is_winrate": ((bt.get("is_metrics") or {}).get("win_rate")),
-        "oos_winrate": ((bt.get("oos_metrics") or {}).get("win_rate")),
+        # 重点关注 excess_return — 真 alpha
+        "oos_excess_return": oos_m.get("excess_return"),
+        "is_excess_return": is_m.get("excess_return"),
+        "all_excess_return": all_m.get("excess_return"),
+        # 总收益 (含基准在内的绝对收益)
+        "oos_total_return": oos_m.get("total_return"),
+        "is_total_return": is_m.get("total_return"),
+        # sharpe (上下文参考, 不是优化目标)
+        "is_sharpe": is_m.get("sharpe"),
+        "oos_sharpe": oos_m.get("sharpe"),
+        "is_winrate": is_m.get("win_rate"),
+        "oos_winrate": oos_m.get("win_rate"),
     }
 
 
@@ -562,6 +596,39 @@ def _format_pool_stats_section(pool_stats: dict | None) -> str:
     )
 
 
+def _format_recent_runs_focus(summarised: list[dict]) -> str:
+    """Render last-N-runs in a human-readable list that visually emphasises
+    excess_return (真 alpha). The same data also lives in the JSON payload;
+    this block is purely cognitive scaffolding for the LLM.
+    """
+    if not summarised:
+        return ""
+    lines: list[str] = []
+    for r in summarised[-5:]:
+        it = r.get("iteration")
+        sh = r.get("oos_sharpe")
+        tr = r.get("oos_total_return")
+        ex = r.get("oos_excess_return")
+        # 渲染: 缺失字段显示为 ?
+        sh_s = f"{float(sh):.3f}" if isinstance(sh, (int, float)) else "?"
+        tr_s = (
+            f"{float(tr) * 100:+.2f}%" if isinstance(tr, (int, float)) else "?"
+        )
+        ex_s = (
+            f"{float(ex) * 100:+.2f}%" if isinstance(ex, (int, float)) else "?"
+        )
+        lines.append(
+            f"  iter {it}: sharpe={sh_s}, total_return={tr_s}, "
+            f"excess_return={ex_s}  ← 重点关注 excess_return"
+        )
+    return (
+        "\n\n## 最近 N 轮回顾 (excess_return = 真 alpha)\n"
+        + "\n".join(lines)
+        + "\n\n注: sharpe 高但 excess_return 接近 0 = 没跑赢基准, 不是好结果. "
+        + "目标是 excess_return 持续上升."
+    )
+
+
 def _build_user_prompt(
     writable_items: list[dict],
     recent_runs: list[Any],
@@ -578,20 +645,22 @@ def _build_user_prompt(
     payload so the LLM sees both the raw machine-friendly facts and a
     quick-read summary.
     """
+    summarised_runs = [_summarise_run(r) for r in (recent_runs or [])]
     payload = {
         "writable_items": writable_items,
-        "recent_runs": [_summarise_run(r) for r in (recent_runs or [])],
+        "recent_runs": summarised_runs,
         "diagnosis": diagnosis or {},
         "tried_directions": _summarise_tried(tried_directions),
     }
     body = json.dumps(payload, ensure_ascii=False)
     pool_block = _format_pool_stats_section(pool_stats)
+    runs_block = _format_recent_runs_focus(summarised_runs)
     if prev_error:
         return (
             f"上一轮你的输出被拒绝, 原因: {prev_error}\n"
-            f"请重出一份合规 JSON。输入数据如下:\n{body}{pool_block}"
+            f"请重出一份合规 JSON。输入数据如下:\n{body}{pool_block}{runs_block}"
         )
-    return f"输入数据 (JSON):\n{body}{pool_block}"
+    return f"输入数据 (JSON):\n{body}{pool_block}{runs_block}"
 
 
 def _default_llm_call(

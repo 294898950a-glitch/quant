@@ -17,6 +17,7 @@ from strategies.cb_arb.verifier import (
     RATING_TO_INT,
     _build_call_index,
     _compute_metrics,
+    _index_total_return,
     _is_force_redeemed_on_date,
     _restrict_dates_for_pool,
     _unpack_config,
@@ -417,6 +418,78 @@ def test_cb_style_5arg_call_works(monkeypatch):
     weights = [20, 1.0, 0.50, 0.99, 0.05, 30, 90, -0.30, 1e6, 1e3, 50, 150]
     result = run_backtest(snap, weights, {}, _Cfg())
     assert isinstance(result, BacktestResult)
+
+
+# --------------------------------------------------------------------------- #
+# excess_return: 跑赢 CB 等权指数多少 (= 真 alpha 信号)
+# --------------------------------------------------------------------------- #
+
+
+def test_excess_return_field_present_in_metrics(monkeypatch):
+    """跑一次回测, is/oos/all metrics 都该有 excess_return 字段."""
+    cb_codes, days = _install_synthetic_caches(monkeypatch)
+    rules = {"rating_floor_int": 0, "fee_pct": 0.0001, "initial_capital": 1_000_000.0}
+    weights = [20, 1.0, 0.50, 0.99, 0.10, 30, 90, -0.30, 1e6, 1e3, 50, 150]
+    result = run_backtest(weights, {}, rules)
+    for name, m in (
+        ("all", result.all_metrics),
+        ("is", result.is_metrics),
+        ("oos", result.oos_metrics),
+    ):
+        assert "excess_return" in m, f"{name}_metrics 缺 excess_return: {m}"
+        assert isinstance(m["excess_return"], (int, float)), (
+            f"{name}_metrics.excess_return 类型 {type(m['excess_return'])} 不是数"
+        )
+        assert math.isfinite(float(m["excess_return"]))
+
+
+def test_excess_return_equals_strategy_minus_index(monkeypatch):
+    """假设策略 +30%, 同期指数 +10%, excess_return 应该约 +20%.
+
+    用 mock 替换 _index_total_return 和 _compute_metrics 输入, 直接验证差值公式.
+    """
+    # 直接调 _compute_metrics, 用 mock _index_total_return 控制返回值
+    fake_curve = [
+        ("20240101", 1_000_000.0),
+        ("20240601", 1_300_000.0),  # +30%
+    ]
+
+    def fake_index(start, end):
+        # 控制为 10%
+        return 0.10
+
+    monkeypatch.setattr(v, "_index_total_return", fake_index)
+
+    m = _compute_metrics(
+        fake_curve, [], initial_capital=1_000_000.0,
+        index_dates=["20240101", "20240601"],
+    )
+    assert abs(m["total_return"] - 0.30) < 1e-6, m
+    # excess_return = total_return - index_return = 0.30 - 0.10 = 0.20
+    assert abs(m["excess_return"] - 0.20) < 1e-4, m
+
+
+def test_excess_return_zero_dates_handled(monkeypatch):
+    """空日期段不 raise — _index_total_return("", "") 应返回 0,
+    _compute_metrics 给空 curve 时 excess_return 为 0.
+    """
+    # 1) 空 equity_curve → 整体走空分支, excess_return = 0
+    m_empty = _compute_metrics([], [], 1_000_000.0)
+    assert m_empty["excess_return"] == 0.0
+
+    # 2) _index_total_return 直接拿空字符串 — 不 raise, 返回 0
+    assert _index_total_return("", "") == 0.0
+    assert _index_total_return("20240101", "") == 0.0
+    # 反向区间也返回 0 (而不是 raise)
+    assert _index_total_return("20240601", "20240101") == 0.0
+
+    # 3) 单点 curve (n_days=1) → excess_return 应该 0 (不能算总收益走势)
+    m_single = _compute_metrics(
+        [("20240101", 1_000_000.0)], [], 1_000_000.0,
+        index_dates=["20240101"],
+    )
+    # 单点有 total_return=0; excess_return = 0 - 0 = 0
+    assert m_single["excess_return"] == 0.0
 
 
 # --------------------------------------------------------------------------- #
