@@ -575,6 +575,77 @@ def _summarise_tried(tried_directions: list[dict]) -> list[dict]:
     return out
 
 
+def detect_noop_adjustments(
+    recent_runs: list[Any],
+    *,
+    min_repeats: int = 3,
+    tolerance: float = 1e-6,
+) -> list[dict]:
+    """Detect repeated edits whose cumulative excess return did not move."""
+
+    rows = []
+    for rec in recent_runs or []:
+        if hasattr(rec, "to_dict"):
+            rec = rec.to_dict()
+        if not isinstance(rec, dict):
+            continue
+        hyp = rec.get("hypothesis_attempt") or {}
+        item_path = hyp.get("item_path")
+        if not item_path:
+            continue
+        bt = rec.get("backtest") or {}
+        cum = bt.get("cumulative_metrics") or {}
+        oos = bt.get("oos_metrics") or {}
+        metric = cum.get("excess_return", oos.get("excess_return"))
+        try:
+            metric_f = float(metric)
+        except (TypeError, ValueError):
+            continue
+        rows.append(
+            {
+                "iteration": rec.get("iteration"),
+                "item_path": item_path,
+                "metric": metric_f,
+            }
+        )
+    if len(rows) < min_repeats:
+        return []
+
+    out: list[dict] = []
+    streak = [rows[0]]
+    for row in rows[1:]:
+        if row["item_path"] == streak[-1]["item_path"]:
+            streak.append(row)
+        else:
+            _append_noop_if_needed(streak, out, min_repeats, tolerance)
+            streak = [row]
+    _append_noop_if_needed(streak, out, min_repeats, tolerance)
+    return out
+
+
+def _append_noop_if_needed(
+    streak: list[dict],
+    out: list[dict],
+    min_repeats: int,
+    tolerance: float,
+) -> None:
+    if len(streak) < min_repeats:
+        return
+    metrics = [float(r["metric"]) for r in streak]
+    metric_delta = max(metrics) - min(metrics)
+    if abs(metric_delta) > tolerance:
+        return
+    out.append(
+        {
+            "item_path": streak[-1]["item_path"],
+            "count": len(streak),
+            "metric": "cumulative_excess_return",
+            "metric_delta": round(metric_delta, 10),
+            "message": "recent repeated edits did not move cumulative_excess_return; switch parameter dimension",
+        }
+    )
+
+
 def _format_pool_stats_section(pool_stats: dict | None) -> str:
     """Render the raw-statistic block appended to the user message.
 
@@ -660,6 +731,7 @@ def _build_user_prompt(
         "recent_runs": summarised_runs,
         "diagnosis": diagnosis or {},
         "tried_directions": _summarise_tried(tried_directions),
+        "noop_adjustments": detect_noop_adjustments(recent_runs or []),
     }
     body = json.dumps(payload, ensure_ascii=False)
     pool_block = _format_pool_stats_section(pool_stats)

@@ -19,6 +19,7 @@ from strategies.cb_redemption.hypothesizer import (
     Hypothesis,
     _build_user_prompt,
     _summarise_run,
+    detect_noop_adjustments,
     propose,
     propose_via_llm,
     propose_via_rules,
@@ -196,6 +197,41 @@ def test_recent_run_summary_prefers_cumulative_metrics(clean_diagnosis):
     prompt = _build_user_prompt([], [rec], clean_diagnosis, [], None)
     assert "cumulative_excess_return" in prompt
     assert "主反馈信号" in prompt
+
+
+def test_detect_noop_adjustments_flags_min_remaining_size_streak():
+    runs = []
+    for i, value in enumerate([90_000_000, 81_000_000, 72_900_000], start=1):
+        runs.append(
+            {
+                "iteration": i,
+                "hypothesis_attempt": {
+                    "item_path": "parameters.min_remaining_size",
+                    "new_value": value,
+                },
+                "backtest": {
+                    "cumulative_metrics": {
+                        "excess_return": -0.04857,
+                    }
+                },
+            }
+        )
+
+    noops = detect_noop_adjustments(runs)
+
+    assert noops == [
+        {
+            "item_path": "parameters.min_remaining_size",
+            "count": 3,
+            "metric": "cumulative_excess_return",
+            "metric_delta": 0.0,
+            "message": "recent repeated edits did not move cumulative_excess_return; switch parameter dimension",
+        }
+    ]
+
+    prompt = _build_user_prompt([], runs, {}, [], None)
+    assert "noop_adjustments" in prompt
+    assert "parameters.min_remaining_size" in prompt
 
 
 def test_llm_returns_garbage_falls_back_to_rules(

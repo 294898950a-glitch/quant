@@ -25,6 +25,15 @@ class BenchmarkDataError(RuntimeError):
     """Raised when benchmark data cannot be loaded safely."""
 
 
+class BenchmarkNotAvailableError(BenchmarkDataError):
+    """Raised when a requested benchmark did not exist for the date range."""
+
+
+LISTING_DATES = {
+    "sixty_forty": "2013-08-15",  # 511010 国债 ETF listing date
+}
+
+
 @dataclass(frozen=True)
 class BenchmarkConfig:
     """Configuration for benchmark data sources and cache locations."""
@@ -54,6 +63,7 @@ def load_benchmark(
     """
 
     cfg = config or BenchmarkConfig()
+    _check_available(name, start)
     if name == "cash":
         return _cash_returns(start, end, cfg)
 
@@ -270,15 +280,36 @@ def _fetch_equal_weight_stocks(
 
 
 def _weighted_price_index(
-    prices: dict[str, pd.Series], weights: dict[str, float]
+    prices: dict[str, pd.Series],
+    weights: dict[str, float],
+    *,
+    rebalance: str = "monthly",
 ) -> pd.Series:
-    returns = pd.DataFrame(
-        {name: _clean_prices(series).pct_change() for name, series in prices.items()}
+    price_df = pd.DataFrame(
+        {name: _clean_prices(series) for name, series in prices.items()}
     ).dropna(how="any")
-    if returns.empty:
+    if price_df.empty:
         raise BenchmarkDataError("weighted benchmark has no overlapping dates")
-    combined = sum(returns[name] * weights[name] for name in weights)
-    index = (1.0 + combined).cumprod()
+    weight_s = pd.Series(weights, dtype=float)
+    weight_s = weight_s / weight_s.sum()
+    if rebalance == "daily":
+        returns = price_df.pct_change().dropna(how="any")
+        combined = sum(returns[name] * weight_s[name] for name in weight_s.index)
+        index = (1.0 + combined).cumprod()
+        index.iloc[0] = 1.0
+        return index.rename("close")
+    if rebalance != "monthly":
+        raise ValueError("rebalance must be daily or monthly")
+
+    parts: list[pd.Series] = []
+    current_value = 1.0
+    for _, group in price_df.groupby(price_df.index.to_period("M")):
+        rel = group / group.iloc[0]
+        portfolio = (rel[weight_s.index] * weight_s).sum(axis=1) * current_value
+        current_value = float(portfolio.iloc[-1])
+        parts.append(portfolio)
+    index = pd.concat(parts)
+    index = index[~index.index.duplicated(keep="last")]
     index.iloc[0] = 1.0
     return index.rename("close")
 
@@ -297,9 +328,20 @@ def _compact_date(date_s: str) -> str:
     return pd.to_datetime(date_s).strftime("%Y%m%d")
 
 
+def _check_available(name: str, start: str) -> None:
+    listing = LISTING_DATES.get(name)
+    if listing is None:
+        return
+    if pd.to_datetime(start) < pd.to_datetime(listing):
+        raise BenchmarkNotAvailableError(
+            f"{name} unavailable before listing date {listing}"
+        )
+
+
 __all__ = [
     "BenchmarkConfig",
     "BenchmarkDataError",
+    "BenchmarkNotAvailableError",
     "load_benchmark",
     "load_benchmarks",
     "write_benchmark_cache",

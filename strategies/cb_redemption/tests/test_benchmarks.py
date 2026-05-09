@@ -10,6 +10,7 @@ import pytest
 from strategies.cb_redemption.benchmarks import (
     BenchmarkConfig,
     BenchmarkDataError,
+    BenchmarkNotAvailableError,
     load_benchmark,
     load_benchmarks,
     write_benchmark_cache,
@@ -78,3 +79,10 @@ def test_short_cached_price_window_raises(tmp_path) -> None:
 
     with pytest.raises(BenchmarkDataError, match="not enough benchmark prices"):
         load_benchmark("dividend", "2024-01-01", "2024-01-10", config=cfg)
+
+
+def test_sixty_forty_rejects_dates_before_bond_etf_listing(tmp_path) -> None:
+    cfg = BenchmarkConfig(cache_dir=tmp_path)
+
+    with pytest.raises(BenchmarkNotAvailableError, match="2013-08-15"):
+        load_benchmark("sixty_forty", "2012-01-01", "2012-12-31", config=cfg)
