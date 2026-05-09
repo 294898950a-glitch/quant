@@ -103,6 +103,57 @@ def determine_tier(thresholds_passed: dict[str, bool]) -> Tier:
     return "底线档"
 
 
+def format_evaluation_report(
+    result: EvaluationResult, *, title: str = "Strategy Evaluation"
+) -> str:
+    """Render a compact Markdown report from an :class:`EvaluationResult`."""
+
+    lines = [
+        f"# {title}",
+        "",
+        f"- Tier: {result.tier}",
+        f"- Reason: {'; '.join(result.reasons)}",
+        "",
+        "## Thresholds",
+        "",
+        _markdown_table(
+            ["threshold", "passed"],
+            [
+                [name, "yes" if passed else "no"]
+                for name, passed in result.thresholds.items()
+            ],
+        ),
+        "",
+        "## Metrics",
+        "",
+        _markdown_table(
+            [
+                "name",
+                "total_return",
+                "annualized_return",
+                "max_drawdown",
+                "information_ratio",
+            ],
+            [
+                [
+                    str(name),
+                    _fmt(row["total_return"]),
+                    _fmt(row["annualized_return"]),
+                    _fmt(row["max_drawdown"]),
+                    _fmt(row["information_ratio"]),
+                ]
+                for name, row in result.metrics_table.iterrows()
+            ],
+        ),
+        "",
+        "## Yearly Consistency",
+        "",
+        _yearly_markdown(result.yearly_consistency),
+        "",
+    ]
+    return "\n".join(lines)
+
+
 def _aligned_returns(
     strategy_returns: pd.Series,
     benchmarks: dict[str, pd.Series],
@@ -266,6 +317,38 @@ def _reasons(thresholds: dict[str, bool], tier: Tier) -> list[str]:
     return [f"tier={tier}; failed: {', '.join(failed)}"]
 
 
+def _yearly_markdown(yearly: pd.DataFrame) -> str:
+    if yearly.empty:
+        return "_No yearly rows._"
+    cols = ["year", "strategy_return"] + [
+        c for c in yearly.columns if c.startswith("beats_")
+    ]
+    rows = []
+    for year, row in yearly.iterrows():
+        rendered = [str(year), _fmt(row["strategy_return"])]
+        for col in cols[2:]:
+            rendered.append("yes" if bool(row[col]) else "no")
+        rows.append(rendered)
+    return _markdown_table(cols, rows)
+
+
+def _markdown_table(headers: list[str], rows: list[list[str]]) -> str:
+    header = "| " + " | ".join(headers) + " |"
+    sep = "| " + " | ".join("---" for _ in headers) + " |"
+    body = ["| " + " | ".join(str(cell) for cell in row) + " |" for row in rows]
+    return "\n".join([header, sep, *body])
+
+
+def _fmt(value: object) -> str:
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        return str(value)
+    if not math.isfinite(f):
+        return "0.000000"
+    return f"{f:.6f}"
+
+
 __all__ = [
     "DEFAULT_BENCHMARKS",
     "EvaluationConfig",
@@ -273,4 +356,5 @@ __all__ = [
     "Tier",
     "determine_tier",
     "evaluate",
+    "format_evaluation_report",
 ]

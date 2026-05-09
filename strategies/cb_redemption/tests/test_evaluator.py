@@ -9,6 +9,7 @@ from strategies.cb_redemption.evaluator import (
     EvaluationConfig,
     determine_tier,
     evaluate,
+    format_evaluation_report,
 )
 
 
@@ -96,3 +97,15 @@ def test_evaluate_requires_all_configured_benchmarks() -> None:
 
     with pytest.raises(ValueError, match="missing benchmark"):
         evaluate(_returns(0.0002), benchmarks)
+
+
+def test_format_evaluation_report_has_stable_sections() -> None:
+    result = evaluate(_returns(0.00035), _benchmarks())
+    report = format_evaluation_report(result, title="Synthetic Strategy")
+
+    assert report.startswith("# Synthetic Strategy")
+    assert "- Tier: 明确好" in report
+    assert "## Thresholds" in report
+    assert "## Metrics" in report
+    assert "## Yearly Consistency" in report
+    assert "| strategy |" in report
