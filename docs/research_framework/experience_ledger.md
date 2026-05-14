@@ -18,6 +18,7 @@
 - YYYY-MM-DD | 假设 | 失败原因 | 报告链接
 - e.g. `2026-05-14 | CSI500 同日大跌过滤 | 2 胜 2 平 2 负, 2022 反向, dating 修复失败 | reports/cb_arb_csi_market_filter_2026-05-14.md`
 - `2026-05-15 | medium_recovery3_hurdle0p10 作为无条件全年参数 | 跨年留出主底线仅 2/4 通过 (2019/2024 ✓, 2022/2023 ✗), 跨 regime 不鲁棒 | reports/cb_arb_round5_retro_2026-05-15.md`
+- `2026-05-15 | arxiv 候选 "Arbitrage-Free XVA" (1608.02690) | 通过硬筛但弱关联 cb_arb (XVA = 衍生品估值调整, 不给策略层信号); priority=低, Claude reject + 写入避免下次重复 | data/research_framework/paper_candidates/2026-05-15.md
 
 模式 B 中, AI **绝对不能再提这里的方向**(B5 红线).
 

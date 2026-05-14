@@ -1,0 +1,30 @@
+# arxiv 论文检索关键词清单 (Claude + Codex 共维护)
+# 来源: l0_protocol.md §c 入口 3 (外部学术)
+# 更新规则: 每次 arxiv FIRST-RUN 结果不理想 → 调整这里
+# 格式: 一行一个关键词, # 开头注释
+
+# === 核心策略 ===
+convertible bond arbitrage
+mean reversion convertible
+dynamic hedging convertible bond
+convertible bond pricing model
+
+# === 状态切换 (regime) ===
+volatility regime switching
+regime switching equity tail
+tail risk timing systematic
+
+# === panic / crash 信号 ===
+panic detection equity
+equity market microstructure crash
+
+# === 信用风险 ===
+credit spread quant strategy
+
+# === 实盘 ===
+cb_arb live performance
+quant convertible live trading
+
+# === 调整历史 ===
+# 2026-05-15 v1.0 初版 (6 关键词): convertible bond arbitrage / volatility regime switching / panic detection equity / credit spread quant strategy / mean reversion convertible / quant strategy live trading
+# 2026-05-15 v1.1 首跑后调整 (12 关键词): 删 "quant strategy live trading" (太宽), 加 4 个 CB 聚焦词 + 2 个 panic/regime 具体词 + 2 个实盘词
