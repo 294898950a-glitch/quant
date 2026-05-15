@@ -11,12 +11,14 @@
 
 ## 总览
 
-| 策略 | status | 累计 excess (复利) | 单年最大 dd | 下一步 owner |
-|---|---|---:|---:|---|
-| cb_arb 主策略 (verifier yaml-current) | **WIP, 不达门槛** | -12.7% | -30.7% | 用户 (决定是否继续) |
-| cb_arb value-gap switch (评估分支) | **WIP 加强版, 不达门槛** | -3.0% | -13.1% (2020) | 用户 (是否升级到主策略) |
+| 策略 | status | 累计 excess (复利) | max_dd (口径) | 下一步 owner |
+|---|---|---:|---|---|
+| cb_arb 主策略 (verifier yaml-current) | **WIP, 不达门槛** | -12.7% | -30.7% (全段 OOS 2019-2024) | 用户 (决定是否继续) |
+| cb_arb value-gap switch (评估分支) | **WIP 加强版, 不达门槛** | -3.0% | -13.1% (单年 2020) | 用户 (是否升级到主策略) |
 | cb_redemption (强赎) | **archived (framework data_mining verdict)** | n/a | n/a | 不复活 |
 | 网格策略 6 标的 (sp500/csi500/yzm/工行/神华/长电) | **archived (EXPERIMENT_LOG 封档)** | n/a (全负) | n/a | 不复跑 |
+
+注: 上面 max_dd 列两个口径不直接可比 (一个全段, 一个单年最大). 重要 baseline 的全段 max_dd 见 baseline_registry.md.
 
 **当前实际可上实盘的策略**: **0 个**。
 
