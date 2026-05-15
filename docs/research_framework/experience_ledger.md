@@ -34,7 +34,7 @@
 
 - YYYY-MM-DD | 策略 | 改动 | 落地处 (yaml 绿区 / 代码 / 数据)
 - e.g. `2026-05-XX | cb_arb | medium signal recovery_days=1 (原 2) | yaml 绿区`
-- `2026-05-15 | cb_arb | **baseline 最终采用版本: medium signal recovery=4 hurdle=0.15** (spec v1.1 normal-state). 5 年 holdout: 2019 +16.1% / 2020 -13.1% / 2021 -5.0% / 2022 +1.4% / 2023 -3.1% / 2024 +3.0%. 4/5 holdout 合理, 2020 是历史极端 cb_arb 结构性不适配, 已确认不再死磕. cb_arb 主线研究饱和. | yaml 绿区 (recovery_days / switch_hurdle_pct), `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` |
+- `2026-05-15 | cb_arb | **HDRF 手工路线 baseline 最终采用: medium signal recovery=4 hurdle=0.15** (spec v1.1 normal-state). 6 年 holdout: 2019 +16.1% / 2020 -13.1% / 2021 -5.0% / 2022 +1.4% / 2023 -3.1% / 2024 +3.0%. 4/5 holdout 合理, 2020 历史极端不再死磕. HDRF 手工路线饱和 (panic detector / trade filter / meta wrapper 三方向全否). **注意: cb_arb 另有自循环 LLM 路线 paused 状态待审, 主线归档不全完** | yaml 绿区, `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` |
 
 ## 二、已确认无效 (Rejected — 不再走)
 
@@ -72,7 +72,8 @@
 | 中 | L3 schema 改进: 加 baseline trades.csv + daily_equity.csv 导出 (L5 反向诊断需要) | 工程 backlog | Codex L5 side finding 2026-05-15 |
 | ~已完成~ | cb_arb medium signal 在 2021 退出节奏过黏 → `recovery_days × switch_hurdle_pct` grid | 已跑完, recovery=3 hurdle=0.10 局部修复 2021 +2.09pp, 但跨年 2/4 不达标 | reports/cb_arb_round5_retro_2026-05-15.md |
 | ~已完成~ | cb_arb baseline 2020/2024 trade-level 归因 | 已跑完, broad weakness 不是 tail, A/B 双路径数据驱动否决, cb_arb 主线研究饱和归档 | reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md |
-| **关键** | **cb_arb 主线饱和, 转向下一个策略** — cb_redemption 继续 (iter 60+) / 多策略组合 / arxiv 14 天周期外部 idea source. 用户长期目标"最少钱+全自动"建议多策略组合 | 待 Claude+Codex 自决 | 本研究 |
+| **关键** | **cb_arb HDRF 手工路线饱和, 但自循环 LLM 路线 paused 待审** — 自循环 iter 1-60 跑的是 cb_arb (不是 cb_redemption), best iter 24 excess=0.313073, paused="hypothesizer returned None 5 consecutive iter". 8 池只用 2 池, 参数空间未穷举. 需要 cross-validation HDRF best vs 自循环 best 看两路线是否收敛 | 待立项 cross-validation | 2026-05-15 Codex recon |
+| **关键** | **多策略组合 / 其他策略立项** — 真正的 cb_redemption (强赎策略) 从未跑过, 历史目录名 `strategies/cb_redemption/` 是 framework 通用代码. 网格策略 EXPERIMENT_LOG 已封档. 用户长期目标"最少钱+全自动"建议多策略组合, 但前提是先有 ≥2 个 stable baseline | 待立项 | 2026-05-15 |
 
 ## 四、未来探索方向 (Future Backlog)
 
