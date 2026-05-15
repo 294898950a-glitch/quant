@@ -20,6 +20,7 @@
 - `2026-05-15 | medium_recovery3_hurdle0p10 作为无条件全年参数 | 跨年留出主底线仅 2/4 通过 (2019/2024 ✓, 2022/2023 ✗), 跨 regime 不鲁棒 | reports/cb_arb_round5_retro_2026-05-15.md`
 - `2026-05-15 | arxiv 候选 "Arbitrage-Free XVA" (1608.02690) | 通过硬筛但弱关联 cb_arb (XVA = 衍生品估值调整, 不给策略层信号); priority=低, Claude reject + 写入避免下次重复 | data/research_framework/paper_candidates/2026-05-15.md
 - `2026-05-15 | cb_arb 自身 PnL lookback rolling excess 作 regime classifier (任何 lookback 10/20/60 + 任何 threshold + 任何风险态参数) | 0/108 过 4 floor, CV 3/6 holdout 通过 (<5/6); lookback fundamental 滞后 (2020 第一次触发 04-03 距 panic 起点 02-03 已 60 日历日); lookback=10 反而比 60 更差 (false positive +); 实际是 51.9% 天数广义 mode switch 不是 panic detector | reports/cb_arb_regime_switch_retro_2026-05-15.md
+- `2026-05-15 | cb_arb 转债池跌幅截面比例作 breadth panic detector (5 维 162 候选 grid: drop_threshold × panic_ratio × recovery × hurdle × min_days) | 0/162 过 4 floor, CV 3/6 通过; **比 regime switch 强**(2020-02-03 准时触发 + targeted 3.7% 天数 vs 51.9%), 但仍 path-sensitive; 2024 -16062 PnL gap path 污染; 任何 floor 重校准都救不了 (full grid 仍 0/162 全过); 单 signal + 单 action mapping 救不了 cb_arb 跨年泛化 | reports/cb_arb_market_breadth_panic_retro_2026-05-15.md
 
 模式 B 中, AI **绝对不能再提这里的方向**(B5 红线).
 
@@ -34,6 +35,9 @@
 | 中 | panic signal 重新设计 (medium 单参数路径已饱和, 回头研究 panic detector) | 待立项 | 2026-05-15 Round 5 复盘 |
 | 中 | 2022/2024 中等亏损年的 regime detector | 待设计 | 2026-05-14 复盘报告 |
 | 高 | **exogenous panic signal**: vol surge / market breadth / credit spread spike — 不依赖自身 PnL 滞后, 用市场即时信号 | 来自 2026-05-15 regime switch 失败的 next-step backlog | reports/cb_arb_regime_switch_retro_2026-05-15.md |
+| 高 | **架构层 floor 重校准**: 4 个 hard floor 混合来源 (2020/2022/2023 来自旧 medium_opportunity, 2021 来自 current_best_no_opportunity 不同 baseline). 当前 spec v1.1 baseline 自己 fail 3 个 floor. 该重新校准用单一 baseline | 等用户拍板 | reports/cb_arb_market_breadth_panic_retro_2026-05-15.md L5 数据 |
+| 高 | **multi-signal ensemble**: market breadth + vol surge + credit spread + market index 多 signal 联合 (any-fire / weighted vote / Bayesian) — 单 signal 单 action 已确认无效, 跨研究方向 | 待立项 | reports/cb_arb_market_breadth_panic_retro_2026-05-15.md |
+| 中 | **新 action mapping**: 不只调 recovery+hurdle, 试 position scaling / hedge overlay / pair trade overlay 等 action family | 跨研究 | reports/cb_arb_market_breadth_panic_retro_2026-05-15.md |
 | 中 | Forward-looking trigger: 不用 lookback, 用结构性突变检测 (PELT / Bayesian changepoint) | 探索 | reports/cb_arb_regime_switch_retro_2026-05-15.md |
 | 中 | L3 schema 改进: 加 baseline trades.csv + daily_equity.csv 导出 (L5 反向诊断需要) | 工程 backlog | Codex L5 side finding 2026-05-15 |
 | ~已完成~ | cb_arb medium signal 在 2021 退出节奏过黏 → `recovery_days × switch_hurdle_pct` grid | 已跑完, recovery=3 hurdle=0.10 局部修复 2021 +2.09pp, 但跨年 2/4 不达标 | reports/cb_arb_round5_retro_2026-05-15.md |
