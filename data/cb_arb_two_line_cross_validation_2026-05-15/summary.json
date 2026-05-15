@@ -1,0 +1,60 @@
+{
+  "created_at": "2026-05-15T13:01:45Z",
+  "data_root": "data/cb_arb_concurrent_supervised_20260511_094500",
+  "sealed_pools": "data/cb_arb_rerun_fixed_20260510_124155/sealed_pools.json",
+  "loop_best": "data/cb_arb_rerun_fixed_20260510_124155/best_params.json",
+  "loop_best_iteration": 24,
+  "loop_best_saved_excess_return": 0.313073,
+  "hdrf_params": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 180.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0,
+    "panic_rule": "agent_combo",
+    "panic_option_value_weight_enabled": 1.0,
+    "panic_effective_lag_days": 1,
+    "panic_option_weight_05": 1.0,
+    "panic_option_weight_10": 0.7,
+    "panic_option_weight_15": 0.4,
+    "panic_option_weight_far": 0.1,
+    "panic_dates_file": "data/cb_arb_concurrent_supervised_20260511_094500/panic_detector_training/panic_detector_trained_daily.csv",
+    "panic_signal_column": "panic_day_trained",
+    "panic_option_value_weight_scope": "triggered_revalue",
+    "panic_opportunity_protect_enabled": 1.0,
+    "panic_opportunity_protect_days": 20,
+    "panic_opportunity_bad_days": 5,
+    "panic_opportunity_exit_on_recovery_enabled": 1.0,
+    "panic_opportunity_recovery_days": 4,
+    "panic_opportunity_switch_hurdle_pct": 0.15,
+    "panic_opportunity_trigger_mode": "medium"
+  },
+  "pool_gap_summary_hdrf_minus_loop": {
+    "n": 8,
+    "mean_gap": 0.00076,
+    "median_gap": -0.008516,
+    "max_abs_gap": 0.120619,
+    "mean_abs_gap": 0.035823,
+    "converged_3pp_count": 6
+  },
+  "year_gap_summary_loop_minus_hdrf": {
+    "n": 6,
+    "mean_gap": -0.012682,
+    "median_gap": 0.012796,
+    "max_abs_gap": 0.262158,
+    "mean_abs_gap": 0.0822,
+    "converged_3pp_count": 3
+  },
+  "hdrf_full_oos_20220101_20260508_metrics": {
+    "total_return": 0.392549,
+    "excess_return": 0.286986,
+    "max_drawdown": -0.345835,
+    "win_rate": 0.4862,
+    "total_trades": 796,
+    "n_days": 1049
+  },
+  "hdrf_full_oos_minus_loop_saved_excess": -0.026087,
+  "convergence_rule": "converged if all compared abs excess gaps are <= 0.03",
+  "convergence": "not_converged"
+}

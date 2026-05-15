@@ -1,0 +1,31 @@
+{
+  "source_dir": "data/cb_arb_breadth_confirm_ensemble_2026-05-15",
+  "cb_daily": "data/cb_warehouse/cb_daily.parquet",
+  "events": [
+    [
+      "20200123",
+      "true_panic"
+    ],
+    [
+      "20240122",
+      "false_positive_2024"
+    ],
+    [
+      "20240205",
+      "false_positive_2024"
+    ],
+    [
+      "20240228",
+      "false_positive_2024"
+    ],
+    [
+      "20240624",
+      "false_positive_2024"
+    ],
+    [
+      "20241009",
+      "false_positive_2024"
+    ]
+  ],
+  "method": "Event-day breadth/pool metrics from cb_daily close-to-close returns; baseline windows from medium_baseline daily_equity/trades artifacts."
+}

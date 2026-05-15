@@ -42,9 +42,10 @@ data/*/control.signal
 data/cb_arb_concurrent_supervised_*/
 data/cb_arb_rerun_*/
 data/cb_arb_*_2026-*/**/*.parquet
-data/cb_arb_*_2026-*/vm_*.log
-data/cb_arb_*_2026-*/*.pid
-data/cb_arb_*_2026-*/heartbeat
+data/cb_arb_*/vm_*.log
+data/cb_arb_*/spot_*.log
+data/cb_arb_*/*.pid
+data/cb_arb_*/heartbeat
 *.pid
 
 # Archive (保留物理副本但不 commit)

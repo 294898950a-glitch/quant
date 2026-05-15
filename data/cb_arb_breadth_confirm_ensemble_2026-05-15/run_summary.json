@@ -1,0 +1,23 @@
+{
+  "years": [
+    2019,
+    2020,
+    2021,
+    2022,
+    2023,
+    2024
+  ],
+  "candidate_count": 108,
+  "task_count": 648,
+  "main_floors": {
+    "2020": -0.130604,
+    "2021": -0.050441,
+    "2022": 0.014425,
+    "2023": -0.031027
+  },
+  "breadth_effective_lag_days": 1,
+  "confirm_signal": "pool_mean_return",
+  "selected_passes": 3,
+  "selected_total": 6,
+  "adoption_pass": false
+}
