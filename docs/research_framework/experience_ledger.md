@@ -2,6 +2,30 @@
 
 研究流程的"记忆系统". 多次研究累积下来, 沉淀什么该做、什么别做.
 
+## 当前 cb_arb 研究 hard floors (v1.1, 2026-05-15 重校准)
+
+来源: spec v1.1 normal-state baseline (recovery=4, hurdle=0.15) 在 medium_opportunity 数据上跑的 6 年 excess.
+
+| 年份 | hard floor |
+| --- | ---: |
+| 2019 | 0.161312 |
+| 2020 | -0.130604 |
+| 2021 | -0.050441 |
+| 2022 | 0.014425 |
+| 2023 | -0.031027 |
+| 2024 | 0.030085 |
+
+**重校准历史**:
+- v1.0 (Round 4/5 used, mixed): 2020 ≥ -0.138588 (旧 medium_opportunity recovery=2 hurdle=0.12), 2021 ≥ -0.033534 (current_best_no_opportunity, **不同 baseline**), 2022 ≥ 0.028891, 2023 ≥ -0.027744
+- v1.1 (本次): 用当前 baseline (spec v1.1 normal-state) 统一 6 年, 4 floor 来自同一 baseline
+- 来源: market breadth panic batch L5 (Codex 2026-05-15 12:18 RESPONSE) 暴露 v1.0 混合来源
+
+**采用门槛**: 候选 selected 在 6 个 holdout 年的 ≥ 5/6 改善或不退化 vs 当前 baseline. **不再用 ≥ 4 floor** (没意义, baseline 自己就是 floor).
+
+下次研究 spec 直接引用本表, 不重写.
+
+---
+
 四个分区:
 
 ## 一、已采用方向 (Adopted)
