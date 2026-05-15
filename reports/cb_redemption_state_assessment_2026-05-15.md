@@ -107,7 +107,45 @@ A/B/C 才是真正的架构层决策 (跟之前 cb_arb A/B 不同 — 那是 tas
 
 ## 后续待办
 
-- [x] 写本状态评估
-- [ ] commit
-- [ ] autonomous_summary 给用户 (cb_arb 今天 final + cb_redemption 待用户架构层拍板)
-- [ ] 设长 wakeup, 等用户白天回来
+- [x] 写本状态评估 (本地浅查版)
+- [x] commit a7c7632
+- [x] Codex L1.5 deep recon (sig 上) — 21:50 RESPONSE 给出关键事实修正 (见下)
+- [x] 自决: **暂缓 cb_redemption 复活**
+
+## 21:50 Codex deep recon 关键修正
+
+**事实纠正 (我之前评估的偏差)**:
+
+1. **工作树 deleted 状态** — `strategies/cb_redemption/data.py` / `backtest.py` / `config.py` / `optimizer.py` 在 sig 工作树都被删了 (git HEAD 里有完整代码). 不只是缺 data.py, 是大块被 remove
+2. **历史 5 iter 已跑过, audit verdict=`data_mining`** — `data/cb_redemption/runs.jsonl` (HEAD deleted) 5 records, iteration=5, holdout_compliance=**False**, optimizer_baseline.json score=null **invalidated**. **framework 自己已经判过这策略过拟合**, 跟 EXPERIMENT_LOG csi500 同 fate
+3. **schema 退化** — cb_call.parquet 缺 `call_type` 字段; cb_daily.parquet 缺 `pct_chg` / `cb_over_rate`; `strong_timeline_snapshots.parquet` cache missing. 跟 HEAD code 需要的不匹配
+4. **factor 设计本身有 lookahead 污染** — `remaining_size` HEAD code 自己注释 "medium lookahead pollution because no historical remain-size series exists"; `stock_momentum` 实际用的是转债 pct_chg 不是正股, **跟 yaml 注释不一致**
+
+**真实工程估算**: 3-5 天 (恢复 deleted files + 修 schema + 重建 cache), 然后还要 strategy validity 研究时间. 当前完成度 10-20%, 恢复后 40-60%.
+
+## Claude 自决判断 (修正版)
+
+**暂缓 cb_redemption 复活** (负向决策, 不立项).
+
+**理由**:
+1. **历史 audit data_mining verdict** — 不是工程问题, 是策略本身可能有过拟合风险. 跟 csi500 同 pattern, EXPERIMENT_LOG 已沉淀"csi500 +1.90 平均分被审计员正确判定为挖数据, 事实证明该判得对"
+2. **factor 设计本身缺陷** — remaining_size lookahead pollution + stock_momentum 名实不符. 即使工程恢复, 这俩 factor 仍要重新设计才不踩 cb_arb 同坑
+3. **同等时间投入更优**:
+   - arxiv 14 天周期 (2026-05-29) 是当前唯一未饱和 idea source
+   - 中间 14 天 idle 期不应该消耗在复活已判过拟合的策略上
+4. **不升级用户拍板 A/B/C** — 因为 A (复活 cb_redemption) 是 3-5 天投入 + 历史 data_mining 风险, 自决"不投入"是低风险负向决策
+
+## 经验账本同步
+
+新加入分区二 (已确认无效):
+- `2026-05-15 | cb_redemption 真强赎策略 (5-factor weights model + redeem_progress / premium_ratio / remaining_size / stock_momentum / market_sentiment) | 历史 5 iter (data/cb_redemption/runs.jsonl HEAD deleted, holdout_compliance=False) 审计员 verdict=data_mining, framework 自己判过拟合. factor 设计有 lookahead pollution (remaining_size 只有最新值) + stock_momentum 名实不符 (实际是转债 pct_chg 不是正股). 工程 3-5 天恢复, 但策略本身过拟合风险未除. 不复活. | 本报告 v2 + Codex 21:50 recon`
+
+## 通知用户 (不要求拍板)
+
+cb_redemption 立项 8-15 天的判断错了, 真实是 3-5 天工程 + 历史已 audit data_mining 过拟合. 自决**暂缓复活**. 你白天看到这块如果想推可推, 但默认不投入.
+
+## 下一步
+
+- arxiv 14 天周期持续 (2026-05-29)
+- 等用户白天回来给新方向 / 或继续 idle
+- cb_arb HDRF baseline 已 stable, 单策略可用
