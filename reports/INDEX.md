@@ -1,6 +1,6 @@
 # 复盘报告索引 (自动生成)
 
-**最后生成**: 2026-05-16 04:08 (由 `scripts/generate_indexes.py` 自动扫描生成)
+**最后生成**: 2026-05-16 04:26 (由 `scripts/generate_indexes.py` 自动扫描生成)
 **触发**: 加新报告后跑 `python3 scripts/generate_indexes.py` 重新生成
 
 报告物理位置仍在 `reports/` 平铺 (避免破坏 35+ 处现有引用). 按策略找请用本索引.

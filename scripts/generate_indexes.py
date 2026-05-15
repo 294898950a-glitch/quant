@@ -106,12 +106,18 @@ def generate_docs_index() -> str:
         cat = classify_doc(f)
         categories.setdefault(cat, []).append(f)
 
-    # Scan data/research_framework (truth/data assets)
+    # Scan data/research_framework (truth/data assets + subdirs + jsonl ledgers)
     data_files = sorted([f.name for f in DATA_FRAMEWORK.glob("*.md")] +
                         [f.name for f in DATA_FRAMEWORK.glob("*.yaml")] +
-                        [f.name for f in DATA_FRAMEWORK.glob("*.txt")])
+                        [f.name for f in DATA_FRAMEWORK.glob("*.txt")] +
+                        [f.name for f in DATA_FRAMEWORK.glob("*.jsonl")])
+    data_subdirs = sorted([f.name + "/" for f in DATA_FRAMEWORK.iterdir() if f.is_dir()])
 
-    # Scan scripts (validator/tool inventory)
+    # Scan docs/ root (not just research_framework)
+    docs_root = REPO_ROOT / "docs"
+    docs_root_files = sorted([f.name for f in docs_root.glob("*.md")])
+
+    # Scan scripts/ by group (no longer cherry-pick a few)
     scripts_dir = REPO_ROOT / "scripts"
     validators = sorted([f.name for f in scripts_dir.glob("validate_*.py")] +
                         [f.name for f in scripts_dir.glob("framework_preflight.py")] +
@@ -122,6 +128,24 @@ def generate_docs_index() -> str:
                      [f.name for f in scripts_dir.glob("generate_indexes.py")])
     automation = sorted([f.name for f in scripts_dir.glob("backfill_run_manifests.py")] +
                         [f.name for f in scripts_dir.glob("process_quant_claude_outbox.py")])
+    evaluate = sorted([f.name for f in scripts_dir.glob("evaluate_*.py")])
+    search = sorted([f.name for f in scripts_dir.glob("search_*.py") if "ledger" not in f.name])
+    analyze = sorted([f.name for f in scripts_dir.glob("analyze_*.py")])
+    data_pipeline = sorted([f.name for f in scripts_dir.glob("build_*.py")] +
+                           [f.name for f in scripts_dir.glob("enrich_*.py")] +
+                           [f.name for f in scripts_dir.glob("fix_*.py")] +
+                           [f.name for f in scripts_dir.glob("fetch_*.py")] +
+                           [f.name for f in scripts_dir.glob("verify_*.py")] +
+                           [f.name for f in scripts_dir.glob("recover_*.py")])
+    run_monitor = sorted([f.name for f in scripts_dir.glob("run_*.py")] +
+                         [f.name for f in scripts_dir.glob("monitor_*.py")])
+    outbox_tools = sorted([f.name for f in scripts_dir.glob("outbox_*.py")] +
+                          [f.name for f in scripts_dir.glob("watch_*.sh")] +
+                          [f.name for f in scripts_dir.glob("check_quant*.py")] +
+                          [f.name for f in scripts_dir.glob("outbox_to_telegram.py")])
+    research_flow = sorted([f.name for f in scripts_dir.glob("research_*.py")] +
+                           [f.name for f in scripts_dir.glob("train_*.py")] +
+                           [f.name for f in scripts_dir.glob("cb_pricer_sanity.py")])
 
     lines = [
         "# 文档地图 (INDEX)",
@@ -155,10 +179,18 @@ def generate_docs_index() -> str:
             lines.append(f"- `docs/research_framework/{f}`")
         lines.append("")
 
+    lines.append("## docs 根目录 (其他)")
+    lines.append("")
+    for f in docs_root_files:
+        lines.append(f"- `docs/{f}`")
+    lines.append("")
+
     lines.append("## 真值数据 (data/research_framework/)")
     lines.append("")
     for f in data_files:
         lines.append(f"- `data/research_framework/{f}`")
+    for d in data_subdirs:
+        lines.append(f"- `data/research_framework/{d}` (子目录)")
     lines.append("")
 
     lines.append("## 自动校验工具 (commit 前自动跑)")
@@ -176,6 +208,49 @@ def generate_docs_index() -> str:
     lines.append("## 自动化脚本")
     lines.append("")
     for f in automation:
+        lines.append(f"- `scripts/{f}`")
+    lines.append("")
+
+    lines.append("## 研究脚本 — 评估实验 (evaluate_*)")
+    lines.append("")
+    lines.append(f"共 {len(evaluate)} 个. 每个对应一次研究假设的回测.")
+    for f in evaluate:
+        lines.append(f"- `scripts/{f}`")
+    lines.append("")
+
+    lines.append("## 研究脚本 — 网格搜索 (search_*)")
+    lines.append("")
+    for f in search:
+        lines.append(f"- `scripts/{f}`")
+    lines.append("")
+
+    lines.append("## 研究脚本 — 分析诊断 (analyze_*)")
+    lines.append("")
+    for f in analyze:
+        lines.append(f"- `scripts/{f}`")
+    lines.append("")
+
+    lines.append("## 研究脚本 — 数据加工 (build/enrich/fix/fetch/verify/recover)")
+    lines.append("")
+    for f in data_pipeline:
+        lines.append(f"- `scripts/{f}`")
+    lines.append("")
+
+    lines.append("## 研究脚本 — 跑批 / 监控 (run/monitor)")
+    lines.append("")
+    for f in run_monitor:
+        lines.append(f"- `scripts/{f}`")
+    lines.append("")
+
+    lines.append("## 研究脚本 — 协作通道 (outbox/watch/check)")
+    lines.append("")
+    for f in outbox_tools:
+        lines.append(f"- `scripts/{f}`")
+    lines.append("")
+
+    lines.append("## 研究脚本 — 研究流程 (research_*, train_*, sanity)")
+    lines.append("")
+    for f in research_flow:
         lines.append(f"- `scripts/{f}`")
     lines.append("")
 
@@ -208,12 +283,13 @@ def generate_docs_index() -> str:
     lines.append("## 自动生成规则")
     lines.append("")
     lines.append("本文件由 `scripts/generate_indexes.py` 扫描以下位置自动生成:")
-    lines.append("- `docs/research_framework/*.md` — 按文件名分类")
-    lines.append("- `data/research_framework/{*.md, *.yaml, *.txt}` — 真值/配置数据")
-    lines.append("- `scripts/{validate_*, framework_preflight, get_baseline, ...}.py` — 工具脚本")
+    lines.append("- `docs/*.md` — 根目录文档")
+    lines.append("- `docs/research_framework/*.md` — 按文件名分类 (协议/流程/角色/模板/真值)")
+    lines.append("- `data/research_framework/{*.md, *.yaml, *.txt, *.jsonl}` + 子目录 — 真值/配置数据/账本")
+    lines.append("- `scripts/*.py + *.sh` — 全部脚本, 按 prefix 分组 (validate/get_/search_ledger/snapshot/generate/backfill/process/evaluate/search/analyze/build|fetch|enrich|fix|verify|recover/run|monitor/outbox|watch|check/research_|train_|cb_pricer_sanity)")
     lines.append("- `docs/plans/*.md` — 计划")
     lines.append("")
-    lines.append("分类规则在脚本里的 `classify_doc()` 函数. 改分类规则时改脚本, 不改本文件.")
+    lines.append("分类规则在脚本里的 `classify_doc()` + 各 group 的 glob. 改分类规则时改脚本, 不改本文件.")
     return "\n".join(lines) + "\n"
 
 

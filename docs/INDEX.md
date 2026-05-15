@@ -1,6 +1,6 @@
 # 文档地图 (INDEX)
 
-**最后生成**: 2026-05-16 04:08 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
+**最后生成**: 2026-05-16 04:26 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
 **触发**: 加新文件后跑 `python3 scripts/generate_indexes.py` 重新生成
 
 ---
@@ -47,12 +47,23 @@
 - `docs/research_framework/CURRENT.md`
 - `docs/research_framework/experience_ledger.md`
 
+## docs 根目录 (其他)
+
+- `docs/INDEX.md`
+- `docs/data_source_summary.md`
+
 ## 真值数据 (data/research_framework/)
 
 - `data/research_framework/baseline_registry.md`
 - `data/research_framework/data_schema_expectations.yaml`
+- `data/research_framework/decisions.jsonl`
 - `data/research_framework/paper_interest_keywords.txt`
+- `data/research_framework/processed_claude_messages.jsonl`
+- `data/research_framework/runs.jsonl`
 - `data/research_framework/strategies.yaml`
+- `data/research_framework/tried_directions.jsonl`
+- `data/research_framework/paper_candidates/` (子目录)
+- `data/research_framework/run_manifests/` (子目录)
 
 ## 自动校验工具 (commit 前自动跑)
 
@@ -73,6 +84,86 @@
 
 - `scripts/backfill_run_manifests.py`
 - `scripts/process_quant_claude_outbox.py`
+
+## 研究脚本 — 评估实验 (evaluate_*)
+
+共 17 个. 每个对应一次研究假设的回测.
+- `scripts/evaluate_cb_arb_breadth_confirm_ensemble.py`
+- `scripts/evaluate_cb_arb_cross_pools.py`
+- `scripts/evaluate_cb_arb_daily_regime_switch.py`
+- `scripts/evaluate_cb_arb_legacy.py`
+- `scripts/evaluate_cb_arb_market_breadth_panic.py`
+- `scripts/evaluate_cb_arb_normal_vol.py`
+- `scripts/evaluate_cb_arb_panic_bond_anchor.py`
+- `scripts/evaluate_cb_arb_panic_option_stop.py`
+- `scripts/evaluate_cb_arb_panic_option_weight.py`
+- `scripts/evaluate_cb_arb_regime_switch.py`
+- `scripts/evaluate_cb_arb_selfpnl_regime_switch.py`
+- `scripts/evaluate_cb_arb_stop_revaluation.py`
+- `scripts/evaluate_cb_arb_stop_source_stress.py`
+- `scripts/evaluate_cb_arb_stop_value_retention.py`
+- `scripts/evaluate_cb_arb_three_value_gate.py`
+- `scripts/evaluate_cb_arb_valuation_switch.py`
+- `scripts/evaluate_cb_arb_value_gap_switch.py`
+
+## 研究脚本 — 网格搜索 (search_*)
+
+- `scripts/search_cb_arb_behavior_grid.py`
+- `scripts/search_cb_arb_behavior_regimes.py`
+- `scripts/search_cb_arb_panic_leave_year_out.py`
+- `scripts/search_cb_arb_panic_mid_signal.py`
+- `scripts/search_cb_arb_time_split_grid.py`
+
+## 研究脚本 — 分析诊断 (analyze_*)
+
+- `scripts/analyze_cb_arb_baseline_trade_attribution.py`
+- `scripts/analyze_cb_arb_panic_calendar_diagnostic.py`
+- `scripts/analyze_cb_arb_panic_yearly_decomposition.py`
+- `scripts/analyze_cb_arb_repair_times.py`
+- `scripts/analyze_cb_arb_stop_source_breakdown.py`
+- `scripts/analyze_cb_panic_detector.py`
+- `scripts/analyze_cb_panic_execution_feasibility.py`
+
+## 研究脚本 — 数据加工 (build/enrich/fix/fetch/verify/recover)
+
+- `scripts/build_cb_warehouse.py`
+- `scripts/enrich_cb_conv_price.py`
+- `scripts/fetch_csi500_etf.py`
+- `scripts/fetch_icbc_stock.py`
+- `scripts/fetch_shenhua_stock.py`
+- `scripts/fetch_sp500_etf.py`
+- `scripts/fetch_stk_daily.py`
+- `scripts/fetch_yangtze_stock.py`
+- `scripts/fetch_yzm_stock.py`
+- `scripts/fix_delisted_conv_price.py`
+- `scripts/recover_cb_arb_reflog.py`
+- `scripts/verify_cb_data_independent.py`
+
+## 研究脚本 — 跑批 / 监控 (run/monitor)
+
+- `scripts/monitor_cb_arb_concurrent.py`
+- `scripts/monitor_cb_arb_holdout_progress.py`
+- `scripts/run_cb_arb_concurrent.py`
+- `scripts/run_cb_arb_cost_realism.py`
+- `scripts/run_cb_arb_two_line_cross_validation.py`
+
+## 研究脚本 — 协作通道 (outbox/watch/check)
+
+- `scripts/check_quant_outbox_misroute.py`
+- `scripts/outbox_protocol_preflight.py`
+- `scripts/outbox_to_telegram.py`
+- `scripts/outbox_to_telegram.py`
+- `scripts/watch_quant_claude_processor.sh`
+- `scripts/watch_quant_vm_task_completion.sh`
+
+## 研究脚本 — 研究流程 (research_*, train_*, sanity)
+
+- `scripts/cb_pricer_sanity.py`
+- `scripts/research_arxiv_first_run.py`
+- `scripts/research_memory.py`
+- `scripts/research_sanity_checker.py`
+- `scripts/research_select_next.py`
+- `scripts/train_cb_panic_detector.py`
 
 ## 报告
 
@@ -105,9 +196,10 @@
 ## 自动生成规则
 
 本文件由 `scripts/generate_indexes.py` 扫描以下位置自动生成:
-- `docs/research_framework/*.md` — 按文件名分类
-- `data/research_framework/{*.md, *.yaml, *.txt}` — 真值/配置数据
-- `scripts/{validate_*, framework_preflight, get_baseline, ...}.py` — 工具脚本
+- `docs/*.md` — 根目录文档
+- `docs/research_framework/*.md` — 按文件名分类 (协议/流程/角色/模板/真值)
+- `data/research_framework/{*.md, *.yaml, *.txt, *.jsonl}` + 子目录 — 真值/配置数据/账本
+- `scripts/*.py + *.sh` — 全部脚本, 按 prefix 分组 (validate/get_/search_ledger/snapshot/generate/backfill/process/evaluate/search/analyze/build|fetch|enrich|fix|verify|recover/run|monitor/outbox|watch|check/research_|train_|cb_pricer_sanity)
 - `docs/plans/*.md` — 计划
 
-分类规则在脚本里的 `classify_doc()` 函数. 改分类规则时改脚本, 不改本文件.
+分类规则在脚本里的 `classify_doc()` + 各 group 的 glob. 改分类规则时改脚本, 不改本文件.
