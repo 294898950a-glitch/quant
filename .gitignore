@@ -36,3 +36,16 @@ data/*/heartbeat
 data/*/tried_directions.jsonl
 data/*/editor_writes.jsonl
 data/*/control.signal
+
+# Heavy generated batch artifacts (按 repo audit 2026-05-16 加)
+# 大批量回测产生的中间结果, 不进 git. 只 promote summary/manifest 进 git
+data/cb_arb_concurrent_supervised_*/
+data/cb_arb_rerun_*/
+data/cb_arb_*_2026-*/**/*.parquet
+data/cb_arb_*_2026-*/vm_*.log
+data/cb_arb_*_2026-*/*.pid
+data/cb_arb_*_2026-*/heartbeat
+*.pid
+
+# Archive (保留物理副本但不 commit)
+archive/
