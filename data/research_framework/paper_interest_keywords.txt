@@ -25,6 +25,16 @@ credit spread quant strategy
 cb_arb live performance
 quant convertible live trading
 
+# === 新策略方向 (cb_arb 主线饱和后拓宽 v1.2) ===
+# EXPERIMENT_LOG 反向建议 (网格全失败 → 反向尝试)
+event-driven equity strategy
+corporate action arbitrage
+momentum trend following systematic
+price volume divergence equity
+cross-asset arbitrage quantitative
+statistical arbitrage stock
+
 # === 调整历史 ===
 # 2026-05-15 v1.0 初版 (6 关键词): convertible bond arbitrage / volatility regime switching / panic detection equity / credit spread quant strategy / mean reversion convertible / quant strategy live trading
 # 2026-05-15 v1.1 首跑后调整 (12 关键词): 删 "quant strategy live trading" (太宽), 加 4 个 CB 聚焦词 + 2 个 panic/regime 具体词 + 2 个实盘词
+# 2026-05-15 v1.2 cb_arb 主线饱和拓宽 (18 关键词): 加 6 个新策略方向 (事件驱动 / 公司动作 / 动量趋势 / 量价背离 / 跨品种 / 统计套利), 来自 EXPERIMENT_LOG 反向建议
