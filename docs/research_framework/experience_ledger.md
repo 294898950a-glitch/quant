@@ -19,6 +19,7 @@
 - e.g. `2026-05-14 | CSI500 同日大跌过滤 | 2 胜 2 平 2 负, 2022 反向, dating 修复失败 | reports/cb_arb_csi_market_filter_2026-05-14.md`
 - `2026-05-15 | medium_recovery3_hurdle0p10 作为无条件全年参数 | 跨年留出主底线仅 2/4 通过 (2019/2024 ✓, 2022/2023 ✗), 跨 regime 不鲁棒 | reports/cb_arb_round5_retro_2026-05-15.md`
 - `2026-05-15 | arxiv 候选 "Arbitrage-Free XVA" (1608.02690) | 通过硬筛但弱关联 cb_arb (XVA = 衍生品估值调整, 不给策略层信号); priority=低, Claude reject + 写入避免下次重复 | data/research_framework/paper_candidates/2026-05-15.md
+- `2026-05-15 | cb_arb 自身 PnL lookback rolling excess 作 regime classifier (任何 lookback 10/20/60 + 任何 threshold + 任何风险态参数) | 0/108 过 4 floor, CV 3/6 holdout 通过 (<5/6); lookback fundamental 滞后 (2020 第一次触发 04-03 距 panic 起点 02-03 已 60 日历日); lookback=10 反而比 60 更差 (false positive +); 实际是 51.9% 天数广义 mode switch 不是 panic detector | reports/cb_arb_regime_switch_retro_2026-05-15.md
 
 模式 B 中, AI **绝对不能再提这里的方向**(B5 红线).
 
@@ -32,6 +33,9 @@
 | 中 | medium signal 2022 退化的 trade-level 归因 — 哪些仓位 / 触发了什么条件 | 待 trade-level 反向诊断 | 2026-05-15 Round 5 复盘 |
 | 中 | panic signal 重新设计 (medium 单参数路径已饱和, 回头研究 panic detector) | 待立项 | 2026-05-15 Round 5 复盘 |
 | 中 | 2022/2024 中等亏损年的 regime detector | 待设计 | 2026-05-14 复盘报告 |
+| 高 | **exogenous panic signal**: vol surge / market breadth / credit spread spike — 不依赖自身 PnL 滞后, 用市场即时信号 | 来自 2026-05-15 regime switch 失败的 next-step backlog | reports/cb_arb_regime_switch_retro_2026-05-15.md |
+| 中 | Forward-looking trigger: 不用 lookback, 用结构性突变检测 (PELT / Bayesian changepoint) | 探索 | reports/cb_arb_regime_switch_retro_2026-05-15.md |
+| 中 | L3 schema 改进: 加 baseline trades.csv + daily_equity.csv 导出 (L5 反向诊断需要) | 工程 backlog | Codex L5 side finding 2026-05-15 |
 | ~已完成~ | cb_arb medium signal 在 2021 退出节奏过黏 → `recovery_days × switch_hurdle_pct` grid | 已跑完, recovery=3 hurdle=0.10 局部修复 2021 +2.09pp, 但跨年 2/4 不达标 | reports/cb_arb_round5_retro_2026-05-15.md |
 
 ## 四、未来探索方向 (Future Backlog)
