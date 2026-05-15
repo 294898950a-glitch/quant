@@ -34,7 +34,7 @@
 
 - YYYY-MM-DD | 策略 | 改动 | 落地处 (yaml 绿区 / 代码 / 数据)
 - e.g. `2026-05-XX | cb_arb | medium signal recovery_days=1 (原 2) | yaml 绿区`
-- `2026-05-15 | cb_arb | **baseline 最终采用 (final, two-line confirmed): medium signal recovery=4 hurdle=0.15** (spec v1.1 normal-state). 6 年 holdout: 2019 +16.1% / 2020 -13.1% / 2021 -5.0% / 2022 +1.4% / 2023 -3.1% / 2024 +3.0%. 两条研究路线 (HDRF 手工 + 自循环 LLM) 全审查完, HDRF 是 winner (自循环 2019 broken -26pp). cb_arb 主线完全饱和归档 | yaml 绿区, `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` + `reports/cb_arb_two_line_cross_validation_2026-05-15.md` |
+- (空 — cb_arb 之前误标 "已采用" 是错的, 见下面分区二 2026-05-15 cb_arb 整体不可用条目)
 
 ## 二、已确认无效 (Rejected — 不再走)
 
@@ -52,6 +52,7 @@
 - `2026-05-15 | **cb_arb 年份选择性 meta wrapper** (B 路径) | meta-detector 仍依赖某种 detector, panic detector 整条子方向已确认无效; 而 2020 broad weakness 是全年级 + 散布(74% 负 + 5 个 entry month), 不是 panic 短窗口, meta 没什么可减仓的窗口. **B 路径数据驱动否决** | reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md
 - `2026-05-15 | **cb_arb 自循环 LLM 调参路线** (iter 1-60 sealed_pools, 13 维 yaml 绿区: rank-based + credit spread + vol_window 等) | iter 24 best params 在 HDRF 6 年 holdout 上 2019 broken (-10.1% vs HDRF +16.1%, 26pp gap); paused 5 天 hypothesizer 撞墙 returned None 5 consecutive; 8 池只用 2 池但表现已次于 HDRF; ensemble (HDRF + 自循环) 任何权重都不优于裸 HDRF (2019 HDRF +16.1% 压倒自循环 -10.1%). cb_arb 两路线 cross-validation 确认 HDRF 是 winner, 自循环不重启 | reports/cb_arb_two_line_cross_validation_2026-05-15.md
 - `2026-05-15 | cb_redemption 真强赎策略 (5-factor weights: redeem_progress / premium_ratio / remaining_size / stock_momentum / market_sentiment) | 历史 5 iter (data/cb_redemption/runs.jsonl HEAD deleted, holdout_compliance=False) framework 审计员 verdict=**data_mining** = 已判过拟合, 跟 EXPERIMENT_LOG csi500 同 fate; factor 设计本身有 lookahead pollution (remaining_size 只有最新值 cb_basic) + stock_momentum 名实不符 (实际是转债 pct_chg 不是正股); 当前工作树 strategies/cb_redemption/data.py + backtest.py + optimizer.py 都 deleted, 工程 3-5 天恢复; 不复活 | reports/cb_redemption_state_assessment_2026-05-15.md (含 Codex 21:50 deep recon)
+- `2026-05-15 | **cb_arb 整体策略 (转债套利 medium signal recovery+hurdle)** | **根本性结论**: 6 年 holdout 复利累计 excess = -3.0% (1.161×0.869×0.95×1.014×0.969×1.03 - 1), 简单加和 = -0.7%. 即使穷举内部参数 (panic detector / trade filter / meta wrapper / 自循环 LLM 13 维) 都救不了. 单年最大 -13.1% (2020) 实盘忍不了. 之前误判 "4/5 holdout 合理" 是因为 hard floor v1.1 自指 baseline 自己 — 没意义. 整个 cb_arb 主线**策略本身不可用**, 不只是难调. **不上实盘, 不再调参**. 教训: 不要把"穷举完了没 better"等同于"可用 baseline", 要看绝对水平 (累计 excess + 单年 dd) | 用户 22:35 质疑 + 复利重算 |
 
 模式 B 中, AI **绝对不能再提这里的方向**(B5 红线).
 
