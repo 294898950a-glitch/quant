@@ -1,0 +1,10 @@
+0c92e7a5054ab7fc0ffc9b7a2f9ebf2c  daily_equity.csv
+7bce44035fb33aded5a00d8859620769  ranked.csv
+e7b8744f476f96ff94ac24eeff5f6c3a  run_summary.json
+0283dcb56d097d27389997ec9ba1cb32  selected.csv
+e962438e88014878ca8c7d20ca8478cb  spot.pid
+2ba831f98ef7feedd26bd58875d963c2  spot_20260515_103348.log
+73eb9ec25d49b5b6e1c8692f670bf908  spot_20260515_103430.log
+25908e0bd9ba8f62e46f8aeb43becde6  summary.csv
+f1e06aab9fc646af963d25d4c779101f  trades.csv
+fe6fc90ba3749a17163bfe33bdbcd130  trigger_dates.csv

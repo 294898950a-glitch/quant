@@ -1,0 +1,5 @@
+4704e295655d3a790f89d4e11b65c804  monthly_aggregation.csv
+ea65f1fde8fb8ed5f916e1c487b7d96a  summary.json
+ecca2e8b7599ec706fff9f87fbe6980d  top_worst_top_best.csv
+3ab5bb524f9121d43cf4421b7b85abbc  trade_attribution_2020.csv
+0a4c51d5ccccf4da1350fcf02825d185  trade_attribution_2024.csv

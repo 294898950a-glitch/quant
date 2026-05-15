@@ -1,0 +1,4 @@
+361ff82519f5674d74887546bb09c1c2  daily_equity.csv
+f41ee5521ae2644fb701fa10be89c6e6  holdout_yearly.csv
+48461be953571e073537b870fae6c540  summary.json
+a40453207b647980b78d9a51c8ae5460  vm_20260515_main_strategy_baseline.log

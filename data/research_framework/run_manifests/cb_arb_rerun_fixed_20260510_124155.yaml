@@ -1,0 +1,44 @@
+schema_version: 1
+batch_id: cb_arb_rerun_fixed_20260510_124155
+strategy_id: cb_arb
+hypothesis_id: self-loop-iter24
+data_window:
+  start: unknown
+  end: unknown
+config_path: unknown (historical-backfill-best-effort)
+config_hash: unknown (historical-backfill-best-effort)
+entrypoint: unknown (historical-backfill-best-effort)
+git_commit: 5f2ca39
+git_dirty:
+- unknown (historical-backfill-best-effort)
+dirty_policy: unknown
+data_snapshot:
+  cb_call.parquet:
+    md5: dbbd6872ecfbe6c403139e8263735c6b
+    note: current snapshot (not historical at run time)
+  cb_daily.parquet:
+    md5: 93cfa3395cf50bfd0c6234d79209cb65
+    note: current snapshot (not historical at run time)
+  cb_basic.parquet:
+    md5: adc98d27237d7f57e8154e4b42ae6b5f
+    note: current snapshot (not historical at run time)
+  stk_daily_qfq.parquet:
+    md5: 60388436537d4cb46eb926a331f5d8b2
+    note: current snapshot (not historical at run time)
+  stk_daily.parquet:
+    md5: ce328dfa85c416115d21d7c0edbf21e8
+    note: current snapshot (not historical at run time)
+compute_host: unknown (historical-backfill-best-effort)
+compute_cost_yuan: null
+start_at: null
+end_at: '2026-05-16T00:22:45.317279Z'
+exit_code: null
+result_artifact: data/cb_arb_rerun_fixed_20260510_124155
+artifact_hash: 670da00f933b0415815173cd80d4aaa6
+artifact_hash_manifest: data/cb_arb_rerun_fixed_20260510_124155/artifact_hash_manifest.txt
+result_summary: historical-backfill-best-effort, see related report under reports/
+promotion_status: stale
+reviewer: claude
+verdict_at: '2026-05-16T00:22:45.317279Z'
+manifest_hash: null
+backfill_method: historical-best-effort-by-backfill_run_manifests.py
