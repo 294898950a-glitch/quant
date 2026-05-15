@@ -88,7 +88,9 @@ manifest_hash: null  # finalization 时填 (manifest 自己写完后 hash 自己
   <md5>  trades.csv
   ```
 
-### `promotion_status` (8 status, see protocol U16 state transitions)
+### `promotion_status` (manifest 用 7 non-n/a status, see protocol U16 state transitions)
+
+注: protocol U16 全集是 8 status (含 `n/a` 给 CURRENT.md archived 策略段). Run manifest 永远是 actual run, 永远有具体 promotion 决策, 所以 manifest 范围只用以下 7 个 (不含 `n/a`):
 
 - `experiment`: 临时尝试, 不进 baseline_registry
 - `wip`: 研究中, 进 baseline_registry

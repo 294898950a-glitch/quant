@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Validate docs/research_framework/CURRENT.md schema (F5 spec, phase 1 warn-only).
 
 Checks each active strategy section has:
@@ -8,6 +9,8 @@ Checks each active strategy section has:
 
 Warn-only: exits 0 on missing fields, prints warnings.
 Exits 1 only on YAML parse error or fatal file structure issues.
+
+Run: python3 scripts/validate_current_md.py (this host: plain `python` absent)
 """
 
 from __future__ import annotations

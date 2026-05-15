@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """Validate run manifest YAML schema (F5 spec, phase 1 warn-only).
 
 Checks every data/research_framework/run_manifests/*.yaml has:
@@ -6,6 +7,8 @@ Checks every data/research_framework/run_manifests/*.yaml has:
 - valid promotion_status / dirty_policy enums
 
 Warn-only: exits 0 on missing fields. Exits 1 only on YAML parse error.
+
+Run: python3 scripts/validate_run_manifest.py (this host: plain `python` absent)
 """
 
 from __future__ import annotations
