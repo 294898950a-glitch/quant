@@ -31,7 +31,8 @@
 
 | pk | 日期 | 实现 | config | period | protocol | 累计 excess (复利) | sharpe | max_dd | trades | artifact | manifest_path | git_commit | config_hash | data_snapshot_hash | status |
 |---|---|---|---|---|---|---:|---:|---:|---:|---|---|---|---|---|---|
-| `cb_arb-main-yaml-current-20260515` | 2026-05-15 | `strategies/cb_arb/verifier.py` `run_backtest()` | yaml current 13 维 + 3 rules (vol_window=60 / rank_buy=0.1 / rank_sell=0.5 / max_holdings=30 等) | 2019-01-02 ~ 2024-12-31 | leave-one-year-out 6 年 holdout | **-12.70%** (简单加 -11.72%) | 0.1957 | -30.70% | 834 | `data/cb_arb_main_strategy_baseline_2026-05-15/` | `data/research_framework/run_manifests/cb_arb_main-strategy-baseline_2026-05-15_2240.yaml` (TODO) | c8c6365 (pre-debate) | TODO | TODO | **WIP, 不达门槛** |
+| `cb_arb-main-yaml-current-20260515` | 2026-05-15 | `strategies/cb_arb/verifier.py` `run_backtest()` | yaml current 13 维 (cost_model_enabled=false) | 2019-01-02 ~ 2024-12-31 | leave-one-year-out 6 年 holdout | **-12.70%** (简单加 -11.72%) | 0.1957 | -30.70% | 834 | `data/cb_arb_main_strategy_baseline_2026-05-15/` | `data/research_framework/run_manifests/cb_arb_main_strategy_baseline_2026-05-15.yaml` | c8c6365 (pre-debate) | TODO | TODO | **WIP, 不达门槛** |
+| `cb_arb-main-yaml-current-cost-on-20260516` | 2026-05-16 | `strategies/cb_arb/verifier.py` `run_backtest()` | yaml current 13 维 + **cost_model_enabled=true** (slippage 0.15% / sqrt impact / fee 0.03%) | 2019-01-02 ~ 2024-12-31 | leave-one-year-out 6 年 holdout | **-19.46%** (degradation **-6.76pp** vs cost-off) | n/a | -33.26% | n/a | `data/cb_arb_cost_realism_test_2026-05-16/holdout_with_cost.csv` | `data/research_framework/run_manifests/cb_arb_cost-realism-main-value-gap_2026-05-16_0053.yaml` | c6000d7 (post-hard-enforce) | TODO | TODO | **WIP, fatal cost degradation — 实盘成本侵蚀** |
 
 #### cb_arb 主策略年度细分 (2026-05-15)
 
@@ -48,7 +49,8 @@
 
 | pk | 日期 | 实现 | config | period | protocol | 累计 excess (复利) | max_dd 单年 | artifact | manifest_path | git_commit | config_hash | data_snapshot_hash | status |
 |---|---|---|---|---|---|---:|---:|---|---|---|---|---|---|
-| `cb_arb-value-gap-switch-medium-signal-20260515` | 2026-05-15 | `scripts/evaluate_cb_arb_value_gap_switch.py` | medium signal recovery=4 hurdle=0.15 | 2019-2024 | leave-one-year-out 6 年 holdout | **-3.00%** (简单加 -0.70%) | -13.1% (2020) | `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` | null (历史回填 TODO) | dce5c0a (近期) | TODO | TODO | **WIP 加强版, 不达门槛** |
+| `cb_arb-value-gap-switch-medium-signal-20260515` | 2026-05-15 | `scripts/evaluate_cb_arb_value_gap_switch.py` | medium signal recovery=4 hurdle=0.15 (cost_model_enabled=false) | 2019-2024 | leave-one-year-out 6 年 holdout | **-3.00%** (简单加 -0.70%) | -13.1% (2020) | `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` | null (历史回填 TODO) | dce5c0a (近期) | TODO | TODO | **WIP 加强版, 不达门槛** |
+| `cb_arb-value-gap-switch-medium-signal-cost-on-20260516` | 2026-05-16 | `scripts/evaluate_cb_arb_value_gap_switch.py` | medium signal recovery=4 hurdle=0.15 + **cost_model_enabled=true** | 2019-2024 | leave-one-year-out 6 年 holdout | **-10.47%** (degradation **-7.47pp** vs cost-off) | n/a | -35.16% | n/a | `data/cb_arb_cost_realism_test_2026-05-16/holdout_with_cost.csv` | `data/research_framework/run_manifests/cb_arb_cost-realism-main-value-gap_2026-05-16_0053.yaml` | c6000d7 (post-hard-enforce) | TODO | TODO | **WIP, fatal cost degradation** |
 | `cb_arb-self-loop-iter24-20260510` | 2026-05-10 (Codex 自循环 iter 24) | `strategies/cb_arb/verifier.py` (用 main strategy 的 yaml 13 维 + LLM 调参) | iter 24 best params (rank_sell=0.505 / max_position=0.0315 等微调) | 2022-01-01 ~ 2026-05-08 | 8 sealed pools, 只用 Pool 0/1 | **+0.313 (3 年累计 OOS)** | -0.292 | `sig:/root/projects/quant/data/cb_arb_rerun_fixed_20260510_124155/` | null (历史回填 TODO) | unknown (sig 上 "ok") | TODO | TODO | 已次于 HDRF 路线 (2019 broken -10.1% vs HDRF +16.1%, 26pp 反差) |
 
 #### cb_arb value-gap switch 年度细分 (2026-05-15)

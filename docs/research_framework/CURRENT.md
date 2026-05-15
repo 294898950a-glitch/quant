@@ -22,6 +22,8 @@
 
 **当前实际可上实盘的策略**: **0 个**。
 
+**2026-05-16 新增 cost realism wall**: cb_arb 整个策略族 (主策略 + value-gap switch) cost-on 累计 excess 退化 -6.76pp / -7.47pp, 远超 "5pp fatal" 阈值. **不只是 baseline 不够好, 是实盘 cost 让任何 cb_arb 变体都跑不赢 benchmark**.
+
 ---
 
 ## cb_arb 主策略 (verifier yaml-current)
@@ -54,16 +56,16 @@ research_direction: open
 
 ### Baseline 摘要
 
-- baseline_registry 行: `cb_arb-main-yaml-current-20260515`
-- 累计 excess (复利): **-12.70%** (简单加和 -11.72%)
-- max_dd: **-30.7%** (全段 OOS 2019-2024)
-- sharpe: 0.20, total trades: 834
-- artifact: `data/cb_arb_main_strategy_baseline_2026-05-15/`
+- **cost-off baseline** (`cb_arb-main-yaml-current-20260515`): 累计 excess 复利 **-12.70%**, max_dd -30.7% (全段 OOS), sharpe 0.20
+- **cost-on baseline** (`cb_arb-main-yaml-current-cost-on-20260516`, **2026-05-16 新加**): 累计 excess 复利 **-19.46%** (退化 **-6.76pp** 来自 slippage + impact + fee), max_dd -33.26%
+- artifact: `data/cb_arb_main_strategy_baseline_2026-05-15/` (cost-off) + `data/cb_arb_cost_realism_test_2026-05-16/` (cost-on)
 
 ### Deployment contract 判定 (当下)
 
-- **failing** (触发证伪条件 a + b: 累计 < 0% AND max_dd > 15%)
-- **注**: 这是 "fails deployment contract today", **不等于 "research direction permanently closed"**. 用户保留 fund A/B/C premise test 的选项, **不 silent hard-kill**.
+- **failing** (cost-off 触发 a + b; cost-on 触发更严重)
+- **2026-05-16 cost realism 暴露**: 实盘 cost (slippage 0.15% / impact / fee) 让累计 excess 退化 -6.76pp, 已远超 "5pp fatal" 阈值
+- **fatal**: 实盘门槛远不可能达到 (-19.46% 复利 + -33% max_dd 实盘根本不可能上)
+- 注: 这是 "fails deployment contract today" + 已显示 "cost realism wall" 客观存在. 用户保留 fund A/B/C premise test 的选项, 但应该意识到 cost 是 hard reality, 不是 fix-it bug
 
 ## cb_arb value-gap switch (评估分支)
 
@@ -105,8 +107,10 @@ research_direction: open
 
 ### Deployment contract 判定 (当下)
 
-- **failing** (触发证伪条件 a: 累计 < 0%; 单年 dd -13.1% 接近但未超 15%)
-- 同主策略, 不 silent kill, 研究方向仍 open (思路有 26pp 优势可挖)
+- **failing** (cost-off 触发 a; 单年 dd 接近 15%)
+- **2026-05-16 cost-on 暴露**: 累计 excess 复利 **-10.47%** (退化 -7.47pp), max_dd -35.16%, 比 cost-off 更糟
+- value-gap switch 思路 (26pp 优势) 在 cost-on 后仍**比主策略好**, 但绝对水平仍不达门槛
+- 研究方向仍 open, 但 cost realism 是 hard wall, 任何 cb_arb 变体都受影响
 
 ## cb_redemption (强赎策略)
 
