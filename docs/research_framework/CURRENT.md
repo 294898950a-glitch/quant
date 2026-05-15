@@ -26,50 +26,124 @@
 
 ## cb_arb 主策略 (verifier yaml-current)
 
+<!-- machine-readable front-matter for validator (F1 spec) -->
+```yaml
+status: wip
+strategy_id: cb_arb
+baseline_row: cb_arb-main-yaml-current-20260515
+kill_date: 2026-05-29
+last_decision_at: 2026-05-15T22:49:00Z
+deployment_contract_status: failing
+research_direction: open
+```
+
 - **实现**: `strategies/cb_arb/verifier.py` `run_backtest()`
 - **配置**: `strategies/cb_arb/tunable_space.yaml` current 值 (13 维 + 3 rules)
 - **算法**: 横截面排名套利 — 算理论价 (BS + 债底) → (市场价 / 理论价) **百分比偏离率**排名 → 买前 10% (`rank_buy_pct=0.1`) → 持仓跌出 50% 内 (`rank_sell_pct=0.5`) 卖
 - **过滤**: 剩余规模 ≥ 7290 万, 20 日均成交 ≥ 100 万, 评级 ≥ AA-, 单只 ≤ 3%, 同时 ≤ 30 只, 最长 90 天, -8% 止损
-- **baseline (Codex 22:49 sig 跑)**:
-  - 简单加和 -11.72% / 复利 -12.70%
-  - 全段 OOS 总收益 +9.69% / benchmark +27.23% / **excess -17.54%**
-  - sharpe **0.20**, max_dd **-30.7%**, 834 trades
-- **artifact**: `data/cb_arb_main_strategy_baseline_2026-05-15/{holdout_yearly.csv, daily_equity.csv, summary.json}`
-- **status**: **不达实盘门槛** (accumulated excess 负 + max_dd > 10%)
-- **当前 gate**: 等用户白天决定 (A. 升级 value-gap switch 思路 / B. cb_arb 整体撤离 / C. arxiv 新方向)
+
+### 决策契约 (F1 spec)
+
+- **假设**: "可转债横截面排名套利能在 6 年 OOS 跑赢中证转债指数 ≥ 5% 累计"
+- **证伪条件**:
+  - 累计 excess (复利) 跨年 < 0% → kill
+  - 任何单年 dd vs benchmark > 15% → kill
+  - 任意 holdout 年 sharpe < 0.5 → kill
+- **成本上限**: ¥30/batch; kill date 2026-05-29; 6 batch reject 上限
+- **下一步最便宜动作**: 等用户白天 A (value-gap promote) / B (撤离) / C (arxiv keyword 调整) 拍板
+
+### Baseline 摘要
+
+- baseline_registry 行: `cb_arb-main-yaml-current-20260515`
+- 累计 excess (复利): **-12.70%** (简单加和 -11.72%)
+- max_dd: **-30.7%** (全段 OOS 2019-2024)
+- sharpe: 0.20, total trades: 834
+- artifact: `data/cb_arb_main_strategy_baseline_2026-05-15/`
+
+### Deployment contract 判定 (当下)
+
+- **failing** (触发证伪条件 a + b: 累计 < 0% AND max_dd > 15%)
+- **注**: 这是 "fails deployment contract today", **不等于 "research direction permanently closed"**. 用户保留 fund A/B/C premise test 的选项, **不 silent hard-kill**.
 
 ## cb_arb value-gap switch (评估分支)
+
+<!-- machine-readable front-matter for validator (F1 spec) -->
+```yaml
+status: wip
+strategy_id: cb_arb_value_gap_switch
+baseline_row: cb_arb-value-gap-switch-medium-signal-20260515
+kill_date: 2026-05-29
+last_decision_at: 2026-05-15T16:30:00Z
+deployment_contract_status: failing
+research_direction: open
+```
 
 - **实现**: `scripts/evaluate_cb_arb_value_gap_switch.py` (untracked WIP)
 - **算法**: 把主策略"百分比偏离率排名"换成"**绝对价值差额排名** `(理论价 - 市场价) × 买入量`" + 加 panic detector + switch_hurdle_pct
 - **lineage**: 从主策略 verifier 派生, 复用底层 (`_load_cb_daily` / `_build_call_index` 等), 但有独立 backtest 主循环
 - **依赖**: 被 16+ 研究脚本 import (panic detector / cross-validation / breadth ensemble 等都用)
-- **baseline (今天讨论的 "medium signal recovery=4 hurdle=0.15")**:
-  - 6 年 holdout: 2019 +16.1% / 2020 -13.1% / 2021 -5.0% / 2022 +1.4% / 2023 -3.1% / 2024 +3.0%
-  - 简单加和 -0.7% / **复利 -3.0%**
-  - max_dd 单年 -13.1% (2020)
-- **artifact**: `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` + `reports/cb_arb_two_line_cross_validation_2026-05-15.md`
-- **关键发现**: 2019 +16.1% vs 主策略 -9.85% → **26pp 反差**, 说明 "绝对价值差额 + panic" 思路在主策略 "百分比偏离率" 上有方向优势
-- **status**: **WIP 加强版, 不达实盘门槛, 但思路有空间**
 - **设计意图** (脚本第 9 行注释): "evaluation harness only, does not replace default strategy" — Codex 确认这是有意为之, 而非工程债
-- **当前 gate**: 等用户白天决定是否把思路 promote 到主策略 yaml 绿区
+
+### 决策契约 (F1 spec)
+
+- **假设**: "value-gap switch (绝对价值差额排名 + panic detector) 比主策略偏离率排名更稳, 6 年 OOS 跑赢 ≥ 5% 累计"
+- **证伪条件**:
+  - 累计 excess (复利) 跨年 < 0% → kill (同主策略门槛)
+  - 任何单年 dd vs benchmark > 15% → kill
+  - 任意 holdout 年 sharpe < 0.5 → kill
+- **成本上限**: 共享主策略 ¥90 月预算; kill date 2026-05-29
+- **下一步最便宜动作**: 等用户白天决定是否把思路 promote 到主策略 yaml 绿区
+
+### Baseline 摘要
+
+- baseline_registry 行: `cb_arb-value-gap-switch-medium-signal-20260515`
+- 6 年 holdout: 2019 +16.1% / 2020 -13.1% / 2021 -5.0% / 2022 +1.4% / 2023 -3.1% / 2024 +3.0%
+- 累计 excess (复利): **-3.00%** (简单加和 -0.7%)
+- max_dd: -13.1% (单年 2020)
+- 关键发现: 2019 +16.1% vs 主策略 -9.85% = **26pp 反差**, 思路有方向上优势
+- artifact: `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` + `reports/cb_arb_two_line_cross_validation_2026-05-15.md`
+
+### Deployment contract 判定 (当下)
+
+- **failing** (触发证伪条件 a: 累计 < 0%; 单年 dd -13.1% 接近但未超 15%)
+- 同主策略, 不 silent kill, 研究方向仍 open (思路有 26pp 优势可挖)
 
 ## cb_redemption (强赎策略)
+
+<!-- machine-readable front-matter for validator (F1 spec) -->
+```yaml
+status: archived
+strategy_id: cb_redemption
+baseline_row: cb_redemption-historical-iter5-data-mining-20260506
+kill_date: n/a
+last_decision_at: 2026-05-15T21:55:00Z
+deployment_contract_status: failing
+research_direction: closed
+```
 
 - **实现**: `strategies/cb_redemption/` 但 `data.py` / `backtest.py` / `config.py` / `optimizer.py` **工作树 deleted** (HEAD git 里有)
 - **历史**: 5 iter 跑过, framework 审计员 **verdict=`data_mining`**, holdout_compliance=**False**
 - **factor 缺陷**: `remaining_size` lookahead pollution (只有最新值 cb_basic), `stock_momentum` 名实不符 (实际是转债 pct_chg 不是正股)
 - **数据基础**: `data/cb_warehouse/cb_call.parquet` (997 强赎事件 2008-2026) 有
 - **artifact**: `reports/cb_redemption_state_assessment_2026-05-15.md`
-- **status**: **archived (历史 audit data_mining + factor 设计缺陷)**, 不复活
 - **不复活理由**: 3-5 天工程恢复 + 历史已判过拟合 + 同时间 arxiv idea source 更高 leverage
 
 ## 网格策略 6 标的
 
+<!-- machine-readable front-matter for validator (F1 spec) -->
+```yaml
+status: archived
+strategy_id: grid_6_targets
+baseline_row: grid-strategies-EXPERIMENT-LOG-20260509
+kill_date: n/a
+last_decision_at: 2026-05-09
+deployment_contract_status: failing
+research_direction: closed
+```
+
 - **实现**: 散在 `strategies/cb_redemption/` framework 通用代码 + 各标的 systemd 服务 (已 stop+disable)
 - **标的**: sp500-grid (513500) / csi500-grid (510500) / yzm-grid (300415) / 工行 (601398) / 神华 (601088) / 长电 (600900)
 - **结论 (`EXPERIMENT_LOG.md` 2026-05-09 封档)**: 网格在 2022-2026 中美股票市场对蓝筹股**全跑不赢直接持有 + 股息**
-- **status**: **archived**, 6 service stop+disable, 不再跑
 - **复活条件**: 找到非蓝筹股 / 非牛市环境的目标
 
 ---

@@ -1,11 +1,11 @@
-# 协议红线 v1.4
+# 协议红线 v1.5
 
 每条 Claude ↔ Codex outbox 消息**顶部必须附本红线段**(16 行内). 双方收到消息时先检查版本号,版本不一致 → 暂停协作同步版本.
 
 ## 红线段(每条消息顶部复制粘贴)
 
 ```
-<!-- protocol-redline-v1.4 -->
+<!-- protocol-redline-v1.5 -->
 U1 数据/事实来源: 结论必须指向 CSV/parquet/报告/记录/VM 输出, 不准编
 U2 执行位置: 重活只能在远端 VM 跑, local 只能编辑文档 / 读代码 / 轻量检查
 U3 任务清单完整: 我发研究任务必含 8 字段 (假设/参数空间/底线/产物/算力/数据来源/真 CV 设计/停止条件)
@@ -21,6 +21,7 @@ U12 三轮收尾权: Claude↔Codex 辩论 ≤3 轮无共识, 听 Codex; Claude 
 U13 L0 硬化: L1 DIRECT 必含 l0-entry-id 标签 + 入口对应前置文档; arxiv 候选必含 passed_rule+evidence; 协作候选数 Claude 3-5/Codex 0-2; Codex 端跑 L0 查重 + 优先级算法 + U12 分歧计数
 U14 进度心跳: Codex 处理任一任务总耗时 >10 分钟时必每 10 分钟在 outbox 写 PROGRESS (task/进度%/ETA/阻塞), 静默 >10 分钟 = 违规, Claude 端会主动催 HEARTBEAT-MISSING
 U15 策略真值同步: RESPONSE 改策略真值 (新 baseline / status 切换 / 立项 / commit 关键文件) 必同 handoff 更新 docs/research_framework/CURRENT.md + data/research_framework/baseline_registry.md, 或显式说"为什么不更新"; 不触发 = 单纯 ACK/recon/schema/算力估算
+U16 状态机 + manifest: status 仅 8 态 (experiment/wip/adopted/rejected/archived/stale/invalidated/n/a 见 protocol §U16), transitions 仅 16 条 (详见本文 §U16); 回测产物必同 handoff 写 run_manifest.yaml (schema 见 docs/research_framework/run_manifest_schema.md), 不触发 = 单纯 ACK/recon
 
 模式 B 沙盒 (用户离场自动循环时, 双方都不准):
 B1 改代码 (strategies/*.py / scripts/*.py / evaluator)
@@ -213,9 +214,60 @@ Claude 端配套机制:
 **为什么要这条**:
 2026-05-15 framework debate 暴露 — Claude 反复读错 "哪个是主策略 / 当前 baseline 是多少", 因为信息散在 sig saved_best / local 6 个 report / 经验账本 / git modified-untracked, 没有权威入口. 用户原话 "整个研究框架对研究结果保存不够完整, 所以你无法读取". 这条规则是根因解.
 
+## U16 状态机 + Run Manifest (v1.5 新加)
+
+**铁律 1: 策略 status 状态机**
+
+允许的 status (8 态, machine-readable 在 CURRENT.md 每策略 YAML front-matter 内):
+
+- `experiment`: 临时尝试, 不进 baseline_registry
+- `wip`: 研究中, 进 baseline_registry, 有累计/单年指标
+- `adopted`: 通过决策契约证伪条件 (累计 excess > 0 + 单年 dd > -15%), 可投实盘
+- `rejected`: 触发任一 kill 条件, 经验账本分区二归档
+- `archived`: 用户手动决定永久归档 (不再花时间)
+- `stale`: 90 天没复跑 / 代码 commit 改 baseline / data schema 变, 需 re-validate
+- `invalidated`: 复跑发现历史 baseline 错误 (lookahead 污染等)
+- `n/a`: 不适用 (i.e. archived 策略不需要 deployment contract)
+
+**允许 transitions (16 条)**:
+
+```
+experiment → wip:        Claude/Codex (升级研究)
+experiment → archived:   Claude/Codex (一次性尝试)
+experiment → rejected:   Claude/Codex (cheap trial 出 negative, 有 ledger 价值)
+wip → adopted:           用户 (deployment_contract passing + 用户拍板)
+wip → rejected:          Claude/Codex (客观 kill 已 documented + 不涉预算/归档/产品方向)
+wip → archived:          用户 (涉及预算/归档/产品方向)
+wip → stale:             自动 (90 天 / commit 变 / schema 变)
+adopted → stale:         自动 (复跑 due)
+adopted → invalidated:   任一 (复跑发现错)
+adopted → rejected:      不允许直接 (必走 stale → re-validate)
+rejected → wip:          用户 (例外, 经验账本 B5 红线)
+archived → wip:          用户
+stale → wip:             Claude/Codex (必显式 successful revalidation, 不能 silent)
+stale → invalidated:     任一 (发现错)
+stale → rejected:        任一 (复跑触发 kill)
+invalidated → wip:       用户 (修 bug 后)
+```
+
+任意 transition 触发 → 必同 handoff 更新 CURRENT.md + baseline_registry (跟 U15 一起).
+
+**铁律 2: Run Manifest 必填**
+
+任何回测或评估 batch 完成时必须**同 handoff** 产出 `data/research_framework/run_manifests/<batch_id>.yaml`. schema 详见 `docs/research_framework/run_manifest_schema.md`.
+
+强制字段 (validator F5 检查):
+- schema_version, batch_id, strategy_id, hypothesis_id, data_window, config_path, config_hash, entrypoint, git_commit, git_dirty, dirty_policy, data_snapshot, compute_host, compute_cost_yuan, start_at, end_at, exit_code, result_artifact, artifact_hash, result_summary, promotion_status, reviewer, verdict_at
+
+不触发: 单纯 ACK / recon / schema check / 算力估算
+
+**违反后果**: artifact identity 弱, 后续真值重建昂贵 (framework debate Round 1 暴露的 C1).
+
+**Claude/Codex 配套**: 跑完 batch 立刻写 manifest, 不要拖到后续 commit; manifest_hash 留 null 直到 finalize.
+
 ## 版本管理
 
-- 当前版本: **v1.4**
+- 当前版本: **v1.5**
 - 升级规则:
   - 一个研究 batch 完成 → 复盘 → 如发现新铁律, minor +1 (v1.0 → v1.1)
   - 用户对协议本身提方向性要求 → major +1 (v1 → v2)
