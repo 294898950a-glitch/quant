@@ -1,0 +1,85 @@
+# 数据 schema 预期定义 (phase 1.5 #2 spec)
+#
+# 跑 batch 前由 validate_data_schema.py 检查. schema drift (字段消失/类型变) → fail.
+# 升级 schema 时同步改这里 + 写 backfill / migration 计划.
+
+schema_version: 1
+
+warehouse_files:
+  - path: data/cb_warehouse/cb_basic.parquet
+    description: 转债基本信息表
+    required_columns:
+      - ts_code
+      - code
+      - bond_short_name
+      - issue_size
+      - remain_size
+      - conv_price
+      - rating
+    expected_min_rows: 700  # ~ 活跃转债数
+
+  - path: data/cb_warehouse/cb_daily.parquet
+    description: 转债日行情表
+    required_columns:
+      - ts_code
+      - trade_date
+      - open
+      - high
+      - low
+      - close
+      - vol
+    recommended_columns:
+      # HEAD code (cb_redemption / value-gap switch) 用到, 但当前 parquet 没有
+      # schema 修复后改 required
+      - pct_chg
+      - cb_over_rate
+    expected_min_rows: 500000
+
+  - path: data/cb_warehouse/cb_call.parquet
+    description: 强赎事件表
+    required_columns:
+      - ts_code
+      - ann_date
+      - call_date
+      - is_call
+    recommended_columns:
+      - call_type   # HEAD cb_redemption data.py 需要, 当前 parquet 没有
+      - call_price
+      - expire_date
+    expected_min_rows: 500
+
+  - path: data/cb_warehouse/stk_daily.parquet
+    description: 正股日行情表
+    required_columns:
+      - stk_code
+      - trade_date
+      - close
+    expected_min_rows: 1000000
+
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: 正股前复权行情表
+    required_columns:
+      - stk_code
+      - trade_date
+      - close
+    expected_min_rows: 1000000
+
+# 已知缺失字段 (供未来 backfill 用)
+known_missing:
+  - file: cb_call.parquet
+    missing: call_type
+    needed_by: strategies/cb_redemption/data.py (HEAD deleted) 的 get_cb_redeem_data()
+    workaround: 历史用 defensive `latest.get("call_type", "")` 取默认
+    fix_plan: data ingestion 加 call_type 字段重建
+
+  - file: cb_daily.parquet
+    missing: [pct_chg, cb_over_rate]
+    needed_by: cb_redemption data.py + 部分 evaluate_cb_arb_* 脚本
+    workaround: 计算时手动 derive (pct_chg = close.pct_change(), cb_over_rate 用 cb_basic + cb_daily 算)
+    fix_plan: data warehouse build 时 enrich 这俩字段
+
+  - file: cb_warehouse/strong_timeline_snapshots.parquet
+    missing: 整个文件
+    needed_by: strategies/cb_redemption/data.py build_historical_snapshots() cache
+    workaround: re-run build_historical_snapshots 重建
+    fix_plan: 若 cb_redemption 复活时再重建

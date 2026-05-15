@@ -66,6 +66,7 @@ def main() -> int:
     exits = []
     exits.append(run_validator("validate_current_md.py"))
     exits.append(run_validator("validate_run_manifest.py"))
+    exits.append(run_validator("validate_data_schema.py"))
 
     print("\n=== dirty-file inventory (research-relevant) ===")
     dirty = dirty_inventory()
