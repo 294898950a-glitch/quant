@@ -34,7 +34,8 @@
 
 - YYYY-MM-DD | 策略 | 改动 | 落地处 (yaml 绿区 / 代码 / 数据)
 - e.g. `2026-05-XX | cb_arb | medium signal recovery_days=1 (原 2) | yaml 绿区`
-- (空 — 今天发现今天所有"已采用"结论全建立在错误前提上, 见下方分区三新加 "cb_arb 主策略 vs prototype 混淆校准" 条目)
+
+**当前为空** — 见 `docs/research_framework/CURRENT.md` 总览段, 0 个策略达上线门槛 (cb_arb 主策略 -12.7% 复利, value-gap switch -3.0% 复利, 其他 archived). 任何"已采用"行入此分区必须先通过 baseline_registry 验证 (累计 excess > 0 + 单年 dd > -10%).
 
 ## 二、已确认无效 (Rejected — 不再走)
 
