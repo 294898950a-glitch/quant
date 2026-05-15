@@ -5,12 +5,14 @@
 
 ---
 
-## 入口顺序 (新会话先看这两个)
+## 入口顺序 (新会话先看这 4 个, 跟 README 保持一致)
 
-1. **`docs/research_framework/CURRENT.md`** — **当前真值**, 每个策略当前状态. 一页讲清"现在哪个策略在跑 / 当前成绩 / 卡在哪 / 下一步等谁".
-2. **`data/research_framework/baseline_registry.md`** — 成绩单档案, 历史每次回测出的数字. immutable-ish, 不可改.
+1. **`docs/research_framework/CURRENT.md`** — **当前真值**, 每个策略状态 / 当前成绩 / 下一步等谁
+2. **`docs/INDEX.md`** — 本文件, 文档地图
+3. **`data/research_framework/baseline_registry.md`** — 成绩单档案, 历史每次回测出的数字 (immutable-ish)
+4. **`docs/research_framework/experience_ledger.md`** — 经验账本 (4 分区: 已采用 / 已无效 / 未完成 / 未来)
 
-只看这两个文件就知道 "现在该做什么". 协议 / 流程 / 报告等等其他文件按需翻.
+看完这 4 个文件就知道 "现在该做什么". 其他文件 (协议 / 流程 / 角色 / 模板 / 报告 / 工具) 按需翻, 见下面分类.
 
 ---
 
