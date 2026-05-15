@@ -37,6 +37,12 @@ data/*/tried_directions.jsonl
 data/*/editor_writes.jsonl
 data/*/control.signal
 
+# Codex P1.0 processor ledgers (会持续追加, 不应该 commit)
+data/research_framework/decisions.jsonl
+data/research_framework/processed_claude_messages.jsonl
+data/research_framework/runs.jsonl
+data/research_framework/tried_directions.jsonl
+
 # Heavy generated batch artifacts (按 repo audit 2026-05-16 加)
 # 大批量回测产生的中间结果, 不进 git. 只 promote summary/manifest 进 git
 data/cb_arb_concurrent_supervised_*/

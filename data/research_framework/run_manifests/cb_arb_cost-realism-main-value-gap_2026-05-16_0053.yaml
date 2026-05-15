@@ -1,0 +1,45 @@
+schema_version: 1
+batch_id: cb_arb_cost-realism-main-value-gap_2026-05-16_0053
+strategy_id: cb_arb
+hypothesis_id: cost-realism-main-and-value-gap
+data_window:
+  start: '2019-01-01'
+  end: '2024-12-31'
+config_path: scripts/run_cb_arb_cost_realism.py
+config_hash: ec6c32c10c88f3b9056b4cac61efe20a
+entrypoint: python3 scripts/run_cb_arb_cost_realism.py --output-dir data/cb_arb_cost_realism_test_2026-05-16
+git_commit: c6000d7
+git_dirty:
+  - M strategies/cb_arb/tests/test_verifier.py
+  - M strategies/cb_arb/tunable_space.yaml
+  - M strategies/cb_arb/verifier.py
+  - '?? scripts/evaluate_cb_arb_value_gap_switch.py'
+  - '?? scripts/run_cb_arb_cost_realism.py'
+  - '?? data/cb_arb_cost_realism_test_2026-05-16/'
+dirty_policy: allowed_with_list
+data_snapshot:
+  cb_daily.parquet:
+    md5: 93cfa3395cf50bfd0c6234d79209cb65
+    rows: 736216
+  cb_basic.parquet:
+    md5: adc98d27237d7f57e8154e4b42ae6b5f
+    rows: 1012
+  cb_call.parquet:
+    md5: dbbd6872ecfbe6c403139e8263735c6b
+    rows: 997
+  stk_daily_qfq.parquet:
+    md5: 60388436537d4cb46eb926a331f5d8b2
+    rows: 2678144
+compute_host: root@100.91.245.108 VM-0-9-opencloudos
+compute_cost_yuan: 0
+start_at: '2026-05-15T16:46:47Z'
+end_at: '2026-05-15T16:53:48Z'
+exit_code: 0
+result_artifact: data/cb_arb_cost_realism_test_2026-05-16
+artifact_hash: 82c910f9e01b688a93974c98af3c8839
+artifact_hash_manifest: data/cb_arb_cost_realism_test_2026-05-16/artifact_hash_manifest.txt
+result_summary: "Cost-on main yaml-current full-span excess -25.57% and compounded yearly excess -19.46%; value-gap medium full-span excess -6.68% and compounded yearly excess -10.47%. Main worsened by >5pp vs prior -12.70% compounded baseline, triggering escalation."
+promotion_status: rejected
+reviewer: codex
+verdict_at: '2026-05-15T16:53:48Z'
+manifest_hash: null
