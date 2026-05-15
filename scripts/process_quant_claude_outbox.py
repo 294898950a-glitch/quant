@@ -313,11 +313,12 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
         return 0
 
-    codex_block = build_codex_block(msg, key, parts, args.mode, args.status, args.task, gate, args.note)
-    state_block = build_state_block(msg, key, parts, gate, args.note)
+    processed_at = processor_time(msg.timestamp)
+    codex_block = build_codex_block(msg, key, parts, args.mode, args.status, args.task, gate, args.note, processed_at)
+    state_block = build_state_block(msg, key, parts, gate, args.note, processed_at)
     append_text(args.codex_box, codex_block)
     append_text(args.state_file, state_block)
-    record_ledger(args.ledger, msg, key, parts, args.mode, gate)
+    record_ledger(args.ledger, msg, key, parts, args.mode, gate, processed_at)
     summary["appended"] = True
     print(json.dumps(summary, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
