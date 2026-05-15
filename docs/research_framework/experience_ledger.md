@@ -34,7 +34,7 @@
 
 - YYYY-MM-DD | 策略 | 改动 | 落地处 (yaml 绿区 / 代码 / 数据)
 - e.g. `2026-05-XX | cb_arb | medium signal recovery_days=1 (原 2) | yaml 绿区`
-- `2026-05-15 | cb_arb | **HDRF 手工路线 baseline 最终采用: medium signal recovery=4 hurdle=0.15** (spec v1.1 normal-state). 6 年 holdout: 2019 +16.1% / 2020 -13.1% / 2021 -5.0% / 2022 +1.4% / 2023 -3.1% / 2024 +3.0%. 4/5 holdout 合理, 2020 历史极端不再死磕. HDRF 手工路线饱和 (panic detector / trade filter / meta wrapper 三方向全否). **注意: cb_arb 另有自循环 LLM 路线 paused 状态待审, 主线归档不全完** | yaml 绿区, `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` |
+- `2026-05-15 | cb_arb | **baseline 最终采用 (final, two-line confirmed): medium signal recovery=4 hurdle=0.15** (spec v1.1 normal-state). 6 年 holdout: 2019 +16.1% / 2020 -13.1% / 2021 -5.0% / 2022 +1.4% / 2023 -3.1% / 2024 +3.0%. 两条研究路线 (HDRF 手工 + 自循环 LLM) 全审查完, HDRF 是 winner (自循环 2019 broken -26pp). cb_arb 主线完全饱和归档 | yaml 绿区, `reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md` + `reports/cb_arb_two_line_cross_validation_2026-05-15.md` |
 
 ## 二、已确认无效 (Rejected — 不再走)
 
@@ -50,6 +50,7 @@
 - `2026-05-15 | **panic detector 整条子方向** (任何 signal family / 任何 action mapping) | 2024 真假 panic 诊断 (reports/cb_arb_panic_diagnostic_2026-05-15.md) 证明: (1) same-day cross-sectional 不能区分真假 panic (2024-10-09 比 2020-01-23 还剧烈); (2) **真 panic 2020-01-23 之后 30 天 baseline 自己也输 benchmark -3.8%, detector 即使完美也救不了**; (3) baseline 已隐含 panic 行为, detector overlay 在假 panic 上反而误伤. **stop 整个 panic detector 子方向**. 真问题是 cb_arb 在 panic+反弹组合年的策略结构性弱点 | reports/cb_arb_panic_diagnostic_2026-05-15.md
 - `2026-05-15 | **cb_arb baseline 单一 trade filter 改造** (entry/exit/holding 任意单维度 rule) | trade-level 归因 (reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md) 证明: 2020 是 cross-trade broad weakness — 90 trades 74% 负 excess + median -4.32pp + worst10 只占 23% + 散在 5 个 entry month + 4 类 exit reason; 没有单一 trade-type 或 single filter 可救. 2024 baseline 本身 +0.77pp 已经在赚, 不需要改. **A 路径 (改 baseline) 数据驱动否决** | reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md
 - `2026-05-15 | **cb_arb 年份选择性 meta wrapper** (B 路径) | meta-detector 仍依赖某种 detector, panic detector 整条子方向已确认无效; 而 2020 broad weakness 是全年级 + 散布(74% 负 + 5 个 entry month), 不是 panic 短窗口, meta 没什么可减仓的窗口. **B 路径数据驱动否决** | reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md
+- `2026-05-15 | **cb_arb 自循环 LLM 调参路线** (iter 1-60 sealed_pools, 13 维 yaml 绿区: rank-based + credit spread + vol_window 等) | iter 24 best params 在 HDRF 6 年 holdout 上 2019 broken (-10.1% vs HDRF +16.1%, 26pp gap); paused 5 天 hypothesizer 撞墙 returned None 5 consecutive; 8 池只用 2 池但表现已次于 HDRF; ensemble (HDRF + 自循环) 任何权重都不优于裸 HDRF (2019 HDRF +16.1% 压倒自循环 -10.1%). cb_arb 两路线 cross-validation 确认 HDRF 是 winner, 自循环不重启 | reports/cb_arb_two_line_cross_validation_2026-05-15.md
 
 模式 B 中, AI **绝对不能再提这里的方向**(B5 红线).
 
@@ -72,8 +73,9 @@
 | 中 | L3 schema 改进: 加 baseline trades.csv + daily_equity.csv 导出 (L5 反向诊断需要) | 工程 backlog | Codex L5 side finding 2026-05-15 |
 | ~已完成~ | cb_arb medium signal 在 2021 退出节奏过黏 → `recovery_days × switch_hurdle_pct` grid | 已跑完, recovery=3 hurdle=0.10 局部修复 2021 +2.09pp, 但跨年 2/4 不达标 | reports/cb_arb_round5_retro_2026-05-15.md |
 | ~已完成~ | cb_arb baseline 2020/2024 trade-level 归因 | 已跑完, broad weakness 不是 tail, A/B 双路径数据驱动否决, cb_arb 主线研究饱和归档 | reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md |
-| **关键** | **cb_arb HDRF 手工路线饱和, 但自循环 LLM 路线 paused 待审** — 自循环 iter 1-60 跑的是 cb_arb (不是 cb_redemption), best iter 24 excess=0.313073, paused="hypothesizer returned None 5 consecutive iter". 8 池只用 2 池, 参数空间未穷举. 需要 cross-validation HDRF best vs 自循环 best 看两路线是否收敛 | 待立项 cross-validation | 2026-05-15 Codex recon |
-| **关键** | **多策略组合 / 其他策略立项** — 真正的 cb_redemption (强赎策略) 从未跑过, 历史目录名 `strategies/cb_redemption/` 是 framework 通用代码. 网格策略 EXPERIMENT_LOG 已封档. 用户长期目标"最少钱+全自动"建议多策略组合, 但前提是先有 ≥2 个 stable baseline | 待立项 | 2026-05-15 |
+| ~已完成~ | cb_arb 两路线 cross-validation (HDRF vs 自循环 LLM) | 已跑完, not_converged 但 HDRF 是 winner (自循环 2019 broken -26pp), 自循环已确认次于 HDRF, cb_arb 主线 final 归档 | reports/cb_arb_two_line_cross_validation_2026-05-15.md |
+| **关键** | **真 cb_redemption (强赎策略) 立项** — 历史目录名 `strategies/cb_redemption/` 实际是 framework 通用代码, 真强赎从未跑过. framework 已经过 cb_arb 自循环 60 iter 验证成熟, 复用即可. 强赎套利逻辑跟 cb_arb 套利逻辑独立, 是多策略组合的好补充 | 待 Claude+Codex spec 草拟 | 2026-05-15 two-line cross-validation |
+| 中 | **多策略组合** (cb_arb 现成 baseline + 待建 cb_redemption) — 用户长期目标"最少钱+全自动"建议多策略组合分散风险, 前提是 ≥2 stable baseline | 待 cb_redemption 立项后启 | 2026-05-15 |
 
 ## 四、未来探索方向 (Future Backlog)
 
