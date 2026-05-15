@@ -64,17 +64,25 @@ def main() -> int:
     if not yamls:
         print(f"validate_run_manifest.py: no manifests in {MANIFEST_DIR} (phase 1 OK)")
         return 0
-    total_warnings = 0
+    total_strict = 0
+    total_soft = 0
     for path in sorted(yamls):
         warnings = validate(path)
         for w in warnings:
-            print(f"  WARN {path.name}: {w}")
-            total_warnings += 1
-    if total_warnings == 0:
+            # P1.1: missing required fields and invalid enum values = strict
+            if "missing required fields" in w or "invalid promotion_status" in w \
+               or "invalid dirty_policy" in w or "invalid reviewer" in w \
+               or "schema_version" in w:
+                print(f"  FAIL {path.name}: {w}")
+                total_strict += 1
+            else:
+                print(f"  WARN {path.name}: {w}")
+                total_soft += 1
+    if total_strict == 0 and total_soft == 0:
         print(f"validate_run_manifest.py: {len(yamls)} manifest(s) OK")
     else:
-        print(f"validate_run_manifest.py: {total_warnings} warning(s) across {len(yamls)} manifest(s) (phase 1 warn-only)")
-    return 0
+        print(f"validate_run_manifest.py: {total_strict} FAIL + {total_soft} WARN across {len(yamls)} manifest(s)")
+    return 1 if total_strict else 0
 
 
 if __name__ == "__main__":

@@ -1,0 +1,68 @@
+# Machine-readable strategy + hypothesis ID registry (P1.6 spec)
+#
+# 单源 strategy_id / hypothesis_id 列表, 让 CURRENT.md / baseline_registry /
+# run_manifest 都 reference 同一处. Validator / preflight 检查一致性.
+#
+# 加新策略 / 新 hypothesis 时改这里, 其他文件不重复维护.
+
+schema_version: 1
+
+strategies:
+  - id: cb_arb
+    full_name: cb_arb 主策略 (verifier yaml-current)
+    type: convertible_bond_arbitrage
+    implementation: strategies/cb_arb/verifier.py
+    config: strategies/cb_arb/tunable_space.yaml
+    status: wip
+    research_direction: open
+
+  - id: cb_arb_value_gap_switch
+    full_name: cb_arb value-gap switch (评估分支)
+    type: convertible_bond_arbitrage
+    parent: cb_arb
+    relationship: research_branch  # 派生于 cb_arb 主策略, 不替换
+    implementation: scripts/evaluate_cb_arb_value_gap_switch.py
+    status: wip
+    research_direction: open
+
+  - id: cb_redemption
+    full_name: cb_redemption 真强赎策略
+    type: convertible_bond_redemption_arbitrage
+    implementation: strategies/cb_redemption/ (data.py + backtest.py + optimizer.py HEAD deleted)
+    status: archived
+    research_direction: closed
+
+  - id: grid_6_targets
+    full_name: 网格策略 6 标的 (sp500/csi500/yzm/工行/神华/长电)
+    type: grid_trading
+    implementation: strategies/cb_redemption/ framework code (历史复用)
+    status: archived
+    research_direction: closed
+
+hypotheses:
+  # Each hypothesis has at most one baseline row in baseline_registry
+  - id: main-yaml-current
+    strategy_id: cb_arb
+    one_line: "可转债横截面排名套利能在 6 年 OOS 跑赢中证转债指数 ≥ 5% 累计"
+    falsifiers:
+      - "累计 excess (复利) 跨年 < 0%"
+      - "任何单年 dd vs benchmark > 15%"
+      - "任意 holdout 年 sharpe < 0.5"
+
+  - id: value-gap-switch-medium-signal
+    strategy_id: cb_arb_value_gap_switch
+    one_line: "绝对价值差额排名 + panic detector 比百分比偏离率更稳, 6 年 OOS 跑赢 ≥ 5% 累计"
+    falsifiers:
+      - "累计 excess (复利) 跨年 < 0%"
+      - "任何单年 dd vs benchmark > 15%"
+      - "任意 holdout 年 sharpe < 0.5"
+
+  - id: self-loop-iter24
+    strategy_id: cb_arb_value_gap_switch
+    one_line: "自循环 LLM 调参 13 维 yaml 找到的 iter 24 best"
+    falsifiers: archived (已次于 HDRF 路线)
+
+  - id: historical-iter5-data-mining
+    strategy_id: cb_redemption
+    one_line: "强赎策略 5-factor weights model"
+    falsifiers: framework audit verdict=data_mining (历史)

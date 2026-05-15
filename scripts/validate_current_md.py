@@ -78,13 +78,24 @@ def main() -> int:
             if "### Deployment contract 判定" not in body:
                 warnings.append(f"[{heading}] active strategy missing Deployment contract 判定 section")
 
-    if warnings:
-        print(f"validate_current_md.py: {len(warnings)} warning(s) (phase 1 warn-only)")
-        for w in warnings:
+    # P1.1: strict mode — missing required front-matter fields = exit 1
+    strict_failures = [w for w in warnings if "missing required front-matter fields" in w
+                       or "invalid status" in w
+                       or "invalid research_direction" in w
+                       or "invalid deployment_contract_status" in w]
+    soft_warnings = [w for w in warnings if w not in strict_failures]
+
+    if strict_failures:
+        print(f"validate_current_md.py: {len(strict_failures)} STRICT failure(s)")
+        for w in strict_failures:
+            print(f"  FAIL {w}")
+    if soft_warnings:
+        print(f"validate_current_md.py: {len(soft_warnings)} warning(s)")
+        for w in soft_warnings:
             print(f"  WARN {w}")
-    else:
+    if not warnings:
         print("validate_current_md.py: OK")
-    return 0  # phase 1 warn-only, never fail except YAML parse error
+    return 1 if strict_failures else 0
 
 
 if __name__ == "__main__":
