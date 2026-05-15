@@ -139,10 +139,9 @@ def generate_docs_index() -> str:
                            [f.name for f in scripts_dir.glob("recover_*.py")])
     run_monitor = sorted([f.name for f in scripts_dir.glob("run_*.py")] +
                          [f.name for f in scripts_dir.glob("monitor_*.py")])
-    outbox_tools = sorted([f.name for f in scripts_dir.glob("outbox_*.py")] +
-                          [f.name for f in scripts_dir.glob("watch_*.sh")] +
-                          [f.name for f in scripts_dir.glob("check_quant*.py")] +
-                          [f.name for f in scripts_dir.glob("outbox_to_telegram.py")])
+    outbox_tools = sorted(set([f.name for f in scripts_dir.glob("outbox_*.py")] +
+                               [f.name for f in scripts_dir.glob("watch_*.sh")] +
+                               [f.name for f in scripts_dir.glob("check_quant*.py")]))
     research_flow = sorted([f.name for f in scripts_dir.glob("research_*.py")] +
                            [f.name for f in scripts_dir.glob("train_*.py")] +
                            [f.name for f in scripts_dir.glob("cb_pricer_sanity.py")])

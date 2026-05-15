@@ -1,6 +1,6 @@
 # 文档地图 (INDEX)
 
-**最后生成**: 2026-05-16 04:26 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
+**最后生成**: 2026-05-16 04:29 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
 **触发**: 加新文件后跑 `python3 scripts/generate_indexes.py` 重新生成
 
 ---
@@ -151,7 +151,6 @@
 
 - `scripts/check_quant_outbox_misroute.py`
 - `scripts/outbox_protocol_preflight.py`
-- `scripts/outbox_to_telegram.py`
 - `scripts/outbox_to_telegram.py`
 - `scripts/watch_quant_claude_processor.sh`
 - `scripts/watch_quant_vm_task_completion.sh`
