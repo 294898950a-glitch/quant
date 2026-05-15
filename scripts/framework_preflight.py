@@ -68,6 +68,15 @@ def main() -> int:
     exits.append(run_validator("validate_run_manifest.py"))
     exits.append(run_validator("validate_data_schema.py"))
 
+    # Index freshness check (warn-only, phase 1)
+    print("\n=== generate_indexes.py --check ===")
+    result = subprocess.run(
+        [sys.executable, str(SCRIPTS / "generate_indexes.py"), "--check"], cwd=REPO_ROOT
+    )
+    if result.returncode != 0:
+        print("  WARN: index outdated (run scripts/generate_indexes.py)")
+        # warn-only in phase 1, don't add to exits
+
     print("\n=== dirty-file inventory (research-relevant) ===")
     dirty = dirty_inventory()
     if dirty:
