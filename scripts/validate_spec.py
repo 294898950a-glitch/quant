@@ -56,6 +56,18 @@ ALLOWED_CV = {"leave-one-year-out", "sealed-pool-8", "walk-forward",
               "leave-one-pool-out", "k-fold", "single-window"}
 
 
+def _contains_sentinel(value) -> bool:
+    """检测 placeholder/sentinel 值. 按 Codex 13:02 Finding 1: DRAFT 必须填实际值后才能 validate 过."""
+    if isinstance(value, str):
+        markers = ("<TODO", "TODO>", "TBD", "<待填>", "(待填)", "placeholder", "PLACEHOLDER")
+        return any(m in value for m in markers)
+    if isinstance(value, list):
+        return any(_contains_sentinel(v) for v in value)
+    if isinstance(value, dict):
+        return any(_contains_sentinel(k) or _contains_sentinel(v) for k, v in value.items())
+    return False
+
+
 def validate(path: Path) -> tuple[list[str], list[str]]:
     """Return (errors, warnings) for a single spec.yaml."""
     errors: list[str] = []
@@ -70,6 +82,14 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
     missing = REQUIRED_FIELDS - set(data.keys())
     if missing:
         errors.append(f"missing required fields: {sorted(missing)}")
+
+    # 按 Codex 13:02 Finding 1: 检测 placeholder/sentinel, DRAFT 必须填实际值才能 validate 过
+    sentinel_fields = []
+    for k, v in data.items():
+        if _contains_sentinel(v):
+            sentinel_fields.append(k)
+    if sentinel_fields:
+        errors.append(f"fields still contain placeholder/sentinel (<TODO> / TBD / 待填), 必须填实际值: {sentinel_fields}")
 
     # Type / enum checks
     if data.get("schema_version") != 1:
