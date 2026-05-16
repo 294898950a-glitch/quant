@@ -1,0 +1,154 @@
+# HDRF baseline registry (machine-readable, 权威源)
+#
+# 按 Codex framework holistic review Q2-D: baseline_registry 从 markdown 升 yaml,
+# 加 transition validator 防"偷偷换 baseline 充作 stress test 已过".
+#
+# baseline_registry.md 保留为人类可读 mirror, 但 commit/audit 看这个 yaml.
+#
+# 规则:
+# - pk 全局唯一 (regex: <strategy>-<variant>-YYYYMMDD)
+# - 历史行 immutable (改了等于撒谎)
+# - baseline 切换必须 supersede 旧 pk, 写 supersede_reason + supersede_audit
+# - 同 strategy_id 只能有一个 status=adopted (当前活跃 baseline)
+# - 任何 RESPONSE 跑出新 baseline 必须同 handoff 加一行
+#
+# strategy_id 必须在 data/research_framework/strategies.yaml 中
+
+schema_version: 1
+
+baselines:
+  # ============================================================
+  # cb_arb 主策略
+  # ============================================================
+
+  - pk: cb_arb-main-yaml-current-20260515
+    strategy_id: cb_arb
+    date: '2026-05-15'
+    implementation: strategies/cb_arb/verifier.py
+    implementation_function: run_backtest
+    config_summary: yaml current 13 维 (cost_model_enabled=false)
+    period: '2019-01-02 ~ 2024-12-31'
+    protocol: leave-one-year-out-6
+    metrics:
+      cumulative_excess_compound: -0.1270
+      cumulative_excess_simple: -0.1172
+      sharpe: 0.1957
+      max_dd: -0.307
+      trades: 834
+    artifact: data/cb_arb_main_strategy_baseline_2026-05-15/
+    manifest_path: data/research_framework/run_manifests/cb_arb_main_strategy_baseline_2026-05-15.yaml
+    git_commit: c8c6365  # pre-debate
+    config_hash: TODO
+    data_snapshot_hash: TODO
+    status: WIP
+    notes: 不达门槛, cost-off baseline
+    supersedes: null
+    superseded_by: cb_arb-main-yaml-current-cost-on-20260516
+
+  - pk: cb_arb-main-yaml-current-cost-on-20260516
+    strategy_id: cb_arb
+    date: '2026-05-16'
+    implementation: strategies/cb_arb/verifier.py
+    implementation_function: run_backtest
+    config_summary: yaml current 13 维 + cost_model_enabled=true (slippage 0.15% / sqrt impact / fee 0.03%)
+    period: '2019-01-02 ~ 2024-12-31'
+    protocol: leave-one-year-out-6
+    metrics:
+      cumulative_excess_compound: -0.1946
+      cost_degradation_pp: -0.0676  # vs cost-off
+      max_dd: -0.3326
+    artifact: data/cb_arb_cost_realism_test_2026-05-16/holdout_with_cost.csv
+    manifest_path: data/research_framework/run_manifests/cb_arb_cost-realism-main-value-gap_2026-05-16_0053.yaml
+    git_commit: c6000d7  # post-hard-enforce
+    config_hash: TODO
+    data_snapshot_hash: TODO
+    status: WIP
+    notes: fatal cost degradation — 实盘成本侵蚀
+    supersedes: cb_arb-main-yaml-current-20260515
+    supersede_reason: |
+      加 cost_model_enabled=true 测真实成本; cost realism wall 验证.
+      cost-on 累计 excess 退化 -6.76pp, 远超 5pp fatal 阈值; 揭示 cb_arb 主策略
+      实盘 cost 让所有变体都跑不赢 benchmark.
+    supersede_audit:
+      committed_by: claude
+      audited_by: codex
+      audit_date: '2026-05-16'
+
+  # ============================================================
+  # cb_arb value-gap switch (研究分支)
+  # ============================================================
+
+  - pk: cb_arb-value-gap-switch-medium-signal-20260515
+    strategy_id: cb_arb_value_gap_switch
+    date: '2026-05-15'
+    implementation: scripts/evaluate_cb_arb_value_gap_switch.py
+    config_summary: medium signal recovery=4 hurdle=0.15 (cost_model_enabled=false)
+    period: '2019-2024'
+    protocol: leave-one-year-out-6
+    metrics:
+      cumulative_excess_compound: -0.0300
+      cumulative_excess_simple: -0.0070
+      max_dd_2020: -0.131
+    artifact: reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md
+    manifest_path: null  # 历史回填 TODO
+    git_commit: dce5c0a  # 近期
+    config_hash: TODO
+    data_snapshot_hash: TODO
+    status: WIP
+    notes: WIP 加强版, 不达门槛
+    supersedes: null
+    superseded_by: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+
+  - pk: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+    strategy_id: cb_arb_value_gap_switch
+    date: '2026-05-16'
+    implementation: scripts/evaluate_cb_arb_value_gap_switch.py
+    config_summary: medium signal recovery=4 hurdle=0.15 + cost_model_enabled=true
+    period: '2019-2024'
+    protocol: leave-one-year-out-6
+    metrics:
+      cumulative_excess_compound: -0.1047
+      cost_degradation_pp: -0.0747  # vs cost-off
+      max_dd: -0.3516
+    artifact: data/cb_arb_cost_realism_test_2026-05-16/holdout_with_cost.csv
+    manifest_path: data/research_framework/run_manifests/cb_arb_cost-realism-main-value-gap_2026-05-16_0053.yaml
+    git_commit: c6000d7
+    config_hash: TODO
+    data_snapshot_hash: TODO
+    status: WIP
+    notes: fatal cost degradation
+    supersedes: cb_arb-value-gap-switch-medium-signal-20260515
+    supersede_reason: |
+      加 cost_model_enabled=true; cost-on 退化 -7.47pp 远超 5pp fatal 阈值.
+    supersede_audit:
+      committed_by: claude
+      audited_by: codex
+      audit_date: '2026-05-16'
+
+  # ============================================================
+  # cb_redemption (强赎, archived)
+  # ============================================================
+
+  - pk: cb_redemption-cmaes-iter5-20260506
+    strategy_id: cb_redemption
+    date: '2026-05-06'
+    implementation: strategies/cb_redemption/  # HEAD deleted
+    config_summary: 5 weight CMA-ES iter 5
+    period: n/a (audit failed)
+    protocol: n/a
+    metrics: {}  # audit failed, 无可信指标
+    artifact: data/cb_redemption/runs.jsonl  # HEAD deleted
+    manifest_path: null
+    git_commit: HEAD-deleted
+    config_hash: TODO
+    data_snapshot_hash: TODO
+    status: archived
+    notes: |
+      audit verdict=data_mining, holdout_compliance=False. framework verdict
+      archived; 不再 supersede 任何 baseline.
+    supersedes: null
+    superseded_by: null
+
+  # 历史 archived baseline (网格策略 6 标的 / cb_arb 自循环 等) 详见
+  # baseline_registry.md, 暂不全量迁移 (只迁主活跃路径)
+  # 完整迁移留 backlog: 历史 sp500/csi500/yzm/工行/300 grid + cb_arb-self-loop 等
