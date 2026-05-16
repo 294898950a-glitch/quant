@@ -5,20 +5,21 @@
 
 ---
 
-**重要 (Codex 01:50 review A-prime 完全解耦)**: 实时检查 (daemon + Claude Code
-hook) 跟 GateKeeper / framework_preflight 完全解耦, 各自独立工作. commit 前
-retro check 由 pre-commit hook 单独 invoke validate_retro_report.py 保证.
+**重要**: framework 是 **cross-AI** (任何 AI 工具) 不是 Claude Code 专属.
+实时检查靠 OS 层 daemon (任何 AI / 编辑器 / 用户改文件都触发), 不靠
+Claude Code 特定 hook. (2026-05-17 用户指出 Claude Code hook 偏向单一 AI
+违反 cross-AI 哲学已删.)
 
-## 红线 1: 写文档后系统自动弹检查 (post-write hook, 不是 AI 主动调)
+## 红线 1: 写文档后系统自动弹检查 (OS 层 daemon, cross-AI)
 
 按用户 2026-05-17 提出: commit 时查不够, **写完那一刻系统自动弹**; AI 看到错警告就回去修. **不靠 AI 自觉调**.
 
 **机制**:
-- `.claude/settings.local.json` 配 PostToolUse hook
-- 监听 Write / Edit / NotebookEdit 工具完成
-- 自动调 `scripts/post_tool_use_hook.sh` → 解析 path → 调 `scripts/framework_doc_check.py`
-- 路径自动推 schema, 不需要 AI 知道走哪个 validator
-- 错了 stderr 弹红字, Claude Code 注入回 AI 会话, AI 下一 turn 看到
+- 后台 daemon (scripts/framework_watch_daemon.py) 监控整 repo, 1 秒
+  poll, 任意文件修改 (任何 AI / 编辑器 / 用户) 都触发
+- 自动调 `scripts/framework_doc_check.py`, 路径推 schema 找对应 validator
+- 错了写 `logs/framework_watch.log` + desktop notification
+- AI 看 log file 知道错了 (或被 notify-send 弹通知)
 
 **受管路径** (自动按路径推 schema 调对应 validator):
 - `reports/**/*.md` → 检查 retro 结构 (H1/日期/引用源)
@@ -30,13 +31,13 @@ retro check 由 pre-commit hook 单独 invoke validate_retro_report.py 保证.
 - `docs/research_framework/*.md` → CURRENT.md / HDRF.md / etc 一致性
 - 其他路径 → silent skip
 
-**AI 责任**: 看到 stderr 红字 (`🔴 [framework_doc_check] xxx 验证失败`) 立即**回到该文件修**, **不要带着错继续做判断或写新东西**. 这是"AI 自救窗口" - 错了系统当场告诉你, 你只要不假装没看见就 OK.
+**AI 责任**: 看 `logs/framework_watch.log` 见 FATAL line 立即**回到该文件修**, **不要带着错继续做判断或写新东西**. 这是"AI 自救窗口" - 错了系统当场告诉你 (log + 可选 desktop notification), 你只要不假装没看见就 OK.
 
-**违规判定**: AI 看到 stderr 错误但忽略 / 继续基于错误内容做判断 = 违规.
+**违规判定**: AI 看到 log file FATAL 但忽略 / 继续基于错误内容做判断 = 违规.
 
 **为什么不依赖 commit hook**: commit hook 是进仓库前最后关 (防止错写进仓库), 但 commit 之前 AI 已经基于错误内容做了判断 / 写了多份文档. 实时检查给 AI **自救窗口**: 错了当场知道当场修, 不带着错继续做.
 
-**Rollback**: 如果 Claude Code 不支持 PostToolUse hook 或语法变了, 删 `.claude/settings.local.json` 即可恢复. 不影响用户级 `~/.claude/`.
+**为什么用 daemon 不用 Claude Code hook**: cross-AI. daemon 任何 AI / 编辑器 / 用户改都触发, Claude Code hook 只对 Claude Code 一种 AI 有效. 不能把 framework 绑死单一 AI.
 
 ---
 
