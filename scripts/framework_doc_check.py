@@ -81,6 +81,10 @@ def dispatch(path: Path) -> tuple[str, list[str]]:
     if rel_str == "data/research_framework/compute_budget_config.json":
         return ("validate_compute_budget.py", [])
 
+    # 按 Codex 01:26 review: data/research_framework/run_manifests/*.yaml 漏了
+    if rel_str.startswith("data/research_framework/run_manifests/") and rel_str.endswith(".yaml"):
+        return ("validate_run_manifest.py", [])
+
     # docs/research_framework/CURRENT.md / HDRF.md / etc
     if rel_str.startswith("docs/research_framework/") and rel_str.endswith(".md"):
         # validate_current_md 扫 CURRENT.md 等; 这里只是触发, 不传 path

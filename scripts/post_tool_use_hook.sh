@@ -37,7 +37,10 @@ if [ $EXIT_CODE -ne 0 ]; then
     echo "" >&2
     echo "🔴 [framework_doc_check] $FILE_PATH 写完后验证失败 (exit $EXIT_CODE)" >&2
     echo "🔴 AI: 立即回到这个文件修, 不要带着错继续往下做." >&2
-    # 注意: hook 自己 exit 0 (不阻塞 tool 完成), 但 stderr 进 AI 会话
+    # 按 Codex 01:26 review: Claude Code PostToolUse hook 必须 exit 2 (而不是
+    # exit 0) 才能把 stderr 注入 AI 会话. exit 0 silent, AI 看不到; exit 2
+    # 是 blocking feedback - tool 完成但 stderr 进下个 AI turn.
+    exit 2
 fi
 
 exit 0
