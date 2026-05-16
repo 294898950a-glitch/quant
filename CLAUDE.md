@@ -28,6 +28,7 @@ Claude Code 特定 hook. (2026-05-17 用户指出 Claude Code hook 偏向单一 
 - `data/<run-id>/diagnostic.yaml` → L5 reverse-diagnostic schema
 - `data/research_framework/baseline_registry.yaml` → transition validator
 - `data/research_framework/compute_budget_config.json` → budget schema
+- `data/research_framework/run_manifests/*.yaml` → run_manifest schema
 - `docs/research_framework/*.md` → CURRENT.md / HDRF.md / etc 一致性
 - 其他路径 → silent skip
 

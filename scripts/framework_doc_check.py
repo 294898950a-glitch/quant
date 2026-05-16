@@ -47,7 +47,7 @@ SCRIPTS = REPO_ROOT / "scripts"
 
 def dispatch(path: Path) -> tuple[str, list[str]]:
     """根据 path 推 (validator_script, args). 返回 ('', []) 表示 skip."""
-    # 兼容相对路径 (Claude Code hook 可能传 cwd 相对) + 绝对路径
+    # 兼容相对路径 (daemon / 用户手动调可能传 cwd 相对) + 绝对路径
     abs_path = path.resolve()
     try:
         rel = abs_path.relative_to(REPO_ROOT)
