@@ -5,6 +5,10 @@
 
 ---
 
+**重要 (Codex 01:50 review A-prime 完全解耦)**: 实时检查 (daemon + Claude Code
+hook) 跟 GateKeeper / framework_preflight 完全解耦, 各自独立工作. commit 前
+retro check 由 pre-commit hook 单独 invoke validate_retro_report.py 保证.
+
 ## 红线 1: 写文档后系统自动弹检查 (post-write hook, 不是 AI 主动调)
 
 按用户 2026-05-17 提出: commit 时查不够, **写完那一刻系统自动弹**; AI 看到错警告就回去修. **不靠 AI 自觉调**.

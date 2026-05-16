@@ -18,10 +18,11 @@ Usage:
 - docs/research_framework/*.md → validate_current_md.py / validate_entrypoints.py
 - 其他路径 → skip (不在 framework 受管范围)
 
-设计:
-- 集成进 GateKeeper.after_doc_write(path); CLI 是入口
-- 配 Claude Code PostToolUse hook 自动调
-- AI 主动调也行
+设计 (按 Codex 01:50 review A-prime 完全解耦):
+- 本工具自成一体, 不依赖 GateKeeper
+- 由 3 层独立调用: framework_watch_daemon (cross-AI) / Claude Code PostToolUse
+  hook / pre-commit hook (commit 前 retro 关). 三层各自调用, 互不依赖.
+- AI 主动调也可以 (e.g. user / Codex / etc 想立刻验证某个文件)
 - 失败 (exit != 0) 时, AI 工作流必须看到错并修
 
 Exit codes:

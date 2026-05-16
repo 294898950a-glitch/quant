@@ -74,7 +74,6 @@ def main() -> int:
     exits.append(run_validator("validate_l4_ack.py"))
     exits.append(run_validator("validate_l5_diagnostic.py"))
     exits.append(run_validator("validate_baseline_registry.py"))
-    exits.append(run_validator("validate_retro_report.py"))
     exits.append(run_validator("validate_gatekeeper_compliance.py"))
 
     # Index freshness check (warn-only, phase 1)

@@ -105,25 +105,11 @@ class GateKeeper:
                        fail_msg="quick_check 失败")
         self._log("  ✓ all clear")
 
-    def after_doc_write(self, path: Path) -> None:
-        """按用户 2026-05-17 要求: AI 写完文档那一刻就检查, 不等 commit.
-
-        commit hook 是进仓库前最后关, 这个是 AI 写错那一刻立即弹的实时关.
-        给 AI '自救窗口' - 错了当场知道, 不带着错继续做判断.
-
-        路径推 schema (内部委托给 framework_doc_check.py):
-        - reports/**/*.md → retro structure
-        - data/<run-id>/spec.yaml → spec schema + sentinel
-        - data/<run-id>/l4_ack.yaml → ack schema
-        - data/<run-id>/diagnostic.yaml → L5 schema
-        - data/research_framework/baseline_registry.yaml → transition validator
-        - docs/research_framework/*.md → CURRENT consistency
-        - 其他 → skip
-        """
-        self._log(f"[GateKeeper] after_doc_write: {path}")
-        self._must_run("framework_doc_check.py", [str(path), "--quiet"],
-                       fail_msg=f"刚写的 {path} 不合规, AI 立即修")
-        self._log(f"  ✓ {path} 实时验证 OK")
+    # 按 Codex 01:50 review A-prime: GateKeeper 跟 realtime daemon/doc-check 模块
+    # 完全解耦 - GateKeeper 只管 5 个研究 stage (before_run_grid / after_run_grid
+    # / before_l5_diagnostic / before_commit_truth / quick_check). 实时文档检查
+    # 由 scripts/framework_doc_check.py 单独提供, 通过 daemon (cross-AI) / hook
+    # (Claude Code) / pre-commit hook (commit 前) 三层各自独立调用.
 
     # === 内部方法 ===
 
@@ -160,7 +146,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="GateKeeper CLI")
     parser.add_argument("stage", choices=[
         "before_run_grid", "after_run_grid", "before_l5_diagnostic",
-        "before_commit_truth", "quick_check", "after_doc_write",
+        "before_commit_truth", "quick_check",
     ])
     parser.add_argument("path", nargs="?")
     parser.add_argument("--quiet", action="store_true")
@@ -181,8 +167,4 @@ if __name__ == "__main__":
         gate.before_commit_truth(Path(args.path) if args.path else None)
     elif args.stage == "quick_check":
         gate.quick_check()
-    elif args.stage == "after_doc_write":
-        if not args.path:
-            sys.exit("ERROR: after_doc_write requires path")
-        gate.after_doc_write(Path(args.path))
     sys.exit(0)

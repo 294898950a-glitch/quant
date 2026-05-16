@@ -75,6 +75,21 @@ if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 2 ]; then
     exit 1
 fi
 
+# 按 Codex 01:50 review A-prime: framework_preflight 跟 retro validator 完全
+# 解耦. 但 commit 前 retro check 是最后关, 不能丢. 这里单独 invoke
+# validate_retro_report.py 当 staged 含 reports/*. daemon/hook 可能 down /
+# bypassed / 另一个 AI session 没装, commit gate 不依赖 daemon freshness.
+echo "$STAGED_FILES" | grep -q "^reports/" && {
+    echo "[pre-commit] reports/* staged, running validate_retro_report.py..."
+    python3 scripts/validate_retro_report.py
+    RETRO_EXIT=$?
+    if [ $RETRO_EXIT -ne 0 ]; then
+        echo ""
+        echo "[pre-commit] validate_retro_report FAILED (exit $RETRO_EXIT). Commit blocked."
+        exit 1
+    fi
+}
+
 exit 0
 EOF
 
