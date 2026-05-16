@@ -36,6 +36,10 @@ except ImportError:
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
 
+# 共享 fail-report helper (sample/diff/hint)
+sys.path.insert(0, str(REPO_ROOT / "scripts"))
+from _validator_helpers import FailReport  # noqa: E402
+
 
 def load_yaml(path: Path) -> dict:
     return yaml.safe_load(path.read_text(encoding="utf-8")) or {}
@@ -126,21 +130,34 @@ def compute_q4_edge_of_grid(ranked: list[dict], spec: dict) -> dict:
 
 def compute_q5_trade_overlap(trades_all: list[dict], baseline_candidate: str,
                              selected_candidate: str) -> dict:
-    """Compute trade overlap from MERGED trades.csv (candidate + pnl_amount schema).
-
-    按 Codex 12:07 review 修正: 实际 trades.csv 是合并文件, 用 candidate 列区分.
-    旧版假设 trades_baseline.csv + trades_selected.csv 分文件 + trade_pnl 列, 错.
-    新版从 candidate 列 group + pnl_amount sum.
-    """
+    """Compute trade overlap from MERGED trades.csv (candidate + pnl_amount schema)."""
     if not trades_all:
         return {"note": "trades.csv empty or missing"}
     cb_key = "cb_code" if "cb_code" in trades_all[0] else "ts_code"
+    # 实际 trades.csv 用 'candidate' 列分组 (经测试). 如果未来 schema 变, fail 时给好提示.
     baseline_rows = [r for r in trades_all if r.get("candidate") == baseline_candidate]
     selected_rows = [r for r in trades_all if r.get("candidate") == selected_candidate]
     if not baseline_rows:
-        return {"note": f"no baseline rows in trades.csv (candidate={baseline_candidate})"}
+        fr = FailReport(
+            what="Q5 baseline trade rows not found",
+            looked_for=f"trades.csv row with candidate == '{baseline_candidate}'",
+        )
+        fr.with_columns(trades_all).with_sample(trades_all[:2])
+        fr.fuzzy_match_keys(["candidate"], trades_all)
+        unique_candidates = sorted({r.get("candidate") for r in trades_all if r.get("candidate")})
+        fr.add_hint(f"trades.csv 里实际有的 candidate 值: {unique_candidates[:5]}")
+        fr.add_hint("如果 baseline 不叫 'medium_baseline', 改 baseline_candidate 默认值或从 spec.yaml 读")
+        return {"note": fr.format()}
     if not selected_rows:
-        return {"note": f"no selected rows in trades.csv (candidate={selected_candidate})"}
+        fr = FailReport(
+            what="Q5 selected trade rows not found",
+            looked_for=f"trades.csv row with candidate == '{selected_candidate}'",
+        )
+        fr.with_columns(trades_all).with_sample(trades_all[:2])
+        unique_candidates = sorted({r.get("candidate") for r in trades_all if r.get("candidate")})
+        fr.add_hint(f"trades.csv 里实际有的 candidate 值: {unique_candidates[:5]}")
+        fr.add_hint(f"ranked.csv top 取的 selected_candidate 是 '{selected_candidate}', 在 trades 里没匹配 — 检查 ranked.csv 字段名 (name 还是 candidate?)")
+        return {"note": fr.format()}
     base_set = {(r.get(cb_key), r.get("entry_date")) for r in baseline_rows}
     sel_set = {(r.get(cb_key), r.get("entry_date")) for r in selected_rows}
     common = base_set & sel_set
@@ -161,16 +178,27 @@ def compute_q5_trade_overlap(trades_all: list[dict], baseline_candidate: str,
 
 
 def compute_q2_selection_score(ranked: list[dict]) -> dict:
-    """Q2 selection_score / passes_main_floors metadata (按 Codex 12:07 加).
+    """Q2 selection_score / passes_main_floors metadata.
 
-    Auto-fill metadata of top candidate. Judgment (是否合理) 留 Claude.
+    实测 ranked.csv 用 'name' 字段, 不是 'candidate'. 兼容多种命名.
     """
     if not ranked:
         return {"note": "ranked.csv empty"}
     top = ranked[0]
+    # 兼容 candidate / name / id 三种字段命名 (Codex 12:17 review: 实际用 name)
+    top_id = top.get("candidate") or top.get("name") or top.get("id")
+    if not top_id:
+        fr = FailReport(
+            what="Q2 top candidate id not found",
+            looked_for="ranked.csv top row with one of: candidate / name / id",
+        )
+        fr.with_columns(ranked).with_sample(ranked[:1])
+        fr.fuzzy_match_keys(["candidate", "name", "id"], ranked)
+        fr.add_hint("ranked.csv top 候选取不到 id, 检查实际 column 名字")
+        return {"note": fr.format()}
     return {
         "top_rank": top.get("rank") or 0,
-        "top_candidate_id": top.get("candidate") or top.get("id"),
+        "top_candidate_id": top_id,
         "top_selection_score": safe_float(top.get("selection_score")),
         "top_passes_main_floors": top.get("passes_main_floors"),
         "any_pass_main_floors": sum(1 for r in ranked if r.get("passes_main_floors") in ("True", "true", "1", True)),
@@ -182,23 +210,40 @@ def compute_q2_selection_score(ranked: list[dict]) -> dict:
 
 
 def compute_q3_baseline_alignment(summary: list[dict], hard_floors: dict) -> dict:
-    """Q3 baseline 是否 fail floor (按 Codex 12:07 加, docstring 已承诺).
+    """Q3 baseline 是否 fail floor.
 
-    Read baseline rows from summary.csv, check 每年 excess vs hard_floors.
+    实测 summary.csv 用 'name'='medium_baseline' + 'kind'='baseline' 字段
+    (Codex 12:17 review). Excess 列实际叫 replay_<year>_excess 或 y<year>_excess.
     """
     if not summary or not hard_floors:
         return {"note": "summary.csv or hard_floors missing"}
-    baseline_rows = [r for r in summary if str(r.get("candidate", "")).startswith("medium_baseline")
+    # 兼容多种字段命名 (按 Codex review)
+    baseline_rows = [r for r in summary if
+                     str(r.get("name", "")).startswith("medium_baseline")
+                     or r.get("kind") == "baseline"
+                     or str(r.get("candidate", "")).startswith("medium_baseline")
                      or r.get("type") == "baseline"]
     if not baseline_rows:
-        return {"note": "no baseline rows in summary.csv"}
+        fr = FailReport(
+            what="Q3 baseline rows not found in summary.csv",
+            looked_for="row with name=medium_baseline OR kind=baseline OR candidate=medium_baseline OR type=baseline",
+        )
+        fr.with_columns(summary).with_sample(summary[:2])
+        fr.fuzzy_match_keys(["name", "kind", "candidate", "type"], summary)
+        fr.add_hint("如果 summary.csv 用其他字段标 baseline, 加进 baseline_rows 过滤条件")
+        return {"note": fr.format()}
+
     fail = []
     pass_ = []
     for r in baseline_rows:
-        yr = r.get("year") or r.get("leave_year")
+        yr = r.get("leave_year") or r.get("year")
         if not yr:
             continue
-        excess = safe_float(r.get("excess_return") or r.get("excess"))
+        # excess 列名兼容: replay_<year>_excess (主) / y<year>_excess / excess_return / excess
+        excess = (safe_float(r.get(f"replay_{yr}_excess"))
+                  or safe_float(r.get(f"y{yr}_excess"))
+                  or safe_float(r.get("excess_return"))
+                  or safe_float(r.get("excess")))
         floor_key = f"replay_{yr}"
         floor = hard_floors.get(floor_key)
         if excess is not None and floor is not None:
@@ -207,6 +252,18 @@ def compute_q3_baseline_alignment(summary: list[dict], hard_floors: dict) -> dic
                              "gap": round(excess - floor, 4)})
             else:
                 pass_.append({"year": yr, "excess": excess, "floor": floor})
+
+    if not pass_ and not fail:
+        # 找到了 baseline rows 但 excess/year 都解析不出来
+        fr = FailReport(
+            what="Q3 baseline rows found but no excess values parsed",
+            looked_for=f"per row: leave_year/year + one of replay_<year>_excess / y<year>_excess / excess_return / excess",
+        )
+        fr.with_columns(baseline_rows).with_sample(baseline_rows[:1])
+        fr.add_hint(f"hard_floors keys: {list(hard_floors.keys())[:5]}")
+        fr.add_hint("可能 summary.csv 用其他 excess 列名 (e.g. cumulative_excess), 加进 fallback chain")
+        return {"note": fr.format()}
+
     return {
         "baseline_pass_years": pass_,
         "baseline_fail_years": fail,
@@ -236,8 +293,8 @@ def process_run(run_dir: Path, dry_run: bool) -> bool:
     summary_rows = read_csv_rows(run_dir / "summary.csv")
     hard_floors = spec.get("hard_floors", {})
 
-    # 从 ranked.csv top 候选取 selected candidate 名
-    top_candidate = ranked[0].get("candidate") if ranked else None
+    # 从 ranked.csv top 候选取 selected candidate 名 (兼容 candidate/name/id)
+    top_candidate = (ranked[0].get("candidate") or ranked[0].get("name") or ranked[0].get("id")) if ranked else None
     baseline_candidate = "medium_baseline"  # cb_arb 标准 baseline name; 可后续从 spec 读
 
     q1 = compute_q1_floor_binding(ranked, hard_floors)
