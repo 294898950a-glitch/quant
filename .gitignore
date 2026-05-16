@@ -56,3 +56,4 @@ data/cb_arb_*/heartbeat
 
 # Archive (保留物理副本但不 commit)
 archive/
+.framework-watch.pid
