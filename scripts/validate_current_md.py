@@ -48,7 +48,7 @@ def main() -> int:
         body = sections[i + 1] if i + 1 < len(sections) else ""
         if heading in ("总览", "WIP 文件清单 (untracked / modified 关键文件)", "策略关系图 (lineage 标签)",
                        "协议触发 CURRENT.md 更新事件 (U15, see protocol_redline.md)",
-                       "下一步 owner (当前等谁)", "维护规则"):
+                       "用户无回复默认规则", "下一步 owner (当前等谁)", "维护规则"):
             continue
         # strategy section
         fm_match = re.search(r"```yaml\n(.*?)\n```", body, re.DOTALL)

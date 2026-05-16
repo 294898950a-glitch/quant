@@ -12,6 +12,7 @@
 4. 超过 10 分钟必须报进度.
 5. 改变策略真值必须同步 `CURRENT.md` + `baseline_registry.md`.
 6. 完成回测必须写 `run_manifest`.
+7. 问用户下一步后 30 分钟无回复, AI 先读入口文件填写 `当前策略`, 然后保持它并换一个研究方向; 不默认归档或升级实盘.
 
 ## 红线段(每条消息顶部复制粘贴)
 
@@ -33,6 +34,7 @@ U13 L0 硬化: L1 DIRECT 必含 l0-entry-id 标签 + 入口对应前置文档; a
 U14 进度心跳: Codex 处理任一任务总耗时 >10 分钟时必每 10 分钟在 outbox 写 PROGRESS (task/进度%/ETA/阻塞), 静默 >10 分钟 = 违规, Claude 端会主动催 HEARTBEAT-MISSING
 U15 策略真值同步: RESPONSE 改策略真值 (新 baseline / status 切换 / 立项 / commit 关键文件) 必同 handoff 更新 docs/research_framework/CURRENT.md + data/research_framework/baseline_registry.md, 或显式说"为什么不更新"; 不触发 = 单纯 ACK/recon/schema/算力估算
 U16 状态机 + manifest: status 仅 8 态 (experiment/wip/adopted/rejected/archived/stale/invalidated/n/a 见 protocol §U16), transitions 仅 16 条 (详见本文 §U16); 回测产物必同 handoff 写 run_manifest.yaml (schema 见 docs/research_framework/run_manifest_schema.md), 不触发 = 单纯 ACK/recon
+U17 用户无回复默认: 询问用户下一步后 30 分钟无回复, AI 先读 3 个入口文件填写 `当前策略`, 默认保持 `当前策略` 但换研究方向; 不归档、不升级实盘、不重复刚失败方向; 若需新增数据/改核心代码/加预算仍停等用户
 
 模式 B 沙盒 (用户离场自动循环时, 双方都不准):
 B1 改代码 (strategies/*.py / scripts/*.py / evaluator)
@@ -109,6 +111,7 @@ COMPENSATE: <如何补 / 何时补>
 进入模式 B 触发条件:
 - 用户明说"自动跑" / "无人值守"
 - 用户连续 5 次心跳无回应 + 当前算力账户余额 + 当前研究 batch 完成
+- 系统明确询问用户下一步后 30 分钟无回复时, 不进入完全自动循环; 只执行 U17 默认: AI 填写 `当前策略`, 保持它, 换一个方向, 先写新方向设计
 
 模式 B 中 AI 只能:
 - ✅ 调已经在 yaml 绿区的参数

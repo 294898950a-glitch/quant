@@ -30,6 +30,13 @@ ENTRY_COUNT_CHECK = [
     "docs/research_framework/HDRF.md",
 ]
 
+NO_REPLY_DEFAULT_FILES = [
+    "README.md",
+    "docs/research_framework/CURRENT.md",
+    "docs/research_framework/protocol_redline.md",
+    "docs/research_framework/autonomous_loop_protocol.md",
+]
+
 
 def read(path: str) -> str:
     return (REPO_ROOT / path).read_text(encoding="utf-8")
@@ -67,6 +74,13 @@ def main() -> int:
         text = read(path)
         if "唯一权威入口" in text or "唯一入口" in text:
             issues.append(f"{path}: stale entry wording (唯一入口) — should say one of 3 个入口")
+
+    for path in NO_REPLY_DEFAULT_FILES:
+        text = read(path)
+        if "30 分钟" not in text or "当前策略" not in text or "换一个研究方向" not in text:
+            issues.append(f"{path}: missing 30-minute no-reply default rule")
+        if "当前策略族" in text:
+            issues.append(f"{path}: no-reply rule must use parameter 当前策略, not fixed 当前策略族")
 
     if issues:
         for issue in issues:
