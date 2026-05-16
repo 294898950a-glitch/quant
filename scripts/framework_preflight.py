@@ -64,6 +64,7 @@ def main() -> int:
     args = parser.parse_args()
 
     exits = []
+    exits.append(run_validator("validate_entrypoints.py"))
     exits.append(run_validator("validate_current_md.py"))
     exits.append(run_validator("validate_run_manifest.py"))
     exits.append(run_validator("validate_data_schema.py"))

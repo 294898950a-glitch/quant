@@ -3,9 +3,14 @@
 **最后更新**: 2026-05-15 23:50 CST
 **触发更新事件**: framework debate Round 3 共识 — 首版建立
 
-这页是每次新会话或新研究 batch 的**唯一权威入口**。读完这页就知道当前在做什么、谁是 owner、下一步等谁。
+这页是**新会话 3 个入口之一**, 当前真值层. 读完知道当前每个策略在哪、当前成绩、下一步等谁.
 
-经验账本 = 历史。autonomous_summary = 回顾。**CURRENT.md = 当前真值**。
+新会话完整入口顺序 (强制):
+1. `docs/research_framework/CURRENT.md` (本文件) — 当前真值
+2. `data/research_framework/baseline_registry.md` — 历史成绩单
+3. `docs/INDEX.md` — 找其他文档和工具
+
+经验账本 = 历史 (查原因时读). autonomous_summary = 回顾 (非入口). 其他文档都是**非入口文件**.
 
 ---
 

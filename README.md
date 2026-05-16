@@ -4,29 +4,32 @@
 
 ---
 
-## 新会话从这里开始 (入口顺序)
+## 新会话从这里开始
 
-| 顺序 | 文件 | 看完知道什么 |
+**只读这 3 个:**
+
+| 顺序 | 文件 | 作用 |
 |---|---|---|
-| 1 | `docs/research_framework/CURRENT.md` | 当前每个策略状态 / 当前成绩 / 下一步等谁 |
-| 2 | `docs/INDEX.md` | 所有文档地图 (协议 / 流程 / 角色 / 模板 / 报告) |
-| 3 | `data/research_framework/baseline_registry.md` | 历史成绩单档案 |
-| 4 | `docs/research_framework/experience_ledger.md` | 经验账本 (已采用 / 已无效 / 未完成 / 未来) |
+| 1 | `docs/research_framework/CURRENT.md` | 当前策略状态 / 当前成绩 / 下一步等谁 |
+| 2 | `data/research_framework/baseline_registry.md` | 历史成绩单 |
+| 3 | `docs/INDEX.md` | 找其他文档和工具 |
 
-只看这 4 个文件就知道项目当前状态. 协议红线 / 角色定义等其他文档按需翻 (在 `docs/INDEX.md` 的对应分类下).
+需要查原因时再读 `docs/research_framework/experience_ledger.md`.
+
+除上面 3 个入口文件外, 其他协议、角色、模板、复盘报告都是**非入口文件**, 不作为当前状态判断依据.
 
 ---
 
-## 协议核心 (v1.5, 17 条规则)
+## 协议核心
 
-详见 `docs/research_framework/protocol_redline.md`. 关键铁律:
+详见 `docs/research_framework/protocol_redline.md`. 日常只记 6 条:
 
-- **U1**: 结论必须指向数据 (CSV/parquet/报告), 不准编
-- **U2**: 重活只能 VM 上跑, 本地只编辑文档
-- **U12**: Claude↔Codex 辩论 ≤3 轮无共识, 听 Codex
-- **U14**: Codex 任务 >10 分钟必每 10 分钟写 PROGRESS
-- **U15**: RESPONSE 改策略真值必同 handoff 更新 `CURRENT.md` + `baseline_registry.md`
-- **U16**: 8 状态机 + 16 转换 + 跑批必写 run_manifest
+- 结论必须有数据来源.
+- 重活只能在 VM 跑.
+- 新研究任务必须有完整设计.
+- 超过 10 分钟必须报进度.
+- 改变策略真值必须更新 `CURRENT.md` + `baseline_registry.md`.
+- 完成回测必须写 `run_manifest`.
 
 ---
 
@@ -54,25 +57,15 @@
 
 ---
 
-## 自动调参框架 (9 个角色)
+## 历史自动调参框架
 
-```
-1. 测试器 (verifier)        给参数模拟一次交易,出客观分数
-2. 体检员 (sanity_checker)   跑测试前先校验参数+数据兼容
-3. 诊断员 (judge)            看一次结果,只描述事实
-4. 审计员 (auditor)          看 N 轮趋势,判健康/挖数据/恶化(有否决权)
-5. 出主意者 (hypothesizer)   LLM 看历史+诊断,出建议(死格式校验)
-6. 编辑器 (editor)           唯一允许写参数文件的入口
-7. 记忆员 (memory)           每轮存档 + 防止 AI 重复试同一方向
-8. 总指挥 (orchestrator)     状态机协调上述 7 个 + 自动恢复
-9. 市场画像员 (pool_stats)   算原始统计(不打标签)
-```
+旧框架包含测试、体检、诊断、审计、出主意、编辑、记忆、总指挥等角色. 这些角色文档保留作参考, 但**不再是新会话入口**.
 
-框架代码全在 `strategies/cb_redemption/`(历史命名, 实际是通用 framework lib). 跑过 cb_arb 60 iter + cb_redemption 5 iter, 都没找出能用 baseline.
+当前判断以 `CURRENT.md`、`baseline_registry.md`、`run_manifest` 为准.
 
 ---
 
-## 真值记录系统 (2026-05-16 建立)
+## 真值记录系统
 
 之前研究产出散在各处, 新会话容易看错策略状态. 现在有:
 
@@ -137,7 +130,7 @@
 
 ## 文档地图
 
-详见 `docs/INDEX.md`. 协议 / 流程 / 角色 / 模板 / 真值 / 报告 / 工具 全分类索引.
+详见 `docs/INDEX.md`. 它只负责找文件, 不负责判断当前状态. 当前状态只看 `CURRENT.md`.
 
 ---
 

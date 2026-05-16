@@ -1,18 +1,28 @@
 # 文档地图 (INDEX)
 
-**最后生成**: 2026-05-16 06:39 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
+**最后生成**: 2026-05-16 10:35 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
 **触发**: 加新文件后跑 `python3 scripts/generate_indexes.py` 重新生成
 
 ---
 
-## 入口顺序 (新会话先看这 4 个)
+## 入口顺序 (新会话只看这 3 个)
 
 1. **`docs/research_framework/CURRENT.md`** — 当前真值, 每个策略状态 / 当前成绩 / 下一步等谁
-2. **`docs/INDEX.md`** — 本文件, 文档地图
-3. **`data/research_framework/baseline_registry.md`** — 成绩单档案, 历史每次回测出的数字 (immutable-ish)
-4. **`docs/research_framework/experience_ledger.md`** — 经验账本 (4 分区: 已采用 / 已无效 / 未完成 / 未来)
+2. **`data/research_framework/baseline_registry.md`** — 成绩单档案, 历史每次回测出的数字
+3. **`docs/INDEX.md`** — 本文件, 找其他文档和工具
 
-看完这 4 个文件就知道 "现在该做什么". 其他文件按需翻.
+`docs/research_framework/experience_ledger.md` 只在查原因或选下一方向时读.
+除上面 3 个入口文件外, 其他协议、角色、模板、报告都是非入口文件, 不作为当前状态判断依据.
+
+---
+
+## 当前主干
+
+- `docs/research_framework/CURRENT.md` — 当前真值
+- `data/research_framework/baseline_registry.md` — 历史 baseline
+- `data/research_framework/run_manifests/` — 每次回测的来源、配置、成本和结果
+- `docs/research_framework/protocol_redline.md` — 最小硬约束和详细边界
+- `C:/Users/陈教授/Desktop/ai/projects/quant/{claude,codex}/outbox.md` — 双方通信
 
 ---
 
@@ -71,6 +81,7 @@
 - `scripts/install_pre_commit_hook.sh`
 - `scripts/validate_current_md.py`
 - `scripts/validate_data_schema.py`
+- `scripts/validate_entrypoints.py`
 - `scripts/validate_run_manifest.py`
 
 ## 查询工具

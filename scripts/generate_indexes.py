@@ -44,6 +44,20 @@ DOCS_FRAMEWORK = REPO_ROOT / "docs" / "research_framework"
 DATA_FRAMEWORK = REPO_ROOT / "data" / "research_framework"
 REPORTS = REPO_ROOT / "reports"
 
+ENTRY_FILES = [
+    ("docs/research_framework/CURRENT.md", "当前真值, 每个策略状态 / 当前成绩 / 下一步等谁"),
+    ("data/research_framework/baseline_registry.md", "成绩单档案, 历史每次回测出的数字"),
+    ("docs/INDEX.md", "本文件, 找其他文档和工具"),
+]
+
+CORE_FILES = [
+    ("docs/research_framework/CURRENT.md", "当前真值"),
+    ("data/research_framework/baseline_registry.md", "历史 baseline"),
+    ("data/research_framework/run_manifests/", "每次回测的来源、配置、成本和结果"),
+    ("docs/research_framework/protocol_redline.md", "最小硬约束和详细边界"),
+    ("C:/Users/陈教授/Desktop/ai/projects/quant/{claude,codex}/outbox.md", "双方通信"),
+]
+
 
 def classify_doc(filename: str) -> str:
     """Return category for a docs/research_framework/*.md file."""
@@ -154,14 +168,21 @@ def generate_docs_index() -> str:
         "",
         "---",
         "",
-        "## 入口顺序 (新会话先看这 4 个)",
+        "## 入口顺序 (新会话只看这 3 个)",
         "",
-        "1. **`docs/research_framework/CURRENT.md`** — 当前真值, 每个策略状态 / 当前成绩 / 下一步等谁",
-        "2. **`docs/INDEX.md`** — 本文件, 文档地图",
-        "3. **`data/research_framework/baseline_registry.md`** — 成绩单档案, 历史每次回测出的数字 (immutable-ish)",
-        "4. **`docs/research_framework/experience_ledger.md`** — 经验账本 (4 分区: 已采用 / 已无效 / 未完成 / 未来)",
+        *[
+            f"{idx}. **`{path}`** — {desc}"
+            for idx, (path, desc) in enumerate(ENTRY_FILES, 1)
+        ],
         "",
-        "看完这 4 个文件就知道 \"现在该做什么\". 其他文件按需翻.",
+        "`docs/research_framework/experience_ledger.md` 只在查原因或选下一方向时读.",
+        "除上面 3 个入口文件外, 其他协议、角色、模板、报告都是非入口文件, 不作为当前状态判断依据.",
+        "",
+        "---",
+        "",
+        "## 当前主干",
+        "",
+        *[f"- `{path}` — {desc}" for path, desc in CORE_FILES],
         "",
         "---",
         "",
