@@ -56,11 +56,11 @@ STAGE_METHODS = {"before_run_grid", "after_run_grid", "before_l5_diagnostic",
 
 
 def script_complies(path: Path) -> tuple[bool, str]:
-    """AST scan: import GateKeeper + 至少调一个 stage 方法.
+    """AST scan: import GateKeeper + 实例化 + 用该实例调 stage 方法.
 
-    按 Codex 13:52 verify Q5 fix: 之前只检查 import, dead import 不调方法也算
-    compliant. 修: 必须既 import 又调用 stage method.
-    Return (ok, reason).
+    按 Codex 13:52/13:57 verify: dead import + dummy object bypass 都拒.
+    必须 (1) import GateKeeper (2) GateKeeper(...) 实例化 (3) 用实例变量调
+    stage method. 三件齐才算 compliant.
     """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
@@ -68,8 +68,12 @@ def script_complies(path: Path) -> tuple[bool, str]:
         return False, f"parse error: {e}"
 
     imports_gatekeeper = False
-    stage_methods_called = set()
+    # 收集"赋值给 GateKeeper() 的变量名" (e.g. gate = GateKeeper() → 'gate')
+    gatekeeper_instance_names: set[str] = set()
+    # 收集"在 GateKeeper 实例上调用的 stage method" (must match instance var name)
+    stage_calls_on_gatekeeper_instance: set[str] = set()
 
+    # Pass 1: find imports + 实例化赋值
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             mod = (node.module or "")
@@ -81,18 +85,35 @@ def script_complies(path: Path) -> tuple[bool, str]:
             for alias in node.names:
                 if alias.name.endswith("gatekeeper"):
                     imports_gatekeeper = True
-        # 检查 stage method call: e.g. gate.before_run_grid(...)
-        elif isinstance(node, ast.Call):
+        # 赋值 var = GateKeeper(...) → 记录 var 名
+        if isinstance(node, ast.Assign):
+            value = node.value
+            if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
+                if value.func.id == "GateKeeper":
+                    for target in node.targets:
+                        if isinstance(target, ast.Name):
+                            gatekeeper_instance_names.add(target.id)
+
+    # Pass 2: 找 var.stage_method(...) 调用, 验证 var 是 GateKeeper 实例
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Call):
             func = node.func
             if isinstance(func, ast.Attribute) and func.attr in STAGE_METHODS:
-                stage_methods_called.add(func.attr)
+                # func.value 是 ast.Name (var 名) 或更复杂
+                if isinstance(func.value, ast.Name):
+                    if func.value.id in gatekeeper_instance_names:
+                        stage_calls_on_gatekeeper_instance.add(func.attr)
 
     if not imports_gatekeeper:
         return False, "missing 'from scripts.gatekeeper import GateKeeper'"
-    if not stage_methods_called:
-        return False, ("import GateKeeper 但没调任何 stage method "
-                       f"({sorted(STAGE_METHODS)}); dead import 不算 compliant")
-    return True, f"calls: {sorted(stage_methods_called)}"
+    if not gatekeeper_instance_names:
+        return False, ("import GateKeeper 但没实例化 (GateKeeper() 调用); "
+                       "dead import 不算 compliant")
+    if not stage_calls_on_gatekeeper_instance:
+        return False, (f"实例化了 GateKeeper 但没调 stage method "
+                       f"({sorted(STAGE_METHODS)}); "
+                       f"dummy object 调同名方法也不算")
+    return True, f"GateKeeper instances: {sorted(gatekeeper_instance_names)}; calls: {sorted(stage_calls_on_gatekeeper_instance)}"
 
 
 def list_scripts_needing_compliance() -> list[Path]:
