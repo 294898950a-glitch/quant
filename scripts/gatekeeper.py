@@ -89,11 +89,14 @@ class GateKeeper:
     # === 内部方法 ===
 
     def _must_run(self, script: str, args: list[str], fail_msg: str) -> None:
+        """exit 0 = OK, exit 1 = strict fail (拦), exit 2 = warning-only (放行)."""
         cmd = [sys.executable, str(self.scripts / script)] + args
         result = subprocess.run(cmd, cwd=self.repo_root)
-        if result.returncode != 0:
+        if result.returncode == 1:
             self._log(f"  ✗ FAIL: {fail_msg}")
             raise GateKeeperError(1)
+        elif result.returncode == 2:
+            self._log(f"  ⚠ WARN-ONLY: {script} returned warnings, GateKeeper 放行")
 
     def _log(self, msg: str) -> None:
         if not self.quiet:
