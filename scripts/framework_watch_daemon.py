@@ -31,6 +31,7 @@ Cursor / vim / nano / 任何编辑器) 都触发 framework_doc_check.py.
 from __future__ import annotations
 
 import os
+import os.path
 import signal
 import subprocess
 import sys
@@ -100,27 +101,27 @@ def signal_handler(signum, frame):
 
 
 def scan_dir(d: Path) -> list[Path]:
-    """递归扫一个目录所有 file, 跳过噪音目录/文件."""
+    """递归扫一个目录所有 file, 跳过噪音目录/文件.
+
+    按 Codex 01:43 review: 用 os.walk() 主动 prune 噪音目录 (不递归进去),
+    rglob('*') 会先扫完所有再 filter, 在 .git/.venv 几百兆下慢到 1.5+ 秒.
+    """
     if not d.exists():
         return []
     files = []
-    for path in d.rglob("*"):
-        if not path.is_file():
-            continue
-        # 跳噪音目录
-        try:
-            rel_parts = path.relative_to(REPO_ROOT).parts
-        except ValueError:
-            continue
-        if any(p in SKIP_DIR_PARTS for p in rel_parts):
-            continue
-        # 跳噪音文件后缀
-        if path.suffix in SKIP_SUFFIXES:
-            continue
-        # 跳隐藏文件 (.开头, 但允许像 .gitignore / .github/ 这种顶层关键文件? 暂时跳全部)
-        if any(p.startswith(".") for p in rel_parts):
-            continue
-        files.append(path)
+    for root, dirs, filenames in os.walk(d):
+        # in-place 修改 dirs 来 prune (os.walk 不会再进去)
+        dirs[:] = [x for x in dirs if x not in SKIP_DIR_PARTS and not x.startswith(".")]
+        root_path = Path(root)
+        for fname in filenames:
+            # 跳噪音文件后缀
+            ext = "." + fname.rsplit(".", 1)[-1] if "." in fname else ""
+            if ext in SKIP_SUFFIXES:
+                continue
+            # 跳隐藏文件
+            if fname.startswith("."):
+                continue
+            files.append(root_path / fname)
     return files
 
 
@@ -182,6 +183,10 @@ def main() -> int:
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     log("INFO", f"daemon started (pid {os.getpid()}), watching: {[str(d) for d in WATCHED_DIRS]}")
 
+    # 按 Codex 01:43 review: 先写 pid file 再 initial scan
+    # (避免 ctl.sh start 误报"启动失败")
+    PID_FILE.write_text(str(os.getpid()))
+
     # 初次扫: 记 mtime 不跑 (启动时已有 file 不算 modification)
     global initialized
     for d in WATCHED_DIRS:
@@ -192,9 +197,6 @@ def main() -> int:
                 continue
     initialized = True
     log("INFO", f"initial scan: {len(file_mtimes)} files indexed, watching for new/modified")
-
-    # 写 pid file
-    PID_FILE.write_text(str(os.getpid()))
 
     try:
         while not stop_requested:
