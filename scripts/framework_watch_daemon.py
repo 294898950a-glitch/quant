@@ -65,29 +65,32 @@ EVENT_DEDUP_WINDOW = 5.0  # 同一 file 同 mtime 5 秒内不重复跑
 
 # state
 file_mtimes: dict[Path, float] = {}
-last_check_at: dict[Path, float] = {}
 initialized = False  # 启动后初次扫完成标志
 
 stop_requested = False
 
 
-def log(level: str, msg: str) -> None:
+def log(level: str, msg: str, notify: bool = False) -> None:
+    """写 log line. notify=True 才触发 desktop notification (避免每行 FATAL 都 notify)."""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     line = f"[{timestamp}] {level} {msg}"
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     with LOG_FILE.open("a", encoding="utf-8") as f:
         f.write(line + "\n")
     if level == "FATAL":
-        # Desktop notification (仅 Linux + notify-send 装了)
+        # 也写 stderr (前台跑用户能看到)
+        print(line, file=sys.stderr)
+    if notify:
+        # 按 Codex 01:38 review: notify 每次 validation 只调一次 (不是每行 log)
+        # + 没 notify-send / DBus 时不漏 stderr
         try:
             subprocess.run(
                 ["notify-send", "-u", "critical", "framework_watch", msg],
                 check=False, timeout=2,
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
         except (FileNotFoundError, subprocess.TimeoutExpired):
             pass
-        # 也写 stderr (如果 daemon 在前台跑用户能看到)
-        print(line, file=sys.stderr)
 
 
 def signal_handler(signum, frame):
@@ -122,13 +125,8 @@ def scan_dir(d: Path) -> list[Path]:
 
 
 def check_one(path: Path) -> None:
-    """跑 framework_doc_check 检查一个 file."""
-    now = time.time()
-    last = last_check_at.get(path, 0.0)
-    if now - last < EVENT_DEDUP_WINDOW:
-        return
-    last_check_at[path] = now
-
+    """跑 framework_doc_check 检查一个 file. 按 Codex 01:38 review:
+    dedup 改成 mtime-based, 同 path 不同 mtime 都跑 (快速连续修改不漏)."""
     cmd = [
         sys.executable,
         str(REPO_ROOT / "scripts" / "framework_doc_check.py"),
@@ -140,8 +138,9 @@ def check_one(path: Path) -> None:
         # skip 或 OK 都不 log
         return
 
-    # FATAL
-    log("FATAL", f"{path.relative_to(REPO_ROOT)} 验证失败 (exit {result.returncode})")
+    # FATAL — 只第一行 log 触发 notify (Codex 01:38 review)
+    rel = path.relative_to(REPO_ROOT)
+    log("FATAL", f"{rel} 验证失败 (exit {result.returncode})", notify=True)
     if result.stdout:
         for line in result.stdout.splitlines():
             log("FATAL", f"  stdout: {line}")
@@ -174,7 +173,6 @@ def poll() -> None:
     for path in list(file_mtimes.keys()):
         if not path.exists():
             del file_mtimes[path]
-            last_check_at.pop(path, None)
 
 
 def main() -> int:

@@ -22,6 +22,8 @@ is_running() {
         if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then
             return 0
         fi
+        # 按 Codex 01:38 review: 异常退出后 stale pidfile, 自动清
+        rm -f "$PID_FILE"
     fi
     return 1
 }
