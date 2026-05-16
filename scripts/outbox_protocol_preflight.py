@@ -248,6 +248,13 @@ def direct_requires_full_spec(msg: Message) -> bool:
         "TRIGGER_EXECUTE",
         "FATAL_ACK",
         "COST_FATAL",
+        # framework discussion / review / audit / debate / 内部架构相关 DIRECT 不该被 L1 spec 检查拦
+        # (这些消息会 mention "假设/参数/floor" 等字面但不是真立项)
+        "FRAMEWORK",
+        "REVIEW",
+        "AUDIT",
+        "DEBATE",
+        "HOMEWORK",
     )
     if any(term in kind_upper for term in control_terms):
         return False
