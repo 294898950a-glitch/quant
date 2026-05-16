@@ -45,7 +45,8 @@ while IFS= read -r file; do
         scripts/auto_compute_l4_data.py|scripts/gatekeeper.py|\
         scripts/validate_*.py|scripts/framework_preflight.py|\
         scripts/new_research.py|scripts/search_ledger.py|\
-        docs/research_framework/*|data/research_framework/*)
+        docs/research_framework/*|data/research_framework/*|\
+        reports/*)
             NEEDS_PREFLIGHT=true
             break
             ;;

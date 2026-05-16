@@ -7,6 +7,41 @@
 
 ---
 
+## AMENDMENT (2026-05-17 加, 用户指出漏点)
+
+**用户 2026-05-17 重审指出本报告初版漏点**: 之前把 "cb_arb 主策略" 和 "cb_arb_value_gap_switch (改进版)" 混淆讲, 导致结论偏 "整条 cb_arb dead", 错过了**改进版方向已被实证强于主策略**这个关键事实.
+
+**关键区分**:
+
+| 版本 | 选转债逻辑 | 2019 单年 | 6 年累计 | 结论 |
+|---|---|---:|---:|---|
+| **主策略** (相对值排名) | 算"市场价/理论价"百分比偏离, 排名最便宜的买 | **-9.85%** | -12.70% | dead, 不可上实盘 |
+| **改进版** (绝对值差额排名 + panic detector) | 算"市场价 - 理论价"绝对差额排名 | **+16.1%** | -3.00% | 6 年仍负但比主策略强 10pp |
+
+**2019 单年反差 26 个百分点** — 改进版大幅赢. 这是**强信号**, 不是巧合.
+
+**漏掉的方向**:
+- **A' 把改进版思路 (绝对值差额排名) 提升到主策略代码**: 改 `strategies/cb_arb/verifier.py` 或 `tunable_space.yaml` 增加 "absolute_value_gap_rank" 选项. ledger 没标 reject, 有 2019 +25pp 反差数据支持.
+
+**重审下一步路径** (在原 A/B/C/D 之上):
+- **A' (首选)**: 改进版思路提升主策略 → 改 verifier.py 核心代码, 但有数据支持 (不是凭空)
+- **A (archive)**: 不该, 主策略 dead 不等于整条 cb_arb dead
+- **B (改 universe/时段)**: 仍可能, 但优先级低于 A'
+- **C (破红区改 verifier 凭空)**: 不该, 应该改 A' (破红区但有数据)
+- **D (休息+arxiv)**: 不该, 还有 A' 明确可做
+
+**为什么本报告初版会混淆**:
+- ledger / baseline_registry 里两个版本都列 "cb_arb 主策略"/"cb_arb value-gap switch", 我跑 reject 列表时把改进版的 panic detector 实验 (内部的) 当作整条 cb_arb 死掉了
+- 实际上 panic detector 整条死是改进版内部实验得出的, 跟"绝对值差额"vs"相对值排名"的核心方向无关
+- 改进版内部还可以不用 panic detector, 只用"绝对值差额"思路
+
+**框架漏洞补丁** (用户 2026-05-17 一并指出):
+- pre-commit hook 之前没覆盖 `reports/*`, 我 commit 这份 retro report 没经过任何 validator
+- 当 commit 时已修: pre-commit hook 加 `reports/*` 触发 + 新加 `scripts/validate_retro_report.py` 检查基本结构 (H1 / 日期 / 引用源)
+- 也就是说: 本 amendment 是**走完整 framework_preflight + retro validator 后才 commit 进去的**, 框架闭环修了
+
+---
+
 ## 一句话结论
 
 cb_arb 主策略 (横截面排名套利) 在 **当前 universe (中国可转债全集 ~700 只) + 当前时段 (2019-2024) + 当前 cost 模型** 下, 累计 excess 触底:
