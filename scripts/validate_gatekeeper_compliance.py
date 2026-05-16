@@ -50,27 +50,49 @@ def load_allowlist() -> set[str]:
             if isinstance(entry, dict) and entry.get("script")}
 
 
-def script_imports_gatekeeper(path: Path) -> bool:
-    """AST scan: does this script import GateKeeper from scripts.gatekeeper?"""
+# GateKeeper stage method 必至少调用其中一个 (Codex 13:52 verify 加)
+STAGE_METHODS = {"before_run_grid", "after_run_grid", "before_l5_diagnostic",
+                 "before_commit_truth", "quick_check"}
+
+
+def script_complies(path: Path) -> tuple[bool, str]:
+    """AST scan: import GateKeeper + 至少调一个 stage 方法.
+
+    按 Codex 13:52 verify Q5 fix: 之前只检查 import, dead import 不调方法也算
+    compliant. 修: 必须既 import 又调用 stage method.
+    Return (ok, reason).
+    """
     try:
         tree = ast.parse(path.read_text(encoding="utf-8"))
-    except (SyntaxError, UnicodeDecodeError):
-        return False
+    except (SyntaxError, UnicodeDecodeError) as e:
+        return False, f"parse error: {e}"
+
+    imports_gatekeeper = False
+    stage_methods_called = set()
+
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
-            # from scripts.gatekeeper import GateKeeper
-            # from gatekeeper import GateKeeper
             mod = (node.module or "")
             if mod.endswith("gatekeeper"):
                 for alias in node.names:
                     if alias.name == "GateKeeper":
-                        return True
+                        imports_gatekeeper = True
         elif isinstance(node, ast.Import):
-            # import scripts.gatekeeper / import gatekeeper
             for alias in node.names:
                 if alias.name.endswith("gatekeeper"):
-                    return True
-    return False
+                    imports_gatekeeper = True
+        # 检查 stage method call: e.g. gate.before_run_grid(...)
+        elif isinstance(node, ast.Call):
+            func = node.func
+            if isinstance(func, ast.Attribute) and func.attr in STAGE_METHODS:
+                stage_methods_called.add(func.attr)
+
+    if not imports_gatekeeper:
+        return False, "missing 'from scripts.gatekeeper import GateKeeper'"
+    if not stage_methods_called:
+        return False, ("import GateKeeper 但没调任何 stage method "
+                       f"({sorted(STAGE_METHODS)}); dead import 不算 compliant")
+    return True, f"calls: {sorted(stage_methods_called)}"
 
 
 def list_scripts_needing_compliance() -> list[Path]:
@@ -93,18 +115,20 @@ def main() -> int:
         if rel in allowlist:
             allowed_skips.append(rel)
             continue
-        if script_imports_gatekeeper(path):
-            compliant.append(rel)
+        ok, reason = script_complies(path)
+        if ok:
+            compliant.append((rel, reason))
         else:
-            failures.append(rel)
+            failures.append((rel, reason))
 
     if failures:
-        print(f"FAIL: {len(failures)} script(s) missing GateKeeper import:")
-        for s in failures:
-            print(f"  {s}")
+        print(f"FAIL: {len(failures)} script(s) not GateKeeper-compliant:")
+        for rel, reason in failures:
+            print(f"  {rel}")
+            print(f"    {reason}")
         print()
         print(f"  Fix options:")
-        print(f"  1. Add 'from scripts.gatekeeper import GateKeeper' + call stage methods (e.g. gate.before_run_grid)")
+        print(f"  1. Add 'from scripts.gatekeeper import GateKeeper' + 调用 stage 方法 (before_run_grid / after_run_grid / etc)")
         print(f"  2. If script is legacy/data-ETL/utility, add to data/research_framework/gatekeeper_allowlist.yaml with reason+owner")
         if allowed_skips:
             print(f"\n  Allowed skips ({len(allowed_skips)}): {allowed_skips}")
@@ -112,6 +136,9 @@ def main() -> int:
 
     print(f"validate_gatekeeper_compliance.py: OK")
     print(f"  {len(compliant)} compliant, {len(allowed_skips)} in allowlist")
+    if compliant:
+        for rel, reason in compliant:
+            print(f"  ✓ {rel}: {reason}")
     return 0
 
 
