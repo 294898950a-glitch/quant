@@ -1,0 +1,72 @@
+# HDRF L5 反向诊断 diagnostic.yaml 模板
+#
+# 触发: data/<run-id>/l4_ack.yaml.overall_decision 是 mini-spec-retry / reject 时,
+# 必须在 data/<run-id>/diagnostic.yaml 写一份, 才能进 L5 流程.
+# (validate_l5_diagnostic.py 强制校验, 缺/不合规 → GateKeeper.before_l5_diagnostic 拒)
+#
+# 用 yaml 不用 markdown 是因为 retry 时必须明确"改什么 spec 字段", free text 不够结构化.
+
+schema_version: 1
+
+run_id: cb_arb_xxx_2026-05-XX  # 跟 spec.yaml.run_id 一致
+diagnostic_date: '2026-05-16'  # YYYY-MM-DD
+diagnostic_by: codex  # claude / codex / user
+
+# 必须跟 l4_ack.yaml.overall_decision 一致
+verdict_referenced: mini-spec-retry  # mini-spec-retry / reject / (adopt/archive-direction 可选 diagnostic)
+
+# 一段话总结
+summary: |
+  这批 grid 跑完 cb_arb 在 2024 reject (max_dd -0.18 < hard_floor -0.10).
+  根因看 trade-level diff 是 panic detector 在 2024-02 误触发, 提前 exit.
+
+# 具体根因 (不能 placeholder)
+verdict_rationale: |
+  Top-1 candidate (csi500_threshold=-0.015, lookback=2) 在 2024-02-05 ~ 02-09
+  panic_market_filter 误触发, baseline 该期同方向交易 11 笔全是 +0.5% ~ +1.2%,
+  candidate 全 skip → 错过 panic 反弹. lookback=2 太短, 02 月数据噪音大.
+
+# verdict=mini-spec-retry 时必填 (每个 entry 必 4 字段)
+next_step_spec_changes:
+  - field: parameter_space[panic_market_filter_lookback].range
+    old_value: [1, 5]
+    new_value: [3, 7]  # 缩 lookback=1,2 (太短), 加 lookback=6,7
+    reason: lookback ≤ 2 在 02 月噪音误触发, ≥ 3 才稳定
+  - field: hard_floors.max_drawdown_2024
+    old_value: -0.10
+    new_value: -0.10  # 不动
+    reason: floor 是用户硬规定, 不调
+
+# 可选: trade-level 量化 diff (Codex 跑 trade-level diff 时填)
+trade_level_diff:
+  baseline_trades_count: 142
+  candidate_trades_count: 131
+  diff_count: 23
+  diff_pct: 0.16
+  top_diff_dates:
+    - date: '2024-02-05'
+      reason: candidate skip, baseline +0.8%
+    - date: '2024-02-08'
+      reason: candidate skip, baseline +1.2%
+
+# 可选: equity diff
+equity_diff:
+  end_pnl_baseline: 0.142
+  end_pnl_candidate: 0.089
+  max_diff_date: '2024-02-09'
+  max_diff_value: -0.053
+
+# 可选: 路径依赖
+path_dependency:
+  initial_state_sensitive: false
+  notes: panic_market_filter 是 stateless lookback, 不依赖 initial state
+
+# 可选: 触发归因 (changes_trade_path=true 时建议填)
+trigger_attribution:
+  changes_trade_path: true
+  trigger_count: 23
+  trigger_dates:
+    - date: '2024-02-05'
+      type: skip
+    - date: '2024-02-08'
+      type: skip

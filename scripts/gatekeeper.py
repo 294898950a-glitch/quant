@@ -84,7 +84,11 @@ class GateKeeper:
         self._log(f"[GateKeeper] before_l5_diagnostic (context: {run_dir})")
         self._must_run("validate_l4_ack.py", [],
                        fail_msg="L4 ack 不全 (Claude 没填判断 / 数据没自动算), 拒进 L5")
-        self._log("  ✓ L4 ack 完整, 可以跑 L5")
+        # 按 Codex framework Q1 P1: L5 反向诊断 yaml schema 强制
+        # (mini-spec-retry/reject 时 diagnostic.yaml 必有结构化 root cause)
+        self._must_run("validate_l5_diagnostic.py", [],
+                       fail_msg="L5 diagnostic.yaml 缺失或不合规 (retry/reject 时必填)")
+        self._log("  ✓ L4 ack 完整 + L5 diagnostic 合规, 可以跑 L5")
 
     def before_commit_truth(self, run_dir: Path | None = None) -> None:
         """commit CURRENT / baseline_registry 前: 完整 preflight."""
