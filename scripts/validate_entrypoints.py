@@ -79,8 +79,12 @@ def main() -> int:
         text = read(path)
         if "30 分钟" not in text or "当前策略" not in text or "换一个研究方向" not in text:
             issues.append(f"{path}: missing 30-minute no-reply default rule")
+        if "¥100" not in text or "scripts/estimate_compute_budget.py" not in text:
+            issues.append(f"{path}: no-reply rule must include mechanical budget calculator and ¥100 auto limit")
         if "当前策略族" in text:
             issues.append(f"{path}: no-reply rule must use parameter 当前策略, not fixed 当前策略族")
+        if "新增数据/改核心代码/加预算仍停等用户" in text or "若需要新增数据源、改变核心代码、提高预算" in text:
+            issues.append(f"{path}: stale no-reply blocker remains for new data/core code/budget")
 
     if issues:
         for issue in issues:

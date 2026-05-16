@@ -65,6 +65,7 @@ def main() -> int:
 
     exits = []
     exits.append(run_validator("validate_entrypoints.py"))
+    exits.append(run_validator("validate_compute_budget.py"))
     exits.append(run_validator("validate_current_md.py"))
     exits.append(run_validator("validate_run_manifest.py"))
     exits.append(run_validator("validate_data_schema.py"))

@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "currency": "CNY",
+  "auto_approve_limit_yuan": 100.0,
+  "spot_yuan_per_hour": 5.0,
+  "sig_yuan_per_hour": 0.0,
+  "local_yuan_per_hour": 0.0,
+  "safety_multiplier": 1.25,
+  "notes": [
+    "Budget decisions are mechanical. AI supplies estimated hours and explicit paid data fees; this config supplies rates, safety margin, and the auto-approval ceiling.",
+    "If a real cloud bill shows a different spot rate, update spot_yuan_per_hour before the next autonomous run."
+  ]
+}

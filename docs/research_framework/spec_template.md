@@ -78,7 +78,9 @@
 
 - 总算力预算: 不超过 <¥X>
 - 总时间预算: 不超过 <Y 小时>
-- 超出后 → 暂停, 回到用户决策
+- 预算计算器: `python3 scripts/estimate_compute_budget.py --spot-hours <X> --sig-hours <Y> --paid-data-yuan <Z>`
+- 计算结果 ≤ ¥100 → 可自动继续
+- 计算结果 > ¥100 或算不出来 → 暂停, 回到用户决策
 
 ## 必出产物 (L3 完成时必齐, Codex L3 RESPONSE 必含路径)
 
@@ -122,7 +124,7 @@ ssh -i ~/.ssh/quant_spot.pem ubuntu@<spot-ip> 'cd /home/ubuntu/projects/quant &&
 - > 50% 候选过 floor → 表面通过, 必须做 5 项质疑检查
 - 真 CV 显示 < 50% holdout 年改善 → 信号不够泛化, 标记 "已确认无效"
 - 修复尝试 2 次仍 fail → 写 "已确认无效" 报告, 不再修
-- 总算力预算超 ¥<X> → 暂停, 回到用户决策
+- 总算力预算超 ¥100 或预算算不出来 → 暂停, 回到用户决策
 
 ## 升级条件 (什么情况 Codex 必须回 Claude / 用户)
 
