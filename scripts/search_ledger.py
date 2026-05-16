@@ -14,6 +14,10 @@ Stop-words removed. Top 5 matches by score returned.
 Exit codes:
   0 OK (no strong match)
   1 strong match found (score > 0.30) → caller should reconsider
+  2 operational error (no tokens, ledger missing, parse error) — 跟 strong match 区分
+
+按 Codex 13:12 verify: caller (new_research.py) 需要区分 strong match vs
+infrastructure error, 不能把 query-empty / ledger-missing 当成 strong match.
 """
 
 from __future__ import annotations
@@ -54,7 +58,7 @@ def parse_ledger() -> list[dict]:
     """Parse all entries in experience_ledger.md sections 二/三/四."""
     if not LEDGER.exists():
         print(f"ERROR: {LEDGER} missing", file=sys.stderr)
-        sys.exit(1)
+        sys.exit(2)  # operational error, not strong match (Codex 13:12 fix)
     text = LEDGER.read_text(encoding="utf-8")
     entries = []
     current_section = None
@@ -101,8 +105,8 @@ def main() -> int:
 
     query_tokens = tokenize(args.query)
     if not query_tokens:
-        print("ERROR: query has no meaningful tokens", file=sys.stderr)
-        return 1
+        print("ERROR: query has no meaningful tokens (all stop-words or 1-char tokens)", file=sys.stderr)
+        return 2  # operational error, not strong match (Codex 13:12 fix)
     print(f"Query tokens: {sorted(query_tokens)}")
     print()
 
