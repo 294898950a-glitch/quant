@@ -1,0 +1,113 @@
+schema_version: 1
+run_id: cb_arb_cost-aware-exit_2026-05-16
+date: '2026-05-16'
+strategy_id: cb_arb
+l0_entry_id: 2  # AI 内省: 从 cost realism wall 反推
+l0_source: |
+  reports/cb_arb_cost_realism_2026-05-16 + cost-on baseline 全负 excess:
+  cb_arb 主-19.46% / value-gap-switch -10.47% cost-on 累计 excess.
+  panic 方向 ledger reject 后 (2026-05-15 diagnostic), 改"cost-aware exit"
+  方向: 主动 exit 持仓在 cost > expected_remaining_pnl 时, 直击 cost-on 负
+  excess 的根因 (cost 吃掉 alpha).
+
+hypothesis: |
+  cb_arb 主策略 + cost-aware exit signal: 持仓时 expected_remaining_pnl
+  ≤ exit_cost_threshold 时主动 exit, 减少 cost 侵蚀, 让 cost-on 累计 excess
+  从 -19.46% 提升到至少不亏 (≥ 0%).
+
+source_insight: |
+  cost realism wall 验证 cost 退化 -6.76pp/-7.47pp 远超 5pp fatal 阈值.
+  当前 cb_arb 主策略 hold-to-default exit logic (max_holding_days/rank_sell_pct/
+  stop_loss_pct), 不考虑 cost. cost-aware exit 假设: 早 exit 高 cost trade
+  (即使尚未触发 max_holding_days / rank_sell), 可降低 cost 侵蚀.
+
+  跟 panic 方向 (ledger reject) 区别: panic 想识别 macro event, 但 panic 后
+  baseline 自己也输 benchmark (panic action 救不了). cost-aware exit 直接攻击
+  micro-level cost 侵蚀, 不依赖 macro signal.
+
+parameter_space:
+  - name: exit_cost_threshold
+    range: [0.005, 0.020]
+    type: float
+    description: |
+      持仓 expected_remaining_pnl ≤ 这个阈值时主动 exit. 单位是 frac (0.005 = 0.5%).
+      grid: [0.005, 0.010, 0.015, 0.020]
+  - name: min_pnl_to_hold
+    range: [0.000, 0.010]
+    type: float
+    description: |
+      hold 必有的最低浮盈 (current unrealized pnl ≥ 这个值才不 exit).
+      grid: [0.000, 0.005, 0.010]
+
+new_data_sources: []  # 复用现有 cb_arb 数据 (data/cb_arb/), 不加新数据源
+
+grid:
+  dimensions: [exit_cost_threshold, min_pnl_to_hold]
+  candidates_count: 12  # 4 * 3
+  description: 2 维 grid, 4 个 exit_cost_threshold * 3 个 min_pnl_to_hold
+
+hard_floors:
+  cost_on_cumulative_excess_compound: 0.0  # 至少 cost-on break even (不亏 benchmark)
+  cost_on_max_dd_each_year: -0.30  # 单年 max_dd ≥ -30% (avoid catastrophic)
+
+hard_floors_baseline_source: |
+  baseline_registry.yaml.cb_arb-main-yaml-current-cost-on-20260516
+  累计 excess -19.46%, max_dd -33.26%. floor 0.0 累计 + -0.30 单年 dd
+  代表"cost_exit 能至少把 cb_arb cost-on 拉到 break even, 同时单年 dd
+  不超过 cost-on baseline".
+
+auxiliary_metrics:
+  - cost_savings_pp  # vs baseline cost-on, 节省多少 pp cost 退化
+  - exit_count  # 主动 exit 触发次数
+  - skip_exit_count  # min_pnl_to_hold 阻止 exit 的次数
+
+cv_design: leave-one-year-out
+cv_holdout_years: [2019, 2020, 2021, 2022, 2023, 2024]
+cv_adoption_threshold: |
+  ≥ 5/6 holdout 通过 hard_floor (cumulative_excess ≥ 0 且 max_dd ≥ -0.30)
+  且累计 excess (复利) 严格优于 cost-on baseline -19.46%
+
+compute_estimate:
+  sig_minutes: 60  # 12 grid * 6 年 leave-one-year-out * ~ 5 min/run/year 估
+  spot_minutes: 10  # 12 grid 并行
+  estimated_cost_yuan: 1.0  # spot 10 min * 2 核 ≈ ¥1
+budget_cap_yuan: 30
+
+spot_decision: |
+  sig 估 60 分钟 (按 [[reference-spot-start-criteria]] >30 分钟建议起 spot,
+  ≤2 小时不强制). 但 spot 10 分钟 + ¥1 成本极低, 建议起 spot 缩短反馈周期.
+
+stop_conditions:
+  - 0/12 candidate 在 5/6 holdout 通过 hard_floor
+  - 12 candidate 累计 excess 都 ≤ -0.10 (cost-on, 比 baseline -19.46% 改善 < 9pp)
+  - 单年 max_dd 超 -0.40 的 candidate 比例 > 50%
+  - GateKeeper.before_run_grid 拒跑 (spec 不合规)
+
+artifacts_required:
+  - ranked.csv
+  - trades.csv
+  - daily_equity.csv
+  - summary.csv
+  - run_summary.json
+
+status: DRAFT
+
+gatekeeper_compliance:
+  acknowledged: true
+  uses_gatekeeper: pending_implementer  # cost-aware exit 还没写 evaluate, 待 implementer
+  allowlist: null
+  notes: |
+    implementer 写 scripts/evaluate_cb_arb_cost_aware_exit.py 时必接
+    GateKeeper.before_run_grid(spec_path), 跑批前 sanity check 全过.
+
+escalation: []
+
+notes: |
+  由 new_research.py 创建 (2026-05-16).
+  panic 方向 ledger reject 后改 cost_exit_only (X1 from H direction debate).
+  Codex 00:39 拍 cost_exit_only first, 不动 verifier.py 红区.
+
+  下一步:
+  1. 写 scripts/evaluate_cb_arb_cost_aware_exit.py (implementer)
+  2. 跑 validate_spec.py + GateKeeper.before_run_grid 本地验证
+  3. 起 spot 前最后 用户批准
