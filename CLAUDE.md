@@ -1,7 +1,7 @@
 # CLAUDE.md (quant repo 协议红线)
 
-本文件 Claude Code 会自动注入到每个 session. 这里只放**硬协议红线**, 不放
-解释 / 教程 / 历史. 解释看 docs/research_framework/HDRF.md.
+本文件 Claude Code 会自动注入到每个 session. 这里只放当前自动基础设施和
+硬协议红线, 不放长解释 / 教程 / 历史. 解释看 docs/research_framework/HDRF.md.
 
 ---
 
@@ -10,9 +10,9 @@
 Claude Code 特定 hook. (2026-05-17 用户指出 Claude Code hook 偏向单一 AI
 违反 cross-AI 哲学已删.)
 
-## 红线 1: 写文档后系统自动弹检查 (OS 层 daemon, cross-AI)
+## 自动基础设施: 写文档后系统自动检查
 
-按用户 2026-05-17 提出: commit 时查不够, **写完那一刻系统自动弹**; AI 看到错警告就回去修. **不靠 AI 自觉调**.
+实时检查已经做成自动启动的基础设施, 不再作为 AI 自觉执行的红线条款。
 
 **机制**:
 - 后台 daemon (scripts/framework_watch_daemon.py) 监控整 repo, 1 秒
@@ -42,7 +42,7 @@ Claude Code 特定 hook. (2026-05-17 用户指出 Claude Code hook 偏向单一 
 
 ---
 
-## 红线 2: 跑回测前 5 道闸 (before_run_grid)
+## 红线 1: 跑回测前 5 道闸 (before_run_grid)
 
 任何 grid 跑批脚本 (scripts/run_cb_* / scripts/evaluate_cb_* / scripts/search_cb_*) 跑批前必须接 GateKeeper.before_run_grid(spec_path), 跑 5 道闸:
 1. validate_spec.py (schema)
@@ -55,7 +55,7 @@ Claude Code 特定 hook. (2026-05-17 用户指出 Claude Code hook 偏向单一 
 
 ---
 
-## 红线 3: 起新研究 batch 走 new_research.py
+## 红线 2: 起新研究 batch 走 new_research.py
 
 不要手动 mkdir data/<run-id>/ + cp spec_template.yaml. 必须用:
 
@@ -70,21 +70,34 @@ python3 scripts/new_research.py <strategy_id> <hypothesis_slug>
 
 ---
 
-## 红线 4: 不动 verifier.py / cost_model 核心 (红区)
+## 红线 3: 研究代码可自动改, 实盘主路径不自动升级
 
-`strategies/cb_arb/verifier.py` 和 cost_model 计算逻辑是核心策略代码, **永远人工**. AI / spot / LLM 不动. 改这些必须用户授权 + 人工 review.
+AI 可以自动改研究脚本、评估脚本、新数据处理脚本、原型策略逻辑和研究参数。
 
-唯一例外: 用户明示 + 数据支持的方向性改动 (e.g. 把 prototype 思路提升到主策略 yaml 绿区), 但仍需用户 commit by hand.
+不能自动做:
+- 把原型提升为当前主策略真值
+- 把策略标成可实盘
+- 永久归档当前策略
+- 改协议红线
+- 复活已确认无效方向
+
+生产主路径的核心定价、成本、切分逻辑如果只是研究原型, 可以改; 如果要替换当前主策略或成为实盘依据, 必须用户拍板.
 
 ---
 
-## 红线 5: 起 spot 前用户最后批
+## 红线 4: 预算计算后自动执行
 
-任何起 spot VM 跑批 (烧钱操作) 必须用户最后批准. AI / Codex 不自决起 spot. spec DRAFT + 本地 schema/sanity/budget 检查可自主推进, 但 grid / backtest / VM 一行命令都不发.
+新数据、研究代码、研究参数都不单独卡用户。先用 `scripts/estimate_compute_budget.py` 算预算:
+
+- 预计 ≤ ¥100: 可以自动继续, 包括远端或 spot 执行.
+- 预计 > ¥100: 等用户.
+- 算不出来: 等用户.
+
+远端或 spot 不是单独红线。是否能跑只看预算计算结果和研究设计是否通过.
 
 ---
 
-## 红线 6: outbox 方向
+## 红线 5: outbox 方向
 
 - `claude/outbox.md` = Claude 写给 Codex (Codex 监听这里)
 - `codex/outbox.md` = Codex 写给 Claude (Claude 监听这里)
@@ -93,6 +106,6 @@ python3 scripts/new_research.py <strategy_id> <hypothesis_slug>
 
 ---
 
-## 红线 7: 报告内容写之前查 ledger
+## 红线 6: 报告内容写之前查 ledger
 
 写新 retro / diagnostic / claim 之前, 跑 search_ledger 查相似方向是否已 reject. 漏看 ledger 就直接开干 = 违规 (实战已发生过 2 次, 工具拦下来了, 但应该 AI 主动查).

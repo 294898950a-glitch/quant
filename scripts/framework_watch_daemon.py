@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import os
 import os.path
+import json
 import signal
 import subprocess
 import sys
@@ -42,6 +43,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 LOG_FILE = REPO_ROOT / "logs" / "framework_watch.log"
+STATE_FILE = REPO_ROOT / "logs" / "framework_watch_status.json"
 PID_FILE = REPO_ROOT / ".framework-watch.pid"
 
 # 按用户 2026-05-17 简化: 整个 repo root 监控, framework_doc_check 自己 dispatch
@@ -69,6 +71,29 @@ file_mtimes: dict[Path, float] = {}
 initialized = False  # 启动后初次扫完成标志
 
 stop_requested = False
+last_status_write = 0.0
+last_error: str | None = None
+
+
+def now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def write_status(status: str, extra: dict | None = None) -> None:
+    payload = {
+        "status": status,
+        "pid": os.getpid(),
+        "repo_root": str(REPO_ROOT),
+        "updated_at": now_iso(),
+        "files_indexed": len(file_mtimes),
+        "last_error": last_error,
+    }
+    if extra:
+        payload.update(extra)
+    STATE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    tmp = STATE_FILE.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(STATE_FILE)
 
 
 def log(level: str, msg: str, notify: bool = False) -> None:
@@ -135,12 +160,17 @@ def check_one(path: Path) -> None:
         "--quiet",
     ]
     result = subprocess.run(cmd, cwd=REPO_ROOT, capture_output=True, text=True)
+    rel = path.relative_to(REPO_ROOT)
     if result.returncode == 0:
         # skip 或 OK 都不 log
+        global last_error
+        last_error = None
+        write_status("running", {"last_checked_path": str(rel), "last_check_result": "ok"})
         return
 
     # FATAL — 只第一行 log 触发 notify (Codex 01:38 review)
-    rel = path.relative_to(REPO_ROOT)
+    last_error = f"{rel} 验证失败 (exit {result.returncode})"
+    write_status("fatal", {"last_checked_path": str(rel), "last_check_result": "fatal"})
     log("FATAL", f"{rel} 验证失败 (exit {result.returncode})", notify=True)
     if result.stdout:
         for line in result.stdout.splitlines():
@@ -152,7 +182,7 @@ def check_one(path: Path) -> None:
 
 def poll() -> None:
     """扫一遍受管目录, 检查 mtime 变化."""
-    global initialized
+    global initialized, last_status_write
     for d in WATCHED_DIRS:
         for path in scan_dir(d):
             try:
@@ -175,6 +205,11 @@ def poll() -> None:
         if not path.exists():
             del file_mtimes[path]
 
+    now = time.time()
+    if now - last_status_write >= 30:
+        write_status("running", {"last_scan_at": now_iso()})
+        last_status_write = now
+
 
 def main() -> int:
     signal.signal(signal.SIGTERM, signal_handler)
@@ -182,6 +217,7 @@ def main() -> int:
 
     LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
     log("INFO", f"daemon started (pid {os.getpid()}), watching: {[str(d) for d in WATCHED_DIRS]}")
+    write_status("starting", {"started_at": now_iso()})
 
     # 按 Codex 01:43 review: 先写 pid file 再 initial scan
     # (避免 ctl.sh start 误报"启动失败")
@@ -197,6 +233,7 @@ def main() -> int:
                 continue
     initialized = True
     log("INFO", f"initial scan: {len(file_mtimes)} files indexed, watching for new/modified")
+    write_status("running", {"started_at": now_iso(), "last_scan_at": now_iso()})
 
     try:
         while not stop_requested:
@@ -205,10 +242,17 @@ def main() -> int:
     finally:
         if PID_FILE.exists():
             PID_FILE.unlink()
+        write_status("stopped", {"stopped_at": now_iso()})
         log("INFO", "daemon stopped")
 
     return 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        sys.exit(main())
+    except Exception as exc:
+        last_error = f"daemon crashed: {type(exc).__name__}: {exc}"
+        write_status("fatal", {"last_check_result": "daemon_crashed"})
+        log("FATAL", last_error, notify=True)
+        raise

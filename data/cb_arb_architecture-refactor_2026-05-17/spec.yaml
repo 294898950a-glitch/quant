@@ -1,0 +1,106 @@
+schema_version: 1
+run_id: cb_arb_architecture-refactor_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb
+l0_entry_id: 1
+l0_source: "user request: 重整架构, 让系统更适合继续跑策略; 先与 Claude Code 讨论方案, 再按完整 spec 标准实施"
+
+hypothesis: "把 cb_arb 的策略核心、实验脚本、评测框架、通信协作和研究记录拆清楚, 可以降低后续策略研究的阻塞和误判风险。"
+source_insight: |
+  当前 repo 的主要工程问题不是单一交易规则, 而是职责边界混在一起:
+  1. `strategies/cb_arb/` 是主策略核心, 但新研究逻辑大量散落在 `scripts/evaluate_cb_arb_*.py`。
+  2. `strategies/cb_redemption/` 名义上是强赎策略, 实际承载了通用评测、裁判、记录和自动循环框架。
+  3. `docs/research_framework/` 与 `data/research_framework/` 记录当前真值, 但部分内容和代码状态出现不同步。
+  4. Claude/Codex 通信在 Windows AI 目录下, 应作为协作外壳, 不应进入策略核心。
+  用户要求先与 Claude Code 讨论好架构方案, 然后按完整 spec 标准实施。
+
+parameter_space:
+  - name: module_boundary_plan
+    range: [0, 1]
+    type: int
+    description: "0=只写方案不改结构; 1=实施最小可回滚重整"
+  - name: framework_location
+    range: [0, 1]
+    type: int
+    description: "0=继续放 strategies/cb_redemption; 1=迁移或建立顶层 framework 壳"
+  - name: experiment_location
+    range: [0, 1]
+    type: int
+    description: "0=继续散落 scripts; 1=建立 cb_arb 实验入口/索引并隔离一次性脚本"
+
+new_data_sources: []
+
+grid:
+  dimensions: [module_boundary_plan, framework_location, experiment_location]
+  candidates_count: 1
+  description: "工程重整不是收益搜索; 先评审一个最小可回滚方案, Claude/Codex 达成一致后实施。"
+
+hard_floors:
+  validate_spec_pass: 1
+  research_sanity_pass: 1
+  framework_preflight_pass: 1
+  no_strategy_truth_change: 1
+  no_heavy_backtest_or_vm: 1
+  claude_review_ack: 1
+hard_floors_baseline_source: "当前 framework 协议红线 v1.5 + 用户本轮架构重整要求"
+
+auxiliary_metrics:
+  - files_moved_count
+  - imports_preserved_count
+  - stale_doc_references_removed
+  - pytest_target_pass_count
+  - rollback_surface_size
+
+cv_design: single-window
+cv_holdout_years: [2026]
+cv_adoption_threshold: "Claude review 接受方案; 本地验证通过; 不改变主策略真值、不启动重回测、不归档策略。"
+
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 30
+spot_decision: "不需要 spot/VM; 本任务只做本地架构整理、文档、轻量测试。"
+
+stop_conditions:
+  - "Claude 明确反对迁移方向或要求先补设计时, 停止实施。"
+  - "Step A 完成标准: `docs/research_framework/architecture.md` 存在, `docs/INDEX.md` 可发现, 且 framework_doc_check/validate_current_md 不报 fatal。"
+  - "Step B 完成标准: 顶层 `framework/` 壳可导入, 旧 `strategies.cb_redemption.*` 路径仍可导入, smoke test 证明新旧路径指向同一 module object。"
+  - "Step C 完成标准: `docs/research_framework/experiments_index.md` 列出当前 `scripts/evaluate_cb_arb_*.py` 和 `scripts/search_cb_arb_*.py`, 并明确 research experiment != strategy truth。"
+  - "Step D 完成标准: 新增架构文档不再声称 framework 只存在于 `strategies/cb_redemption/`; 旧路径只作为兼容源/legacy home 描述。"
+  - "发现会改变 cb_arb 主策略真值或实盘状态时, 停止并请求用户。"
+  - "发现需要运行 heavy backtest、VM 或预算无法计算时, 停止并重新估预算。"
+  - "本地 preflight 或目标测试失败且不能在当前改动范围内修复时, 停止并报告。"
+  - "发现该方向与经验账本 STRONG MATCH 已拒绝方向重复时, 停止。"
+
+artifacts_required:
+  - "data/cb_arb_architecture-refactor_2026-05-17/spec.yaml"
+  - "codex/outbox.md architecture discussion message"
+  - "Claude review / ACK in claude/outbox.md"
+  - "architecture implementation diff"
+  - "validation command output summary"
+  - "CURRENT.md or INDEX.md sync if entry/architecture truth changes"
+
+status: READY
+
+gatekeeper_compliance:
+  entry_method: before_run_grid
+  required_methods:
+    - before_run_grid
+    - after_run_grid
+    - before_l5_diagnostic
+    - before_commit_truth
+
+escalation:
+  - "如果 Claude 建议改协议红线, 必须回用户。"
+  - "如果需要把 value-gap 或其他原型提升为主策略, 必须回用户。"
+  - "如果预算估算 > ¥100 或估不出, 必须回用户。"
+
+notes: |
+  本 spec 用于工程架构重整, 不是交易收益搜索。为了兼容现有 L1 schema,
+  parameter_space/grid/hard_floors 使用工程验收口径。
+  预期实施顺序:
+  1. Codex 写出最小重整方案并发给 Claude。
+  2. Claude review / 修改 / ACK。
+  3. Claude 2026-05-17 02:43 CST 已 ACK: shell-first framework alias, CURRENT.md 保持策略真值层不改, scripts/ 先用 index 标界, spec 可 promote READY。
+  4. 只跑轻量检查和目标测试, 不启动重回测或 VM。

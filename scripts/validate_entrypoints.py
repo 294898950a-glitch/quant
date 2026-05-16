@@ -37,6 +37,32 @@ NO_REPLY_DEFAULT_FILES = [
     "docs/research_framework/autonomous_loop_protocol.md",
 ]
 
+REDLINE_SYNC_FILES = [
+    "README.md",
+    "AGENTS.md",
+    "CLAUDE.md",
+    "docs/research_framework/protocol_redline.md",
+    "docs/research_framework/autonomous_loop_protocol.md",
+]
+
+STALE_RULE_PHRASES = [
+    "起 spot 前用户最后批",
+    "必须用户最后批准",
+    "grid / backtest / VM 一行命令都不发",
+    "永远人工",
+    "不能自决起 spot",
+    "月预算: ¥90",
+    "模式 B 沙盒",
+    "沙盒约束",
+    "新增数据/改核心代码/加预算仍停等用户",
+    "若需要新增数据源、改变核心代码、提高预算",
+    "当前策略族",
+    "R3 实时",
+    "红线 1: 写文档",
+    "7 条红线",
+    "OS 文件系统层 (cross-AI 真硬)",
+]
+
 
 def read(path: str) -> str:
     return (REPO_ROOT / path).read_text(encoding="utf-8")
@@ -85,6 +111,19 @@ def main() -> int:
             issues.append(f"{path}: no-reply rule must use parameter 当前策略, not fixed 当前策略族")
         if "新增数据/改核心代码/加预算仍停等用户" in text or "若需要新增数据源、改变核心代码、提高预算" in text:
             issues.append(f"{path}: stale no-reply blocker remains for new data/core code/budget")
+
+    for path in REDLINE_SYNC_FILES:
+        text = read(path)
+        for phrase in STALE_RULE_PHRASES:
+            if phrase in text:
+                issues.append(f"{path}: stale redline wording remains: {phrase}")
+
+    for path in ("AGENTS.md", "CLAUDE.md", "docs/research_framework/protocol_redline.md"):
+        text = read(path)
+        if "¥100" not in text or "estimate_compute_budget.py" not in text:
+            issues.append(f"{path}: current autonomy rule must mention budget calculator and ¥100")
+        if "实盘" not in text or "归档" not in text:
+            issues.append(f"{path}: current autonomy rule must preserve no-auto-live/no-auto-archive boundary")
 
     if issues:
         for issue in issues:

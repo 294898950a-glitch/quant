@@ -35,7 +35,11 @@ case "$ACTION" in
             exit 0
         fi
         mkdir -p "$REPO_ROOT/logs"
-        nohup python3 "$DAEMON" > /dev/null 2>&1 &
+        if command -v setsid >/dev/null 2>&1; then
+            setsid python3 "$DAEMON" >> "$LOG_FILE" 2>&1 < /dev/null &
+        else
+            nohup python3 "$DAEMON" >> "$LOG_FILE" 2>&1 < /dev/null &
+        fi
         sleep 1
         if is_running; then
             echo "✓ framework_watch daemon 启动成功 (PID $(cat $PID_FILE))"
@@ -65,6 +69,9 @@ case "$ACTION" in
         if is_running; then
             local_pid=$(cat "$PID_FILE")
             echo "✓ daemon 在跑 (PID $local_pid)"
+            if [ -f "$REPO_ROOT/logs/framework_watch_status.json" ]; then
+                echo "  status: $REPO_ROOT/logs/framework_watch_status.json"
+            fi
             if [ -f "$LOG_FILE" ]; then
                 echo "  最近 5 行 log:"
                 tail -5 "$LOG_FILE" | sed 's/^/    /'

@@ -108,8 +108,8 @@ class GateKeeper:
     # 按 Codex 01:50 review A-prime: GateKeeper 跟 realtime daemon/doc-check 模块
     # 完全解耦 - GateKeeper 只管 5 个研究 stage (before_run_grid / after_run_grid
     # / before_l5_diagnostic / before_commit_truth / quick_check). 实时文档检查
-    # 由 scripts/framework_doc_check.py 单独提供, 通过 daemon (cross-AI) / hook
-    # (Claude Code) / pre-commit hook (commit 前) 三层各自独立调用.
+    # 由 scripts/framework_doc_check.py 单独提供, 通过 daemon (cross-AI) /
+    # pre-commit hook (commit 前) / AI 手动调用 三层各自独立调用.
 
     # === 内部方法 ===
 

@@ -12,6 +12,8 @@ env/
 
 # Logs
 logs/*.log
+logs/framework_watch_status.json
+logs/framework_watch_status.json.tmp
 
 # OS
 .DS_Store
