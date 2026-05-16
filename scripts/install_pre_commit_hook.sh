@@ -41,6 +41,10 @@ NEEDS_PREFLIGHT=false
 while IFS= read -r file; do
     case "$file" in
         strategies/*|scripts/evaluate_cb_*|scripts/search_cb_*|\
+        scripts/run_cb_*|scripts/analyze_cb_*|scripts/monitor_cb_*|\
+        scripts/auto_compute_l4_data.py|scripts/gatekeeper.py|\
+        scripts/validate_*.py|scripts/framework_preflight.py|\
+        scripts/new_research.py|scripts/search_ledger.py|\
         docs/research_framework/*|data/research_framework/*)
             NEEDS_PREFLIGHT=true
             break

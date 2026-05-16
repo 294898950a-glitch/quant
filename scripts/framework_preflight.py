@@ -72,6 +72,7 @@ def main() -> int:
     exits.append(run_validator("validate_spec.py"))
     exits.append(run_validator("validate_report.py"))
     exits.append(run_validator("validate_l4_ack.py"))
+    exits.append(run_validator("validate_gatekeeper_compliance.py"))
 
     # Index freshness check (warn-only, phase 1)
     print("\n=== generate_indexes.py --check ===")

@@ -46,7 +46,7 @@ class GateKeeper:
     # === 公开方法 (按研究阶段) ===
 
     def before_run_grid(self, spec_path: Path) -> None:
-        """跑回测前: spec.yaml 合规 + 数据 schema OK + 预算配置 OK."""
+        """跑回测前: spec.yaml 合规 + 数据 schema OK + 预算配置 OK + sanity 检查."""
         self._log(f"[GateKeeper] before_run_grid: {spec_path}")
         self._must_run("validate_spec.py", [str(spec_path)],
                        fail_msg="spec.yaml 不合规, 拒跑回测")
@@ -54,6 +54,9 @@ class GateKeeper:
                        fail_msg="数据 warehouse schema 不全, 拒跑")
         self._must_run("validate_compute_budget.py", [],
                        fail_msg="预算配置文件损坏, 拒跑")
+        # TODO (Codex framework review Q2-A): 接入 research_sanity_checker 做 spec-data
+        # compatibility 检查. 当前该 checker 是 markdown 设计, 跟 yaml spec 字段名不匹配,
+        # 直接接入会误报 fatal. 等 research_sanity_checker 升级到 yaml schema 后再接入.
         self._log("  ✓ 启动 grid 检查全过")
 
     def after_run_grid(self, run_dir: Path | None = None) -> None:
