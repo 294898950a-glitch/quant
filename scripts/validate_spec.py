@@ -137,7 +137,10 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.path:
-        paths = [Path(args.path)]
+        p = Path(args.path)
+        if not p.is_absolute():
+            p = REPO_ROOT / p
+        paths = [p]
     else:
         paths = sorted(DATA_DIR.glob("*/spec.yaml"))
 
