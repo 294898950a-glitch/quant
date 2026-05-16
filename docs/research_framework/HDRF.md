@@ -75,6 +75,31 @@ L0 是研究流程的起点 — 想法从哪儿来. 第一性原理简化为 **3
 
 arxiv 筛选硬规则 (任何年份相同): **试盘 / 引用 ≥50 / 顶会 / 复现 stars ≥100** 任一即可. 2025+ 仅排序优先, 不是放水.
 
+## GateKeeper 节点强制约定 (2026-05-16 加)
+
+任何跑批 / 分析脚本启动时**必接 `scripts/gatekeeper.GateKeeper`**, 不能裸跑.
+
+```python
+from scripts.gatekeeper import GateKeeper
+gate = GateKeeper()
+
+# 节点 1: 启动 grid 前
+gate.before_run_grid(spec_path)  # 不合规 → sys.exit(1), 不烧算力
+
+# 节点 2: grid 跑完后
+gate.after_run_grid(run_dir)  # 拦 manifest 不全 + 自动算 L4 数据
+
+# 节点 3: 进入 L5 反向诊断前
+gate.before_l5_diagnostic(run_dir)  # 拦 L4 ack 空填
+
+# 节点 4: 改 CURRENT/baseline_registry 前
+gate.before_commit_truth(run_dir)  # 完整 preflight
+```
+
+避免"跑完才知道 spec 不合规, 算力白烧". 不再靠 git commit 最后兜底.
+
+不接 GateKeeper 的跑批脚本不许提交 git (pre-commit hook 检查 import 字符串).
+
 ## 硬约束矩阵 (v2 核心)
 
 | 层 | 必填项 | 硬化方式 | 失败后果 |

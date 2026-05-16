@@ -99,6 +99,22 @@ status: DRAFT  # DRAFT / READY / RUNNING / COMPLETE / ARCHIVED
 # COMPLETE: 跑完 + L6 复盘
 # ARCHIVED: 不再用
 
+# === GateKeeper 调用约定 (强制) ===
+# 任何跑批 / 分析脚本启动时必接 scripts/gatekeeper.GateKeeper, 不能裸跑.
+# 节点强制检查:
+#   1. 启动前: gate.before_run_grid(spec_path) — 拦不合规 spec/数据/预算
+#   2. 跑完后: gate.after_run_grid(run_dir) — 拦 manifest 不全 + 自动算 L4 数据
+#   3. L5 前: gate.before_l5_diagnostic(run_dir) — 拦 L4 ack 空填
+#   4. 改真值前: gate.before_commit_truth(run_dir) — 完整 preflight
+# 不接 GateKeeper 的脚本不许提交进 git, pre-commit hook 拦.
+gatekeeper_compliance:
+  entry_method: before_run_grid  # 跑批入口必调这个
+  required_methods:
+    - before_run_grid
+    - after_run_grid
+    - before_l5_diagnostic
+    - before_commit_truth
+
 # === 升级条件 (可选) ===
 escalation:
   - 算力 > budget_cap → ESCALATE 用户
