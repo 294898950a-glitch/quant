@@ -98,7 +98,9 @@ gate.before_commit_truth(run_dir)  # 完整 preflight
 
 避免"跑完才知道 spec 不合规, 算力白烧". 不再靠 git commit 最后兜底.
 
-不接 GateKeeper 的跑批脚本不许提交 git (pre-commit hook 检查 import 字符串).
+不接 GateKeeper 的跑批脚本是工程债. 当前 pre-commit hook **没**实现 import
+字符串检查 (按 Codex 12:07 review 指出), 是协议层约定, 不是机器强制. 未来加
+validate_gatekeeper_compliance.py 可强制.
 
 ## 硬约束矩阵 (v2 核心)
 

@@ -42,7 +42,9 @@ REQUIRED_TOPLEVEL = {"schema_version", "run_id", "reviewer", "ack_at",
 
 REQUIRED_Q_FIELDS = {"description", "answer", "pass"}
 # Questions that must have computed_data filled by auto_compute_l4_data.py (not Claude手抄)
-AUTO_COMPUTED_QUESTIONS = {"q1_floor_binding", "q4_monotonic", "q5_trade_overlap"}
+# 按 Codex 12:07 review: Q3 docstring 已承诺 auto-compute baseline 对齐, 加进来
+AUTO_COMPUTED_QUESTIONS = {"q1_floor_binding", "q3_baseline_alignment",
+                           "q4_monotonic", "q5_trade_overlap"}
 
 ALLOWED_DECISION = {"adopt", "reject", "mini-spec-retry", "archive-direction"}
 ALLOWED_REVIEWER = {"claude", "codex", "user"}

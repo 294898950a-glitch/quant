@@ -56,18 +56,27 @@ class GateKeeper:
                        fail_msg="预算配置文件损坏, 拒跑")
         self._log("  ✓ 启动 grid 检查全过")
 
-    def after_run_grid(self, run_dir: Path) -> None:
-        """跑完回测: run_manifest 完整 + 自动算 L4 数据."""
-        self._log(f"[GateKeeper] after_run_grid: {run_dir}")
+    def after_run_grid(self, run_dir: Path | None = None) -> None:
+        """跑完回测: run_manifest 完整 + 自动算 L4 数据.
+
+        注: 当前 validate_run_manifest + auto_compute_l4_data 都扫所有 active run,
+        run_dir 参数仅用于 logging context. 未来 validator 支持 single-run 时改传.
+        按 Codex 12:07 review: 参数保留 (信息性), 但语义说清.
+        """
+        self._log(f"[GateKeeper] after_run_grid (context: {run_dir})")
         self._must_run("validate_run_manifest.py", [],
                        fail_msg="run_manifest.yaml 不全, 拒进入 L4")
         self._must_run("auto_compute_l4_data.py", [],
                        fail_msg="L4 数据自动算失败, 检查 ranked.csv / trades.csv")
         self._log("  ✓ 跑批产物 + L4 数据自动算 完整")
 
-    def before_l5_diagnostic(self, run_dir: Path) -> None:
-        """L5 反向诊断前: Claude 已写 L4 判断, 校验合规."""
-        self._log(f"[GateKeeper] before_l5_diagnostic: {run_dir}")
+    def before_l5_diagnostic(self, run_dir: Path | None = None) -> None:
+        """L5 反向诊断前: Claude 已写 L4 判断, 校验合规.
+
+        run_dir 同 after_run_grid, 仅 logging context. validator 内部扫所有
+        RUNNING/COMPLETE 状态 run.
+        """
+        self._log(f"[GateKeeper] before_l5_diagnostic (context: {run_dir})")
         self._must_run("validate_l4_ack.py", [],
                        fail_msg="L4 ack 不全 (Claude 没填判断 / 数据没自动算), 拒进 L5")
         self._log("  ✓ L4 ack 完整, 可以跑 L5")
@@ -88,15 +97,27 @@ class GateKeeper:
 
     # === 内部方法 ===
 
+    # Whitelist: 仅这些 validator 用 exit 2 表示 warning-only. 其他脚本非 0 都当 fail
+    # (避免 Python error / missing script 也被放行).
+    WARN_ONLY_WHITELIST = {"validate_data_schema.py", "framework_preflight.py"}
+
     def _must_run(self, script: str, args: list[str], fail_msg: str) -> None:
-        """exit 0 = OK, exit 1 = strict fail (拦), exit 2 = warning-only (放行)."""
+        """exit code 处理:
+        - 0 = OK
+        - 1 = strict fail (拦)
+        - 2 = warning-only (只放行 WARN_ONLY_WHITELIST 里的脚本; 其他脚本 2 也是 fail)
+        - 其他非 0 (Python error / missing script / 等) = fail
+        """
         cmd = [sys.executable, str(self.scripts / script)] + args
         result = subprocess.run(cmd, cwd=self.repo_root)
-        if result.returncode == 1:
-            self._log(f"  ✗ FAIL: {fail_msg}")
-            raise GateKeeperError(1)
-        elif result.returncode == 2:
+        rc = result.returncode
+        if rc == 0:
+            return
+        if rc == 2 and script in self.WARN_ONLY_WHITELIST:
             self._log(f"  ⚠ WARN-ONLY: {script} returned warnings, GateKeeper 放行")
+            return
+        self._log(f"  ✗ FAIL ({script} exit {rc}): {fail_msg}")
+        raise GateKeeperError(1)
 
     def _log(self, msg: str) -> None:
         if not self.quiet:

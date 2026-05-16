@@ -53,15 +53,21 @@ if [ "$NEEDS_PREFLIGHT" = false ]; then
 fi
 
 echo "[pre-commit] Strategy/research files staged, running framework_preflight..."
-if ! python3 scripts/framework_preflight.py --quiet; then
-    EXIT_CODE=$?
-    if [ $EXIT_CODE -eq 1 ]; then
-        echo ""
-        echo "[pre-commit] STRICT FAILURE in framework_preflight. Commit blocked."
-        echo "  Fix the issues or bypass with --no-verify (not recommended)."
-        exit 1
-    fi
-    # exit 2 = warnings only, allow commit
+# 修 Codex 12:07 review bug: 旧写法 'if ! ...; then EXIT_CODE=$?' 因为 ! 把 exit
+# status 取反, EXIT_CODE 永远是 0, strict fail 不会 block commit. 改成直接捕获.
+python3 scripts/framework_preflight.py --quiet
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 1 ]; then
+    echo ""
+    echo "[pre-commit] STRICT FAILURE in framework_preflight (exit 1). Commit blocked."
+    echo "  Fix the issues or bypass with --no-verify (not recommended)."
+    exit 1
+fi
+# exit 0 = OK; exit 2 = warnings only, allow commit; 其他非零也 block
+if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 2 ]; then
+    echo ""
+    echo "[pre-commit] Unexpected preflight exit code $EXIT_CODE. Commit blocked."
+    exit 1
 fi
 
 exit 0

@@ -124,24 +124,97 @@ def compute_q4_edge_of_grid(ranked: list[dict], spec: dict) -> dict:
     }
 
 
-def compute_q5_trade_overlap(trades_baseline: list[dict], trades_selected: list[dict]) -> dict:
-    """Compute trade overlap, exit changes, pnl gap."""
-    if not trades_baseline or not trades_selected:
-        return {"note": "trades.csv missing (baseline or selected)"}
-    base_set = {(r.get("ts_code"), r.get("entry_date")) for r in trades_baseline}
-    sel_set = {(r.get("ts_code"), r.get("entry_date")) for r in trades_selected}
+def compute_q5_trade_overlap(trades_all: list[dict], baseline_candidate: str,
+                             selected_candidate: str) -> dict:
+    """Compute trade overlap from MERGED trades.csv (candidate + pnl_amount schema).
+
+    按 Codex 12:07 review 修正: 实际 trades.csv 是合并文件, 用 candidate 列区分.
+    旧版假设 trades_baseline.csv + trades_selected.csv 分文件 + trade_pnl 列, 错.
+    新版从 candidate 列 group + pnl_amount sum.
+    """
+    if not trades_all:
+        return {"note": "trades.csv empty or missing"}
+    cb_key = "cb_code" if "cb_code" in trades_all[0] else "ts_code"
+    baseline_rows = [r for r in trades_all if r.get("candidate") == baseline_candidate]
+    selected_rows = [r for r in trades_all if r.get("candidate") == selected_candidate]
+    if not baseline_rows:
+        return {"note": f"no baseline rows in trades.csv (candidate={baseline_candidate})"}
+    if not selected_rows:
+        return {"note": f"no selected rows in trades.csv (candidate={selected_candidate})"}
+    base_set = {(r.get(cb_key), r.get("entry_date")) for r in baseline_rows}
+    sel_set = {(r.get(cb_key), r.get("entry_date")) for r in selected_rows}
     common = base_set & sel_set
-    baseline_total_pnl = sum(safe_float(r.get("trade_pnl")) or 0 for r in trades_baseline)
-    selected_total_pnl = sum(safe_float(r.get("trade_pnl")) or 0 for r in trades_selected)
+    base_pnl = sum(safe_float(r.get("pnl_amount")) or 0 for r in baseline_rows)
+    sel_pnl = sum(safe_float(r.get("pnl_amount")) or 0 for r in selected_rows)
     return {
-        "baseline_trade_count": len(trades_baseline),
-        "selected_trade_count": len(trades_selected),
+        "baseline_candidate": baseline_candidate,
+        "selected_candidate": selected_candidate,
+        "baseline_trade_count": len(baseline_rows),
+        "selected_trade_count": len(selected_rows),
         "common_trades": len(common),
         "baseline_only": len(base_set - sel_set),
         "selected_only": len(sel_set - base_set),
-        "baseline_total_pnl": round(baseline_total_pnl, 2),
-        "selected_total_pnl": round(selected_total_pnl, 2),
-        "pnl_gap_selected_minus_baseline": round(selected_total_pnl - baseline_total_pnl, 2),
+        "baseline_total_pnl": round(base_pnl, 2),
+        "selected_total_pnl": round(sel_pnl, 2),
+        "pnl_gap_selected_minus_baseline": round(sel_pnl - base_pnl, 2),
+    }
+
+
+def compute_q2_selection_score(ranked: list[dict]) -> dict:
+    """Q2 selection_score / passes_main_floors metadata (按 Codex 12:07 加).
+
+    Auto-fill metadata of top candidate. Judgment (是否合理) 留 Claude.
+    """
+    if not ranked:
+        return {"note": "ranked.csv empty"}
+    top = ranked[0]
+    return {
+        "top_rank": top.get("rank") or 0,
+        "top_candidate_id": top.get("candidate") or top.get("id"),
+        "top_selection_score": safe_float(top.get("selection_score")),
+        "top_passes_main_floors": top.get("passes_main_floors"),
+        "any_pass_main_floors": sum(1 for r in ranked if r.get("passes_main_floors") in ("True", "true", "1", True)),
+        "total_candidates": len(ranked),
+        "fallback_to_score_only": (
+            sum(1 for r in ranked if r.get("passes_main_floors") in ("True", "true", "1", True)) == 0
+        ),
+    }
+
+
+def compute_q3_baseline_alignment(summary: list[dict], hard_floors: dict) -> dict:
+    """Q3 baseline 是否 fail floor (按 Codex 12:07 加, docstring 已承诺).
+
+    Read baseline rows from summary.csv, check 每年 excess vs hard_floors.
+    """
+    if not summary or not hard_floors:
+        return {"note": "summary.csv or hard_floors missing"}
+    baseline_rows = [r for r in summary if str(r.get("candidate", "")).startswith("medium_baseline")
+                     or r.get("type") == "baseline"]
+    if not baseline_rows:
+        return {"note": "no baseline rows in summary.csv"}
+    fail = []
+    pass_ = []
+    for r in baseline_rows:
+        yr = r.get("year") or r.get("leave_year")
+        if not yr:
+            continue
+        excess = safe_float(r.get("excess_return") or r.get("excess"))
+        floor_key = f"replay_{yr}"
+        floor = hard_floors.get(floor_key)
+        if excess is not None and floor is not None:
+            if excess < floor:
+                fail.append({"year": yr, "excess": excess, "floor": floor,
+                             "gap": round(excess - floor, 4)})
+            else:
+                pass_.append({"year": yr, "excess": excess, "floor": floor})
+    return {
+        "baseline_pass_years": pass_,
+        "baseline_fail_years": fail,
+        "fail_count": len(fail),
+        "alignment_health": (
+            "baseline 全过 floor (健康)" if not fail
+            else f"baseline fail {len(fail)} 个 floor (floor 错位)"
+        ),
     }
 
 
@@ -159,12 +232,19 @@ def is_target_run(run_dir: Path) -> bool:
 def process_run(run_dir: Path, dry_run: bool) -> bool:
     spec = load_yaml(run_dir / "spec.yaml")
     ranked = read_csv_rows(run_dir / "ranked.csv")
-    trades_baseline = read_csv_rows(run_dir / "trades_baseline.csv") or read_csv_rows(run_dir / "trades.csv")
-    trades_selected = read_csv_rows(run_dir / "trades_selected.csv")
+    trades_all = read_csv_rows(run_dir / "trades.csv")  # 合并 trades 文件 (candidate + pnl_amount)
+    summary_rows = read_csv_rows(run_dir / "summary.csv")
+    hard_floors = spec.get("hard_floors", {})
 
-    q1 = compute_q1_floor_binding(ranked, spec.get("hard_floors", {}))
+    # 从 ranked.csv top 候选取 selected candidate 名
+    top_candidate = ranked[0].get("candidate") if ranked else None
+    baseline_candidate = "medium_baseline"  # cb_arb 标准 baseline name; 可后续从 spec 读
+
+    q1 = compute_q1_floor_binding(ranked, hard_floors)
+    q2 = compute_q2_selection_score(ranked)
+    q3 = compute_q3_baseline_alignment(summary_rows, hard_floors)
     q4 = compute_q4_edge_of_grid(ranked, spec)
-    q5 = compute_q5_trade_overlap(trades_baseline, trades_selected)
+    q5 = compute_q5_trade_overlap(trades_all, baseline_candidate, top_candidate) if top_candidate else {"note": "ranked.csv empty, cant select top candidate"}
 
     ack_path = run_dir / "l4_ack.yaml"
     existing = load_yaml(ack_path) if ack_path.exists() else {}
@@ -176,6 +256,8 @@ def process_run(run_dir: Path, dry_run: bool) -> bool:
         return slot
 
     existing["q1_floor_binding"] = merge_q(existing, "q1_floor_binding", q1)
+    existing["q2_selection_score"] = merge_q(existing, "q2_selection_score", q2)
+    existing["q3_baseline_alignment"] = merge_q(existing, "q3_baseline_alignment", q3)
     existing["q4_monotonic"] = merge_q(existing, "q4_monotonic", q4)
     existing["q5_trade_overlap"] = merge_q(existing, "q5_trade_overlap", q5)
     existing["auto_computed_at"] = dt.datetime.utcnow().isoformat() + "Z"
