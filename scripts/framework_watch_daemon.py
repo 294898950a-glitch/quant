@@ -43,11 +43,22 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 LOG_FILE = REPO_ROOT / "logs" / "framework_watch.log"
 PID_FILE = REPO_ROOT / ".framework-watch.pid"
 
-WATCHED_DIRS = [
-    REPO_ROOT / "reports",
-    REPO_ROOT / "data",
-    REPO_ROOT / "docs" / "research_framework",
-]
+# 按用户 2026-05-17 简化: 整个 repo root 监控, framework_doc_check 自己 dispatch
+# (非受管路径 silent skip). 这样新增目录自动覆盖, 不用维护 WATCHED_DIRS 列表.
+WATCHED_DIRS = [REPO_ROOT]
+
+# 跳过的"噪音"目录/路径模式 (相对 REPO_ROOT). 避免扫 .venv/__pycache__/.git/等
+SKIP_DIR_PARTS = {
+    ".git", ".venv", "venv", "__pycache__", ".pytest_cache", ".mypy_cache",
+    "node_modules", ".idea", ".vscode", "logs", ".claude",
+    "archive",  # 历史 archived data, 不算 active
+}
+
+# 跳过的文件 pattern (suffix)
+SKIP_SUFFIXES = {
+    ".pyc", ".pyo", ".log", ".pid", ".lock", ".swp", ".tmp",
+    ".parquet", ".csv",  # 数据文件, 不是 framework 文档
+}
 
 POLL_INTERVAL = 1.0  # seconds
 EVENT_DEDUP_WINDOW = 5.0  # 同一 file 同 mtime 5 秒内不重复跑
@@ -86,13 +97,27 @@ def signal_handler(signum, frame):
 
 
 def scan_dir(d: Path) -> list[Path]:
-    """递归扫一个目录所有 file, 返回 list."""
+    """递归扫一个目录所有 file, 跳过噪音目录/文件."""
     if not d.exists():
         return []
     files = []
     for path in d.rglob("*"):
-        if path.is_file() and not any(p.startswith(".") for p in path.parts):
-            files.append(path)
+        if not path.is_file():
+            continue
+        # 跳噪音目录
+        try:
+            rel_parts = path.relative_to(REPO_ROOT).parts
+        except ValueError:
+            continue
+        if any(p in SKIP_DIR_PARTS for p in rel_parts):
+            continue
+        # 跳噪音文件后缀
+        if path.suffix in SKIP_SUFFIXES:
+            continue
+        # 跳隐藏文件 (.开头, 但允许像 .gitignore / .github/ 这种顶层关键文件? 暂时跳全部)
+        if any(p.startswith(".") for p in rel_parts):
+            continue
+        files.append(path)
     return files
 
 
