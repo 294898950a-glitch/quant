@@ -1,5 +1,9 @@
 # 协议红线 v1.5
 
+> **本文件: 描述性参考, 非机器约束源**.
+> 真正的机器强制规则在 `scripts/validate_*.py` + `data/research_framework/*.yaml`.
+> 本文件解释"为什么这么做" + 历史背景, 不写"必须如何".
+
 每条 Claude ↔ Codex outbox 消息**顶部必须附本红线段**. 双方收到消息时先检查版本号,版本不一致 → 暂停协作同步版本.
 
 ## 执行最小核心
@@ -18,23 +22,23 @@
 
 ```
 <!-- protocol-redline-v1.5 -->
-U1 数据/事实来源: 结论必须指向 CSV/parquet/报告/记录/VM 输出, 不准编
-U2 执行位置: 重活只能在远端 VM 跑, local 只能编辑文档 / 读代码 / 轻量检查
-U3 任务清单完整: 我发研究任务必含 8 字段 (假设/参数空间/底线/产物/算力/数据来源/真 CV 设计/停止条件)
-U4 算力 ACK: Codex 收任务立刻报 sig 估时 + spot 协议判档
-U5 质疑义务: Claude 收实验结果必跑标准疑点清单 (新机制时加 Q6/Q7); Codex 收论证请求必检 Claude 是否 ACK
-U6 跳过留痕: 任何跳过的项必须明写"为什么跳过", 否则消息不被接受
-U7 用户急单降级: 用户明说"急" 可临时跳过, 但报告必须记录跳过项 + 原因 + 补跑条件
-U8 不重复不抢占: 发消息前查对方 outbox + state, 已 ACK/RUNNING 不重复处理; 模式 B 选研究前必查 tried_directions.jsonl
-U9 健全性检查: 跑回测前 Codex 必跑 sanity_check, 参数和数据兼容性 fail → 拒跑
-U10 审计员义务 (模式 B): 每轮完成 Claude 必写 audit_report; Codex 下一轮 DIRECT 前必检, 缺/否决 → 不开下一轮
-U11 记录员义务: 研究流程关键节点必写 jsonl (设计完 / 跑完 / 报告完 / 切换模式 / 审计), 不能遗漏
-U12 三轮收尾权: Claude↔Codex 辩论 ≤3 轮无共识, 听 Codex; Claude 不转用户除非触红线/预算/框架
-U13 L0 硬化: L1 DIRECT 必含 l0-entry-id 标签 + 入口对应前置文档; arxiv 候选必含 passed_rule+evidence; 协作候选数 Claude 3-5/Codex 0-2; Codex 端跑 L0 查重 + 优先级算法 + U12 分歧计数
-U14 进度心跳: Codex 处理任一任务总耗时 >10 分钟时必每 10 分钟在 outbox 写 PROGRESS (task/进度%/ETA/阻塞), 静默 >10 分钟 = 违规, Claude 端会主动催 HEARTBEAT-MISSING
-U15 策略真值同步: RESPONSE 改策略真值 (新 baseline / status 切换 / 立项 / commit 关键文件) 必同 handoff 更新 docs/research_framework/CURRENT.md + data/research_framework/baseline_registry.md, 或显式说"为什么不更新"; 不触发 = 单纯 ACK/recon/schema/算力估算
-U16 状态机 + manifest: status 仅 8 态 (experiment/wip/adopted/rejected/archived/stale/invalidated/n/a 见 protocol §U16), transitions 仅 16 条 (详见本文 §U16); 回测产物必同 handoff 写 run_manifest.yaml (schema 见 docs/research_framework/run_manifest_schema.md), 不触发 = 单纯 ACK/recon
-U17 用户无回复默认: 询问用户下一步后 30 分钟无回复, AI 先读 3 个入口文件填写 `当前策略`, 默认保持 `当前策略` 但换研究方向; 不归档、不升级实盘、不重复刚失败方向; 新增数据/改核心代码可继续; 预算由 scripts/estimate_compute_budget.py 计算, ≤ ¥100 继续, > ¥100 或算不出来才等用户
+U1 数据/事实来源: 结论必须指向 CSV/parquet/报告/记录/VM 输出, 不准编 (⚠ prompt-only)
+U2 执行位置: 重活只能在远端 VM 跑, local 只能编辑文档 / 读代码 / 轻量检查 (⚠ prompt-only)
+U3 任务清单完整: 我发研究任务必含 8 字段 (假设/参数空间/底线/产物/算力/数据来源/真 CV 设计/停止条件) (✓ machine: scripts/validate_spec.py + scripts/outbox_protocol_preflight.py)
+U4 算力 ACK: Codex 收任务立刻报 sig 估时 + spot 协议判档 (⚠ prompt-only)
+U5 质疑义务: Claude 收实验结果必跑标准疑点清单 (新机制时加 Q6/Q7); Codex 收论证请求必检 Claude 是否 ACK (✓ machine: scripts/validate_l4_ack.py)
+U6 跳过留痕: 任何跳过的项必须明写"为什么跳过", 否则消息不被接受 (⚠ prompt-only)
+U7 用户急单降级: 用户明说"急" 可临时跳过, 但报告必须记录跳过项 + 原因 + 补跑条件 (⚠ prompt-only)
+U8 不重复不抢占: 发消息前查对方 outbox + state, 已 ACK/RUNNING 不重复处理; 模式 B 选研究前必查 tried_directions.jsonl (⚠ prompt-only)
+U9 健全性检查: 跑回测前 Codex 必跑 sanity_check, 参数和数据兼容性 fail → 拒跑 (⚠ prompt-only)
+U10 审计员义务 (模式 B): 每轮完成 Claude 必写 audit_report; Codex 下一轮 DIRECT 前必检, 缺/否决 → 不开下一轮 (⚠ prompt-only)
+U11 记录员义务: 研究流程关键节点必写 jsonl (设计完 / 跑完 / 报告完 / 切换模式 / 审计), 不能遗漏 (⚠ prompt-only)
+U12 三轮收尾权: Claude↔Codex 辩论 ≤3 轮无共识, 听 Codex; Claude 不转用户除非触红线/预算/框架 (⚠ prompt-only)
+U13 L0 硬化: L1 DIRECT 必含 l0-entry-id 标签 + 入口对应前置文档; arxiv 候选必含 passed_rule+evidence; 协作候选数 Claude 3-5/Codex 0-2; Codex 端跑 L0 查重 + 优先级算法 + U12 分歧计数 (✓ machine: scripts/validate_spec.py l0_entry_id + scripts/outbox_protocol_preflight.py)
+U14 进度心跳: Codex 处理任一任务总耗时 >10 分钟时必每 10 分钟在 outbox 写 PROGRESS (task/进度%/ETA/阻塞), 静默 >10 分钟 = 违规, Claude 端会主动催 HEARTBEAT-MISSING (⚠ prompt-only)
+U15 策略真值同步: RESPONSE 改策略真值 (新 baseline / status 切换 / 立项 / commit 关键文件) 必同 handoff 更新 docs/research_framework/CURRENT.md + data/research_framework/baseline_registry.md, 或显式说"为什么不更新"; 不触发 = 单纯 ACK/recon/schema/算力估算 (✓ machine: scripts/validate_current_md.py + git pre-commit framework_preflight.py)
+U16 状态机 + manifest: status 仅 8 态 (experiment/wip/adopted/rejected/archived/stale/invalidated/n/a 见 protocol §U16), transitions 仅 16 条 (详见本文 §U16); 回测产物必同 handoff 写 run_manifest.yaml (schema 见 docs/research_framework/run_manifest_schema.md), 不触发 = 单纯 ACK/recon (✓ machine: scripts/validate_current_md.py + scripts/validate_run_manifest.py)
+U17 用户无回复默认: 询问用户下一步后 30 分钟无回复, AI 先读 3 个入口文件填写 `当前策略`, 默认保持 `当前策略` 但换研究方向; 不归档、不升级实盘、不重复刚失败方向; 新增数据/改核心代码可继续; 预算由 scripts/estimate_compute_budget.py 计算, ≤ ¥100 继续, > ¥100 或算不出来才等用户 (✓ machine: scripts/validate_entrypoints.py + scripts/validate_compute_budget.py)
 
 模式 B 自动执行边界 (用户离场自动循环时):
 B1 新数据/研究代码/研究参数可做, 但必须服务当前策略 + 先写设计 + 预算计算 ≤ ¥100 + 留记录
@@ -61,7 +65,7 @@ B5 不改协议红线, 不碰经验账本里"已确认无效"区域
 
 ### U3 任务清单 8 字段
 
-详见 [spec_template](./spec_template.md). 必含:
+详见 [spec_template.yaml](./spec_template.yaml). 必含:
 1. hypothesis (一句话假设)
 2. parameter_space (维度 + 范围)
 3. hard_floors (replay_year ≥ floor)

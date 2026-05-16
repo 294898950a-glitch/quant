@@ -1,6 +1,6 @@
 # 文档地图 (INDEX)
 
-**最后生成**: 2026-05-16 11:39 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
+**最后生成**: 2026-05-16 12:25 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
 **触发**: 加新文件后跑 `python3 scripts/generate_indexes.py` 重新生成
 
 ---
@@ -48,9 +48,10 @@
 ## 模板
 
 - `docs/research_framework/autonomous_summary_template.md`
-- `docs/research_framework/report_template.md`
+- `docs/research_framework/l4_ack_template.yaml`
+- `docs/research_framework/report_template.yaml`
 - `docs/research_framework/run_manifest_schema.md`
-- `docs/research_framework/spec_template.md`
+- `docs/research_framework/spec_template.yaml`
 
 ## 真值层
 
@@ -84,6 +85,7 @@
 - `scripts/validate_data_schema.py`
 - `scripts/validate_entrypoints.py`
 - `scripts/validate_l4_ack.py`
+- `scripts/validate_report.py`
 - `scripts/validate_run_manifest.py`
 - `scripts/validate_spec.py`
 

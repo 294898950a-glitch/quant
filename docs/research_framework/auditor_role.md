@@ -1,5 +1,9 @@
 # 审计员角色
 
+> **本文件: 描述性参考, 非机器约束源**.
+> 真正的机器强制规则在 `scripts/validate_*.py` + `data/research_framework/*.yaml`.
+> 本文件解释"为什么这么做" + 历史背景, 不写"必须如何".
+
 来源: 参考旧框架 `strategies/cb_redemption/auditor.py` 设计.
 
 ## 职责定位

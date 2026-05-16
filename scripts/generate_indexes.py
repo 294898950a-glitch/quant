@@ -64,7 +64,7 @@ def classify_doc(filename: str) -> str:
     name = filename.lower()
     if name.endswith("_role.md"):
         return "角色定义"
-    if name.endswith("_template.md") or name == "run_manifest_schema.md":
+    if name.endswith("_template.md") or name.endswith("_template.yaml") or name == "run_manifest_schema.md":
         return "模板"
     if name.startswith("protocol_") or name.endswith("_protocol.md"):
         return "协议层"
@@ -114,7 +114,8 @@ def generate_docs_index() -> str:
     now = dt.datetime.now().strftime("%Y-%m-%d %H:%M")
 
     # Scan docs/research_framework
-    framework_files = sorted([f.name for f in DOCS_FRAMEWORK.glob("*.md")])
+    framework_files = sorted([f.name for f in DOCS_FRAMEWORK.glob("*.md")] +
+                             [f.name for f in DOCS_FRAMEWORK.glob("*.yaml")])
     categories: dict[str, list[str]] = {}
     for f in framework_files:
         cat = classify_doc(f)

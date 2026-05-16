@@ -1,5 +1,9 @@
 # 模式 B — 用户离场自动循环
 
+> **本文件: 描述性参考, 非机器约束源**.
+> 真正的机器强制规则在 `scripts/validate_*.py` + `data/research_framework/*.yaml`.
+> 本文件解释"为什么这么做" + 历史背景, 不写"必须如何".
+
 详见 [protocol_redline](./protocol_redline.md) "模式 B 自动执行边界" 部分.
 
 本文档展开模式 B 的完整流程 + 边界 + 例外.

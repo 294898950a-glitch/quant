@@ -1,5 +1,9 @@
 # HDRF 硬化机制 (enforcement protocol)
 
+> **本文件: 描述性参考, 非机器约束源**.
+> 真正的机器强制规则在 `scripts/validate_*.py` + `data/research_framework/*.yaml`.
+> 本文件解释"为什么这么做" + 历史背景, 不写"必须如何".
+
 把 HDRF v1 的"软约束"升级成可强制 / 可双向对账的硬约束.
 
 ## 三层硬化

@@ -1,5 +1,9 @@
 # HDRF — 假设驱动研究框架
 
+> **本文件: 描述性参考, 非机器约束源**.
+> 真正的机器强制规则在 `scripts/validate_*.py` + `data/research_framework/*.yaml`.
+> 本文件解释"为什么这么做" + 历史背景, 不写"必须如何".
+
 **Hypothesis-Driven Research Framework for Quant Strategy Development**
 
 日期: 2026-05-16
@@ -187,9 +191,9 @@ validate_gatekeeper_compliance.py 可强制.
 ## 子文件
 
 **流程模板**:
-- [spec_template.md](./spec_template.md) — L1 实验设计模板 (8 必填字段)
+- [spec_template.yaml](./spec_template.yaml) — L1 实验设计模板 (机器强制字段)
 - [questioning_checklist.md](./questioning_checklist.md) — L4 质疑清单 (Q1-Q5 + Q6/Q7 条件)
-- [report_template.md](./report_template.md) — L6 复盘报告模板 (三出口 + 6 必填段)
+- [report_template.yaml](./report_template.yaml) — L6 复盘报告模板 (三出口 + 必填字段)
 
 **协议机制**:
 - [protocol_redline.md](./protocol_redline.md) — **协议红线** v1.5 (每条 outbox 必附顶部)

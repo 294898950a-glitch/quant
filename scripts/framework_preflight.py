@@ -70,6 +70,7 @@ def main() -> int:
     exits.append(run_validator("validate_run_manifest.py"))
     exits.append(run_validator("validate_data_schema.py"))
     exits.append(run_validator("validate_spec.py"))
+    exits.append(run_validator("validate_report.py"))
     exits.append(run_validator("validate_l4_ack.py"))
 
     # Index freshness check (warn-only, phase 1)

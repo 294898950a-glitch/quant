@@ -1,0 +1,49 @@
+# HDRF L6 report.yaml 模板 (替代旧 report_template.md)
+#
+# 每次研究 run 的 spec.yaml status=COMPLETE 时, 必须在同一 run 目录写:
+#   data/<run-id>/report.yaml
+#
+# 必填字段由 scripts/validate_report.py 强制校验. 本模板是机器可检查的
+# L6 复盘结构; 叙述性长文仍可另写 reports/*.md, 但不作为约束源.
+
+schema_version: 1
+
+run_id: cb_arb_example_2026-05-16
+date: '2026-05-16'
+strategy_id: cb_arb
+
+# L6 三出口, 与 l4_ack.yaml overall_decision 对齐.
+# allowed: adopt / reject / mini-spec-retry / archive-direction
+l6_exit_decision: reject
+
+three_exits_section:
+  adopt:
+    decision: false
+    reason: "未达到采用条件."
+  reject:
+    decision: true
+    reason: "真 CV 未通过, 且关键年份退化."
+  mini_spec_retry:
+    decision: false
+    reason: "没有足够证据支持同方向小改继续烧算力."
+
+compute_cost_yuan: 0.0
+
+confirmed_invalid_directions:
+  - "同一信号族继续调参无法修复 2024 false positive."
+
+learnings:
+  - "触发日需要与真实 panic 日期对齐, 不能只看年度 replay."
+
+follow_up_actions:
+  - "记录无效方向, 下一轮改信号家族而不是同族微调."
+
+# allowed: DRAFT / READY / COMPLETE / ARCHIVED
+status: COMPLETE
+
+notes: ""
+references:
+  - "data/<run-id>/ranked.csv"
+  - "data/<run-id>/l4_ack.yaml"
+related_reports:
+  - "reports/<run-id>.md"
