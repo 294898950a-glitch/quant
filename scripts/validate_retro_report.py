@@ -110,7 +110,8 @@ def main() -> int:
         if not REPORTS_DIR.exists():
             print(f"validate_retro_report.py: reports/ 不存在, skip")
             return 0
-        targets = sorted(REPORTS_DIR.glob("*.md"))
+        # 按 Codex 01:12 review: 加 recursive 防 reports/subdir/*.md 绕过
+        targets = sorted(REPORTS_DIR.rglob("*.md"))
 
     total_errors = []
     checked = 0
