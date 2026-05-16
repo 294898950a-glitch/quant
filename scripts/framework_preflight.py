@@ -69,6 +69,7 @@ def main() -> int:
     exits.append(run_validator("validate_current_md.py"))
     exits.append(run_validator("validate_run_manifest.py"))
     exits.append(run_validator("validate_data_schema.py"))
+    exits.append(run_validator("validate_spec.py"))
 
     # Index freshness check (warn-only, phase 1)
     print("\n=== generate_indexes.py --check ===")

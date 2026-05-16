@@ -1,6 +1,6 @@
 # 文档地图 (INDEX)
 
-**最后生成**: 2026-05-16 11:07 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
+**最后生成**: 2026-05-16 11:16 (由 `scripts/generate_indexes.py` 自动扫描生成, 不要手工编辑)
 **触发**: 加新文件后跑 `python3 scripts/generate_indexes.py` 重新生成
 
 ---
@@ -84,6 +84,7 @@
 - `scripts/validate_data_schema.py`
 - `scripts/validate_entrypoints.py`
 - `scripts/validate_run_manifest.py`
+- `scripts/validate_spec.py`
 
 ## 查询工具
 
