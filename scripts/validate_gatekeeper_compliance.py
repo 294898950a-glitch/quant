@@ -1,18 +1,33 @@
 #!/usr/bin/env python3
-"""Validate that run/evaluate/search/monitor scripts import GateKeeper.
+"""Validate run/evaluate/search/monitor scripts truly use GateKeeper.
 
 按 Codex framework holistic review Q5: bare script bypass (跑批脚本不接 GateKeeper
-也能跑, 烧算力没人挡) 是最大漏洞. 加这个 validator AST 扫脚本, 强制 import
-GateKeeper + 调 stage 方法.
+直接跑, 烧算力没人挡) 是最大漏洞.
 
-允许例外: data/research_framework/gatekeeper_allowlist.yaml 列已知豁免脚本.
+**Best-effort static check (不防恶意 bypass)**:
+
+按 Codex 13:52, 13:57, 14:02 review 逐步加强, 当前防御层:
+1. ✓ 必 import GateKeeper (防完全裸跑)
+2. ✓ 必实例化 (var = GateKeeper(), 防 import-only dead import)
+3. ✓ stage 方法必在实例化变量上调 (防 dummy class same-name method)
+4. ✓ 禁止 shadowing imported GateKeeper (防 GateKeeper = Fake 替换)
+
+**已知未防的 (静态分析极限, 接受)**:
+- non-executable path: GateKeeper() 调用在 dead function (uncalled) 里, validator 仍 pass.
+  这种是 deliberate adversarial bypass, 不防 (要防得 runtime instrumentation).
+- 动态属性赋值 (obj.before_run_grid = lambda ...).
+- 极端深嵌套 (nested function/class 内实例化但外部不调).
+
+防御目标: **accidental bypass (90%+) + obvious adversarial bypass**, 不防恶意.
+
+允许例外: data/research_framework/gatekeeper_allowlist.yaml.
 
 Usage:
   python3 scripts/validate_gatekeeper_compliance.py
 
 Exit codes:
   0 = all scripts comply or in allowlist
-  1 = some script missing GateKeeper + not in allowlist
+  1 = some script missing/non-compliant
 """
 
 from __future__ import annotations
@@ -68,12 +83,13 @@ def script_complies(path: Path) -> tuple[bool, str]:
         return False, f"parse error: {e}"
 
     imports_gatekeeper = False
+    gatekeeper_shadowed = False  # 按 Codex 14:02: 防 GateKeeper = Fake 替换
     # 收集"赋值给 GateKeeper() 的变量名" (e.g. gate = GateKeeper() → 'gate')
     gatekeeper_instance_names: set[str] = set()
-    # 收集"在 GateKeeper 实例上调用的 stage method" (must match instance var name)
+    # 收集"在 GateKeeper 实例上调用的 stage method"
     stage_calls_on_gatekeeper_instance: set[str] = set()
 
-    # Pass 1: find imports + 实例化赋值
+    # Pass 1: find imports + 实例化赋值 + shadowing
     for node in ast.walk(tree):
         if isinstance(node, ast.ImportFrom):
             mod = (node.module or "")
@@ -85,9 +101,14 @@ def script_complies(path: Path) -> tuple[bool, str]:
             for alias in node.names:
                 if alias.name.endswith("gatekeeper"):
                     imports_gatekeeper = True
-        # 赋值 var = GateKeeper(...) → 记录 var 名
+        # 赋值 var = GateKeeper(...) / GateKeeper = Fake 等
         if isinstance(node, ast.Assign):
             value = node.value
+            # GateKeeper 被 shadowed: GateKeeper = something
+            for target in node.targets:
+                if isinstance(target, ast.Name) and target.id == "GateKeeper":
+                    gatekeeper_shadowed = True
+            # 收集 var = GateKeeper() 的 var
             if isinstance(value, ast.Call) and isinstance(value.func, ast.Name):
                 if value.func.id == "GateKeeper":
                     for target in node.targets:
@@ -106,6 +127,8 @@ def script_complies(path: Path) -> tuple[bool, str]:
 
     if not imports_gatekeeper:
         return False, "missing 'from scripts.gatekeeper import GateKeeper'"
+    if gatekeeper_shadowed:
+        return False, "GateKeeper 被 reassign (e.g. GateKeeper = Fake); 不允许 shadowing"
     if not gatekeeper_instance_names:
         return False, ("import GateKeeper 但没实例化 (GateKeeper() 调用); "
                        "dead import 不算 compliant")
