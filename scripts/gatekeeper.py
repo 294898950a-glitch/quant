@@ -78,15 +78,16 @@ class GateKeeper:
     def before_l5_diagnostic(self, run_dir: Path | None = None) -> None:
         """L5 反向诊断前: Claude 已写 L4 判断, 校验合规.
 
-        run_dir 同 after_run_grid, 仅 logging context. validator 内部扫所有
-        RUNNING/COMPLETE 状态 run.
+        按 Codex framework Q2-B: validator 支持 --run-dir 单 run 模式, GateKeeper
+        传 run_dir 时 validator 只锁这个 run; 不传时扫全部 active run.
         """
-        self._log(f"[GateKeeper] before_l5_diagnostic (context: {run_dir})")
-        self._must_run("validate_l4_ack.py", [],
+        self._log(f"[GateKeeper] before_l5_diagnostic (run_dir={run_dir})")
+        extra_args = ["--run-dir", str(run_dir)] if run_dir is not None else []
+        self._must_run("validate_l4_ack.py", extra_args,
                        fail_msg="L4 ack 不全 (Claude 没填判断 / 数据没自动算), 拒进 L5")
         # 按 Codex framework Q1 P1: L5 反向诊断 yaml schema 强制
         # (mini-spec-retry/reject 时 diagnostic.yaml 必有结构化 root cause)
-        self._must_run("validate_l5_diagnostic.py", [],
+        self._must_run("validate_l5_diagnostic.py", extra_args,
                        fail_msg="L5 diagnostic.yaml 缺失或不合规 (retry/reject 时必填)")
         self._log("  ✓ L4 ack 完整 + L5 diagnostic 合规, 可以跑 L5")
 

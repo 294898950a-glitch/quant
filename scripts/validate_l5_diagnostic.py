@@ -167,6 +167,13 @@ def read_l4_decision(l4_ack_path: Path) -> str | None:
 
 
 def main() -> int:
+    # 按 Codex framework Q2-B: 加 --run-dir 让 GateKeeper 能锁单 run; 不传时 fall back 扫全部
+    import argparse
+    parser = argparse.ArgumentParser(description="Validate L5 diagnostic.yaml")
+    parser.add_argument("--run-dir", type=Path, default=None,
+                        help="单 run 模式: 只扫这个 dir 的 diagnostic.yaml (GateKeeper 透传用)")
+    args = parser.parse_args()
+
     if not DATA_DIR.exists():
         print(f"validate_l5_diagnostic.py: data/ 不存在, skip")
         return 0
@@ -175,7 +182,15 @@ def main() -> int:
     diagnostic_required_missing = []
     diagnostic_validated = []
 
-    for run_dir in sorted(DATA_DIR.iterdir()):
+    if args.run_dir is not None:
+        if not args.run_dir.exists():
+            print(f"ERROR: --run-dir {args.run_dir} 不存在", file=sys.stderr)
+            return 1
+        run_dirs_to_scan = [args.run_dir]
+    else:
+        run_dirs_to_scan = sorted(DATA_DIR.iterdir())
+
+    for run_dir in run_dirs_to_scan:
         if not run_dir.is_dir():
             continue
         spec_path = run_dir / "spec.yaml"

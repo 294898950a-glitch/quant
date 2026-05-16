@@ -149,7 +149,20 @@ def is_ack_required(run_dir: Path) -> bool:
 
 
 def main() -> int:
-    run_dirs = sorted([d for d in DATA_DIR.iterdir() if d.is_dir() and (d / "spec.yaml").exists()])
+    # 按 Codex framework Q2-B: 加 --run-dir 让 GateKeeper 能锁单 run; 不传时 fall back 扫全部
+    import argparse
+    parser = argparse.ArgumentParser(description="Validate L4 ack yaml")
+    parser.add_argument("--run-dir", type=Path, default=None,
+                        help="单 run 模式: 只扫这个 dir 的 l4_ack.yaml (GateKeeper 透传用)")
+    args = parser.parse_args()
+
+    if args.run_dir is not None:
+        if not args.run_dir.exists() or not (args.run_dir / "spec.yaml").exists():
+            print(f"ERROR: --run-dir {args.run_dir} 不存在或缺 spec.yaml", file=sys.stderr)
+            return 1
+        run_dirs = [args.run_dir]
+    else:
+        run_dirs = sorted([d for d in DATA_DIR.iterdir() if d.is_dir() and (d / "spec.yaml").exists()])
 
     total_err = 0
     total_warn = 0
