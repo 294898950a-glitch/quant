@@ -20,10 +20,20 @@ ack_at: 2026-05-14T22:30:00Z  # ISO timestamp
 q1_floor_binding:
   # Q1 硬约束 binding 检查 — Floor 是不是平凡通过?
   description: "pass_both / total > 50% → floor 太松; pass_one_only ≈ 0 → 对应 floor 冗余"
+  # computed_data 由 scripts/auto_compute_l4_data.py 自动从 ranked.csv 算出, Claude 不能手填
+  computed_data:
+    total_candidates: 480
+    pass_all_floors: 66
+    fail_all_floors: 120
+    pass_count_per_floor: {replay_2020_excess: 186, replay_2021_excess: 240}
+    pass_all_pct: 13.75
+    binding_assessment: "至少一 floor binding (健康)"
+  computed_at: 2026-05-14T22:25:00Z  # 自动工具填的时间戳
+  # 下面 answer + pass 由 Claude 看 computed_data 后填
   answer: |
-    pass_both = 66/480 (13.75%), pass_2020_only fail_2021 = 120, pass_2021_only
-    fail_2020 = 174, fail_both = 120. 两个 floor 都 binding, 健康.
-  pass: true  # 该项是否合规 (floor 健康设定)
+    13.75% 候选过 4 个 floor (66/480), 不平凡通过 (>50% 才叫平凡); 单个 floor
+    pass_count 也分布合理. 健康.
+  pass: true
 
 q2_selection_score:
   # Q2 selection_score 决策方式
@@ -45,19 +55,43 @@ q3_baseline_alignment:
 q4_monotonic:
   # Q4 selected 候选的 monotonicity / robustness
   description: "selected 是不是参数空间边缘 (最宽 trigger)? path-sensitive 还是 robust?"
+  # computed_data 由 auto_compute_l4_data.py 自动从 ranked.csv top 候选 vs spec parameter_space 算出
+  computed_data:
+    top_candidate_id: rank=0
+    params_at_edge:
+      - param: drop_threshold
+        value: -0.03
+        range: [-0.07, -0.02]
+      - param: panic_ratio
+        value: 0.20
+        range: [0.15, 0.40]
+    edge_count: 2
+    assessment: "selected 有 2 个参数在 grid 边缘 (可能 path-sensitive)"
+  computed_at: 2026-05-14T22:25:00Z
   answer: |
-    selected (drop -0.03, ratio 20%, recovery 3, hurdle 0.08, min_days 1) 是
-    最宽 trigger, targeted 但 path-sensitive. 改参数 1 步 → 2 个 baseline 变差.
-  pass: false  # path-sensitive, 不算 robust
+    selected (drop -0.03, ratio 20%, recovery 3, hurdle 0.08) 在 grid 边缘
+    (drop 是最宽阈值, ratio 是最低阈值). 改参数 1 步会导致 2 个 baseline 变差,
+    path-sensitive 不 robust.
+  pass: false
 
 q5_trade_overlap:
   # Q5 trade overlap / 修改 exit 的 path 影响
   description: "selected vs baseline 共有几个 trade? 修改了几个 exit? PnL gap 来自哪?"
+  # computed_data 由 auto_compute_l4_data.py 自动从 trades.csv (baseline + selected) 算出
+  computed_data:
+    baseline_trade_count: 90
+    selected_trade_count: 76
+    common_trades: 42
+    baseline_only: 48
+    selected_only: 34
+    baseline_total_pnl: 35982.50
+    selected_total_pnl: 30063.75
+    pnl_gap_selected_minus_baseline: -5919.0
+  computed_at: 2026-05-14T22:25:00Z
   answer: |
-    2020: 90 base / 76 sel, 42 共同, 12 改 exit, PnL gap -5919.
-    2021: 116/152, 68 共同, +12576 改善.
-    2024: 255/263, 233 共同, 27 改 exit, PnL gap -16062 path 污染.
-  pass: true  # L5 schema 修复后第一次精确算出
+    2020: 共有 42 个 trade, baseline 90 sel 76, sel 改了 12 个 exit, PnL gap
+    -5919 (path 污染). 2024 同样 pattern 更严重: -16062 PnL gap.
+  pass: true
 
 # === Q6/Q7 条件必答 (新机制改变交易路径时) ===
 

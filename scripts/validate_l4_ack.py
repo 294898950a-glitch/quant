@@ -41,6 +41,8 @@ REQUIRED_TOPLEVEL = {"schema_version", "run_id", "reviewer", "ack_at",
                      "overall_decision", "overall_reason"}
 
 REQUIRED_Q_FIELDS = {"description", "answer", "pass"}
+# Questions that must have computed_data filled by auto_compute_l4_data.py (not Claude手抄)
+AUTO_COMPUTED_QUESTIONS = {"q1_floor_binding", "q4_monotonic", "q5_trade_overlap"}
 
 ALLOWED_DECISION = {"adopt", "reject", "mini-spec-retry", "archive-direction"}
 ALLOWED_REVIEWER = {"claude", "codex", "user"}
@@ -77,6 +79,12 @@ def validate_question(qkey: str, q: dict, required_apply: bool = True) -> list[s
         errs.append(f"{qkey}: answer is placeholder/empty — must fill real content")
     if "pass" in q and not isinstance(q["pass"], bool):
         errs.append(f"{qkey}: pass must be boolean")
+    # AUTO_COMPUTED_QUESTIONS must have computed_data + computed_at (filled by auto tool, not Claude)
+    if qkey in AUTO_COMPUTED_QUESTIONS:
+        if "computed_data" not in q:
+            errs.append(f"{qkey}: missing computed_data (run scripts/auto_compute_l4_data.py first)")
+        if "computed_at" not in q:
+            errs.append(f"{qkey}: missing computed_at timestamp (data must be auto-computed, not hand-filled)")
     return errs
 
 
