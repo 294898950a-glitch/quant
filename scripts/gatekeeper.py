@@ -54,9 +54,11 @@ class GateKeeper:
                        fail_msg="数据 warehouse schema 不全, 拒跑")
         self._must_run("validate_compute_budget.py", [],
                        fail_msg="预算配置文件损坏, 拒跑")
-        # TODO (Codex framework review Q2-A): 接入 research_sanity_checker 做 spec-data
-        # compatibility 检查. 当前该 checker 是 markdown 设计, 跟 yaml spec 字段名不匹配,
-        # 直接接入会误报 fatal. 等 research_sanity_checker 升级到 yaml schema 后再接入.
+        # 按 Codex framework holistic review Q2-A: sanity_checker 升级 yaml 后接入
+        # (commit 升级 sanity_checker yaml schema 同 commit 接入). 检查 spec 字段
+        # 语义合理性 (range / hard_floors scale / 路径 / cv years / budget vs cost).
+        self._must_run("research_sanity_checker.py", ["--spec", str(spec_path)],
+                       fail_msg="spec semantic 检查失败 (range/hard_floors/路径/budget), 拒跑")
         self._log("  ✓ 启动 grid 检查全过")
 
     def after_run_grid(self, run_dir: Path | None = None) -> None:
