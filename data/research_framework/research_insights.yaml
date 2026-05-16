@@ -1,0 +1,80 @@
+schema_version: 1
+updated_at: "2026-05-17T05:25:00+08:00"
+authority: machine
+source_migration:
+  from_git_paths:
+    - docs/research_framework/experience_ledger.md
+    - reports/cb_arb_research_complete_retro_2026-05-17.md
+  reason: "Markdown runtime and report files removed; durable research memory moved to YAML."
+
+cb_arb_hard_floors_v1_1:
+  source: "spec v1.1 normal-state baseline, medium_opportunity, recovery=4, hurdle=0.15"
+  adoption_rule: "candidate must improve or not degrade in at least 5 of 6 holdout years versus current baseline"
+  yearly_excess:
+    "2019": 0.161312
+    "2020": -0.130604
+    "2021": -0.050441
+    "2022": 0.014425
+    "2023": -0.031027
+    "2024": 0.030085
+  note: "Do not use the older mixed-source four-floor rule."
+
+key_insights:
+  - id: main_vs_value_gap_distinction
+    summary: "Main cb_arb and value-gap switch are distinct; rejection of panic-detector internals does not reject absolute value-gap ranking."
+    facts:
+      main_strategy_logic: "market price / theoretical value percentage deviation ranking"
+      value_gap_logic: "absolute theoretical-minus-market value gap ranking, plus optional panic detector"
+      main_2019_excess: -0.0985
+      value_gap_2019_excess: 0.161
+      gap_pp: 25.95
+      main_6y_excess_compound: -0.127
+      value_gap_6y_excess_compound: -0.030
+    decision_use: "Value-gap ranking remains a legitimate research direction even though full value-gap switch is not deployable."
+
+  - id: cost_realism_wall
+    summary: "Cost-on tests materially worsen both main cb_arb and value-gap switch."
+    facts:
+      main_cost_degradation_pp: -0.0676
+      value_gap_cost_degradation_pp: -0.0747
+      fatal_threshold_pp: -0.0500
+    decision_use: "Any future cb_arb variant must be checked cost-on before promotion."
+
+  - id: panic_detector_dead_end
+    summary: "Panic detector overlay is rejected as a family under current action mapping."
+    facts:
+      true_panic_post_30d_baseline_excess_vs_benchmark: -0.038
+      false_panic_cross_section_can_be_more_extreme_than_true_panic: true
+      overlay_hurts_false_panic_paths: true
+    decision_use: "Do not restart panic overlay without a new action family and explicit evidence that action adds alpha."
+
+  - id: single_filter_dead_end
+    summary: "2020 weakness was broad across trades; single trade filters do not address the failure mode."
+    facts:
+      negative_trade_share_2020: 0.74
+      median_excess_2020_pp: -4.32
+      worst10_loss_share: 0.23
+    decision_use: "Avoid one-dimensional entry/exit/holding filters as a rescue path."
+
+  - id: hdrf_beats_self_loop_for_cb_arb
+    summary: "HDRF/value-gap route beat self-loop LLM tuning in cross-route validation."
+    facts:
+      hdrf_2019_excess: 0.161
+      self_loop_2019_excess: -0.101
+      gap_pp: 26.2
+    decision_use: "Do not restart sealed-pool LLM tuning over the same 13-dimension yaml space."
+
+open_threads:
+  - id: promote_absolute_value_gap_ranking_to_core
+    priority: high
+    summary: "Test whether absolute value-gap ranking alone should be promoted into core verifier as an option."
+    status: awaiting_user_or_new_spec
+    evidence: main_vs_value_gap_distinction
+  - id: universe_or_market_regime_retest
+    priority: medium
+    summary: "Retest cb_arb under different universe or longer market regimes only if explicitly scoped."
+    status: backlog
+  - id: arxiv_new_strategy_source
+    priority: medium
+    summary: "Use arxiv as source for genuinely new strategy family; XVA paper is rejected."
+    status: backlog

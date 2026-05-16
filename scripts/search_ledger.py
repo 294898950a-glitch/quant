@@ -1,35 +1,25 @@
 #!/usr/bin/env python3
-"""Search experience_ledger.md for similar historical entries (phase 1.5 #3 spec).
-
-Auto-dedupe research direction before launching new batch: if a hypothesis text
-matches existing rejected/archived entries (section 二/三/四), warn loudly.
-
-Usage:
-  python3 scripts/search_ledger.py "panic detector based on market breadth"
-  python3 scripts/search_ledger.py "value-gap ranking" --section rejected
-
-Algorithm: simple keyword token overlap (jaccard) on Chinese+English text.
-Stop-words removed. Top 5 matches by score returned.
-
-Exit codes:
-  0 OK (no strong match)
-  1 strong match found (score > 0.30) → caller should reconsider
-  2 operational error (no tokens, ledger missing, parse error) — 跟 strong match 区分
-
-按 Codex 13:12 verify: caller (new_research.py) 需要区分 strong match vs
-infrastructure error, 不能把 query-empty / ledger-missing 当成 strong match.
-"""
+"""Search machine-readable experiment and direction ledgers for similar work."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
 import sys
 from pathlib import Path
 
-LEDGER = Path(__file__).resolve().parent.parent / "docs" / "research_framework" / "experience_ledger.md"
+try:
+    import yaml
+except ImportError:
+    print("ERROR: pyyaml required", file=sys.stderr)
+    sys.exit(2)
 
-# Only genuine stop-words (low semantic signal). Keep strategy/method terms (panic/detector/value-gap) for matching.
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+EXPERIMENTS = REPO_ROOT / "data" / "research_framework" / "experiments.yaml"
+TRIED = REPO_ROOT / "data" / "research_framework" / "tried_directions.jsonl"
+
 STOP = {
     "the", "a", "is", "of", "to", "in", "for", "and", "or", "with", "on", "by",
     "未完成", "已采用", "已确认", "线索", "未来", "探索",
@@ -37,12 +27,10 @@ STOP = {
     "spec", "yaml",
     "x", "y", "n", "k", "abc", "xyz", "todo",
 }
-
 ALL_TOKENS_RE = re.compile(r"[一-龥]|[a-zA-Z0-9_]+")
 
 
 def tokenize(text: str) -> set[str]:
-    """Crude tokenization: Chinese char + English word. Lowercase, drop stop-words."""
     text = text.lower()
     tokens = set()
     for token in ALL_TOKENS_RE.findall(text):
@@ -54,42 +42,68 @@ def tokenize(text: str) -> set[str]:
     return tokens
 
 
-def parse_ledger() -> list[dict]:
-    """Parse all entries in experience_ledger.md sections 二/三/四."""
-    if not LEDGER.exists():
-        print(f"ERROR: {LEDGER} missing", file=sys.stderr)
-        sys.exit(2)  # operational error, not strong match (Codex 13:12 fix)
-    text = LEDGER.read_text(encoding="utf-8")
-    entries = []
-    current_section = None
-    for line in text.split("\n"):
-        line = line.strip()
-        if line.startswith("## 二、"):
-            current_section = "rejected"
-            continue
-        if line.startswith("## 三、"):
-            current_section = "open_thread"
-            continue
-        if line.startswith("## 四、"):
-            current_section = "future_backlog"
-            continue
-        if line.startswith("## "):
-            current_section = None
-            continue
-        if not current_section:
-            continue
-        # markdown list items or pipe table rows
-        if line.startswith("- `") or line.startswith("- ") or line.startswith("|"):
-            entries.append({"section": current_section, "text": line})
+def load_entries() -> list[dict]:
+    entries: list[dict] = []
+    if EXPERIMENTS.exists():
+        data = yaml.safe_load(EXPERIMENTS.read_text(encoding="utf-8"))
+        if isinstance(data, dict):
+            for item in data.get("experiments", []):
+                if not isinstance(item, dict):
+                    continue
+                artifacts = item.get("artifacts")
+                artifact_text = " ".join(str(x) for x in artifacts) if isinstance(artifacts, list) else str(artifacts or "")
+                text = " ".join(
+                    str(item.get(key, ""))
+                    for key in (
+                        "id",
+                        "strategy_id",
+                        "hypothesis_id",
+                        "status",
+                        "hypothesis",
+                        "reject_reason",
+                        "summary",
+                        "current_strategy_effect",
+                        "commit_ref",
+                    )
+                )
+                text = f"{text} {artifact_text}"
+                entries.append({
+                    "section": str(item.get("status") or "experiment"),
+                    "text": text,
+                    "source": str(item.get("id") or "experiments.yaml"),
+                })
+            for item in data.get("research_insights", []):
+                if not isinstance(item, dict):
+                    continue
+                implications = item.get("implications")
+                implication_text = " ".join(str(x) for x in implications) if isinstance(implications, list) else str(implications or "")
+                text = " ".join(str(item.get(key, "")) for key in ("id", "source", "summary"))
+                entries.append({
+                    "section": "insight",
+                    "text": f"{text} {implication_text}",
+                    "source": str(item.get("id") or "experiments.yaml#research_insights"),
+                })
+    if TRIED.exists():
+        for raw in TRIED.read_text(encoding="utf-8").splitlines():
+            if not raw.strip():
+                continue
+            try:
+                row = json.loads(raw)
+            except json.JSONDecodeError:
+                continue
+            text = " ".join(str(row.get(key, "")) for key in ("direction_key", "outcome", "outcome_reason"))
+            entries.append({
+                "section": str(row.get("outcome") or "tried"),
+                "text": text,
+                "source": str(row.get("direction_key") or "tried_directions.jsonl"),
+            })
+    if not entries:
+        print("ERROR: no machine-readable experiment ledger entries found", file=sys.stderr)
+        sys.exit(2)
     return entries
 
 
-def query_coverage(query: set, entry: set) -> float:
-    """Query coverage: 多少 query token 在 entry 里出现.
-
-    比 jaccard 更适合 short query vs long entry (经验账本条目动辄 ≥ 100 token,
-    短假设 query 用 jaccard 永远跑不到 high score).
-    """
+def query_coverage(query: set[str], entry: set[str]) -> float:
     if not query:
         return 0.0
     return len(query & entry) / len(query)
@@ -98,44 +112,37 @@ def query_coverage(query: set, entry: set) -> float:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("query", help="hypothesis text to search for")
-    parser.add_argument("--section", choices=["rejected", "open_thread", "future_backlog", "all"], default="all")
+    parser.add_argument("--section", default="all")
     parser.add_argument("--top", type=int, default=5)
-    parser.add_argument("--threshold", type=float, default=0.50, help="exit 1 if any match >= this (query coverage)")
+    parser.add_argument("--threshold", type=float, default=0.50)
     args = parser.parse_args()
 
     query_tokens = tokenize(args.query)
     if not query_tokens:
-        print("ERROR: query has no meaningful tokens (all stop-words or 1-char tokens)", file=sys.stderr)
-        return 2  # operational error, not strong match (Codex 13:12 fix)
-    print(f"Query tokens: {sorted(query_tokens)}")
-    print()
+        print("ERROR: query has no meaningful tokens", file=sys.stderr)
+        return 2
 
-    entries = parse_ledger()
+    entries = load_entries()
     scored = []
-    for e in entries:
-        if args.section != "all" and e["section"] != args.section:
+    for entry in entries:
+        if args.section != "all" and entry["section"] != args.section:
             continue
-        score = query_coverage(query_tokens, tokenize(e["text"]))
-        scored.append((score, e))
-
+        score = query_coverage(query_tokens, tokenize(entry["text"]))
+        scored.append((score, entry))
     scored.sort(reverse=True, key=lambda x: x[0])
 
     found_strong = False
+    print(f"Query tokens: {sorted(query_tokens)}\n")
     print(f"Top {args.top} matches:")
-    for score, e in scored[: args.top]:
-        marker = " ⚠ STRONG MATCH" if score >= args.threshold else ""
+    for score, entry in scored[: args.top]:
+        marker = " STRONG_MATCH" if score >= args.threshold else ""
         if score >= args.threshold:
             found_strong = True
-        section_label = {"rejected": "二·已确认无效",
-                         "open_thread": "三·未完成线索",
-                         "future_backlog": "四·未来探索"}[e["section"]]
-        print(f"  [{score:.2f}] [{section_label}]{marker}")
-        text_preview = e["text"][:150] + ("..." if len(e["text"]) > 150 else "")
-        print(f"    {text_preview}")
+        print(f"  [{score:.2f}] [{entry['section']}] {entry['source']}{marker}")
+        print(f"    {entry['text'][:180]}")
 
     if found_strong:
-        print(f"\n⚠ STRONG MATCH (>={args.threshold}). Reconsider before launching new batch.")
-        print("   If proceeding, write 'aware-of-prior-match' in DIRECT spec.")
+        print(f"\nSTRONG MATCH (>={args.threshold}). Reconsider before launching new batch.")
         return 1
     print(f"\nOK: no strong match (threshold={args.threshold})")
     return 0

@@ -1,9 +1,6 @@
 # HDRF baseline registry (machine-readable, 权威源)
 #
-# 按 Codex framework holistic review Q2-D: baseline_registry 从 markdown 升 yaml,
-# 加 transition validator 防"偷偷换 baseline 充作 stress test 已过".
-#
-# baseline_registry.md 保留为人类可读 mirror, 但 commit/audit 看这个 yaml.
+# Machine-readable baseline registry. Markdown mirrors have been removed.
 #
 # 规则:
 # - pk 全局唯一 (regex: <strategy>-<variant>-YYYYMMDD)
@@ -89,7 +86,7 @@ baselines:
       cumulative_excess_compound: -0.0300
       cumulative_excess_simple: -0.0070
       max_dd_2020: -0.131
-    artifact: reports/cb_arb_baseline_trade_diagnostic_2026-05-15.md
+    artifact: data/research_framework/run_manifests/cb_arb_two_line_cross_validation_2026-05-15.yaml
     manifest_path: null  # 历史回填 TODO
     git_commit: dce5c0a  # 近期
     config_hash: TODO
@@ -149,6 +146,6 @@ baselines:
     supersedes: null
     superseded_by: null
 
-  # 历史 archived baseline (网格策略 6 标的 / cb_arb 自循环 等) 详见
-  # baseline_registry.md, 暂不全量迁移 (只迁主活跃路径)
+  # 历史 archived baseline (网格策略 6 标的 / cb_arb 自循环 等) 暂不全量迁移
+  # (只迁主活跃路径)
   # 完整迁移留 backlog: 历史 sp500/csi500/yzm/工行/300 grid + cb_arb-self-loop 等

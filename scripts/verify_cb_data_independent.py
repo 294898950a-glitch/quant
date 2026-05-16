@@ -11,7 +11,7 @@
   E. tushare bond_basic                     token 已过期, skip
 
 输出:
-  reports/cb_data_verification.md
+  data/cb_warehouse/verification/cb_data_verification.yaml
 """
 from __future__ import annotations
 
@@ -24,12 +24,13 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+import yaml
 
 warnings.filterwarnings("ignore")
 
 ROOT = Path(__file__).resolve().parent.parent
 PARQUET = ROOT / "data" / "cb_warehouse" / "cb_basic.parquet"
-REPORT = ROOT / "reports" / "cb_data_verification.md"
+REPORT = ROOT / "data" / "cb_warehouse" / "verification" / "cb_data_verification.yaml"
 
 # 10 只代表性 CB
 SAMPLES = [
@@ -615,7 +616,30 @@ def main():
     md.append("")
 
     REPORT.parent.mkdir(parents=True, exist_ok=True)
-    REPORT.write_text("\n".join(md), encoding="utf-8")
+    report_payload = {
+        "schema_version": 1,
+        "generated_at": pd.Timestamp.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "parquet_path": "data/cb_warehouse/cb_basic.parquet",
+        "parquet_rows": int(len(df_parq)),
+        "summary": {
+            "samples_checked": len(results),
+            "bad_conv_count": len(bad_conv),
+            "bad_conv_details": [
+                {
+                    "ts_code": r["ts_code"],
+                    "name": r["name"],
+                    "parq_conv": r["parq_conv"],
+                    "truth_conv_price": r["truth_conv_price"],
+                    "truth_source": r["truth_source"],
+                    "diff_pct": round(diff * 100, 2),
+                }
+                for r, diff in sorted(bad_conv, key=lambda x: -x[1])
+            ],
+        },
+        "per_sample_results": results,
+        "report_text": "\n".join(md),
+    }
+    REPORT.write_text(yaml.safe_dump(report_payload, sort_keys=False, allow_unicode=True), encoding="utf-8")
     print(f"\n报告已写入: {REPORT}", flush=True)
     print(f"严重不一致: {len(bad_conv)} 只", flush=True)
 

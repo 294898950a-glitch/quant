@@ -1,0 +1,96 @@
+schema_version: 1
+updated_at: "2026-05-17T04:58:00+08:00"
+trigger: "runtime Markdown entrypoints removed; current state moved to YAML"
+
+summary:
+  deployable_strategies: 0
+  cost_realism_wall:
+    applies_to:
+      - cb_arb
+      - cb_arb_value_gap_switch
+    finding: "Cost-on tests degraded cumulative excess by -6.76pp / -7.47pp; current cb_arb variants are not deployable."
+
+strategies:
+  - strategy_id: cb_arb
+    name: "cb_arb 主策略 (verifier yaml-current)"
+    status: wip
+    baseline_row: cb_arb-main-yaml-current-cost-on-20260516
+    deployment_contract_status: failing
+    research_direction: open
+    implementation: strategies/cb_arb/verifier.py
+    config: strategies/cb_arb/tunable_space.yaml
+    metrics:
+      cost_off:
+        cumulative_excess_compound: -0.1270
+        max_drawdown: -0.3070
+        sharpe: 0.1957
+      cost_on:
+        cumulative_excess_compound: -0.1946
+        max_drawdown: -0.3326
+        cost_degradation_pp: -0.0676
+    decision_contract:
+      hypothesis: "Convertible-bond cross-sectional ranking arbitrage can beat the benchmark by >= 5% cumulative OOS."
+      falsifiers:
+        - cumulative_excess_compound_cross_year_lt_0
+        - any_single_year_drawdown_vs_benchmark_gt_15pct
+        - any_holdout_year_sharpe_lt_0_5
+      kill_date: "2026-05-29"
+    next_default:
+      owner: ai_after_30_min_no_user_reply
+      action: keep_strategy_but_choose_another_research_direction
+
+  - strategy_id: cb_arb_value_gap_switch
+    name: "cb_arb value-gap switch (research branch)"
+    status: wip
+    baseline_row: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+    deployment_contract_status: failing
+    research_direction: open
+    implementation: scripts/evaluate_cb_arb_value_gap_switch.py
+    parent: cb_arb
+    relationship: research_branch
+    metrics:
+      cost_off:
+        cumulative_excess_compound: -0.0300
+        max_drawdown_single_year: -0.1310
+      cost_on:
+        cumulative_excess_compound: -0.1047
+        max_drawdown: -0.3516
+        cost_degradation_pp: -0.0747
+    decision_contract:
+      hypothesis: "Absolute value-gap ranking plus panic detector can be more stable than percentage deviation ranking."
+      falsifiers:
+        - cumulative_excess_compound_cross_year_lt_0
+        - any_single_year_drawdown_vs_benchmark_gt_15pct
+        - any_holdout_year_sharpe_lt_0_5
+      kill_date: "2026-05-29"
+    next_default:
+      owner: ai_after_30_min_no_user_reply
+      action: keep_strategy_but_choose_another_research_direction
+
+  - strategy_id: cb_redemption
+    name: "cb_redemption 真强赎策略"
+    status: archived
+    baseline_row: cb_redemption-cmaes-iter5-20260506
+    deployment_contract_status: failing
+    research_direction: closed
+    reason: "Historical framework audit verdict=data_mining; do not revive without user approval."
+
+  - strategy_id: grid_6_targets
+    name: "网格策略 6 标的"
+    status: archived
+    baseline_row: grid-strategies-EXPERIMENT-LOG-20260509
+    deployment_contract_status: failing
+    research_direction: closed
+    reason: "Archived after 2022-2026 tests failed to beat buy-and-hold plus dividends."
+
+no_reply_default:
+  timeout_minutes: 30
+  current_strategy_is_parameter: true
+  actions:
+    - keep_current_strategy
+    - choose_another_research_direction
+    - do_not_archive
+    - do_not_promote_to_live
+    - use_budget_calculator
+  budget_calculator: scripts/estimate_compute_budget.py
+  auto_continue_limit_cny: 100

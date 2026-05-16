@@ -1,0 +1,57 @@
+schema_version: 1
+updated_at: "2026-05-17T04:55:00+08:00"
+purpose: "Machine-owned runtime context. AI should not discover entry files from Markdown."
+
+runtime_context:
+  prompt_contract:
+    load_order:
+      - current_state
+      - strategy_registry
+      - baseline_registry
+      - experiment_registry
+      - research_insights
+      - protocol_rules
+    instruction: "Load these files directly into the AI context before research or architecture work. Do not use docs/INDEX.md as an entrypoint."
+
+  files:
+    current_state:
+      path: data/research_framework/current.yaml
+      format: yaml
+      role: current strategy state and user-default next action
+      required: true
+    strategy_registry:
+      path: data/research_framework/strategies.yaml
+      format: yaml
+      role: strategy_id and hypothesis_id registry
+      required: true
+    baseline_registry:
+      path: data/research_framework/baseline_registry.yaml
+      format: yaml
+      role: machine-readable official baseline records
+      required: true
+    experiment_registry:
+      path: data/research_framework/experiments.yaml
+      format: yaml
+      role: machine-readable experiment status ledger
+      required: true
+    research_insights:
+      path: data/research_framework/research_insights.yaml
+      format: yaml
+      role: machine-readable cross-experiment lessons and open threads
+      required: true
+    protocol_rules:
+      path: data/research_framework/protocol_rules.yaml
+      format: yaml
+      role: machine-readable operating rules
+      required: true
+
+deprecated_runtime_entries:
+  - path: docs/INDEX.md
+    replacement: data/research_framework/runtime_entrypoints.yaml
+    reason: "Markdown map is not a runtime entrypoint; AI context should be injected mechanically."
+  - path: docs/research_framework/protocol_redline.md
+    replacement: data/research_framework/protocol_rules.yaml
+    reason: "Machine rules live in YAML; Markdown is not authoritative for runtime behavior."
+  - path: docs/research_framework/CURRENT.md
+    replacement: data/research_framework/current.yaml
+    reason: "Current state is machine-owned YAML."

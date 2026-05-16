@@ -11,6 +11,8 @@ from __future__ import annotations
 import json
 import re
 import subprocess
+
+import yaml
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -20,7 +22,7 @@ from typing import Any
 VM_HOST = "root@100.91.245.108"
 VM_REPO = "/root/projects/quant"
 OUT_DIR = Path("data/cb_arb/recovered")
-REPORT_PATH = Path("reports/cb_arb_recovery_2026-05-10.md")
+REPORT_PATH = Path("data/cb_arb/recovered/cb_arb_recovery_2026-05-10.yaml")
 TARGET_START = datetime.fromisoformat("2026-05-09 16:20:00 +0800")
 TARGET_END = datetime.fromisoformat("2026-05-09 20:01:00 +0800")
 
@@ -315,61 +317,43 @@ def main() -> None:
 
     start = target[0]
     end = target[-1]
-    report = [
-        "# cb_arb VM Reflog Recovery",
-        "",
-        "## Scope",
-        "",
-        f"- VM repo: `{VM_HOST}:{VM_REPO}`",
-        f"- Recovered run: iteration {start.iteration} at {start.date} through iteration {end.iteration} at {end.date}",
-        f"- Commits recovered: {len(target)}",
-        "- Source: `git reflog --date=iso --all`; original `data/cb_arb/runs.jsonl` remains unavailable.",
-        "",
-        "## Artifacts",
-        "",
-        f"- `{OUT_DIR / 'vm_git_reflog_raw.txt'}`",
-        f"- `{OUT_DIR / 'cb_arb_reflog_iter_1_240.jsonl'}`",
-        f"- `{OUT_DIR / 'cb_arb_recovery_trace_iter_1_240.jsonl'}`",
-        f"- `{OUT_DIR / 'cb_arb_iter_240_params_before_commit.json'}`",
-        f"- `{OUT_DIR / 'cb_arb_iter_240_params_after_commit.json'}`",
-        "",
-        "## Recovery Quality",
-        "",
-    ]
-    for key in sorted(quality_counts):
-        report.append(f"- {key}: {quality_counts[key]}")
-    report.extend(
-        [
-            "",
-            "Exact JSON run records were not recoverable because `runs.jsonl` was untracked and overwritten.",
-            "Rows marked `unresolved_recovery_attempt` were recovery commits whose messages did not include concrete values.",
-            "Rows marked `inferred_with_mismatch` indicate that a later commit message provided a value that did not match the state reconstructed from earlier messages.",
-            "",
-            "## Iteration 240 Parameters",
-            "",
-            "The `before_commit` file is the best proxy for the parameters used by the 240th backtest row.",
-            "The `after_commit` file includes the iteration-240 LLM edit itself.",
-            "",
-            "### Before Iteration 240 Commit",
-            "",
-            "```json",
-            json.dumps(before_240, ensure_ascii=False, indent=2),
-            "```",
-            "",
-            "### After Iteration 240 Commit",
-            "",
-            "```json",
-            json.dumps(after_240, ensure_ascii=False, indent=2),
-            "```",
-            "",
-            "## Gaps",
-            "",
-            f"- Unresolved recovery attempts: {len(unresolved)}",
-            f"- State/value mismatches: {len(mismatches)}",
-        ]
-    )
+    report_data = {
+        "schema_version": 1,
+        "title": "cb_arb VM Reflog Recovery",
+        "scope": {
+            "vm_repo": f"{VM_HOST}:{VM_REPO}",
+            "iter_start": {"iteration": start.iteration, "date": start.date},
+            "iter_end": {"iteration": end.iteration, "date": end.date},
+            "commits_recovered": len(target),
+            "source": "git reflog --date=iso --all",
+            "note": "original data/cb_arb/runs.jsonl remains unavailable",
+        },
+        "artifacts": [
+            str(OUT_DIR / "vm_git_reflog_raw.txt"),
+            str(OUT_DIR / "cb_arb_reflog_iter_1_240.jsonl"),
+            str(OUT_DIR / "cb_arb_recovery_trace_iter_1_240.jsonl"),
+            str(OUT_DIR / "cb_arb_iter_240_params_before_commit.json"),
+            str(OUT_DIR / "cb_arb_iter_240_params_after_commit.json"),
+        ],
+        "recovery_quality": dict(sorted(quality_counts.items())),
+        "quality_notes": {
+            "unresolved_recovery_attempt": "recovery commits whose messages did not include concrete values",
+            "inferred_with_mismatch": "later commit message provided a value that did not match earlier-reconstructed state",
+            "missing_runs_jsonl": "exact JSON run records were not recoverable because runs.jsonl was untracked and overwritten",
+        },
+        "iteration_240": {
+            "before_commit_note": "best proxy for the parameters used by the 240th backtest row",
+            "after_commit_note": "includes the iteration-240 LLM edit itself",
+            "before_params": before_240,
+            "after_params": after_240,
+        },
+        "gaps": {
+            "unresolved_recovery_attempts": len(unresolved),
+            "state_value_mismatches": len(mismatches),
+        },
+    }
     REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text("\n".join(report) + "\n")
+    REPORT_PATH.write_text(yaml.safe_dump(report_data, sort_keys=False, allow_unicode=True), encoding="utf-8")
 
     print(f"wrote {REPORT_PATH}")
     print(f"wrote {OUT_DIR}")

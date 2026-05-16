@@ -8,14 +8,19 @@ Usage:
   python3 scripts/framework_doc_check.py <path>
 
 路径推 schema:
-- reports/*.md → validate_retro_report.py --single
+- *.md except AGENTS.md/CLAUDE.md → validate_entrypoints.py (Markdown is not allowed)
 - data/<run-id>/spec.yaml → validate_spec.py
 - data/<run-id>/l4_ack.yaml → validate_l4_ack.py --run-dir
 - data/<run-id>/diagnostic.yaml → validate_l5_diagnostic.py --run-dir
+- data/research_framework/current.yaml → validate_current_md.py
 - data/research_framework/baseline_registry.yaml → validate_baseline_registry.py
+- data/research_framework/runtime_entrypoints.yaml → validate_entrypoints.py
+- data/research_framework/protocol_rules.yaml → validate_entrypoints.py
+- data/research_framework/experiments.yaml → validate_entrypoints.py
+- data/research_framework/truth_sync_waivers/*.yaml → validate_truth_sync.py
 - data/research_framework/strategies.yaml → validate_spec.py (依赖检查)
 - data/research_framework/compute_budget_config.json → validate_compute_budget.py
-- docs/research_framework/*.md → validate_current_md.py / validate_entrypoints.py
+- AGENTS.md / CLAUDE.md → validate_entrypoints.py
 - 其他路径 → skip (不在 framework 受管范围)
 
 设计 (cross-AI, 完全解耦):
@@ -45,6 +50,11 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO_ROOT / "scripts"
 
 
+def is_markdown_artifact(path: Path) -> bool:
+    name = path.name
+    return name.endswith(".md") or ".md." in name
+
+
 def dispatch(path: Path) -> tuple[str, list[str]]:
     """根据 path 推 (validator_script, args). 返回 ('', []) 表示 skip."""
     # 兼容相对路径 (daemon / 用户手动调可能传 cwd 相对) + 绝对路径
@@ -58,9 +68,10 @@ def dispatch(path: Path) -> tuple[str, list[str]]:
     rel_str = str(rel)
     path = abs_path  # 后续 args 用绝对路径, 避免子 validator cwd 歧义
 
-    # reports/**/*.md
-    if rel_str.startswith("reports/") and rel_str.endswith(".md"):
-        return ("validate_retro_report.py", [str(path)])
+    allowed_markdown = {"AGENTS.md", "CLAUDE.md"}
+
+    if is_markdown_artifact(rel) and rel_str not in allowed_markdown:
+        return ("validate_entrypoints.py", [])
 
     # data/<run-id>/spec.yaml
     if rel_str.startswith("data/") and rel.name == "spec.yaml":
@@ -80,6 +91,20 @@ def dispatch(path: Path) -> tuple[str, list[str]]:
     if rel_str == "data/research_framework/baseline_registry.yaml":
         return ("validate_baseline_registry.py", [])
 
+    if rel_str == "data/research_framework/current.yaml":
+        return ("validate_current_md.py", [])
+
+    if rel_str in {
+        "data/research_framework/runtime_entrypoints.yaml",
+        "data/research_framework/protocol_rules.yaml",
+        "data/research_framework/experiments.yaml",
+    }:
+        return ("validate_entrypoints.py", [])
+
+    # data/research_framework/truth_sync_waivers/*.yaml
+    if rel_str.startswith("data/research_framework/truth_sync_waivers/") and rel_str.endswith((".yaml", ".yml")):
+        return ("validate_truth_sync.py", ["--waivers-only"])
+
     # data/research_framework/compute_budget_config.json
     if rel_str == "data/research_framework/compute_budget_config.json":
         return ("validate_compute_budget.py", [])
@@ -88,10 +113,8 @@ def dispatch(path: Path) -> tuple[str, list[str]]:
     if rel_str.startswith("data/research_framework/run_manifests/") and rel_str.endswith(".yaml"):
         return ("validate_run_manifest.py", [])
 
-    # docs/research_framework/CURRENT.md / HDRF.md / etc
-    if rel_str.startswith("docs/research_framework/") and rel_str.endswith(".md"):
-        # validate_current_md 扫 CURRENT.md 等; 这里只是触发, 不传 path
-        return ("validate_current_md.py", [])
+    if rel_str in allowed_markdown:
+        return ("validate_entrypoints.py", [])
 
     # scripts/*.py 改的话也走 validate_gatekeeper_compliance + entrypoints
     # (脚本改动不算 doc 写, 但安全起见 framework_preflight 已 cover 在 commit 时)

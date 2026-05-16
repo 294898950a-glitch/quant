@@ -21,16 +21,21 @@ from pathlib import Path
 from typing import Iterator
 from zoneinfo import ZoneInfo
 
+try:
+    import yaml
+except ImportError:
+    yaml = None
+
 
 EXIT_OK = 0
 EXIT_SKIP = 10
 EXIT_HANDOFF = 20
 EXIT_ERROR = 1
 
-DEFAULT_PROTOCOL_DOC = Path("docs/research_framework/protocol_redline.md")
+DEFAULT_PROTOCOL_DOC = Path("data/research_framework/protocol_rules.yaml")
 DEFAULT_CACHE = Path("data/research_framework/processed_claude_messages.jsonl")
 DEFAULT_DISAGREEMENT_COUNTERS = Path("data/research_framework/disagreement_counters.json")
-DEFAULT_LEDGER = Path("docs/research_framework/experience_ledger.md")
+DEFAULT_LEDGER = Path("data/research_framework/experiments.yaml")
 
 HEADING_RE = re.compile(
     r"^###\s+(?P<ts>\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}\s+CST)\s+-\s+"
@@ -118,6 +123,16 @@ def first_nonempty_line(text: str) -> str:
 
 def local_protocol_version(protocol_doc: Path) -> str | None:
     text = read_text(protocol_doc)
+    if protocol_doc.suffix in {".yaml", ".yml"} and yaml is not None:
+        try:
+            data = yaml.safe_load(text)
+        except yaml.YAMLError:
+            data = None
+        if isinstance(data, dict):
+            version = str(data.get("version") or "")
+            match = re.match(r"(?P<version>\d+\.\d+)", version)
+            if match:
+                return match.group("version")
     match = re.search(r"协议红线\s+v(?P<version>\d+\.\d+)", text)
     if match:
         return match.group("version")
@@ -266,14 +281,34 @@ def direct_requires_full_spec(msg: Message) -> bool:
 def extract_run_id(msg: Message) -> str | None:
     patterns = (
         r"\brun[-_ ]?id\s*[:=]\s*`?([A-Za-z0-9_.-]+)`?",
-        r"`data/([^/`]+)/(?:spec|l0_[^/`]+)\.md`",
-        r"data/([^/\s`]+)/(?:spec|l0_[^/\s`]+)\.md",
+        r"`data/([^/`]+)/(?:spec|l0_[^/`]+)\.yaml`",
+        r"data/([^/\s`]+)/(?:spec|l0_[^/\s`]+)\.yaml",
     )
     for pattern in patterns:
         match = re.search(pattern, msg.body, flags=re.IGNORECASE)
         if match:
             return match.group(1)
     return None
+
+
+def load_l0_yaml(path: Path) -> tuple[dict | None, str | None]:
+    if not path.exists():
+        return None, f"missing file: {path}"
+    if yaml is None:
+        return None, "PyYAML unavailable; cannot validate L0 yaml precondition."
+    try:
+        data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    except Exception as exc:  # pragma: no cover - exact yaml exception type depends on PyYAML
+        return None, f"invalid yaml: {path}: {exc}"
+    if not isinstance(data, dict):
+        return None, f"{path} root must be a mapping."
+    if "schema_version" not in data:
+        return None, f"{path} missing schema_version."
+    return data, None
+
+
+def missing_l0_keys(data: dict, keys: tuple[str, ...]) -> list[str]:
+    return [key for key in keys if not data.get(key)]
 
 
 def check_l0_preconditions(msg: Message, repo: Path) -> list[str]:
@@ -283,25 +318,32 @@ def check_l0_preconditions(msg: Message, repo: Path) -> list[str]:
     run_id = extract_run_id(msg)
     if entry == "1.1":
         if not run_id:
-            return ["l0-entry-id 1.1 requires a run-id for data/<run-id>/l0_intuition.md."]
-        path = repo / "data" / run_id / "l0_intuition.md"
-        text = read_text(path)
-        if not path.exists() or "强" not in text or "中" not in text or "弱" not in text:
-            return [f"missing L0 intuition precondition: {path} with 强/中/弱 ladder."]
+            return ["l0-entry-id 1.1 requires a run-id for data/<run-id>/l0_intuition.yaml."]
+        path = repo / "data" / run_id / "l0_intuition.yaml"
+        data, error = load_l0_yaml(path)
+        if error:
+            return [error]
+        ladder = data.get("intuition_ladder") if data else None
+        if not isinstance(ladder, dict) or missing_l0_keys(ladder, ("strong", "medium", "weak")):
+            return [f"missing L0 intuition precondition: {path} with schema_version and intuition_ladder strong/medium/weak."]
     if entry == "2.2":
         if not run_id:
-            return ["l0-entry-id 2.2 requires a run-id for data/<run-id>/l0_anomaly.md."]
-        path = repo / "data" / run_id / "l0_anomaly.md"
-        text = read_text(path)
-        if not path.exists() or not ("异常" in text and "假设" in text):
-            return [f"missing L0 anomaly precondition: {path} with anomaly and hypothesis."]
+            return ["l0-entry-id 2.2 requires a run-id for data/<run-id>/l0_anomaly.yaml."]
+        path = repo / "data" / run_id / "l0_anomaly.yaml"
+        data, error = load_l0_yaml(path)
+        if error:
+            return [error]
+        if data is None or missing_l0_keys(data, ("anomaly", "hypothesis")):
+            return [f"missing L0 anomaly precondition: {path} with schema_version, anomaly, and hypothesis."]
     if entry == "3":
         if not run_id:
-            return ["l0-entry-id 3 requires a run-id for data/<run-id>/l0_reproduction.md."]
-        path = repo / "data" / run_id / "l0_reproduction.md"
-        text = read_text(path)
-        if not path.exists() or not ("作者数据" in text and "我方数据" in text):
-            return [f"missing L0 reproduction precondition: {path} with 作者数据 vs 我方数据."]
+            return ["l0-entry-id 3 requires a run-id for data/<run-id>/l0_reproduction.yaml."]
+        path = repo / "data" / run_id / "l0_reproduction.yaml"
+        data, error = load_l0_yaml(path)
+        if error:
+            return [error]
+        if data is None or missing_l0_keys(data, ("author_data", "our_data")):
+            return [f"missing L0 reproduction precondition: {path} with schema_version, author_data, and our_data."]
     return []
 
 
@@ -374,24 +416,44 @@ def duplicate_reasons(msg: Message, ledger: Path) -> list[str]:
     query_tokens = tokenize(hypothesis_text(msg))
     if not query_tokens:
         return []
-    rejected = section_between(ledger_text, "## 二、已确认无效", "## 三、未完成线索")
-    open_threads = section_between(ledger_text, "## 三、未完成线索", "## 四、未来探索方向")
+    lines: list[tuple[str, str, str]] = []
+    if ledger.suffix in {".yaml", ".yml"} and yaml is not None:
+        try:
+            data = yaml.safe_load(ledger_text)
+        except yaml.YAMLError:
+            data = None
+        if isinstance(data, dict):
+            for item in data.get("experiments", []):
+                if not isinstance(item, dict):
+                    continue
+                status = str(item.get("status") or "experiment")
+                text = " ".join(
+                    str(item.get(key, ""))
+                    for key in ("id", "strategy_id", "hypothesis_id", "status", "summary", "current_strategy_effect")
+                )
+                label = "rejected" if status in {"rejected", "abandoned", "superseded"} else "open_threads"
+                code = "HANDOFF/L0-DUPLICATE-REJECTED" if label == "rejected" else "HANDOFF/L0-DUPLICATE-MERGE"
+                lines.append((label, code, text))
+    if not lines:
+        rejected = section_between(ledger_text, "## 二、已确认无效", "## 三、未完成线索")
+        open_threads = section_between(ledger_text, "## 三、未完成线索", "## 四、未来探索方向")
+        for label, block, status in (
+            ("rejected", rejected, "HANDOFF/L0-DUPLICATE-REJECTED"),
+            ("open_threads", open_threads, "HANDOFF/L0-DUPLICATE-MERGE"),
+        ):
+            for raw_line in block.splitlines():
+                line = raw_line.strip()
+                if line.startswith(("-", "|")) and "---" not in line:
+                    lines.append((label, status, line))
     reasons: list[str] = []
-    for label, block, status in (
-        ("rejected", rejected, "HANDOFF/L0-DUPLICATE-REJECTED"),
-        ("open_threads", open_threads, "HANDOFF/L0-DUPLICATE-MERGE"),
-    ):
-        for raw_line in block.splitlines():
-            line = raw_line.strip()
-            if not line.startswith(("-", "|")) or "---" in line:
-                continue
-            line_tokens = tokenize(line)
-            if not line_tokens:
-                continue
-            score = len(query_tokens & line_tokens) / max(1, len(query_tokens | line_tokens))
-            if score >= 0.35:
-                reasons.append(f"{status}: fuzzy duplicate in {label} (score={score:.2f}): {line[:160]}")
-                return reasons
+    for label, status, line in lines:
+        line_tokens = tokenize(line)
+        if not line_tokens:
+            continue
+        score = len(query_tokens & line_tokens) / max(1, len(query_tokens | line_tokens))
+        if score >= 0.35:
+            reasons.append(f"{status}: fuzzy duplicate in {label} (score={score:.2f}): {line[:160]}")
+            return reasons
     return reasons
 
 

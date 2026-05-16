@@ -8,7 +8,7 @@
 做的事:
 1. 算 run_id = <strategy_id>_<hypothesis_slug>_<YYYY-MM-DD>
 2. 检查 data/<run_id>/ 不存在 (不覆盖现有)
-3. 跑 search_ledger.py 查经验账本是否 reject 过相似方向
+3. 跑 search_ledger.py 查机器实验账本是否 reject 过相似方向
    - 命中 strong match → 拒绝建立 (用户确认后用 --force)
 4. mkdir data/<run_id>/
 5. cp spec_template.yaml → data/<run_id>/spec.yaml
@@ -197,13 +197,13 @@ def main() -> int:
         return 1
 
     if not args.force:
-        print(f"Checking experience_ledger for similar '{hypothesis_slug}'...")
+        print(f"Checking machine experiment ledger for similar '{hypothesis_slug}'...")
         status, output = check_ledger_duplicate(hypothesis_slug)
         if status == "strong_match":
             print()
             print(output)
             print()
-            print(f"⚠ STRONG MATCH found in experience_ledger.")
+            print(f"⚠ STRONG MATCH found in machine experiment ledger.")
             print(f"  This direction may have been already tried/rejected.")
             print(f"  If you want to proceed anyway, re-run with --force")
             print(f"  and write 'aware-of-prior-match' in spec.yaml notes.")
@@ -211,7 +211,7 @@ def main() -> int:
         if status == "error":
             print(f"\nERROR running search_ledger.py:\n{output}", file=sys.stderr)
             print(f"  这不是 strong match, 是 search_ledger 自己 fail.", file=sys.stderr)
-            print(f"  请检查 search_ledger.py 或 experience_ledger.md 是否完好.", file=sys.stderr)
+            print(f"  请检查 search_ledger.py 或 data/research_framework/experiments.yaml 是否完好.", file=sys.stderr)
             return 2
         print("  ✓ No strong duplicate found")
 

@@ -13,6 +13,7 @@ Exit codes:
 Run by:
   - git pre-commit hook (P1.3) when touching strategy files
   - Codex/Claude before claims touching strategy truth
+  - validate_truth_sync.py closes the "truth changed but CURRENT/baseline not updated" gap
 """
 
 from __future__ import annotations
@@ -68,6 +69,7 @@ def main() -> int:
     exits.append(run_validator("validate_compute_budget.py"))
     exits.append(run_validator("validate_current_md.py"))
     exits.append(run_validator("validate_run_manifest.py"))
+    exits.append(run_validator("validate_truth_sync.py"))
     exits.append(run_validator("validate_data_schema.py"))
     exits.append(run_validator("validate_spec.py"))
     exits.append(run_validator("validate_report.py"))
@@ -75,15 +77,6 @@ def main() -> int:
     exits.append(run_validator("validate_l5_diagnostic.py"))
     exits.append(run_validator("validate_baseline_registry.py"))
     exits.append(run_validator("validate_gatekeeper_compliance.py"))
-
-    # Index freshness check (warn-only, phase 1)
-    print("\n=== generate_indexes.py --check ===")
-    result = subprocess.run(
-        [sys.executable, str(SCRIPTS / "generate_indexes.py"), "--check"], cwd=REPO_ROOT
-    )
-    if result.returncode != 0:
-        print("  WARN: index outdated (run scripts/generate_indexes.py)")
-        # warn-only in phase 1, don't add to exits
 
     print("\n=== dirty-file inventory (research-relevant) ===")
     dirty = dirty_inventory()

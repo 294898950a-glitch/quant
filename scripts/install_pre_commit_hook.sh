@@ -7,7 +7,7 @@
 #
 # Hook behavior:
 # - Triggers on commits touching: strategies/*, scripts/evaluate_cb_*, scripts/search_cb_*,
-#   docs/research_framework/*, data/research_framework/*
+#   data/research_framework/*
 # - Runs framework_preflight.py
 # - exit 1 from preflight → block commit (use --no-verify to bypass)
 # - dirty inventory warnings don't block
@@ -45,8 +45,7 @@ while IFS= read -r file; do
         scripts/auto_compute_l4_data.py|scripts/gatekeeper.py|\
         scripts/validate_*.py|scripts/framework_preflight.py|\
         scripts/new_research.py|scripts/search_ledger.py|\
-        docs/research_framework/*|data/research_framework/*|\
-        reports/*)
+        data/research_framework/*)
             NEEDS_PREFLIGHT=true
             break
             ;;
@@ -75,20 +74,8 @@ if [ $EXIT_CODE -ne 0 ] && [ $EXIT_CODE -ne 2 ]; then
     exit 1
 fi
 
-# 按 Codex 01:50 review A-prime: framework_preflight 跟 retro validator 完全
-# 解耦. 但 commit 前 retro check 是最后关, 不能丢. 这里单独 invoke
-# validate_retro_report.py 当 staged 含 reports/*. daemon/hook 可能 down /
-# bypassed / 另一个 AI session 没装, commit gate 不依赖 daemon freshness.
-echo "$STAGED_FILES" | grep -q "^reports/" && {
-    echo "[pre-commit] reports/* staged, running validate_retro_report.py..."
-    python3 scripts/validate_retro_report.py
-    RETRO_EXIT=$?
-    if [ $RETRO_EXIT -ne 0 ]; then
-        echo ""
-        echo "[pre-commit] validate_retro_report FAILED (exit $RETRO_EXIT). Commit blocked."
-        exit 1
-    fi
-}
+# 2026-05-17: historical report markdown is no longer runtime-managed.
+# validate_entrypoints now allows only AGENTS.md / CLAUDE.md. Old retro validator wiring is deleted.
 
 exit 0
 EOF
@@ -96,7 +83,7 @@ EOF
 chmod +x "$HOOK_PATH"
 echo "Installed pre-commit hook at $HOOK_PATH"
 echo "Hook will:"
-echo "  - Trigger on commits touching strategies/* / scripts/evaluate_cb_* / docs|data/research_framework/*"
+echo "  - Trigger on commits touching strategies/* / scripts/evaluate_cb_* / data/research_framework/*"
 echo "  - Run framework_preflight.py"
 echo "  - Block on STRICT failures (exit 1)"
 echo "  - Allow with warnings (exit 2)"

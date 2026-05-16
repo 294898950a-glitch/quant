@@ -1,101 +1,99 @@
 #!/usr/bin/env python3
-"""Validate docs/research_framework/CURRENT.md schema (F5 spec, phase 1 warn-only).
+"""Validate data/research_framework/current.yaml.
 
-Checks each active strategy section has:
-- machine-readable YAML front-matter with required fields
-- 决策契约 section (假设 / 证伪条件 / 成本上限 / 下一步)
-- Baseline 摘要 section
-- Deployment contract 判定 section
-
-Warn-only: exits 0 on missing fields, prints warnings.
-Exits 1 only on YAML parse error or fatal file structure issues.
-
-Run: python3 scripts/validate_current_md.py (this host: plain `python` absent)
+The filename is kept for compatibility with existing preflight wiring.
 """
 
 from __future__ import annotations
 
-import re
 import sys
 from pathlib import Path
+from typing import Any
 
 try:
     import yaml
 except ImportError:
-    print("ERROR: pyyaml required (pip install pyyaml)", file=sys.stderr)
+    print("ERROR: pyyaml required", file=sys.stderr)
     sys.exit(1)
 
-CURRENT_MD = Path(__file__).resolve().parent.parent / "docs" / "research_framework" / "CURRENT.md"
 
-REQUIRED_FRONTMATTER = {"status", "strategy_id", "baseline_row", "kill_date", "last_decision_at",
-                        "deployment_contract_status", "research_direction"}
+REPO_ROOT = Path(__file__).resolve().parent.parent
+CURRENT = REPO_ROOT / "data" / "research_framework" / "current.yaml"
+
+REQUIRED_STRATEGY_FIELDS = {
+    "strategy_id",
+    "name",
+    "status",
+    "baseline_row",
+    "deployment_contract_status",
+    "research_direction",
+}
 ALLOWED_STATUS = {"experiment", "wip", "adopted", "rejected", "archived", "stale", "invalidated", "n/a"}
 ALLOWED_RESEARCH_DIRECTION = {"open", "closed"}
 ALLOWED_DEPLOYMENT_STATUS = {"passing", "failing", "unknown", "n/a"}
 
 
 def main() -> int:
-    if not CURRENT_MD.exists():
-        print(f"ERROR: {CURRENT_MD} missing", file=sys.stderr)
+    if not CURRENT.exists():
+        print(f"ERROR: missing {CURRENT.relative_to(REPO_ROOT)}", file=sys.stderr)
+        return 1
+    try:
+        data = yaml.safe_load(CURRENT.read_text(encoding="utf-8"))
+    except yaml.YAMLError as exc:
+        print(f"ERROR: current.yaml parse failure: {exc}", file=sys.stderr)
+        return 1
+    if not isinstance(data, dict):
+        print("ERROR: current.yaml root must be mapping", file=sys.stderr)
         return 1
 
-    text = CURRENT_MD.read_text(encoding="utf-8")
-    warnings = []
-    sections = re.split(r"^## (.+)$", text, flags=re.MULTILINE)
-    # sections[0] = preamble, then alternating (heading, body)
-    for i in range(1, len(sections), 2):
-        heading = sections[i].strip()
-        body = sections[i + 1] if i + 1 < len(sections) else ""
-        if heading in ("总览", "WIP 文件清单 (untracked / modified 关键文件)", "策略关系图 (lineage 标签)",
-                       "协议触发 CURRENT.md 更新事件 (U15, see protocol_redline.md)",
-                       "用户无回复默认规则", "下一步 owner (当前等谁)", "维护规则"):
-            continue
-        # strategy section
-        fm_match = re.search(r"```yaml\n(.*?)\n```", body, re.DOTALL)
-        if not fm_match:
-            warnings.append(f"[{heading}] missing machine-readable YAML front-matter")
-            continue
-        try:
-            fm = yaml.safe_load(fm_match.group(1))
-        except yaml.YAMLError as e:
-            print(f"ERROR: [{heading}] YAML parse failure: {e}", file=sys.stderr)
-            return 1
-        missing = REQUIRED_FRONTMATTER - set(fm.keys())
-        if missing:
-            warnings.append(f"[{heading}] missing required front-matter fields: {missing}")
-        if fm.get("status") not in ALLOWED_STATUS:
-            warnings.append(f"[{heading}] invalid status: {fm.get('status')} (allowed: {ALLOWED_STATUS})")
-        if fm.get("research_direction") not in ALLOWED_RESEARCH_DIRECTION:
-            warnings.append(f"[{heading}] invalid research_direction: {fm.get('research_direction')}")
-        if fm.get("deployment_contract_status") not in ALLOWED_DEPLOYMENT_STATUS:
-            warnings.append(f"[{heading}] invalid deployment_contract_status: {fm.get('deployment_contract_status')}")
-        # Active strategies (not archived) must have decision contract
-        if fm.get("status") not in ("archived", "rejected", "invalidated"):
-            if "### 决策契约" not in body:
-                warnings.append(f"[{heading}] active strategy missing 决策契约 section")
-            if "### Baseline 摘要" not in body:
-                warnings.append(f"[{heading}] active strategy missing Baseline 摘要 section")
-            if "### Deployment contract 判定" not in body:
-                warnings.append(f"[{heading}] active strategy missing Deployment contract 判定 section")
+    issues: list[str] = []
+    if data.get("schema_version") != 1:
+        issues.append("schema_version must be 1")
+    strategies = data.get("strategies")
+    if not isinstance(strategies, list) or not strategies:
+        issues.append("strategies must be a non-empty list")
+    else:
+        seen: set[str] = set()
+        for idx, item in enumerate(strategies):
+            if not isinstance(item, dict):
+                issues.append(f"strategies[{idx}] must be mapping")
+                continue
+            sid = str(item.get("strategy_id") or "")
+            if sid in seen:
+                issues.append(f"duplicate strategy_id: {sid}")
+            seen.add(sid)
+            missing = REQUIRED_STRATEGY_FIELDS - set(item)
+            if missing:
+                issues.append(f"{sid or idx}: missing fields {sorted(missing)}")
+            if item.get("status") not in ALLOWED_STATUS:
+                issues.append(f"{sid}: invalid status {item.get('status')}")
+            if item.get("research_direction") not in ALLOWED_RESEARCH_DIRECTION:
+                issues.append(f"{sid}: invalid research_direction {item.get('research_direction')}")
+            if item.get("deployment_contract_status") not in ALLOWED_DEPLOYMENT_STATUS:
+                issues.append(f"{sid}: invalid deployment_contract_status {item.get('deployment_contract_status')}")
+            if item.get("status") not in {"archived", "rejected", "invalidated"}:
+                if not isinstance(item.get("decision_contract"), dict):
+                    issues.append(f"{sid}: active strategy missing decision_contract")
+                if not isinstance(item.get("metrics"), dict):
+                    issues.append(f"{sid}: active strategy missing metrics")
 
-    # P1.1: strict mode — missing required front-matter fields = exit 1
-    strict_failures = [w for w in warnings if "missing required front-matter fields" in w
-                       or "invalid status" in w
-                       or "invalid research_direction" in w
-                       or "invalid deployment_contract_status" in w]
-    soft_warnings = [w for w in warnings if w not in strict_failures]
+    no_reply = data.get("no_reply_default")
+    if not isinstance(no_reply, dict):
+        issues.append("missing no_reply_default")
+    else:
+        if no_reply.get("timeout_minutes") != 30:
+            issues.append("no_reply_default.timeout_minutes must be 30")
+        if no_reply.get("auto_continue_limit_cny") != 100:
+            issues.append("no_reply_default.auto_continue_limit_cny must be 100")
 
-    if strict_failures:
-        print(f"validate_current_md.py: {len(strict_failures)} STRICT failure(s)")
-        for w in strict_failures:
-            print(f"  FAIL {w}")
-    if soft_warnings:
-        print(f"validate_current_md.py: {len(soft_warnings)} warning(s)")
-        for w in soft_warnings:
-            print(f"  WARN {w}")
-    if not warnings:
-        print("validate_current_md.py: OK")
-    return 1 if strict_failures else 0
+    if issues:
+        print(f"validate_current_md.py: {len(issues)} failure(s)")
+        for issue in issues:
+            print(f"  FAIL {issue}")
+        return 1
+
+    print("validate_current_md.py: OK")
+    return 0
 
 
 if __name__ == "__main__":

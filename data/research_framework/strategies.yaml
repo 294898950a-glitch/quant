@@ -1,6 +1,6 @@
 # Machine-readable strategy + hypothesis ID registry (P1.6 spec)
 #
-# 单源 strategy_id / hypothesis_id 列表, 让 CURRENT.md / baseline_registry /
+# 单源 strategy_id / hypothesis_id 列表, 让 current.yaml / baseline_registry /
 # run_manifest 都 reference 同一处. Validator / preflight 检查一致性.
 #
 # 加新策略 / 新 hypothesis 时改这里, 其他文件不重复维护.

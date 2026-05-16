@@ -1,133 +1,114 @@
 #!/usr/bin/env python3
-"""Validate the hard-coded new-session entrypoint contract."""
+"""Validate machine-owned runtime entrypoints.
+
+Markdown maps are not runtime inputs. The AI context must be loaded from
+data/research_framework/runtime_entrypoints.yaml.
+"""
 
 from __future__ import annotations
 
 import sys
 from pathlib import Path
+from typing import Any
+
+try:
+    import yaml
+except ImportError:
+    print("ERROR: pyyaml required", file=sys.stderr)
+    sys.exit(1)
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+RUNTIME = REPO_ROOT / "data" / "research_framework" / "runtime_entrypoints.yaml"
+PROTOCOL = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
+CURRENT = REPO_ROOT / "data" / "research_framework" / "current.yaml"
+EXPERIMENTS = REPO_ROOT / "data" / "research_framework" / "experiments.yaml"
 
-ENTRY_FILES = [
-    "docs/research_framework/CURRENT.md",
-    "data/research_framework/baseline_registry.md",
+FORBIDDEN_RUNTIME_MD = [
     "docs/INDEX.md",
-]
-
-CHECK_FILES = [
-    "README.md",
-    "docs/INDEX.md",
-    "docs/research_framework/HDRF.md",
-    "docs/research_framework/CURRENT.md",
-]
-
-# Files that must mention "3 个入口" or "3 入口" (not "4 个入口" or "唯一入口")
-ENTRY_COUNT_CHECK = [
-    "README.md",
-    "docs/INDEX.md",
-    "docs/research_framework/CURRENT.md",
-    "docs/research_framework/HDRF.md",
-]
-
-NO_REPLY_DEFAULT_FILES = [
-    "README.md",
     "docs/research_framework/CURRENT.md",
     "docs/research_framework/protocol_redline.md",
-    "docs/research_framework/autonomous_loop_protocol.md",
 ]
-
-REDLINE_SYNC_FILES = [
-    "README.md",
-    "AGENTS.md",
-    "CLAUDE.md",
-    "docs/research_framework/protocol_redline.md",
-    "docs/research_framework/autonomous_loop_protocol.md",
-]
-
-STALE_RULE_PHRASES = [
-    "起 spot 前用户最后批",
-    "必须用户最后批准",
-    "grid / backtest / VM 一行命令都不发",
-    "永远人工",
-    "不能自决起 spot",
-    "月预算: ¥90",
-    "模式 B 沙盒",
-    "沙盒约束",
-    "新增数据/改核心代码/加预算仍停等用户",
-    "若需要新增数据源、改变核心代码、提高预算",
-    "当前策略族",
-    "R3 实时",
-    "红线 1: 写文档",
-    "7 条红线",
-    "OS 文件系统层 (cross-AI 真硬)",
-]
+ALLOWED_MARKDOWN = {"AGENTS.md", "CLAUDE.md"}
 
 
-def read(path: str) -> str:
-    return (REPO_ROOT / path).read_text(encoding="utf-8")
+def is_markdown_artifact(path: Path) -> bool:
+    name = path.name
+    return name.endswith(".md") or ".md." in name
 
 
-def ordered(text: str, needles: list[str]) -> bool:
-    pos = -1
-    for needle in needles:
-        next_pos = text.find(needle, pos + 1)
-        if next_pos < 0:
-            return False
-        pos = next_pos
-    return True
+def load_yaml(path: Path) -> dict[str, Any]:
+    if not path.exists():
+        raise FileNotFoundError(str(path.relative_to(REPO_ROOT)))
+    data = yaml.safe_load(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict):
+        raise ValueError(f"{path.relative_to(REPO_ROOT)} root must be a mapping")
+    return data
 
 
 def main() -> int:
     issues: list[str] = []
-    readme = read("README.md")
-    docs_index = read("docs/INDEX.md")
+    try:
+        runtime = load_yaml(RUNTIME)
+        protocol = load_yaml(PROTOCOL)
+        load_yaml(CURRENT)
+        load_yaml(EXPERIMENTS)
+    except (FileNotFoundError, ValueError, yaml.YAMLError) as exc:
+        print(f"validate_entrypoints.py: FAIL {exc}")
+        return 1
 
-    for path, text in (("README.md", readme), ("docs/INDEX.md", docs_index)):
-        if not ordered(text, ENTRY_FILES):
-            issues.append(f"{path}: new-session entry files are missing or out of order")
-        if "非入口文件" not in text:
-            issues.append(f"{path}: must explicitly label non-entry files as 非入口文件")
+    files = runtime.get("runtime_context", {}).get("files")
+    if not isinstance(files, dict) or not files:
+        issues.append("runtime_entrypoints.yaml missing runtime_context.files")
+    else:
+        for key, spec in files.items():
+            if not isinstance(spec, dict):
+                issues.append(f"runtime_context.files.{key} must be mapping")
+                continue
+            rel = spec.get("path")
+            if not isinstance(rel, str) or not rel:
+                issues.append(f"runtime_context.files.{key}.path missing")
+                continue
+            if rel.endswith(".md") and rel not in ALLOWED_MARKDOWN:
+                issues.append(f"runtime entry {key} points to markdown: {rel}")
+            if spec.get("required") is True and not (REPO_ROOT / rel).exists():
+                issues.append(f"required runtime file missing: {rel}")
 
-    for path in CHECK_FILES:
-        text = read(path)
-        if "参考层" in text:
-            issues.append(f"{path}: forbidden soft label 参考层 remains")
+    protocol_rules = protocol.get("rules")
+    if not isinstance(protocol_rules, list) or not protocol_rules:
+        issues.append("protocol_rules.yaml missing non-empty rules")
+    else:
+        rule_ids = {str(rule.get("id")) for rule in protocol_rules if isinstance(rule, dict)}
+        for required in {"R1", "R4", "R5", "R6", "R7", "R9"}:
+            if required not in rule_ids:
+                issues.append(f"protocol_rules.yaml missing {required}")
 
-    # Forbid stale wording about single entry, in core docs.
-    # 注: "4 入口"在 HDRF L0 历史日志里有合法用法 (v3.1 第 4 入口), 不 forbid.
-    for path in ENTRY_COUNT_CHECK:
-        text = read(path)
-        if "唯一权威入口" in text or "唯一入口" in text:
-            issues.append(f"{path}: stale entry wording (唯一入口) — should say one of 3 个入口")
+    for rel in FORBIDDEN_RUNTIME_MD:
+        if (REPO_ROOT / rel).exists():
+            issues.append(f"forbidden runtime markdown still exists: {rel}")
 
-    for path in NO_REPLY_DEFAULT_FILES:
-        text = read(path)
-        if "30 分钟" not in text or "当前策略" not in text or "换一个研究方向" not in text:
-            issues.append(f"{path}: missing 30-minute no-reply default rule")
-        if "¥100" not in text or "scripts/estimate_compute_budget.py" not in text:
-            issues.append(f"{path}: no-reply rule must include mechanical budget calculator and ¥100 auto limit")
-        if "当前策略族" in text:
-            issues.append(f"{path}: no-reply rule must use parameter 当前策略, not fixed 当前策略族")
-        if "新增数据/改核心代码/加预算仍停等用户" in text or "若需要新增数据源、改变核心代码、提高预算" in text:
-            issues.append(f"{path}: stale no-reply blocker remains for new data/core code/budget")
+    agent = REPO_ROOT / "AGENTS.md"
+    if not agent.exists():
+        issues.append("AGENTS.md must remain as the primary AI-facing markdown bootstrap")
 
-    for path in REDLINE_SYNC_FILES:
-        text = read(path)
-        for phrase in STALE_RULE_PHRASES:
-            if phrase in text:
-                issues.append(f"{path}: stale redline wording remains: {phrase}")
+    claude = REPO_ROOT / "CLAUDE.md"
+    if not claude.exists():
+        issues.append("CLAUDE.md must remain as the Claude Code auto-entry pointer")
 
-    for path in ("AGENTS.md", "CLAUDE.md", "docs/research_framework/protocol_redline.md"):
-        text = read(path)
-        if "¥100" not in text or "estimate_compute_budget.py" not in text:
-            issues.append(f"{path}: current autonomy rule must mention budget calculator and ¥100")
-        if "实盘" not in text or "归档" not in text:
-            issues.append(f"{path}: current autonomy rule must preserve no-auto-live/no-auto-archive boundary")
+    for path in REPO_ROOT.rglob("*"):
+        if not path.is_file() or not is_markdown_artifact(path):
+            continue
+        rel = path.relative_to(REPO_ROOT)
+        rel_str = str(rel)
+        if rel_str.startswith((".git/", ".venv/", ".pytest_cache/")):
+            continue
+        if rel_str not in ALLOWED_MARKDOWN:
+            issues.append(f"markdown file is not allowed: {rel_str}")
 
     if issues:
+        print("validate_entrypoints.py: FAIL")
         for issue in issues:
-            print(issue)
+            print(f"  ERROR {issue}")
         return 1
 
     print("validate_entrypoints.py: OK")
