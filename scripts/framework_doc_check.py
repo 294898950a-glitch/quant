@@ -18,12 +18,14 @@ Usage:
 - docs/research_framework/*.md → validate_current_md.py / validate_entrypoints.py
 - 其他路径 → skip (不在 framework 受管范围)
 
-设计 (按 Codex 01:50 review A-prime 完全解耦):
+设计 (cross-AI, 完全解耦):
 - 本工具自成一体, 不依赖 GateKeeper
-- 由 3 层独立调用: framework_watch_daemon (cross-AI) / Claude Code PostToolUse
-  hook / pre-commit hook (commit 前 retro 关). 三层各自调用, 互不依赖.
+- 由 2 层独立调用:
+  1. framework_watch_daemon (cross-AI 实时, 任何 AI / 编辑器都触发)
+  2. pre-commit hook (commit 前 retro 关, 防 daemon down)
 - AI 主动调也可以 (e.g. user / Codex / etc 想立刻验证某个文件)
 - 失败 (exit != 0) 时, AI 工作流必须看到错并修
+- (原有 Claude Code PostToolUse hook 层 2026-05-17 删, 违反 cross-AI 哲学)
 
 Exit codes:
   0 = OK (含 skip 非受管路径)
@@ -104,7 +106,7 @@ def main() -> int:
     )
     parser.add_argument("path", type=Path, help="刚写的文件路径")
     parser.add_argument("--quiet", action="store_true",
-                        help="只在 fatal 时打印 (适合 PostToolUse hook)")
+                        help="只在 fatal 时打印 (适合 daemon / hook 调用)")
     args = parser.parse_args()
 
     if not args.path.exists():
