@@ -1,0 +1,90 @@
+# HDRF L4 质疑清单 ACK 模板 (l4_ack.yaml)
+#
+# 每次 grid 跑完出 ranked.csv 后, Claude 必须在 data/<run-id>/l4_ack.yaml 写一份,
+# 才能发 L5 DIRECT 给 Codex 跑反向诊断.
+#
+# 由 scripts/validate_l4_ack.py 强制校验, 必答字段缺 / answer 空 / answer 是
+# 占位符 (TBD/...) → commit 被拦.
+#
+# 替代旧的"Codex 在 L5 DIRECT 字符串查 ACK"软约定. 现在是真硬代码.
+
+schema_version: 1
+
+# === 元信息 ===
+run_id: cb_arb_csi_market_filter_2026-05-14  # 跟 spec.yaml run_id 一致
+reviewer: claude  # claude / codex / user
+ack_at: 2026-05-14T22:30:00Z  # ISO timestamp
+
+# === Q1-Q5 必答 ===
+
+q1_floor_binding:
+  # Q1 硬约束 binding 检查 — Floor 是不是平凡通过?
+  description: "pass_both / total > 50% → floor 太松; pass_one_only ≈ 0 → 对应 floor 冗余"
+  answer: |
+    pass_both = 66/480 (13.75%), pass_2020_only fail_2021 = 120, pass_2021_only
+    fail_2020 = 174, fail_both = 120. 两个 floor 都 binding, 健康.
+  pass: true  # 该项是否合规 (floor 健康设定)
+
+q2_selection_score:
+  # Q2 selection_score 决策方式
+  description: "candidate 排名是只靠 pass count 还是有平滑加权? 0 候选过 floor 时降级行为?"
+  answer: |
+    passes_main_floors boolean + score 加权排序. 当 0 候选过 floor 时退化为纯
+    score 排序 (warning 但不 block).
+  pass: true
+
+q3_baseline_alignment:
+  # Q3 baseline 跟 floor 对齐
+  description: "当前 baseline 自己能不能过 4 个 floor? 不能 → floor 来源跟 baseline 错位"
+  answer: |
+    当前 baseline (spec v1.1 normal-state) 自身: 2020 -13.1% (pass floor),
+    2021 -5.0% (FAIL floor by -0.017), 2022 +1.4% (FAIL by -0.014), 2023 -3.1%
+    (FAIL by -0.003). 4 个 floor 混合来源, 架构问题, 见 L5.
+  pass: false  # 警告项, baseline 自己 fail 3 个 floor
+
+q4_monotonic:
+  # Q4 selected 候选的 monotonicity / robustness
+  description: "selected 是不是参数空间边缘 (最宽 trigger)? path-sensitive 还是 robust?"
+  answer: |
+    selected (drop -0.03, ratio 20%, recovery 3, hurdle 0.08, min_days 1) 是
+    最宽 trigger, targeted 但 path-sensitive. 改参数 1 步 → 2 个 baseline 变差.
+  pass: false  # path-sensitive, 不算 robust
+
+q5_trade_overlap:
+  # Q5 trade overlap / 修改 exit 的 path 影响
+  description: "selected vs baseline 共有几个 trade? 修改了几个 exit? PnL gap 来自哪?"
+  answer: |
+    2020: 90 base / 76 sel, 42 共同, 12 改 exit, PnL gap -5919.
+    2021: 116/152, 68 共同, +12576 改善.
+    2024: 255/263, 233 共同, 27 改 exit, PnL gap -16062 path 污染.
+  pass: true  # L5 schema 修复后第一次精确算出
+
+# === Q6/Q7 条件必答 (新机制改变交易路径时) ===
+
+q6_trigger_timing:
+  # Q6 信号触发时点是否 forward-looking
+  applicable: true  # 新机制 (panic detector) 改变了交易路径 → 必填
+  description: "信号 T 日触发是不是 T 日 effective? 还是 T+1 lag?"
+  answer: |
+    2020-01-23 signal → 2020-02-03 effective (T+1 lag, 严格). 滞后问题解决.
+  pass: true
+
+q7_path_contamination:
+  # Q7 路径污染 / same-day leakage
+  applicable: true  # 新机制必填
+  description: "T 日 signal 是不是只用 T-1 之前的数据? T 日 close 之前的 leakage?"
+  answer: |
+    T+1 effective 严格, no same-day leakage. signal 用 T 日 close 后 EOD 数据.
+  pass: true
+
+# === 总评 ===
+overall_pass: false  # 任一 pass=false 时, overall=false
+overall_decision: reject  # adopt / reject / mini-spec-retry / archive-direction
+overall_reason: |
+  Q3 baseline 跟 floor 错位 + Q4 path-sensitive + Q5 2024 -16062 PnL gap.
+  整体 path 污染, 不进 L7 采用. L6 出口选 reject + 把方向写入经验账本"已确认无效".
+
+# === 备注 ===
+notes: |
+  自由文本段, validator 不检查 notes 内容.
+  如果 Q1-Q5 任一 answer 是 "TBD" / "..." / "skip" / "(blank)" → validator 拒.
