@@ -1,0 +1,18 @@
+schema_version: 1
+active_provider: codex
+providers:
+  codex:
+    kind: local_adapter
+    model: codex
+  claude:
+    kind: external_adapter
+    api_key_env: ANTHROPIC_API_KEY
+    model: claude
+  openai:
+    kind: external_adapter
+    api_key_env: OPENAI_API_KEY
+    model: gpt
+  deepseek:
+    kind: external_adapter
+    api_key_env: DEEPSEEK_API_KEY
+    model: deepseek-chat

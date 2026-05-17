@@ -1,0 +1,204 @@
+schema_version: 1
+updated_at: "2026-05-17T22:15:00+08:00"
+authority: machine
+purpose: "Machine-readable acceptance criteria for the 10-component autonomous research framework. Codex implements code; Claude+Codex run framework/tests/test_autonomous_research_*.py to verify."
+
+# Components (Codex 22:02 design + Claude 22:10 guards):
+components:
+  - id: executor_registry
+    module_path: framework/autonomous/executor_registry.py
+    data_path: data/research_framework/executor_registry.yaml
+    public_api:
+      - "load_registry(path) -> dict"
+      - "match_executor(proposal_mechanics, proposal_data, registry) -> dict or None"
+      - "validate_registry_schema(registry) -> list of error strings"
+    must:
+      - "Reject duplicate executor id"
+      - "Schema validation: id, version, script_path, can_test, cannot_test, required_data, required_config_fields, artifacts_produced, command_template, budget_estimate, vm_local_limits, obsolescence_date"
+      - "Strict matching: mechanics subset of can_test AND mechanics disjoint cannot_test AND required_data covered"
+      - "Reject obsolete executors when obsolescence_date is in the past"
+      - "No closest-executor fallback; no match returns None"
+    must_not:
+      - "Silent fallback to closest executor"
+      - "Match if data schema_hash mismatch"
+
+  - id: proposal_schema
+    module_path: framework/autonomous/proposal_schema.py
+    public_api:
+      - "validate_proposal(proposal, mechanics_vocab) -> list of error strings"
+    must:
+      - "Require fields: proposal_id, strategy_id, family, hypothesis, source_insight, expected_improvement, mechanics, required_executor, required_data, test_design, success_criteria, falsifiers, risk, why_not_repeated_failure, related_prior_runs, implementation_assumption"
+      - "mechanics must be list of controlled-vocab strings"
+      - "falsifiers must include train, validate, and test thresholds"
+    must_not:
+      - "Allow free-form mechanics tags outside controlled vocabulary"
+
+  - id: spec_compiler
+    module_path: framework/autonomous/spec_compiler.py
+    public_api:
+      - "compile(proposal, registry, closed_tags, budget_cap, recent_proposals) -> CompileResult with status (READY or DRAFT or REJECT), spec_path, implementation_plan_path, reason, errors"
+    must:
+      - "Reject if proposal.mechanics intersects closed_tags (closed family enforcement)"
+      - "Cycle detection: hash of hypothesis plus mechanics vs last 5 proposals, reject if duplicate"
+      - "DRAFT if no executor match OR data missing OR budget over cap"
+      - "READY only if all checks pass"
+      - "Provenance preserved (ai_provider, prompt_path, proposal_path, decision, reason) in spec.yaml ideation_provenance field"
+    must_not:
+      - "Silent compile against wrong executor"
+      - "READY status if any falsifier check missing"
+
+  - id: ai_provider_adapter
+    module_path: framework/autonomous/ai_provider_adapter.py
+    data_path: data/research_framework/ai_providers.yaml
+    public_api:
+      - "load_providers(path) -> dict"
+      - "call_active_provider(prompt, schema) -> ProviderResponse with content, provider_id, response_hash, retries_used"
+    must:
+      - "Swappable provider via config (claude, openai, deepseek, codex)"
+      - "Retry on rate-limit and 5xx, max 3 attempts, exponential backoff"
+      - "Return ProviderResponse, raise only on max-retry exhausted"
+    must_not:
+      - "Hardcode Claude as only provider"
+      - "Embed prompt template (caller passes prompt)"
+
+  - id: strategy_ideator
+    module_path: framework/autonomous/strategy_ideator.py
+    public_api:
+      - "propose(closed_tags, recent_digest, insights, budget_cap, ai_adapter) -> proposal dict"
+    must:
+      - "Read all input yaml (current, strategies, baseline, experiments, insights, digest, data_schema, executor_registry, compute_budget)"
+      - "Call AI adapter once per cycle plus rewrite loop"
+      - "Filter proposed mechanics against closed_tags"
+      - "Provenance in proposal (ai_provider, prompt_path, response_hash)"
+    must_not:
+      - "Write spec.yaml directly (only proposal)"
+      - "Promote strategy or change baseline or change current"
+
+  - id: result_reviewer
+    module_path: framework/autonomous/result_reviewer.py
+    public_api:
+      - "review(run_dir, verification_callback, ai_adapter) -> review dict, writes review.yaml"
+      - "extract_facts(run_dir) -> facts dict (no AI)"
+      - "verify_facts_hash(facts, run_dir) -> bool"
+    must:
+      - "facts field 100% code-extracted from CSV and yaml"
+      - "facts hash-verified against source artifacts"
+      - "interpretation and next_directions fields AI-generated, NOT hash-verified"
+      - "facts field IMMUTABLE on re-review (raise on overwrite with different hash)"
+      - "closed_directions populated when failure matches known reject family"
+      - "inconclusive=true after 2 verification rounds without resolution"
+      - "provenance (ai_provider, prompt_path, response_hash) recorded"
+    must_not:
+      - "AI write to facts field"
+      - "Promote or change truth or start new strategy"
+
+  - id: recent_results_digest
+    module_path: framework/autonomous/recent_results_digest.py
+    public_api:
+      - "build_digest(review_dir, last_n) -> digest dict"
+      - "update_current_pointer(digest, current_yaml_path) -> None"
+    must:
+      - "Aggregate ONLY from review.yaml facts fields"
+      - "Detect cross-run patterns (3+ same family reject flags close-family)"
+      - "Update current.yaml only with entry-level pointer (not full detail)"
+      - "last_n configurable, default 5"
+    must_not:
+      - "Read run artifact files (CSV, parquet) directly"
+      - "Use AI to summarize digest content"
+
+  - id: verification_tool
+    module_path: framework/autonomous/verification_tool.py
+    data_path: data/research_framework/evidence_tool_registry.yaml
+    public_api:
+      - "request_verification(review_id, request_type, params, round_num) -> VerificationResult"
+      - "EvidenceToolkit(review_dir).collect_for_role(role, review_id) -> evidence list"
+      - "tool_manifest_for_prompt() -> existing tool paths and manifest hash"
+      - "ALLOWED_REQUEST_TYPES = {metric_slice, year_breakdown, source_attribution, trade_group_attribution, baseline_vs_candidate_diff, artifact_consistency_check}"
+    must:
+      - "Allowed types: metric_slice, year_breakdown, source_attribution, trade_group_attribution, baseline_vs_candidate_diff, artifact_consistency_check"
+      - "All callable evidence tools must be registered in data/research_framework/evidence_tool_registry.yaml before use"
+      - "Before adding a new tool, inject existing registered tool ids, module_path, callable, and description into the AI context"
+      - "New tool registration must include registration_reason, why_existing_tools_insufficient, reviewed_existing_tool_ids, and current existing_tools_manifest_sha256"
+      - "max 2 rounds per review"
+      - "max_budget_yuan 50 per review total"
+      - "Pre-registered requests: round 1 declares all request_ids, round 2 allows only those plus 1 follow-up"
+      - "VM-only, no local execution"
+      - "All requests and results in data/<run-id>/verification_log.jsonl"
+    must_not:
+      - "Call an unregistered evidence tool"
+      - "Register a new evidence tool without proving the current existing-tool manifest was reviewed"
+      - "Allow new_strategy or param_optimization or promotion verification types"
+      - "Run on local"
+      - "Skip the 2-round cap"
+
+  - id: proposal_rewrite_loop
+    module_path: framework/autonomous/proposal_rewrite_loop.py
+    public_api:
+      - "rewrite_until_valid(initial_proposal, validator, ai_adapter) -> RewriteResult with final_proposal, status (valid or exhausted), rounds_used, last_errors"
+    must:
+      - "Feed validation errors back to AI exactly"
+      - "max 3 rewrites"
+      - "Preserve provenance of all rounds (response_hash per round)"
+
+  - id: orchestrator
+    module_path: framework/autonomous/orchestrator.py
+    pause_flag_path: data/research_framework/orchestrator_paused.flag
+    audit_log_path: data/research_framework/orchestrator_log.jsonl
+    public_api:
+      - "run_cycle(config) -> CycleResult"
+      - "is_paused() -> bool"
+      - "PAUSE_FLAG_PATH constant"
+      - "AUDIT_LOG_PATH constant"
+    must:
+      - "Check pause flag first; if exists return immediately"
+      - "Flow: check_running_jobs, sync_completed, review, digest, check_ready_specs; if none ideate, compile, handoff to runner"
+      - "Hard order: no review without runner output, no ideation without digest"
+      - "Append audit log per major action"
+      - "Per-cycle budget cap (default 100 CNY)"
+      - "Do not auto-run DRAFT specs"
+    must_not:
+      - "Implement strategy or review or run logic itself (coordinator only)"
+      - "Skip ideation if READY exists in queue"
+      - "Bypass pause flag"
+
+# Closed Family Enforcement Vocabulary (Claude critical guard 1)
+# These tags represent already-rejected research directions. Spec Compiler reject any proposal whose mechanics intersect this set.
+closed_directions_tags:
+  panic_filter:
+    insight_id: panic_detector_dead_end
+    reject_count: 4
+  global_entry_filter:
+    insight_id: single_filter_dead_end
+    reject_count: 1
+  regime_conditioned_entry_filter:
+    insight_id: regime_option_entry_gate_reject_2026_05_17
+    reject_count: 1
+  valuation_haircut_global:
+    insight_id: option_source_value_gap_structural_tradeoff_2026_05_17
+    reject_count: 1
+  universe_subset_filter:
+    insight_id: universe_filter_retest_reject_2026_05_17
+    reject_count: 1
+  cross_sectional_option_value_ranking:
+    insight_id: option_source_value_gap_structural_tradeoff_2026_05_17
+    reject_count: 7
+    note: "All cb_arb_value_gap_switch family. Fundamental, not fixable by simple mechanism."
+
+# Open infrastructure dependencies (not in original Codex 10):
+infra_dependencies:
+  - "audit_log_schema: framework/autonomous/audit_log_schema.py for orchestrator_log.jsonl + verification_log.jsonl validation"
+  - "pause_flag: simple file existence check, no schema"
+  - "mechanics_controlled_vocab: data/research_framework/mechanics_vocab.yaml"
+
+# Test files (Claude writes; Codex makes pass):
+test_files:
+  - framework/tests/test_autonomous_research_executor_registry.py
+  - framework/tests/test_autonomous_research_proposal_and_compiler.py
+  - framework/tests/test_autonomous_research_reviewer_and_digest.py
+  - framework/tests/test_autonomous_research_orchestrator_and_adapters.py
+
+# All tests must pass before user commit. Acceptance verification:
+acceptance_command: ".venv/bin/python -m pytest framework/tests/test_autonomous_research_*.py -v"
+acceptance_minimum_test_count: 50
+acceptance_no_skipped: true
+acceptance_no_xfail: true

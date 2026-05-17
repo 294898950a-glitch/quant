@@ -1,6 +1,6 @@
 schema_version: 1
 version: "1.5-machine"
-updated_at: "2026-05-17T04:55:00+08:00"
+updated_at: "2026-05-17T06:05:00+08:00"
 authority: machine
 
 rules:
@@ -33,8 +33,18 @@ rules:
 
   - id: R3
     name: research_design_gate
-    summary: "New research batches must be created through scripts/new_research.py and pass pre-run gates."
+    summary: "New research batches must be created through scripts/new_research.py; filled specs can run through scripts/auto_research_pipeline.py."
     required_launcher: scripts/new_research.py
+    automatic_pipeline: scripts/auto_research_pipeline.py
+    automatic_steps:
+      - load_spec
+      - estimate_budget
+      - gatekeeper_before_run
+      - execute_spec_command
+      - verify_artifacts
+      - derive_verdict
+      - write_run_manifest
+      - update_experiments_yaml
     pre_run_gates:
       - validate_spec.py
       - validate_data_schema.py
@@ -63,12 +73,14 @@ rules:
 
   - id: R6
     name: truth_sync
-    summary: "Truth-affecting changes require CURRENT/baseline sync or a machine-readable waiver."
+    summary: "Truth-affecting changes require CURRENT/baseline sync or a machine-readable waiver, and are automatically appended to the protected-action audit log."
     validator: scripts/validate_truth_sync.py
     truth_paths:
       - data/research_framework/current.yaml
       - data/research_framework/baseline_registry.yaml
     waiver_dir: data/research_framework/truth_sync_waivers
+    audit_log: data/research_framework/protected_action_audit.jsonl
+    audit_rule: "Trace records are automatic and do not grant approval; they preserve evidence even when a protected action is unauthorized."
 
   - id: R7
     name: experiment_registry_sync
@@ -93,3 +105,18 @@ rules:
       - do_not_archive
       - do_not_promote_to_live
       - use_budget_calculator
+
+  - id: R10
+    name: compute_placement
+    summary: "Heavy backtests, cb_arb run/evaluate/search jobs, and any run with spot_minutes > 0 must execute on an allowed VM/spot host, not on the local workstation."
+    enforced_by:
+      - scripts/auto_research_pipeline.py
+      - scripts/research_sanity_checker.py
+    allowed_spot_hosts_config: data/research_framework/compute_budget_config.json:spot_allowed_hosts
+    local_workstation_allowed_for:
+      - dry_run
+      - no_execute_classification
+      - lightweight_validation
+    wait_for_user_when:
+      - required_spot_host_unavailable
+      - spot_budget_unknown

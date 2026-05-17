@@ -78,6 +78,26 @@ allowlist:
     reason: 历史 normal vol 评估
     owner: claude
     archived_at: 2026-05-16
+  - script: scripts/evaluate_cb_arb_option_entry_gate.py
+    reason: option-entry-gate 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+    owner: codex
+    archived_at: 2026-05-17
+  - script: scripts/evaluate_cb_arb_option_value_haircut.py
+    reason: option-value-haircut 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+    owner: codex
+    archived_at: 2026-05-17
+  - script: scripts/evaluate_cb_arb_option_position_sizing.py
+    reason: option-position-sizing 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+    owner: codex
+    archived_at: 2026-05-17
+  - script: scripts/evaluate_cb_arb_regime_option_entry_gate.py
+    reason: regime option-entry-gate 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+    owner: codex
+    archived_at: 2026-05-17
+  - script: scripts/evaluate_cb_arb_universe_filter.py
+    reason: universe-filter retest 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+    owner: codex
+    archived_at: 2026-05-17
   - script: scripts/evaluate_cb_arb_panic_bond_anchor.py
     reason: 历史 panic bond anchor
     owner: claude
@@ -150,6 +170,10 @@ allowlist:
     reason: 历史 trade-level 归因诊断
     owner: claude
     archived_at: 2026-05-16
+  - script: scripts/analyze_cb_arb_option_false_undervaluation.py
+    reason: option-source false undervaluation 本地归因诊断, 不发起策略跑批
+    owner: codex
+    archived_at: 2026-05-17
   - script: scripts/analyze_cb_arb_panic_calendar_diagnostic.py
     reason: 历史 2024 panic 诊断
     owner: claude

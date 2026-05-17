@@ -110,3 +110,65 @@ def test_waiver_rejects_placeholder_reason():
     errors = v.validate_waiver_data("waiver.yaml", waiver)
     assert any("reason" in e for e in errors)
     assert any("placeholder" in e for e in errors)
+
+
+def test_audit_relevant_paths_include_truth_and_trigger_paths():
+    v = _load_module()
+    paths = [
+        "data/research_framework/current.yaml",
+        "data/research_framework/strategies.yaml",
+        "scripts/unrelated.py",
+    ]
+    triggers = [
+        {
+            "path": "data/research_framework/strategies.yaml",
+            "reason": "strategy_registry_changed",
+        }
+    ]
+
+    assert v.audit_relevant_paths(paths, triggers) == [
+        "data/research_framework/current.yaml",
+        "data/research_framework/strategies.yaml",
+    ]
+
+
+def test_append_protected_action_audit_is_idempotent(tmp_path, monkeypatch):
+    v = _load_module()
+    audit_path = tmp_path / "protected_action_audit.jsonl"
+    paths = ["data/research_framework/current.yaml", "data/research_framework/strategies.yaml"]
+    triggers = [{"path": "data/research_framework/strategies.yaml", "reason": "strategy_registry_changed"}]
+    monkeypatch.setattr(v, "diff_for_paths", lambda relevant, source: "same diff")
+
+    first = v.append_protected_action_audit(
+        paths=paths,
+        source="working-tree",
+        triggers=triggers,
+        errors=[],
+        waiver_covered=[],
+        audit_path=audit_path,
+    )
+    second = v.append_protected_action_audit(
+        paths=paths,
+        source="working-tree",
+        triggers=triggers,
+        errors=[],
+        waiver_covered=[],
+        audit_path=audit_path,
+    )
+
+    assert first == second
+    assert len(audit_path.read_text(encoding="utf-8").splitlines()) == 1
+
+
+def test_framework_doc_check_truth_sync_secondary_paths():
+    path = Path(__file__).resolve().parents[2] / "scripts" / "framework_doc_check.py"
+    spec = importlib.util.spec_from_file_location("framework_doc_check", path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    root = Path(__file__).resolve().parents[2]
+    assert module.needs_truth_sync_check(root / "data/research_framework/current.yaml")
+    assert module.needs_truth_sync_check(root / "data/research_framework/strategies.yaml")
+    assert module.needs_truth_sync_check(root / "data/research_framework/run_manifests/x.yaml")
+    assert not module.needs_truth_sync_check(root / "data/research_framework/experiments.yaml")

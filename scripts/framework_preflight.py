@@ -25,6 +25,10 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO_ROOT / "scripts"
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from framework.autonomous.framework_change_recorder import auto_record_framework_changes  # noqa: E402
 
 STRATEGY_FILE_PATTERNS = [
     "strategies/cb_arb/*.py",
@@ -52,7 +56,8 @@ def dirty_inventory() -> list[str]:
             continue
         status, _, path = line.partition(" ")
         path = path.strip()
-        if path.startswith("strategies/") or path.startswith("scripts/evaluate_cb_") \
+        if path in {"AGENTS.md", "CLAUDE.md"} \
+           or path.startswith("strategies/") or path.startswith("scripts/evaluate_cb_") \
            or path.startswith("scripts/search_cb_") or path.startswith("data/research_framework/") \
            or path.startswith("docs/research_framework/"):
             dirty.append(f"{status} {path}")
@@ -86,6 +91,13 @@ def main() -> int:
         print(f"\nTotal: {len(dirty)} dirty/untracked file(s) in research scope")
     else:
         print("  clean")
+
+    print("\n=== framework change recorder ===")
+    change_hash = auto_record_framework_changes(repo_root=REPO_ROOT)
+    if change_hash:
+        print(f"  recorded framework_change_event_hash={change_hash}")
+    else:
+        print("  no framework-scope changes detected")
 
     print("\n=== preflight summary ===")
     if 1 in exits:

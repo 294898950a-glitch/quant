@@ -6,8 +6,8 @@
 #   bash scripts/install_pre_commit_hook.sh --uninstall   # uninstall
 #
 # Hook behavior:
-# - Triggers on commits touching: strategies/*, scripts/evaluate_cb_*, scripts/search_cb_*,
-#   data/research_framework/*
+# - Triggers on commits touching: AGENTS.md / CLAUDE.md / strategies/*,
+#   scripts/evaluate_cb_*, scripts/search_cb_*, data/research_framework/*
 # - Runs framework_preflight.py
 # - exit 1 from preflight → block commit (use --no-verify to bypass)
 # - dirty inventory warnings don't block
@@ -38,9 +38,10 @@ cd "$REPO_ROOT"
 STAGED_FILES=$(git diff --cached --name-only)
 
 NEEDS_PREFLIGHT=false
+NEEDS_ENTRYPOINT_UPDATE=false
 while IFS= read -r file; do
     case "$file" in
-        strategies/*|scripts/evaluate_cb_*|scripts/search_cb_*|\
+        AGENTS.md|CLAUDE.md|strategies/*|scripts/evaluate_cb_*|scripts/search_cb_*|\
         scripts/run_cb_*|scripts/analyze_cb_*|scripts/monitor_cb_*|\
         scripts/auto_compute_l4_data.py|scripts/gatekeeper.py|\
         scripts/validate_*.py|scripts/framework_preflight.py|\
@@ -51,6 +52,26 @@ while IFS= read -r file; do
             ;;
     esac
 done <<< "$STAGED_FILES"
+
+while IFS= read -r file; do
+    case "$file" in
+        framework/autonomous/*|scripts/run_strategy_ideation_once.py|\
+        scripts/register_evidence_tool.py|scripts/framework_preflight.py|\
+        data/research_framework/runtime_entrypoints.yaml|\
+        data/research_framework/protocol_rules.yaml)
+            NEEDS_ENTRYPOINT_UPDATE=true
+            break
+            ;;
+    esac
+done <<< "$STAGED_FILES"
+
+if [ "$NEEDS_ENTRYPOINT_UPDATE" = true ] && git diff --cached --quiet -- AGENTS.md CLAUDE.md; then
+    echo ""
+    echo "[pre-commit] BLOCKED: framework entry behavior changed, but AGENTS.md / CLAUDE.md did not change versus HEAD."
+    echo "  Update and stage the AI bootstrap entrypoint, or keep framework entry behavior out of this commit."
+    echo ""
+    exit 1
+fi
 
 if [ "$NEEDS_PREFLIGHT" = false ]; then
     exit 0
@@ -83,7 +104,7 @@ EOF
 chmod +x "$HOOK_PATH"
 echo "Installed pre-commit hook at $HOOK_PATH"
 echo "Hook will:"
-echo "  - Trigger on commits touching strategies/* / scripts/evaluate_cb_* / data/research_framework/*"
+echo "  - Trigger on commits touching AGENTS.md / CLAUDE.md / strategies/* / scripts/evaluate_cb_* / data/research_framework/*"
 echo "  - Run framework_preflight.py"
 echo "  - Block on STRICT failures (exit 1)"
 echo "  - Allow with warnings (exit 2)"

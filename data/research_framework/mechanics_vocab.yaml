@@ -1,0 +1,18 @@
+schema_version: 1
+mechanics:
+  - entry_filter
+  - valuation_adjustment
+  - exit_rule
+  - universe_filter
+  - universe_subset_filter
+  - position_sizing
+  - regime_conditioning
+  - rolling_pnl_feedback
+  - static_candidate_position_scale
+  - close_to_bond_floor_threshold
+  - moneyness_stock_to_conv_threshold
+  - panic_filter
+  - global_entry_filter
+  - regime_conditioned_entry_filter
+  - valuation_haircut_global
+  - cross_sectional_option_value_ranking

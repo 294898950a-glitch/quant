@@ -28,3 +28,12 @@ Hard boundaries:
 - Truth changes must update `data/research_framework/current.yaml` and/or
   `data/research_framework/baseline_registry.yaml`, or add a waiver under
   `data/research_framework/truth_sync_waivers/`.
+- Evidence tools for strategy ideation and review must go through
+  `framework/autonomous/verification_tool.py::EvidenceToolkit` and be registered
+  in `data/research_framework/evidence_tool_registry.yaml` before use.
+- Before any AI proposes or registers a new evidence tool, inject the existing
+  tool manifest with ids, paths, callables, descriptions, and manifest hash.
+  New tool registration must include why existing tools are insufficient.
+- Commits that change autonomous framework entry behavior must also stage a
+  changed `AGENTS.md` or `CLAUDE.md`; the pre-commit hook blocks unchanged
+  bootstrap entrypoints for those framework changes.

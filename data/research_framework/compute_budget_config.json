@@ -5,6 +5,9 @@
   "spot_yuan_per_hour": 5.0,
   "sig_yuan_per_hour": 0.0,
   "local_yuan_per_hour": 0.0,
+  "spot_allowed_hosts": [
+    "VM-0-9-opencloudos"
+  ],
   "safety_multiplier": 1.25,
   "notes": [
     "Budget decisions are mechanical. AI supplies estimated hours and explicit paid data fees; this config supplies rates, safety margin, and the auto-approval ceiling.",

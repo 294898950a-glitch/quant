@@ -1,0 +1,115 @@
+schema_version: 1
+updated_at: "2026-05-17T23:20:00+08:00"
+purpose: "Machine-readable registry for EvidenceToolkit tools. AI agents may write new evidence tools, but the tool must be registered here before use."
+
+registration_rules:
+  existing_tools_must_be_injected_before_new_tool: true
+  prohibit_unregistered_tool_calls: true
+  required_new_tool_fields:
+    - id
+    - status
+    - owner
+    - module_path
+    - callable
+    - description
+    - allowed_roles
+    - max_budget_yuan
+    - registration_reason
+    - why_existing_tools_insufficient
+    - reviewed_existing_tool_ids
+    - existing_tools_manifest_sha256
+    - created_at
+  allowed_statuses:
+    - implemented
+    - draft
+    - disabled
+  allowed_roles:
+    - ideator
+    - reviewer
+    - compiler
+    - orchestrator
+
+tools:
+  artifact_consistency_check:
+    status: implemented
+    owner: codex
+    module_path: framework/autonomous/verification_tool.py
+    callable: _execute_request
+    request_type: artifact_consistency_check
+    description: "Check review.yaml source artifact paths and sha256 hashes against current files."
+    allowed_roles: [ideator, reviewer]
+    max_budget_yuan: 0
+    registration_reason: "Built-in evidence guard for fact integrity."
+    why_existing_tools_insufficient: "Initial built-in tool."
+    reviewed_existing_tool_ids: []
+    created_at: "2026-05-17T23:20:00+08:00"
+
+  baseline_vs_candidate_diff:
+    status: implemented
+    owner: codex
+    module_path: framework/autonomous/verification_tool.py
+    callable: _execute_request
+    request_type: baseline_vs_candidate_diff
+    description: "Compare selected candidate test metrics against baseline test metrics from review.yaml facts."
+    allowed_roles: [ideator, reviewer]
+    max_budget_yuan: 0
+    registration_reason: "Built-in evidence guard for avoiding misleading train-only improvements."
+    why_existing_tools_insufficient: "Initial built-in tool."
+    reviewed_existing_tool_ids: []
+    created_at: "2026-05-17T23:20:00+08:00"
+
+  year_breakdown:
+    status: implemented
+    owner: codex
+    module_path: framework/autonomous/verification_tool.py
+    callable: _execute_request
+    request_type: year_breakdown
+    description: "Extract baseline and selected 2020 metrics from review.yaml facts."
+    allowed_roles: [ideator, reviewer]
+    max_budget_yuan: 0
+    registration_reason: "Built-in evidence guard for stress-year diagnosis."
+    why_existing_tools_insufficient: "Initial built-in tool."
+    reviewed_existing_tool_ids: []
+    created_at: "2026-05-17T23:20:00+08:00"
+
+  source_attribution:
+    status: implemented
+    owner: codex
+    module_path: framework/autonomous/verification_tool.py
+    callable: _execute_request
+    request_type: source_attribution
+    description: "Return decision, experiment metadata, and source artifact records from review.yaml facts."
+    allowed_roles: [reviewer]
+    max_budget_yuan: 0
+    registration_reason: "Built-in reviewer evidence for tracing conclusions to sources."
+    why_existing_tools_insufficient: "Initial built-in tool."
+    reviewed_existing_tool_ids: []
+    created_at: "2026-05-17T23:20:00+08:00"
+
+  metric_slice:
+    status: implemented
+    owner: codex
+    module_path: framework/autonomous/verification_tool.py
+    callable: _execute_request
+    request_type: metric_slice
+    description: "Return all key_metrics or one named key_metrics block from review.yaml facts."
+    allowed_roles: [reviewer, ideator]
+    max_budget_yuan: 0
+    registration_reason: "Built-in reviewer evidence for targeted metric inspection."
+    why_existing_tools_insufficient: "Initial built-in tool."
+    reviewed_existing_tool_ids: []
+    created_at: "2026-05-17T23:20:00+08:00"
+
+  trade_group_attribution:
+    status: implemented
+    owner: codex
+    module_path: framework/autonomous/verification_tool.py
+    callable: _execute_request
+    request_type: trade_group_attribution
+    description: "Return trade group attribution if already present in review.yaml facts; otherwise report no_data."
+    allowed_roles: [reviewer, ideator]
+    max_budget_yuan: 0
+    registration_reason: "Built-in placeholder for attribution evidence without allowing new grid searches."
+    why_existing_tools_insufficient: "Initial built-in tool."
+    reviewed_existing_tool_ids: []
+    created_at: "2026-05-17T23:20:00+08:00"
