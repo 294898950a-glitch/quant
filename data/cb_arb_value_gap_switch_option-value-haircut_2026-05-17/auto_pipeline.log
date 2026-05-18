@@ -1,0 +1,27 @@
+$ .venv/bin/python scripts/evaluate_cb_arb_option_value_haircut.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule score_4state --output-dir data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17 --base-ranks-path data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet --reuse-ranks --cost-model-enabled
+
+[option_value_haircut] baseline_no_haircut train_excess=0.131363 test_excess=0.37976 adjusted_rows=0
+[option_value_haircut] ratio_1p4_weight_0p75 train_excess=-0.038778 test_excess=-0.179792 adjusted_rows=44662
+[option_value_haircut] ratio_1p4_weight_0p5 train_excess=0.171847 test_excess=-0.192753 adjusted_rows=44662
+[option_value_haircut] ratio_1p5_weight_0p75 train_excess=-0.079221 test_excess=-0.104933 adjusted_rows=24995
+[option_value_haircut] ratio_1p5_weight_0p5 train_excess=0.054643 test_excess=-0.138718 adjusted_rows=24995
+[option_value_haircut] moneyness_1p6_weight_0p75 train_excess=0.051852 test_excess=0.165353 adjusted_rows=18237
+[option_value_haircut] moneyness_1p6_weight_0p5 train_excess=0.111372 test_excess=0.15428 adjusted_rows=18237
+[option_value_haircut] ratio_1p5_or_mny_1p6_weight_0p75 train_excess=-0.136818 test_excess=-0.104933 adjusted_rows=34276
+[option_value_haircut] ratio_1p5_or_mny_1p6_weight_0p5 train_excess=0.056209 test_excess=-0.138718 adjusted_rows=34276
+[option_value_haircut] ratio_1p5_or_mny_1p6_weight_0p25 train_excess=0.418475 test_excess=-0.139723 adjusted_rows=34276
+[option_value_haircut] progressive_stocklike_haircut train_excess=0.397678 test_excess=-0.203898 adjusted_rows=51690
+Traceback (most recent call last):
+  File "/root/projects/quant/scripts/evaluate_cb_arb_option_value_haircut.py", line 449, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/root/projects/quant/scripts/evaluate_cb_arb_option_value_haircut.py", line 399, in main
+    _write_csv(output_dir / "adjustment_option_value_haircut.csv", adjustment_rows)
+  File "/root/projects/quant/scripts/evaluate_cb_arb_value_gap_switch.py", line 71, in _write_csv
+    writer.writerows(rows)
+  File "/usr/lib64/python3.11/csv.py", line 157, in writerows
+    return self.writer.writerows(map(self._dict_to_list, rowdicts))
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/usr/lib64/python3.11/csv.py", line 149, in _dict_to_list
+    raise ValueError("dict contains fields not in fieldnames: "
+ValueError: dict contains fields not in fieldnames: 'max_option_weight', 'min_option_weight'

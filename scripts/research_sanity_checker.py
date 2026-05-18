@@ -28,10 +28,11 @@ Severity:
 3. data_sources / new_data_sources: 路径存在
 4. cv_holdout_years: 在 2018-2035 范围
 5. budget_cap_yuan ≥ compute_estimate.estimated_cost_yuan
-6. compute_estimate.sig_minutes, spot_minutes ≥ 0
+6. compute_estimate.sig_minutes, spot_minutes, local_minutes ≥ 0
 7. parameter_space 不为空 list
 8. grid.candidates_count > 0 (如有)
 9. stop_conditions 至少 1 个非空字符串
+10. cb_arb run/evaluate/search jobs 必须声明 spot_minutes > 0 且 local_minutes = 0
 """
 
 from __future__ import annotations
@@ -180,18 +181,70 @@ def check_budget_vs_compute_cost(spec: dict[str, Any]) -> list[Issue]:
 
 
 def check_compute_estimate_positive(spec: dict[str, Any]) -> list[Issue]:
-    """compute_estimate.sig_minutes, spot_minutes ≥ 0."""
+    """compute_estimate.sig_minutes, spot_minutes, local_minutes ≥ 0."""
     issues = []
     compute = spec.get("compute_estimate") or {}
     if not isinstance(compute, dict):
         return issues
-    for field in ("sig_minutes", "spot_minutes"):
+    for field in ("sig_minutes", "spot_minutes", "local_minutes"):
         v = compute.get(field)
         if isinstance(v, (int, float)) and v < 0:
             issues.append(Issue(
                 "fatal", "compute_minutes_negative",
                 f"compute_estimate.{field}={v} 必须 ≥ 0"
             ))
+    return issues
+
+
+def _automation_command_tokens(spec: dict[str, Any]) -> list[str]:
+    automation = spec.get("automation") or spec.get("execution") or {}
+    if not isinstance(automation, dict):
+        return []
+    command = automation.get("command") or []
+    if isinstance(command, str):
+        return [command]
+    if isinstance(command, list):
+        return [str(item) for item in command]
+    return []
+
+
+def _requires_spot_compute(spec: dict[str, Any]) -> bool:
+    command_text = " ".join(_automation_command_tokens(spec))
+    cb_arb_script = any(
+        marker in command_text
+        for marker in (
+            "scripts/evaluate_cb_arb",
+            "scripts/search_cb_arb",
+            "scripts/run_cb_arb",
+        )
+    )
+    if cb_arb_script:
+        return True
+    strategy_id = str(spec.get("strategy_id") or "")
+    grid = spec.get("grid") or {}
+    candidate_count = grid.get("candidates_count") if isinstance(grid, dict) else 0
+    return strategy_id.startswith("cb_arb") and isinstance(candidate_count, int) and candidate_count > 0
+
+
+def check_compute_placement_declared(spec: dict[str, Any]) -> list[Issue]:
+    """cb_arb run/evaluate/search jobs must be declared as spot, never local."""
+    issues = []
+    compute = spec.get("compute_estimate") or {}
+    if not isinstance(compute, dict) or not _requires_spot_compute(spec):
+        return issues
+    spot_minutes = float(compute.get("spot_minutes", 0) or 0)
+    local_minutes = float(compute.get("local_minutes", 0) or 0)
+    if spot_minutes <= 0:
+        issues.append(Issue(
+            "fatal", "cb_arb_backtest_requires_spot_minutes",
+            "cb_arb 回测/评估/搜索必须声明 compute_estimate.spot_minutes > 0, "
+            "不能伪装成本地轻量任务"
+        ))
+    if local_minutes > 0:
+        issues.append(Issue(
+            "fatal", "cb_arb_backtest_forbids_local_minutes",
+            "cb_arb 回测/评估/搜索不能声明 local_minutes > 0; 必须放到 VM/spot host"
+        ))
     return issues
 
 
@@ -245,6 +298,7 @@ def run_checks(spec: dict[str, Any], repo: Path) -> dict[str, Any]:
     issues.extend(check_cv_holdout_years(spec))
     issues.extend(check_budget_vs_compute_cost(spec))
     issues.extend(check_compute_estimate_positive(spec))
+    issues.extend(check_compute_placement_declared(spec))
     issues.extend(check_grid_candidates(spec))
     issues.extend(check_stop_conditions(spec))
 

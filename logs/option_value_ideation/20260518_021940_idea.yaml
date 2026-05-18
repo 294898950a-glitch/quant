@@ -1,0 +1,19 @@
+proposal_id: option_pnl_feedback_loss_threshold
+executor: option_source_pnl_feedback_scaler
+family: option_source_pnl_feedback
+hypothesis: 上一轮19变体均以零门槛触发（任意亏损即缩减），在训练期误触正常波动；将 option_source_pnl_feedback_trigger_avg_pnl_pct
+  设为非零负值（如 -5%、-10%）可过滤噪声触发，只在期权来源交易真正大幅亏损时才缩减，有望在保留训练期好期权收益的同时捕捉2020式崩盘期信号。
+source_insight: 来自 cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259 的
+  params_json：19变体全部固定 option_source_pnl_feedback_trigger_avg_pnl_pct=0.0，该参数在字段中存在但从未被变动；测试段最优变体
+  feedback_60d_min2_scale_0p5 的 test_excess=0.458 高于基线0.380，证明反馈机制在测试期有效；训练期仍选基线 train_score=0.050351，根因是零门槛使正常波动也触发缩减，误压了2019-2024年的好期权收益。
+why_not_rejected_repeat: 已确认无效方向 rolling_option_source_pnl_feedback 的全部19变体均以 trigger_avg_pnl_pct=0
+  运行，即"任何净亏损即触发"；本提案核心维度是损失门槛从零变为非零（如 -0.03 至 -0.10），该参数区间在整个历史参数空间内从未被探索；机制性质从"噪声敏感反馈"变为"信号门控反馈"，不属于任何
+  forbidden_families（非禁买、非整体期权折价、非入场门控）。
+risk: "主要风险有三点： (1) 若2020崩盘期间期权交易的每笔平均亏损幅度未达到所设门槛（例如每笔实际仅亏1%-3%），则机制在2020期间仍不触发，2020修复依然失败；\
+  \ (2) option_source_pnl_feedback_trigger_avg_pnl_pct 在脚本\n    scripts/evaluate_cb_arb_option_pnl_feedback.py\
+  \ 中是否实现为真实条件逻辑\n    （即 if avg_pnl_pct < trigger_threshold 时才缩减）需在发送 spec 前验证，\n\
+  \    若脚本将0作为硬编码阈值而忽略传入参数，则本轮结果与上一轮无差异；\n(3) 框架可能将本轮判定为已确认无效方向 rolling_option_source_pnl_feedback\n\
+  \    的变体，存在 sanity_checker 拦截风险，需在 spec 中明确说明本轮测试的是\n    未被覆盖的门槛维度。"
+_ideation_source: claude
+_family_override_reason: compiled pnl_feedback variant to implemented option-source
+  feedback family

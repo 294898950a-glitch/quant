@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17
+diagnostic_date: '2026-05-17'
+diagnostic_by: claude
+verdict_referenced: reject
+summary: '恐慌债底锚定 网格全部变体: test 1.5y mechanical pass (excess > 0, dd > -0.3), 但 train
+  6y 全部失败 decision_contract falsifier (cumulative excess negative or marginal, 2020
+  单年 dd > 15%). best test variant buy_anchor_15 test excess 看起来好是 short window false
+  positive.'
+verdict_rationale: 'rejected per current.yaml cb_arb_value_gap_switch decision_contract.falsifiers:
+  (1) cumulative_excess_compound_cross_year_lt_0 触发 (train_excess < 0 or marginal
+  across all variants); (2) any_single_year_drawdown_vs_benchmark_gt_15pct 触发 (2020
+  yearly dd ≈ -20% for all variants). 这正符合 panic_detector_dead_end + single_filter_dead_end
+  已 reject 模式 — 4th time panic 系列复现. mechanical auto pipeline 现在只看 test thresholds
+  不看 train falsifier, 是已知 gap (see open_threads.enforce_train_period_falsifiers_in_pipeline).'
+trade_level_diff:
+  note: Trade-level overlap not analyzed; aggregate falsifier failure sufficient evidence
+    for reject.

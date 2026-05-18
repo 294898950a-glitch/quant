@@ -1,0 +1,74 @@
+{
+  "train_start": "20190101",
+  "train_end": "20241231",
+  "test_start": "20250101",
+  "test_end": "20260508",
+  "base": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 180.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0,
+    "panic_rule": "agent_combo",
+    "panic_option_value_weight_enabled": 1.0,
+    "panic_effective_lag_days": 1.0,
+    "cost_model_enabled": 1.0,
+    "slippage_pct": 0.0015,
+    "market_impact_coeff": 0.001,
+    "market_impact_cap_pct": 0.02,
+    "holding_cost_pct": 0.0
+  },
+  "configs": [
+    {
+      "name": "weight_soft_100_80_60_30",
+      "description": "恐慌日按债底距离给期权价值温和打折: 100/80/60/30",
+      "params": {
+        "panic_option_weight_05": 1.0,
+        "panic_option_weight_10": 0.8,
+        "panic_option_weight_15": 0.6,
+        "panic_option_weight_far": 0.3
+      }
+    },
+    {
+      "name": "weight_mid_100_70_40_10",
+      "description": "恐慌日按债底距离给期权价值中等打折: 100/70/40/10",
+      "params": {
+        "panic_option_weight_05": 1.0,
+        "panic_option_weight_10": 0.7,
+        "panic_option_weight_15": 0.4,
+        "panic_option_weight_far": 0.1
+      }
+    },
+    {
+      "name": "weight_hard_100_50_20_00",
+      "description": "恐慌日按债底距离给期权价值重度打折: 100/50/20/0",
+      "params": {
+        "panic_option_weight_05": 1.0,
+        "panic_option_weight_10": 0.5,
+        "panic_option_weight_15": 0.2,
+        "panic_option_weight_far": 0.0
+      }
+    },
+    {
+      "name": "weight_flat_70",
+      "description": "恐慌日所有期权型低估统一保留70%期权价值",
+      "params": {
+        "panic_option_weight_05": 0.7,
+        "panic_option_weight_10": 0.7,
+        "panic_option_weight_15": 0.7,
+        "panic_option_weight_far": 0.7
+      }
+    },
+    {
+      "name": "weight_flat_50",
+      "description": "恐慌日所有期权型低估统一保留50%期权价值",
+      "params": {
+        "panic_option_weight_05": 0.5,
+        "panic_option_weight_10": 0.5,
+        "panic_option_weight_15": 0.5,
+        "panic_option_weight_far": 0.5
+      }
+    }
+  ]
+}

@@ -73,12 +73,29 @@ REVALUE_CONFIGS: list[dict[str, Any]] = [
 ]
 
 
+def _with_cost_params(params: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    if not args.cost_model_enabled:
+        return dict(params)
+    out = dict(params)
+    out.update(
+        {
+            "cost_model_enabled": 1.0,
+            "slippage_pct": float(args.slippage_pct),
+            "market_impact_coeff": float(args.market_impact_coeff),
+            "market_impact_cap_pct": float(args.market_impact_cap_pct),
+            "holding_cost_pct": float(args.holding_cost_pct),
+        }
+    )
+    return out
+
+
 def _row(
     name: str,
     description: str,
     period: str,
     start: str,
     end: str,
+    base_params: dict[str, Any],
     overrides: dict[str, float],
     result: dict[str, Any],
 ) -> dict[str, Any]:
@@ -89,7 +106,7 @@ def _row(
         "start": start,
         "end": end,
         "overrides_json": json.dumps(overrides, sort_keys=True),
-        **BASE_PARAMS,
+        **base_params,
         **result["metrics"],
     }
     row["score"] = _score(result["metrics"])
@@ -128,6 +145,11 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--rule", default="score_4state")
     p.add_argument("--output-dir", type=Path, default=None)
     p.add_argument("--reuse-ranks", action="store_true")
+    p.add_argument("--cost-model-enabled", action="store_true")
+    p.add_argument("--slippage-pct", type=float, default=0.0015)
+    p.add_argument("--market-impact-coeff", type=float, default=0.0010)
+    p.add_argument("--market-impact-cap-pct", type=float, default=0.02)
+    p.add_argument("--holding-cost-pct", type=float, default=0.0)
     return p.parse_args()
 
 
@@ -135,6 +157,7 @@ def main() -> int:
     args = _parse_args()
     output_dir = args.output_dir or args.data_root / "value_gap_stop_revaluation"
     output_dir.mkdir(parents=True, exist_ok=True)
+    base_params = _with_cost_params(BASE_PARAMS, args)
     start_all = min(args.train_start, args.test_start)
     end_all = max(args.train_end, args.test_end)
 
@@ -177,7 +200,7 @@ def main() -> int:
             args.data_root,
             args.fixed_source,
             args.rule,
-            BASE_PARAMS,
+            base_params,
             stop_revalue_ranks=stop_ranks[
                 (stop_ranks["trade_date"] >= args.train_start)
                 & (stop_ranks["trade_date"] <= args.train_end)
@@ -190,17 +213,17 @@ def main() -> int:
             args.data_root,
             args.fixed_source,
             args.rule,
-            BASE_PARAMS,
+            base_params,
             stop_revalue_ranks=stop_ranks[
                 (stop_ranks["trade_date"] >= args.test_start)
                 & (stop_ranks["trade_date"] <= args.test_end)
             ],
         )
         summary_rows.append(
-            _row(name, description, "train", args.train_start, args.train_end, overrides, train)
+            _row(name, description, "train", args.train_start, args.train_end, base_params, overrides, train)
         )
         summary_rows.append(
-            _row(name, description, "test", args.test_start, args.test_end, overrides, test)
+            _row(name, description, "test", args.test_start, args.test_end, base_params, overrides, test)
         )
         print(
             f"[stop_revalue] {name} "
@@ -219,12 +242,12 @@ def main() -> int:
                 args.data_root,
                 args.fixed_source,
                 args.rule,
-                BASE_PARAMS,
+                base_params,
                 stop_revalue_ranks=stop_ranks[
                     (stop_ranks["trade_date"] >= start) & (stop_ranks["trade_date"] <= end)
                 ],
             )
-            yearly_rows.append(_row(name, description, str(year), start, end, overrides, y))
+            yearly_rows.append(_row(name, description, str(year), start, end, base_params, overrides, y))
             if year == 2020:
                 exit_2020_rows.extend(_exit_rows(name, y["trades"]))
 
@@ -240,7 +263,7 @@ def main() -> int:
                 "train_end": args.train_end,
                 "test_start": args.test_start,
                 "test_end": args.test_end,
-                "base_params": BASE_PARAMS,
+                "base_params": base_params,
                 "configs": REVALUE_CONFIGS,
             },
             ensure_ascii=False,

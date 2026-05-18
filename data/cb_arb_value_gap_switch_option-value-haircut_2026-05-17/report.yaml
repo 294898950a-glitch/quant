@@ -1,0 +1,33 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-value-haircut_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  exit_1_mechanical: "11 variants tested. Best train variant ratio_1p5_or_mny_1p6_weight_0p25 has train_excess=0.418475, but test_excess=-0.139723. Baseline test_excess is 0.379760."
+  exit_2_falsifier: "auto_research_pipeline marked passed_mechanical_but_falsifier_failed. Single-year drawdown falsifier failed: 2024 max_drawdown=-0.167919 below -0.15 ceiling."
+  exit_3_pattern_match: "Matches prior option-entry-gate tradeoff: aggressive changes repair 2020 but destroy 2025-2026 option-source gains."
+compute_cost_yuan: 4.69
+confirmed_invalid_directions:
+  - "Global option-value haircut triggered by price/bond_floor alone."
+  - "Global option-value haircut triggered by stock/conversion moneyness alone."
+  - "Aggressive stock-like haircut that optimizes train while damaging 2025-2026."
+learnings:
+  - "Best 2020 repair was ratio_1p5_or_mny_1p6_weight_0p25: 2020 total_return improved from -0.090593 to 0.132064."
+  - "The same best train variant failed test: test_excess fell from baseline 0.379760 to -0.139723."
+  - "Moneyness-only 0.75 and 0.5 variants preserved positive test excess but both underperformed baseline test materially."
+  - "The false option-value issue is real, but a global haircut is too blunt."
+follow_up_actions:
+  - "Do not promote any option-value haircut variant."
+  - "Keep the attribution insight, but require a more conditional mechanism before another full run."
+  - "If continuing, test conditional sizing or sell logic rather than global valuation compression."
+status: COMPLETE
+notes: "VM run completed all 11 variants. Initial packaging failed after main CSVs were written; Codex repaired summary/report/adjustment artifacts without rerunning the backtest."
+references:
+  - data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17/summary_option_value_haircut.csv
+  - data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17/yearly_option_value_haircut.csv
+  - data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17/summary.json
+  - data/research_framework/run_manifests/cb_arb_value_gap_switch_option-value-haircut_2026-05-17.yaml
+related_reports:
+  - data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/report.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/report.yaml

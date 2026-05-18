@@ -183,6 +183,8 @@ def main() -> int:
     diagnostic_validated = []
 
     if args.run_dir is not None:
+        if not args.run_dir.is_absolute():
+            args.run_dir = (REPO_ROOT / args.run_dir).resolve()
         if not args.run_dir.exists():
             print(f"ERROR: --run-dir {args.run_dir} 不存在", file=sys.stderr)
             return 1

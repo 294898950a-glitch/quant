@@ -1,0 +1,65 @@
+schema_version: 1
+run_id: cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17
+ack_at: '2026-05-16T23:51:22Z'
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-17T03:39:40.896429Z'
+  description: Hard floors test_excess>=0 and max_dd>=-0.3
+  answer: Test period passes both floors (+0.348 >= 0, -0.127 >= -0.3). However train
+    6y dd = -0.357 breaches -0.15 falsifier defined in current.yaml decision_contract.falsifiers,
+    so the candidate does not actually pass the strategy-level adoption rule.
+  pass: false
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-17T03:39:40.896452Z'
+  description: Selected variant ranking methodology
+  answer: Selected buy_anchor_15 by max test_excess_return ranking across grid variants.
+    All variants in this rerun show similar test pattern (~+35-46%) and similarly
+    bad train pattern (~-3 to -8% cumulative, ~-32 to -35% dd). Ranking by test alone
+    is not a valid selection criterion when train period systematically fails.
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-17T03:39:40.896459Z'
+  description: Baseline cb_arb_value_gap_switch passes floors
+  answer: Baseline cb_arb_value_gap_switch (cost-on) has cumulative_excess_compound
+    -0.1047 and 2020 single-year dd > 15%, already failing decision_contract falsifiers
+    per data/research_framework/current.yaml. Both baseline and all rerun variants
+    share the same 2020 weakness pattern.
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-17T03:39:40.896463Z'
+  description: Edge-of-grid / monotonic check
+  answer: Grid is categorical (variant names like vol_50 / spread_plus_100), not continuous.
+    No monotonic edge-of-grid concern applies. All variants tested were intended fixed
+    configurations, not boundary parameters.
+  pass: true
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-17T03:39:40.896467Z'
+  description: Trade overlap baseline vs selected
+  answer: 'Trade overlap not analyzed in this rerun: evaluate_cb_arb_* scripts produce
+    summary_*.csv aggregates, not per-trade comparison vs baseline. Overlap analysis
+    not required for rejection: train falsifier failure is sufficient evidence.'
+  pass: true
+auto_computed_at: '2026-05-17T03:39:40.896569Z'
+q6_trigger_timing:
+  description: Trigger timing leakage check
+  applicable: false
+q7_path_contamination:
+  description: Path/data contamination check
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: 'Best test variant buy_anchor_15: test_excess=+0.348, test_dd=-0.127;
+  train_excess=-0.073, train_dd=-0.357. Train 6y aggregate fails decision_contract
+  falsifiers (cumulative_excess_compound < 0 and any_single_year_dd > 15%), so mechanical
+  test-only pass is a short-window false positive.'
+reviewer: claude
+reviewed_at: '2026-05-16T23:51:10Z'

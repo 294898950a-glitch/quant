@@ -1,0 +1,149 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user request: use spot/Guangzhou computer to test whether the general
+  framework can adapt to regime-conditioned parameter search'
+hypothesis: 期权型低估入口不应该全市场同一门槛；按市场状态只在弱市/弱震荡收紧，可以减少 2020 错买，同时保留强市期权修复收益。
+source_insight: '上一轮 option-entry-gate 全局过滤显示：过滤期权型候选可以改善 2020， 但会伤害 2025-2026 的主要收益来源。结论不是“期权低估不能买”，
+  而是“弱市场中的期权低估需要更高买入门槛，强市场不能被一起砍掉”。 当前 daily regime classifier 已能按日给出 strong/neutral/flat_weak/weak，
+  本实验只测试期权入口门槛是否可以按 regime 条件启用。
+
+  '
+parameter_space:
+- name: regime_option_entry_gate_variant
+  range:
+  - 0
+  - 14
+  type: int
+  description: 15 个固定方案，包括 baseline、弱市单独限制、弱震荡单独限制、弱市严格且弱震荡温和限制。
+- name: option_entry_max_close_to_bond_floor_by_regime
+  range:
+  - 1.15
+  - 1.35
+  type: float
+  description: 期权型候选价格/债底上限，只在指定市场状态启用。
+- name: option_entry_max_bad_signals_by_regime
+  range:
+  - 0
+  - 2
+  type: int
+  description: 期权型候选允许的弱势信号数量，只在指定市场状态启用。
+- name: option_entry_max_option_share_by_regime
+  range:
+  - 0.9
+  - 0.95
+  type: float
+  description: 期权低估占总低估的占比上限，只在指定市场状态启用。
+new_data_sources:
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  description: current value-gap switch source pool config
+- path: data/cb_warehouse/cb_daily.parquet
+  description: convertible bond daily prices and liquidity
+- path: data/cb_warehouse/stk_daily.parquet
+  description: stock daily prices for timely weak-signal checks
+- path: data/csi500_grid/raw/510500_daily.parquet
+  description: CSI500 index/volume data used by daily regime classifier
+grid:
+  dimensions:
+  - regime_option_entry_gate_variant
+  candidates_count: 15
+  description: 固定 15 组 regime-conditioned 期权入口规则；估值、债底规则、卖出和换仓保持当前主策略。
+hard_floors:
+  train_excess_return: 0.0
+  train_max_drawdown: -0.3
+  test_excess_return: 0.0
+  test_max_drawdown: -0.3
+  replay_2020_total_return: -0.067944
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-on branch and prior
+  option-entry-gate falsifier contract
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- yearly_2020_total_return
+- yearly_2020_excess_return
+- max_drawdown
+- total_trades
+- win_rate
+- entry_source_2020_by_regime
+- entry_source_test_by_regime
+cv_design: single-window
+cv_holdout_years:
+- 2019
+- 2020
+- 2021
+- 2022
+- 2023
+- 2024
+- 2025
+- 2026
+cv_adoption_threshold: '不能只看 train 通过。必须同时检查：训练段不为负，2020 明显改善， 2025-2026 不明显伤害，且强市期权来源收益没有被一起砍掉。
+
+  '
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 150
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 100
+spot_decision: spot_minutes=150，按 R10 必须在 VM/spot host 跑；预算 15.63 元，低于 100 元自动执行。
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_regime_option_entry_gate.csv
+- 缺少 yearly_regime_option_entry_gate.csv
+- 缺少 entry_source_2020_regime_option_entry_gate.csv
+- 所有非 baseline 方案 train_excess_return < 0 且 2020 total_return 未改善
+artifacts_required:
+- summary_regime_option_entry_gate.csv
+- yearly_regime_option_entry_gate.csv
+- exit_2020_regime_option_entry_gate.csv
+- entry_source_2020_regime_option_entry_gate.csv
+- entry_source_test_regime_option_entry_gate.csv
+- summary.json
+automation:
+  output_dir: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
+  gatekeeper_after_run: false
+  manual_2020_review_required: true
+  manual_review_reason: 自动 verdict 只筛训练表；本实验必须人工/AI 复核 2020 和 2025-2026 tradeoff。
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_regime_option_entry_gate.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --reuse-ranks
+  - --cost-model-enabled
+  verdict:
+    table_path: summary_regime_option_entry_gate.csv
+    filters:
+      period: train
+    rank_by: score
+    rank_desc: true
+    thresholds:
+      excess_return:
+        min: 0.0
+      max_drawdown:
+        min: -0.3
+status: COMPLETE
+escalation:
+- VM/spot host 不可用
+- 预算估算超过 100 元
+- 训练段过关但 2020 仍显著跑输
+notes: '这是围绕当前主策略的研究分支，不推广到 current.yaml，不改 baseline_registry。 本实验验证通用框架是否适合按市场状态寻找参数：代码只给候选空间和机械记录，
+  结果是否升级必须另行判断。
+
+  '
+updated_at: '2026-05-17T03:29:05Z'

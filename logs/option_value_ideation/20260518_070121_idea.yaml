@@ -1,0 +1,24 @@
+proposal_id: option_pnl_feedback_extended_lookback_v1
+executor: option_source_pnl_feedback_scaler
+family: option_source_pnl_feedback
+hypothesis: '将反馈信号回看窗口从固定的 60 天拉长至 120-180 天、最小成交笔数提升至 4-6 笔， 迫使信号只在「连续多月期权来源持续净亏」时才触发；训练期（2019-2024）偶发短期
+  亏损段不再误射从而保留训练期超额，若测试期（2025-2026）存在结构性持续亏损则 长窗口信号仍能在积累足够证据后降低暴露。
+
+  '
+source_insight: '连续 6 轮 option_source_pnl_feedback 运行（lookback 固定 60d，变化维度为 trigger_avg_pnl_pct=0/-5/-10、trigger_sum_pnl=-50K/-100K/-200K、
+  高风险子集 ratio>1.4 或 moneyness>1.6、两者 AND 交集）全部以相同模式失败： 训练段最优始终是 baseline_no_feedback（train_score=0.050351），
+  测试段最优始终是 feedback_60d_min2_scale_0p5（test_excess=0.458109 vs baseline 0.37976）。触发阈值和信号子集的全面枚举均无法修复训练段，
+  说明根本原因不是阈值灵敏度，而是 60 天窗口过短导致训练期短暂波动频繁误触； 所有历史运行从未系统变化 lookback_days 参数轴。
+
+  '
+why_not_rejected_repeat: 'forbidden_families 中不含 option_source_pnl_feedback；available_executors
+  中明确列出 option_source_pnl_feedback_scaler 为可用 executor。 历史全部 pnl_feedback 运行均固定 lookback_days=60，只变化触发阈值或信号子集；
+  本提案是首次系统测试 lookback_days=120/150/180 + min_trades=4/5/6 参数轴， 机制不变（仍为已实现的 pnl_feedback
+  scaler），参数空间与历史所有运行无重叠。 不涉及禁买、不改理论价格、不引入期权入场门槛，与四个 forbidden_families 均无交集。
+
+  '
+risk: 训练期（2019-2024 共 6 年）若无任何连续 4 个月以上的期权来源累计净亏， 长窗口信号将几乎不触发，训练段表现等同基线，score 仍不超过
+  0.050351； 测试段（2025-2026 约 1.3 年）若亏损事件不满足新的笔数要求， 信号同样几乎不触发，两段均退化为基线，train+test+2020
+  联合门槛依然无法通过。 此外现有 summary.json 不直接输出「历史触发频率」分布，无法事先验证新阈值 在训练期是否真的减少触发次数，存在运行后才发现窗口仍不够长的风险。
+_ideation_source: claude
+_contract_attempt: 1

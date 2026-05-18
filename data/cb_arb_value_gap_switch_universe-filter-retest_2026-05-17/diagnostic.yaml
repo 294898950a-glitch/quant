@@ -1,0 +1,15 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_universe-filter-retest_2026-05-17
+diagnostic_date: '2026-05-17'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: "Universe-filter retest rejected. Permanent CB sub-population exclusions do not produce a train-robust repair for cb_arb_value_gap_switch."
+verdict_rationale: "All non-baseline variants regress train_excess versus baseline. Some filters improve 2020 drawdown and sealed test excess, but the train degradation violates the pre-registered floors and repeats the option-source tradeoff pattern. No variant is promotion-ready."
+trade_level_diff:
+  baseline_train_trades_count: 628
+  exclude_far_above_bond_floor_train_trades_count: 505
+  exclude_high_moneyness_train_trades_count: 625
+  exclude_short_maturity_train_trades_count: 546
+  exclude_small_size_train_trades_count: 491
+  combined_lowrisk_universe_train_trades_count: 400
+  note: "Counts are train-period total trades from summary_universe_filter.csv. Detailed pairwise overlap deferred because aggregate floor rejection is decisive."

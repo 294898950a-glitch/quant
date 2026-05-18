@@ -1,0 +1,9 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047
+diagnostic_date: '2026-05-17'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: No position sizing variant beat baseline across train, 2020 repair, and sealed
+  test together.
+verdict_rationale: No position sizing variant beat baseline across train, 2020 repair,
+  and sealed test together.

@@ -1,0 +1,66 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_universe-filter-retest_2026-05-17
+reviewer: codex
+ack_at: '2026-05-17T14:33:00+08:00'
+q1_floor_binding:
+  computed_data:
+    baseline_train_excess: 0.205456
+    baseline_validate_excess: -0.029677
+    baseline_test_excess: 0.379760
+    best_test_variant: combined_lowrisk_universe
+    best_test_excess: 0.452725
+    best_test_train_excess: -0.358389
+    best_test_train_delta_vs_baseline: -0.563845
+  computed_at: '2026-05-17T14:33:00+08:00'
+  description: Pre-registered train+validate+2020 floors.
+  answer: "No non-baseline universe filter meets the train floor. The best test variant improves test_excess but destroys train_excess versus baseline."
+  pass: false
+q2_selection_score:
+  computed_data:
+    selected_name: baseline_full_universe
+    adoption_pass: false
+    highest_nonbaseline_test_excess: 0.452725
+    highest_nonbaseline_test_name: combined_lowrisk_universe
+  computed_at: '2026-05-17T14:33:00+08:00'
+  description: Candidate selection quality.
+  answer: "The adoption table selects the baseline/control because all non-baseline variants fail the pre-registered floors."
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    baseline_train_excess: 0.205456
+    exclude_far_train_excess: -0.300876
+    exclude_high_moneyness_train_excess: -0.049916
+    exclude_short_maturity_train_excess: -0.147086
+    exclude_small_size_train_excess: -0.042857
+    combined_train_excess: -0.358389
+  computed_at: '2026-05-17T14:33:00+08:00'
+  description: Alignment against current cb_arb_value_gap_switch baseline.
+  answer: "Every exclusion variant regresses train_excess versus the current full-universe baseline, so it cannot replace the current strategy."
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: "categorical universe filters, not a monotonic parameter grid"
+  computed_at: '2026-05-17T14:33:00+08:00'
+  description: Edge-of-grid or monotonic concern.
+  answer: "The categorical filters show a tradeoff: safer-looking universe cuts improve some later metrics but remove too much historical train edge."
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    baseline_total_train_trades: 628
+    combined_total_train_trades: 400
+    exclude_far_total_train_trades: 505
+    exclude_high_moneyness_total_train_trades: 625
+  computed_at: '2026-05-17T14:33:00+08:00'
+  description: Trade overlap baseline vs selected.
+  answer: "Detailed overlap is not needed for adoption because aggregate train/validate floors already reject the non-baseline variants."
+  pass: true
+q6_trigger_timing:
+  description: Trigger timing leakage.
+  applicable: false
+q7_path_contamination:
+  description: Path/data contamination.
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: "Universe-filter retest is complete but rejected: simple permanent exclusions improve some 2020/test metrics while materially degrading train robustness. Baseline remains selected and no truth promotion is allowed."
+auto_computed_at: '2026-05-17T14:33:00+08:00'

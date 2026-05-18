@@ -1,0 +1,44 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-entry-gate_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+
+three_exits_section:
+  adopt:
+    decision: false
+    reason: "没有候选同时满足 train、2020、test。"
+  reject:
+    decision: true
+    reason: "全局期权入口过滤确认风险来源，但收益与风险来自同一类 option-source 交易，不能直接采用。"
+  mini_spec_retry:
+    decision: false
+    reason: "同一批全局入口阈值继续微调会增加挑结果风险；下一步必须换成更有条件的规则，而不是扩大网格。"
+
+compute_cost_yuan: 18.75
+
+confirmed_invalid_directions:
+  - "全局按价格/债底距离硬过滤期权型入口。"
+  - "全局按期权占比上限硬过滤期权型入口。"
+  - "把 train aggregate 最高的入口规则直接作为采用依据。"
+
+learnings:
+  - "2020 亏损确实主要来自 option-source 入口；baseline 2020 option-source PnL 为 -92630.91。"
+  - "option_share_max_0p95 可把 2020 total return 提到 0.066778，但 test excess 变成 -0.348735。"
+  - "2025-2026 的主要收益同样来自 option-source；baseline test option-source PnL 为 729505.32。"
+  - "弱势信号过滤比债底距离硬过滤温和，但没有超过 baseline。"
+
+follow_up_actions:
+  - "不要采用本分支任何候选。"
+  - "下一步如果继续研究，应测试条件化入口：只在弱市或信用压力环境下限制 option-source，不能全市场硬砍。"
+  - "自动 verdict 需要加入 yearly/2020 约束，否则会继续把 train 最高但 test 失败的候选标成 pass。"
+
+status: COMPLETE
+notes: "Manual review overrides mechanical adoption_pass."
+references:
+  - "data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/summary_option_entry_gate.csv"
+  - "data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/yearly_option_entry_gate.csv"
+  - "data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/entry_source_2020_option_entry_gate.csv"
+  - "data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/entry_source_test_option_entry_gate.csv"
+  - "data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/l4_ack.yaml"
+related_reports: []

@@ -1,0 +1,49 @@
+proposal_id: option_ps_trailing_optionsrc_pnl
+executor: option_position_sizing
+family: trailing_optionsrc_feedback_scale
+hypothesis: 用最近 N 天期权来源实现盈亏（rolling PnL）动态调节期权型候选买入金额，2020 期权来源持续亏损时自动缩减暴露、2025-2026
+  期权来源盈利时维持正常仓位，从而在不禁买前提下降低坏期权暴露同时保留好期权收益。
+source_insight: 'attribution 研究（option_false_undervalue_attribution_2026_05_17）显示期权来源
+  2020 PnL 为 -92630.91、
+
+  测试段为 +729505.32，同类交易不同时期表现截然相反，说明需要一个能感知"当前期权来源是否在赚钱"的机制；
+
+  progressive_stocklike_position_scale（训练 excess 0.386 远超基线 0.131）证明了仓位缩减机制本身在训练段有效，
+
+  但静态 CB 特征缩减把 2025-2026 的好期权交易也一并压低（测试 0.119 vs 基线 0.380），
+
+  说明"何时缩减"比"对谁缩减"更重要；时序 rolling PnL 反馈天然区分亏损期和盈利期，
+
+  无需依赖任何 CB 特征阈值或市场状态分类器。'
+why_not_rejected_repeat: '与 global_option_entry_gate / regime_conditioned_option_entry_gate
+  的区别：不是 binary 禁买，
+
+  是连续金额缩减，允许期权型候选以缩减仓位继续参与；
+
+  与 global_option_value_haircut 的区别：不修改理论估值，不影响是否入场的决策逻辑；
+
+  与 progressive_stocklike_position_scale 的本质区别：前者基于 CB 自身静态特征全时段缩减
+
+  （导致测试段好交易同步受损），本方案基于期权来源子集时序盈亏动态触发，盈利期不缩减；
+
+  与 cb_arb_self_pnl_lookback_regime_classifier（已拒绝，0/108 候选通过）的区别：
+
+  那是全策略 PnL 驱动的状态切换影响所有交易，本方案是仅用期权来源子集 PnL 驱动、
+
+  仅对期权型候选买入金额做连续缩减，作用范围和机制均不同。'
+risk: '主要风险：trailing PnL 反馈滞后 20-40 个交易日，2020 开始亏损后前期全额暴露仍无法避免，
+
+  训练集 falsifier（单年 dd > 15%、跨年累计 excess < 0）可能仍然触发，和已拒绝的
+
+  cb_arb_self_pnl_lookback_regime_classifier 面临同样的"只有 2020 一个坏年份可校准 rolling
+
+  窗口参数"的过拟合风险（类似 0/108 模式）；
+
+  次要风险：evaluate_cb_arb_option_position_sizing.py 当前可能不包含逐日期权来源 PnL 流计算，
+
+  需 Codex 在脚本中增加 rolling option-source PnL 逻辑，若底层数据不支持则无法实现；
+
+  第三风险：若 2020 期权来源亏损与全策略亏损高度同步，本方案实际效果可能退化为
+
+  full-strategy trailing PnL 缩减，与已拒绝方向等价。'
+_ideation_source: claude

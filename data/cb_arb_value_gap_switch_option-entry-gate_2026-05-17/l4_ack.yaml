@@ -1,0 +1,86 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-entry-gate_2026-05-17
+reviewer: codex
+ack_at: 2026-05-17 01:28:11+00:00
+q1_floor_binding:
+  description: 检查是否只是机械 train 汇总过关。
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-17T03:39:40.972005Z'
+  answer: 'Floor 是 binding 的。按 train 汇总看 19 个候选都为正，太松；加入 test 和 2020 单年后，没有候选同时通过。
+
+    这正是 Claude review 指出的风险：不能只看 train aggregate。
+
+    '
+  pass: false
+q2_selection_score:
+  description: 候选排名是否被单一训练段分数误导。
+  answer: '自动选择的是 ratio_1p15，因为 train score 最高。但它 test excess=-0.230402，不能采用。
+
+    人工复核必须覆盖 2020 和 test，因此自动 selected_name 只作为诊断，不作为采用依据。
+
+    '
+  pass: false
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-17T03:39:40.972017Z'
+q3_baseline_alignment:
+  description: 当前 baseline 与候选在 train/test/2020 的对齐情况。
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-17T03:39:40.972020Z'
+  answer: 'baseline 测试段最强。改善 2020 的方案会明显牺牲 2025-2026；保留 2025-2026 的方案不能修好 2020。
+
+    入口过滤方向有诊断价值，但没有给出能替换 baseline 的规则。
+
+    '
+  pass: false
+q4_monotonic:
+  description: 入口门槛变化是否单调稳健。
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-17T03:39:40.972022Z'
+  answer: '不是稳健单调改进。债底距离越严格，train 越好但 test 越差；弱势信号门槛越宽，test 越接近 baseline。
+
+    这说明单一入口过滤容易砍掉未来大赢家。
+
+    '
+  pass: false
+q5_trade_overlap:
+  description: PnL 差异来自入口来源变化还是退出变化。
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-17T03:39:40.972024Z'
+  answer: '改的是入口，路径差异集中在 option-source 交易。2020 里限制期权入口能减少亏损，甚至转正；
+
+    但测试段的大额利润也来自 option-source，硬过滤会把主要收益一并砍掉。
+
+    '
+  pass: false
+q6_trigger_timing:
+  applicable: true
+  description: 入口信号是否使用未来信息。
+  answer: '入口门槛在买入日使用当日可见的价格、债底、期权占比，以及已有实现中的 timely weak-signal map。
+
+    Claude review 确认 rolling low 使用 shift(1)，没有未来数据泄漏。
+
+    '
+  pass: true
+q7_path_contamination:
+  applicable: true
+  description: 新机制是否污染卖出路径。
+  answer: '本实验只过滤买入候选，不改卖出、止损、换仓规则。路径变化来自是否买入和后续持仓集合改变，不是退出规则被重写。
+
+    '
+  pass: true
+overall_pass: false
+overall_decision: reject
+overall_reason: '不采用。入口过滤方向证实了 2020 的亏损确实集中在期权型入口，但全局过滤无法同时保住 2025-2026 的收益。
+
+  最好的 2020 修复方案 option_share_max_0p95 test excess=-0.348735；最好的 test 方案仍是 baseline。
+
+  '
+notes: '这个分支不晋升 current.yaml，不改 baseline_registry。保留为复盘资产：期权型入口是风险来源，但不能全局硬砍。
+
+  '
+auto_computed_at: '2026-05-17T03:39:40.972028Z'

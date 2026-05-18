@@ -1,0 +1,42 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-entry-gate_2026-05-17
+diagnostic_date: '2026-05-17'
+diagnostic_by: codex
+verdict_referenced: reject
+
+summary: |
+  全量 19 组入口过滤跑完。方向验证了 2020 的风险来源：亏损集中在 option-source 买入。
+  但全局过滤 option-source 会同时砍掉 2025-2026 的主要收益，因此本分支 reject。
+
+verdict_rationale: |
+  自动 train 最高候选 ratio_1p15 的 train excess=0.666909，但 test excess=-0.230402。
+  2020 最好候选 option_share_max_0p95 的 2020 total_return=0.066778，但 test excess=-0.348735。
+  test 最好仍是 baseline_no_entry_gate，test excess=0.37976。没有候选同时解决 2020 并保留 test。
+
+next_step_spec_changes: []
+
+trade_level_diff:
+  baseline_trades_count: 75
+  candidate_trades_count: 23
+  diff_count: 52
+  diff_pct: 0.693333
+  top_diff_dates:
+    - date: '2020'
+      reason: "option_share_max_0p95 大幅减少 option-source 交易，2020 改善但 test 收益消失。"
+
+equity_diff:
+  end_pnl_baseline: -0.090593
+  end_pnl_candidate: 0.066778
+  max_diff_date: '2020'
+  max_diff_value: 0.157371
+
+path_dependency:
+  initial_state_sensitive: true
+  notes: "入口过滤改变持仓集合；不是同一持仓的退出优化。"
+
+trigger_attribution:
+  changes_trade_path: true
+  trigger_count: 19
+  trigger_dates:
+    - date: '2019-2026'
+      type: "option-source entry filtering variants"

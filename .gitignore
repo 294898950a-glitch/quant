@@ -59,3 +59,7 @@ data/cb_arb_*/heartbeat
 # Archive (保留物理副本但不 commit)
 archive/
 .framework-watch.pid
+
+# Runtime state (not source)
+data/research_framework/orchestrator_paused.flag
+logs/option_value_loop_status.json

@@ -1,0 +1,16 @@
+{
+  "iteration": 0,
+  "timestamp_iso": "2026-05-17T00:00:00Z",
+  "params": {
+    "weights": [60, 1.0, 0.10, 0.50, 0.03, 30, 90, -0.08, 72900000.0, 1000000.0, 50, 150],
+    "thresholds": {},
+    "rules": {
+      "rating_floor_int": 2,
+      "fee_pct": 0.0003,
+      "initial_capital": 1000000
+    }
+  },
+  "metrics": {
+    "source": "strategies/cb_arb/tunable_space.yaml current fields"
+  }
+}

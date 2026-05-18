@@ -1,0 +1,154 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-entry-gate_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user request: start a branch research for option-sourced entry gate after
+  2020 loss attribution'
+hypothesis: 期权型低估的主要风险发生在买入入口；对期权型候选增加入口限制，可以减少 2020 年错误买入，同时不明显伤害 2025-2026 的收益来源。
+source_insight: '最新诊断显示，2020 年亏损交易几乎都不是债底低估，而是期权价值主导的低估。
+
+  之前做过恐慌日折价、债底锚、止损复查和正常化波动率，但大多在恐慌日或止损时生效。
+
+  本实验只改买入入口：如果候选的低估主要来自期权价值，则额外检查价格离债底距离、期权占比和当日可见弱势信号。
+
+  债底型候选不受影响，卖出和换仓规则保持当前主策略逻辑。
+
+  '
+parameter_space:
+- name: option_entry_gate_variant
+  range:
+  - 0
+  - 18
+  type: int
+  description: 19 个固定入口方案，包括当前入口、债底距离、弱势信号、组合限制和期权占比上限。
+- name: option_entry_max_close_to_bond_floor
+  range:
+  - 1.15
+  - 1.5
+  type: float
+  description: 期权型候选买入时允许的价格/债底上限。
+- name: option_entry_max_bad_signals
+  range:
+  - 0
+  - 2
+  type: int
+  description: 期权型候选买入时允许的最多弱势信号数。
+- name: option_entry_max_option_share
+  range:
+  - 0.9
+  - 0.95
+  type: float
+  description: 期权型候选买入时允许的最高期权低估占比。
+new_data_sources:
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  description: current value-gap switch source pool config
+- path: data/cb_warehouse/cb_daily.parquet
+  description: convertible bond daily prices and liquidity
+- path: data/cb_warehouse/stk_daily.parquet
+  description: stock daily prices for timely weak-signal checks
+grid:
+  dimensions:
+  - option_entry_gate_variant
+  candidates_count: 19
+  description: 固定 19 组入口规则，全量跑 train/test/2019-2024 yearly，并输出 2020 和 test 的入口来源拆解。
+hard_floors:
+  train_excess_return: 0.0
+  train_max_drawdown: -0.3
+  test_excess_return: 0.0
+  test_max_drawdown: -0.3
+  replay_2020_total_return: -0.067944
+hard_floors_baseline_source: rerun_9 weight_soft 2020 total return and current cb_arb_value_gap_switch
+  train/test falsifier contract
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- yearly_2020_excess_return
+- yearly_2020_total_return
+- max_drawdown
+- total_trades
+- win_rate
+- entry_source_2020_option_loss
+- entry_source_test_option_profit
+cv_design: single-window
+cv_holdout_years:
+- 2019
+- 2020
+- 2021
+- 2022
+- 2023
+- 2024
+- 2025
+- 2026
+cv_adoption_threshold: 必须同时满足 train 累计不为负、2020 不劣于 rerun_9、test 不靠短窗口假阳性；否则只作为诊断资产，不晋升。
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 180
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 100
+spot_decision: spot_minutes=180，按 R10 必须在 VM/spot host 跑；预算 18.75 元，低于 100 元自动执行。
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_option_entry_gate.csv
+- 缺少 yearly_option_entry_gate.csv
+- 缺少 entry_source_2020_option_entry_gate.csv
+- 所有非 baseline 方案 train_excess_return < 0 且 2020 total_return 未改善
+artifacts_required:
+- summary_option_entry_gate.csv
+- yearly_option_entry_gate.csv
+- exit_2020_option_entry_gate.csv
+- entry_source_2020_option_entry_gate.csv
+- entry_source_test_option_entry_gate.csv
+- summary.json
+automation:
+  output_dir: data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17
+  gatekeeper_after_run: false
+  manual_2020_review_required: true
+  manual_review_reason: 自动 verdict 只按 train 汇总表筛选；本实验必须额外检查 2020 单年是否不劣于 rerun_9，并对比
+    single_filter_dead_end 旧结论。
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_option_entry_gate.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --reuse-ranks
+  - --cost-model-enabled
+  verdict:
+    table_path: summary_option_entry_gate.csv
+    filters:
+      period: train
+    rank_by: score
+    rank_desc: true
+    thresholds:
+      excess_return:
+        min: 0.0
+      max_drawdown:
+        min: -0.3
+status: COMPLETE
+escalation:
+- VM/spot host 不可用
+- 预算估算超过 100 元
+- 训练段过关但 2020 仍显著跑输
+notes: '这是新分支，不推广到 current.yaml，不改 baseline_registry。
+
+  本实验的关键比较不是 test 单窗口，而是 train 与 2020 是否同时改善。
+
+  Claude review 2026-05-17 08:42: no blocker; keep 19 variants; no future-data leak
+  found in timely weak-signal map; retro 必须显式检查 2020 yearly，不能只信 automation.verdict。
+
+  '
+updated_at: '2026-05-17T01:25:33Z'

@@ -1,0 +1,7 @@
+name,adoption_pass,adoption_pass_numeric,train_excess_delta_vs_baseline,validate_excess_delta_vs_baseline,test_excess_delta_vs_baseline,max_drawdown_2020_delta_vs_baseline,worst_yearly_max_drawdown_2019_2024,score
+baseline_full_universe,False,0,0.0,0.0,0.0,0.0,-0.182667,0.0
+exclude_high_moneyness,False,0,-0.255372,0.084114,-0.056502,0.062139,-0.169116,-0.165621
+exclude_far_above_bond_floor,False,0,-0.506332,0.098454,0.067199,0.058261,-0.167906,-0.349617
+exclude_short_maturity,False,0,-0.352542,0.0,0.0,-0.005611,-0.184677,-0.358153
+combined_lowrisk_universe,False,0,-0.563845,0.076539,0.072965,0.081909,-0.172377,-0.405397
+exclude_small_size,False,0,-0.248313,0.014809,-0.368128,0.013469,-0.209167,-0.588163

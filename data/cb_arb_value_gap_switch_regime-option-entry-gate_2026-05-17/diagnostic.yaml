@@ -1,0 +1,20 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
+diagnostic_date: '2026-05-17'
+diagnostic_by: claude
+verdict_referenced: reject
+summary: '15-variant regime-conditioned option-entry gate test: failed train + test
+  + 2020 three-way contract. train_falsifier_pipeline (newly implemented) caught it
+  as failed_mechanical_thresholds — first batch where mechanical pipeline correctly
+  auto-rejected without AI manual retro override.'
+verdict_rationale: 'rejected per train_falsifier_pipeline.derive_verdict (auto): mechanical
+  train floors (excess >= 0, dd >= -0.30) failed for all 15 variants. State-conditioning
+  the entry gate by daily regime classifier (strong/neutral/flat_weak/weak) did not
+  lift any variant above the contract. Best test gain (weak_mild_flat_signal +0.388
+  vs baseline +0.380) is +0.8pp, within noise band. Train robustness degraded universally.
+  2020 unchanged. This closes the option-entry-gate family (global + regime-conditioned
+  both rejected). Reinforces single_filter_dead_end and option_entry_gate_tradeoff.
+  State-dependent filters are not a productive direction without genuinely new action
+  mechanism.'
+trade_level_diff:
+  note: Trade-level analysis deferred; aggregate falsifier failure clear.

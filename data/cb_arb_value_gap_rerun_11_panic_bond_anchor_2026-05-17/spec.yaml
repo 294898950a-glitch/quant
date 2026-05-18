@@ -1,0 +1,93 @@
+schema_version: 1
+run_id: cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user request: rerun idea 11 because previous results are not trusted'
+hypothesis: 恐慌日对期权型候选增加债底距离限制，可以减少买入远离债底、只靠期权想象支撑的标的。
+source_insight: 恐慌环境中债底比期权更可靠；本次只测试债底锚，不推广结果。
+parameter_space:
+- name: panic_bond_anchor_variant
+  range:
+  - 0
+  - 5
+  type: int
+  description: 6 个固定债底锚方案。
+new_data_sources:
+- path: data/cb_arb_concurrent_supervised_20260511_094500/panic_detector_training/panic_detector_trained_daily.csv
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+- path: data/cb_warehouse/cb_daily.parquet
+grid:
+  dimensions:
+  - panic_bond_anchor_variant
+  candidates_count: 6
+hard_floors:
+  test_excess_return: 0.0
+  test_max_drawdown: -0.3
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-aware rerun floor
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+- total_trades
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 30
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_panic_bond_anchor.csv
+- 测试段最优配置 excess_return < 0 或 max_drawdown < -0.30
+artifacts_required:
+- summary_panic_bond_anchor.csv
+- yearly_panic_bond_anchor.csv
+- exit_2020_panic_bond_anchor.csv
+- summary.json
+status: COMPLETE
+automation:
+  output_dir: data/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17
+  gatekeeper_after_run: false
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_panic_bond_anchor.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --panic-dates-file
+  - data/cb_arb_concurrent_supervised_20260511_094500/panic_detector_training/panic_detector_trained_daily.csv
+  - --panic-signal-column
+  - panic_day_trained
+  - --panic-effective-lag-days
+  - '1'
+  - --cost-model-enabled
+  verdict:
+    table_path: summary_panic_bond_anchor.csv
+    filters:
+      period: test
+    rank_by: score
+    rank_desc: true
+    thresholds:
+      excess_return:
+        min: 0.0
+      max_drawdown:
+        min: -0.3
+notes: Framework rerun on VM. Uses trained panic signal and cost model.
+updated_at: '2026-05-16T23:39:28Z'

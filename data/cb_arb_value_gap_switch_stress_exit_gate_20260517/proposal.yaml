@@ -1,0 +1,107 @@
+proposal_id: cb_arb_value_gap_switch_stress_exit_gate_20260517
+strategy_id: cb_arb_value_gap_switch
+family: exit_management
+hypothesis: 'The strategy''s largest drawdowns (train max_dd -32.4%, 2020 excess -19.5%)
+  occur during market stress when held positions deteriorate faster than the default
+  holding period allows exits. A stress-triggered early-exit gate that shortens max
+  holding days and enforces a per-position stop-loss when a market drawdown indicator
+  exceeds a threshold should cut peak drawdown without materially hurting win rate,
+  because the value gap signal remains valid but continuing to hold through stress
+  amplifies loss.
+
+  '
+source_insight: 'Baseline train score 0.050 vs test score 0.355 signals a regime mismatch.
+  The 2020 sub-period (win_rate=0.29, excess=-0.195) is the primary drag. All 11 position-sizing
+  variants failed to fix this; the root cause is not entry weighting but exit timing
+  under stress. Regime-aware exit has not been tested in isolation for this strategy.
+
+  '
+expected_improvement: 'Train excess return improves from 0.131 toward 0.20+ by reducing
+  2020-style holding losses; test performance holds near baseline (excess >=0.34)
+  because severe stress regimes are rare in 2025-2026. Target: train max_dd < -0.22,
+  2020 excess > -0.15.
+
+  '
+mechanics: []
+required_executor: evaluate_cb_arb_stress_exit_gate
+required_data:
+- daily CSI 300 index close (stress indicator source)
+- cb_arb_value_gap_switch existing position and trade records
+test_design:
+  variants:
+  - name: baseline_no_stress_exit
+    description: current strategy, no stress exit gate
+  - name: stress_exit_mild
+    stress_threshold_enter: -0.06
+    stress_threshold_exit: -0.03
+    stress_max_holding_days: 10
+    stress_stop_loss_pct: -0.045
+  - name: stress_exit_moderate
+    stress_threshold_enter: -0.08
+    stress_threshold_exit: -0.04
+    stress_max_holding_days: 8
+    stress_stop_loss_pct: -0.035
+  - name: stress_exit_aggressive
+    stress_threshold_enter: -0.1
+    stress_threshold_exit: -0.05
+    stress_max_holding_days: 6
+    stress_stop_loss_pct: -0.025
+  periods:
+    train:
+    - '20190101'
+    - '20241231'
+    repair_2020:
+    - '20200101'
+    - '20201231'
+    test:
+    - '20250101'
+    - '20260508'
+  adoption_rule: 'A variant passes all three gates: (1) test excess_return >= 0.34,
+    (2) train max_drawdown >= -0.22 (less negative than baseline -0.324), (3) repair_2020
+    excess_return >= -0.15 (better than baseline -0.195).
+
+    '
+success_criteria:
+  test_excess_return_min: 0.34
+  train_max_drawdown_max: -0.22
+  repair_2020_excess_return_min: -0.15
+  test_score_min: 0.28
+falsifiers:
+- stress mode triggers during test period and reduces test excess below 0.30
+- trade count in stress mode increases by more than 40% without drawdown improvement
+- 2020 excess return does not improve despite stress indicator firing throughout 2020
+- stress exits consistently cut winners rather than losers (exit_pnl distribution
+  skewed positive)
+risk: 'Early exits during brief stress dips may terminate profitable trades. Four
+  parameters risk overfitting; test design limits to three named variants. CSI 300
+  stress indicator may lag idiosyncratic CB sell-offs. Stress mode deactivation threshold
+  must be set conservatively to avoid thrashing.
+
+  '
+why_not_repeated_failure: 'This is mechanically distinct from closed directions. Position
+  sizing (closed) adjusts entry amounts for new trades only; stress exit gate acts
+  on existing open positions and modifies when to exit. Entry gates (separate runs
+  already in progress) filter which new trades to take; this mechanic does not touch
+  entry logic. The 2020 failure (win_rate=0.29) is consistent with late exits on deteriorating
+  positions—a problem that entry-side and sizing-side changes structurally cannot
+  address.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_option-entry-gate_2026-05-17
+- cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
+implementation_assumption: 'CSI 300 daily close is available in the existing data
+  pipeline. evaluate_cb_arb_stress_exit_gate does not yet exist; compiler should mark
+  this DRAFT. Implementation requires: (a) stress_indicator computed from index data
+  at daily granularity, (b) stress_mode flag injected into the position manager loop,
+  (c) override logic for max_holding_days and stop_loss_pct on active positions when
+  stress_mode is True.'
+ai_provider: claude
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 4c1af4d1715c736a
+provenance:
+  ai_provider: claude
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 4c1af4d1715c736a
+proposal_path: data/cb_arb_value_gap_switch_stress_exit_gate_20260517/proposal.yaml

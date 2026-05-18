@@ -157,6 +157,8 @@ def main() -> int:
     args = parser.parse_args()
 
     if args.run_dir is not None:
+        if not args.run_dir.is_absolute():
+            args.run_dir = (REPO_ROOT / args.run_dir).resolve()
         if not args.run_dir.exists() or not (args.run_dir / "spec.yaml").exists():
             print(f"ERROR: --run-dir {args.run_dir} 不存在或缺 spec.yaml", file=sys.stderr)
             return 1

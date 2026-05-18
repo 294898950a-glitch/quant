@@ -11,7 +11,7 @@
 3. 跑 search_ledger.py 查机器实验账本是否 reject 过相似方向
    - 命中 strong match → 拒绝建立 (用户确认后用 --force)
 4. mkdir data/<run_id>/
-5. cp spec_template.yaml → data/<run_id>/spec.yaml
+5. 直接生成 data/<run_id>/spec.yaml
 6. 自动填: schema_version=1, run_id, date, strategy_id, status: DRAFT
 7. 提示下一步
 
@@ -39,7 +39,6 @@ except ImportError:
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = REPO_ROOT / "data"
-TEMPLATE_PATH = REPO_ROOT / "docs" / "research_framework" / "spec_template.yaml"
 STRATEGIES_YAML = REPO_ROOT / "data" / "research_framework" / "strategies.yaml"
 
 
@@ -151,6 +150,11 @@ def fill_template(out_path: Path, run_id: str, strategy_id: str,
         "stop_conditions": ["<TODO>"],
         "artifacts_required": ["ranked.csv", "trades.csv", "daily_equity.csv",
                                "summary.csv", "run_summary.json"],
+        "automation": {
+            "output_dir": f"data/{run_id}",
+            "command": ["<TODO: python3 scripts/... --output-dir data/{run_id}>"],
+            "verdict": {"pass_field": "adoption_pass"},
+        },
         "status": "DRAFT",
         "escalation": [],
         "notes": f"由 new_research.py 自动创建 (hypothesis_slug={hypothesis_slug}). 删除所有 <TODO> 后才能 validate 通过.",
@@ -190,10 +194,6 @@ def main() -> int:
     if target_dir.exists():
         print(f"ERROR: data/{run_id}/ already exists. 不覆盖.", file=sys.stderr)
         print(f"  Hint: 用不同 hypothesis_slug, 或先 rm 旧目录 (谨慎)", file=sys.stderr)
-        return 1
-
-    if not TEMPLATE_PATH.exists():
-        print(f"ERROR: template missing at {TEMPLATE_PATH}", file=sys.stderr)
         return 1
 
     if not args.force:

@@ -1,0 +1,63 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259
+reviewer: codex
+ack_at: '2026-05-18T02:16:17'
+q1_floor_binding:
+  description: Hard floors and train/test consistency.
+  answer: Selected train winner does not pass train/test/2020 robustness checks together.
+  computed_data:
+    best_train_variant: baseline_no_feedback
+    train_excess: 0.131363
+    test_excess: 0.37976
+    baseline_test_excess: 0.37976
+    baseline_2020_total_return: -0.090593
+    selected_2020_total_return: -0.090593
+  computed_at: '2026-05-18T02:16:17'
+  pass: false
+q2_selection_score:
+  description: Candidate selection quality.
+  answer: Train score selects baseline_no_feedback; sealed test best is feedback_60d_min2_scale_0p5.
+  computed_data:
+    selected_by_train_score: baseline_no_feedback
+    selected_score: 0.050351
+    best_test_variant: feedback_60d_min2_scale_0p5
+    best_test_score: 0.433669
+  pass: false
+q3_baseline_alignment:
+  description: Alignment against current cb_arb_value_gap_switch baseline.
+  answer: Candidate does not justify replacing the current baseline.
+  computed_data:
+    baseline_train_excess: 0.131363
+    baseline_test_excess: 0.37976
+    selected_test_excess: 0.37976
+  computed_at: '2026-05-18T02:16:17'
+  pass: false
+q4_monotonic:
+  description: Edge-of-grid or monotonic concern.
+  answer: Categorical feedback variants; no monotonic promotion without review.
+  computed_data:
+    grid_type: categorical_feedback_variants
+    candidates_count: 19
+  computed_at: '2026-05-18T02:16:17'
+  pass: true
+q5_trade_overlap:
+  description: Trade overlap baseline vs selected.
+  answer: Aggregate train/test/2020 checks are used for automatic decision.
+  computed_data:
+    selected_total_trades_test: 191
+    baseline_total_trades_test: 191
+    selected_total_trades_2020: 75
+    baseline_total_trades_2020: 75
+  computed_at: '2026-05-18T02:16:17'
+  pass: true
+q6_trigger_timing:
+  description: Trigger timing leakage.
+  applicable: false
+q7_path_contamination:
+  description: Path/data contamination.
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: No rolling option-source PnL feedback variant beat baseline across
+  train, 2020, and test together.
+auto_computed_at: '2026-05-18T02:16:17'

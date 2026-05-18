@@ -1,0 +1,38 @@
+proposal_id: targeted_high_risk_candidate_feedback
+executor: option_source_pnl_feedback_scaler
+family: option_source_pnl_feedback
+hypothesis: '以近期已平仓期权来源交易的盈亏为触发信号，但仅对当前进场时属于高风险子集 （距债底比率 > 1.4 或正股溢价率 > 1.6）的候选降低买入金额；
+  训练期正常期权候选不受影响，可保留训练期净正收益，同时精准压缩历史净亏 -255K 的高风险暴露。
+
+  '
+source_insight: '①attribution 数据（226 笔高风险子集，净亏 -255K，亏损捕获率 45.5% vs 盈利捕获率 19.3%） 显示高风险候选在进场时已可由静态特征识别；
+  ②三轮 rolling PnL feedback（004259 / 022212 / 023149）失败原因一致： feedback 缩减作用域为全量期权候选，训练期净正收益的正常期权来源一并被砍，导致训练分数始终选中
+  baseline_no_feedback； ③READY run 035352 仅净化触发信号来源（高风险子集历史交易作信号），但作用对象仍为全量候选， 本方案从另一维度入手——保持信号来源不变，只收窄缩减作用对象至高风险候选本身。
+
+  '
+why_not_rejected_repeat: '已确认失效的方向是"对全量期权来源候选应用 rolling PnL 反馈缩减" （confirmed_invalid_directions:
+  rolling_option_source_pnl_feedback，三轮均拒）； 已拒的仓位调整方向是基于静态阈值的无条件全量缩减 （close_to_bond_floor_threshold
+  / moneyness_stock_to_conv_threshold / static_candidate_position_scale）； 本方案缩减触发仍依赖
+  PnL 反馈信号（非静态阈值），且缩减作用对象限定为进场时属于高风险子集的候选 （非全量），与两类已拒方向在机制维度上均不重叠。
+
+  '
+risk: '主要风险：scripts/evaluate_cb_arb_option_pnl_feedback.py 当前接口可能不支持 "仅对高风险候选施加缩减"的目标选择参数；若脚本只支持对所有候选统一缩减，
+  本 spec 无法直接变为 READY 状态，需先完成执行器接口扩展后才可提交 VM 运行。 次要风险：训练期高风险候选总量约 226 笔 / 6 年，统计功效有限，即使方向正确，
+  训练期相对 baseline_no_feedback 的改善幅度可能仍不足以通过 train+2020+test 联合检验。
+
+  '
+hard_limit_checks:
+  no_local_backtest: true
+  forbidden_families_avoided: true
+  current_yaml_unchanged: true
+  baseline_registry_unchanged: true
+  test_period_preserved_2025_2026: true
+  output_is_yaml: true
+prerequisite_before_ready:
+  action: 确认 scripts/evaluate_cb_arb_option_pnl_feedback.py 是否支持 apply_scale_to_high_risk_only
+    参数
+  if_supported: 直接生成 spec 提交 VM
+  if_not_supported: 先扩展执行器接口再生成 spec，不在本地跑回测
+_ideation_source: claude
+_family_override_reason: compiled pnl_feedback variant to implemented option-source
+  feedback family

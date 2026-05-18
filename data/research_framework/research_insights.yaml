@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-05-17T05:25:00+08:00"
+updated_at: "2026-05-17T13:59:00+08:00"
 authority: machine
 source_migration:
   from_git_paths:
@@ -64,6 +64,160 @@ key_insights:
       gap_pp: 26.2
     decision_use: "Do not restart sealed-pool LLM tuning over the same 13-dimension yaml space."
 
+  - id: cb_arb_value_gap_panic_reruns_2026_05_17
+    summary: "3 panic-family rerun (stop_revaluation / panic_option_weight / panic_bond_anchor) all show good test_excess but uniformly bad train_excess — false positive from short test window."
+    source: "data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17/, rerun_9_panic_option_weight, rerun_11_panic_bond_anchor (committed VM batch 2026-05-17)"
+    facts:
+      test_period: "2025-01-01 to 2026-05-08, ~1.5 years"
+      train_period: "2019-01-01 to 2024-12-31, 6 years"
+      rerun_8_stop_revaluation:
+        best_test_excess_variant: vol_50
+        test_excess: 0.4566
+        test_max_dd: -0.0978
+        train_excess: -0.0839
+        train_max_dd: -0.3347
+      rerun_9_panic_option_weight:
+        best_test_excess_variant: weight_soft_100_80_60_30
+        test_excess: 0.3868
+        test_max_dd: -0.0978
+        train_excess: -0.0668
+        train_max_dd: -0.3389
+      rerun_11_panic_bond_anchor:
+        best_test_excess_variant: buy_anchor_15
+        test_excess: 0.3482
+        test_max_dd: -0.1271
+        train_excess: -0.0727
+        train_max_dd: -0.3572
+      all_variants_train_dd_breach_15pp_falsifier: true
+      all_variants_train_excess_negative_or_marginal: true
+      false_positive_pattern: "test 1.5y window aggregate looks positive but train 6y aggregate fails decision_contract falsifiers (any_single_year_dd > 15%; cumulative_excess_cross_year < 0)"
+    decision_use: "All 3 panic family reruns are mechanical-pass but falsifier-fail. Do NOT promote any variant to baseline_registry. Reinforces panic_detector_dead_end (this is the 4th time panic family has been rejected). Use as evidence that test-only mechanical thresholds (excess>0, dd>-30%) are insufficient — must also enforce train-period falsifiers (cross-year cumulative excess sign, single-year dd ceiling)."
+
+  - id: mechanical_threshold_insufficient_for_promotion
+    summary: "passed_mechanical_thresholds_not_promoted is the correct call when train-period falsifiers fail despite test mechanical pass."
+    facts:
+      example_runs: ["cb_arb_value_gap_rerun_8/9/11_2026-05-17"]
+      mechanical_thresholds: ["test_excess_return >= 0", "max_drawdown >= -0.3"]
+      falsifier_checks_needed: ["cumulative_excess_compound_cross_year_lt_0 over full train", "any_single_year_drawdown_vs_benchmark_gt_15pct over full train", "any_holdout_year_sharpe_lt_0_5"]
+      gap_caught: "test 1.5y can swing positive on lookback, but train 6y exposes consistent underperformance"
+    decision_use: "auto_research_pipeline.update_experiments should ideally compute falsifier flags too, not just adoption_pass. Until that's added, AI must manually flag in retro that mechanical-pass != promotion-eligible."
+
+  - id: option_entry_gate_tradeoff_2026_05_17
+    summary: "Global option-source entry gates improve 2020 in some variants but remove the 2025-2026 upside; do not adopt as a global filter."
+    source: "data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/"
+    facts:
+      candidates: 19
+      baseline:
+        train_excess: 0.131363
+        test_excess: 0.37976
+        total_return_2020: -0.090593
+        option_source_pnl_2020: -92630.91
+        option_source_pnl_test: 729505.32
+      best_train:
+        name: ratio_1p15
+        train_excess: 0.666909
+        test_excess: -0.230402
+        total_return_2020: 0.028808
+      best_2020:
+        name: option_share_max_0p95
+        total_return_2020: 0.066778
+        test_excess: -0.348735
+      best_test:
+        name: baseline_no_entry_gate
+        test_excess: 0.37976
+      adoption_verdict: reject
+    decision_use: "Option-source entry is a real risk source, but global hard filters are rejected. Future work, if any, must condition option-source entry restrictions on market/credit state instead of applying them all the time."
+
+  - id: regime_option_entry_gate_reject_2026_05_17
+    summary: "Regime-conditioned option-entry gates did not fix the option-source tradeoff; best test gains were marginal, train metrics degraded, and 2020 was not repaired."
+    source: "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/"
+    facts:
+      candidates: 15
+      cost_model_enabled: true
+      pipeline_decision: failed_mechanical_thresholds
+      baseline:
+        train_excess: 0.131363
+        train_max_dd: -0.324048
+        test_excess: 0.37976
+        total_return_2020: -0.090593
+        excess_2020: -0.19476
+      best_test:
+        name: weak_mild_flat_signal
+        test_excess: 0.388471
+        train_excess: 0.019776
+        train_max_dd: -0.344744
+        total_return_2020: -0.091111
+        excess_2020: -0.195278
+      best_train:
+        name: baseline_no_regime_entry_gate
+        reason: "All gated variants either reduce train excess or keep the 2020 loss essentially unchanged; baseline itself fails the train max-drawdown floor."
+    decision_use: "Reject this regime-conditioned entry-gate branch. Do not promote any variant to current.yaml or baseline_registry; future work should move away from entry-gate filters unless it brings a new state/action mechanism and fixes 2020 without sacrificing train robustness."
+
+  - id: option_false_undervalue_attribution_2026_05_17
+    summary: "False option-sourced undervaluation is better explained by far-above-bond-floor / deep-in-the-money option exposure than by panic-day entry or high volatility alone."
+    source: "data/cb_arb_option_false_undervalue_attribution_2026-05-17/"
+    facts:
+      scope: "Local attribution only; no VM/spot; no strategy change."
+      option_trades_2019_2024: 921
+      total_option_loss_abs: 1028788.67
+      total_option_profit: 1103646.32
+      far_from_bond_floor_gt_1p5:
+        trades: 116
+        loss_capture_rate: 0.313854
+        profit_capture_rate: 0.131557
+        net_pnl: -177697.84
+        avg_selected_pnl: -1531.88
+      far_from_bond_floor_gt_1p4:
+        trades: 226
+        loss_capture_rate: 0.455
+        profit_capture_rate: 0.193
+        net_pnl: -255040.52
+        avg_selected_pnl: -1128.5
+      moneyness_gt_1p6:
+        trades: 184
+        loss_capture_rate: 0.493
+        profit_capture_rate: 0.205
+        net_pnl: -280983.41
+        avg_selected_pnl: -1527.08
+      ratio_gt_1p5_or_moneyness_gt_1p6:
+        trades: 240
+        loss_capture_rate: 0.564
+        profit_capture_rate: 0.266
+        net_pnl: -286692.23
+        avg_selected_pnl: -1194.55
+      high_vol60_alone:
+        note: "Not useful as a negative signal; selects 837/921 option trades and remains net positive."
+        selected_trades: 837
+        loss_capture_rate: 0.908435
+        profit_capture_rate: 0.954482
+        avg_selected_pnl: 141.96
+      hot_trend_sigma_setup:
+        note: "The strict trend-sigma condition was too narrow and did not explain losses."
+        selected_trades: 3
+        loss_capture_rate: 0.001442
+    decision_use: "Do not pursue another simple entry filter. If testing this mechanism, change option valuation itself: cap or haircut option value when the CB is far above bond floor or stock is deep in the money, then validate across 2019-2024 before touching 2025-2026."
+
+  - id: option_source_value_gap_structural_tradeoff_2026_05_17
+    summary: "Option-source value gap is structurally inseparable under the current cb_arb_value_gap_switch universe and cost-on setup: simple filters and global valuation haircuts repair 2020-style losses only by sacrificing later option-source upside."
+    source: "codex/claude outbox closeout 2026-05-17 13:58 plus option-entry-gate, regime-entry-gate, and option-value-haircut run artifacts"
+    facts:
+      strategy_id: cb_arb_value_gap_switch
+      evidence_runs:
+        - cb_arb_value_gap_switch_option-entry-gate_2026-05-17
+        - cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
+        - cb_arb_value_gap_switch_option-value-haircut_2026-05-17
+      rejected_families:
+        - panic_family_reruns
+        - global_option_entry_gate
+        - regime_conditioned_option_entry_gate
+        - global_option_value_haircut
+      option_entry_gate_pattern: "Global option-source entry gates can improve 2020 but remove 2025-2026 upside; best test remains baseline_no_entry_gate."
+      regime_entry_gate_pattern: "Regime-conditioned gates do not materially improve test, degrade train metrics, and do not repair 2020."
+      valuation_haircut_pattern: "Best haircut train variant improves 2020 total_return from -0.090593 to 0.132064 but drops sealed test_excess from baseline 0.379760 to -0.139723 and fails the 2024 single-year drawdown falsifier."
+      train_falsifier_status: "pipeline caught promotion false positives twice via passed_mechanical_but_falsifier_failed."
+      no_truth_promotion: true
+    decision_use: "Stop autonomous same-family repair batches for cb_arb_value_gap_switch. Escalate to user for commit/split and strategic direction: archive documented failure, retest universe/regime, promote absolute ranking as a separate user-gated design, or search for a new strategy family."
+
 open_threads:
   - id: promote_absolute_value_gap_ranking_to_core
     priority: high
@@ -78,3 +232,13 @@ open_threads:
     priority: medium
     summary: "Use arxiv as source for genuinely new strategy family; XVA paper is rejected."
     status: backlog
+
+  - id: enforce_train_period_falsifiers_in_pipeline
+    priority: high
+    summary: "auto_research_pipeline.update_experiments should compute decision_contract falsifier checks (cross-year excess sign, single-year dd ceiling) over train period, not just mechanical thresholds over test period. Caught 3 false-positive 'passed_mechanical' reruns 2026-05-17."
+    status: completed
+    evidence: cb_arb_value_gap_panic_reruns_2026_05_17
+    completed_at: "2026-05-17T11:02:12+08:00"
+    completion_artifacts:
+      - scripts/auto_research_pipeline.py
+      - framework/tests/test_train_period_falsifiers.py

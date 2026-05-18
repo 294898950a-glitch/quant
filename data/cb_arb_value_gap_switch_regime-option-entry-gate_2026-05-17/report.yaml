@@ -1,0 +1,45 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  exit_1_mechanical: '15 variants tested. Best test variant weak_mild_flat_signal:
+    test +38.8%, dd -9.8%, but train +2.0% with dd -34.5% (breaches -30% train floor).
+    Mechanical floors not satisfied.'
+  exit_2_falsifier: 'train_falsifier_pipeline.derive_verdict (newly implemented) marked
+    status: rejected, decision: failed_mechanical_thresholds. The new framework gate
+    caught the failure automatically, no manual retro override needed.'
+  exit_3_pattern_match: 'Matches single_filter_dead_end + option_entry_gate_tradeoff.
+    State-conditioning the gate (by regime) did not change the fundamental tradeoff:
+    2020 weakness is broad, and aggressive filtering damages other periods. State-dependent
+    ≠ state-aware in a way that fixes the failure mode.'
+compute_cost_yuan: 15.62
+confirmed_invalid_directions:
+- Regime-conditioned option-source entry gate (15 variants) — does not repair 2020,
+  damages train robustness, marginal test gain.
+- State-conditioned single-dimension entry filters as a class — reinforces single_filter_dead_end.
+learnings:
+- train_falsifier_pipeline now operational and correctly catches mechanical false-positives.
+- Daily regime classifier (strong/neutral/flat_weak/weak) does not provide enough
+  lift to convert option-entry filter from rejected (global) to adopted (state-conditioned).
+- 2020 weakness is robust to conditional filtering — likely a market-wide regime shift,
+  not a candidate-selection problem solvable by entry gating.
+follow_up_actions:
+- Close the option-entry-gate / regime-conditioned variant family. No further entry-time
+  filter variants without genuinely new action mechanism (e.g. position sizing by
+  regime, hedging overlay) — not just selection threshold.
+- 'Consider stepping back: 2020 is the dominant failure mode across all batches. Direct
+  attack on 2020 (e.g. hedge / cash-shift overlay / smaller capital deployment during
+  specific market regimes) may be more productive than candidate selection tweaks.'
+status: COMPLETE
+notes: Codex auto-pipeline + train_falsifier caught reject mechanically. Claude added
+  structured retro yaml to satisfy preflight schema.
+references:
+- data/research_framework/research_insights.yaml regime_option_entry_gate_reject_2026_05_17
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/summary.json
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/l4_ack.yaml
+- data/research_framework/run_manifests/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17.yaml
+related_reports:
+- data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/report.yaml
+- data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17/report.yaml

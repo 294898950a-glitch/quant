@@ -1,0 +1,173 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: option_value_loop Claude prompt injection from current.yaml, research_insights.yaml,
+  experiments.yaml, baseline_registry.yaml, strategies.yaml, and protocol_rules.yaml
+hypothesis: '在"债底比率 > 1.4 OR 正股溢价率 > 1.6"的较宽风险集上施加温和折扣（scale≈0.6）， 同时对"债底比率 > 1.5
+  AND 正股溢价率 > 1.6"的极端交集施加深度折扣（scale≈0.3）； 双层分级比单一固定门槛更能保留训练期中等风险期权收益，同时对历史净亏最集中的极端子集实施强压缩，
+  有望同时避免单条件 position_sizing 因覆盖面过宽而损伤训练期 score 的失败模式。
+
+  '
+source_insight: '归因分析（data/cb_arb_option_false_undervalue_attribution_2026-05-17/）显示：
+  "债底比率>1.5 OR 正股溢价率>1.6"子集净亏-286K（亏损捕获率56.4%，盈利捕获率仅26.6%，约240/921笔）； AND 交集(债底比率>1.4
+  AND 正股溢价率>1.6)已作为单一固定 scale 方案提交为 READY run 060047； 6 轮 pnl_feedback 测试（共114个候选）训练期均以
+  baseline_no_feedback 胜出，说明路径敏感的滚动盈亏信号在 训练期无法区分好坏期权时段，该方向参数空间已实质性耗尽；单条件 position_sizing（151411）已按
+  close_to_bond_floor_threshold / moneyness_stock_to_conv_threshold 各自测试并被拒； 双层 OR+AND
+  分级 scale 在已有记录中未曾运行。
+
+  '
+parameter_space:
+- name: position_scale_variant
+  range:
+  - 0
+  - 16
+  type: int
+  description: 17 个固定候选仓位调整方案，包括 baseline、价格/债底触发、正股/转股价触发、任一触发、同时触发和渐进调整。
+- name: close_to_bond_floor_threshold
+  range:
+  - 1.5
+  - 1.7
+  type: float
+  description: 期权型候选中，转债价格相对债底过高的触发线。
+- name: moneyness_stock_to_conv_threshold
+  range:
+  - 1.6
+  - 2.0
+  type: float
+  description: 期权型候选中，正股价格相对转股价过高的触发线。
+- name: position_cash_scale
+  range:
+  - 0.25
+  - 1.0
+  type: float
+  description: 触发后实际买入金额和排序金额保留比例。
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  description: 已有 value-gap 估值与可交易金额，避免重复计算基础基准。
+- path: data/cb_warehouse/cb_basic.parquet
+  description: 转股价和正股代码，用于计算正股/转股价。
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  description: 前复权正股价格，用于计算正股/转股价。
+grid:
+  dimensions:
+  - position_scale_variant
+  candidates_count: 17
+  description: 固定 17 组候选仓位调整方案，全量跑 train/test/2019-2024 yearly，并输出 2020 和 test 的入口来源拆解。
+hard_floors:
+  train_excess_return: 0.0
+  train_max_drawdown: -0.3
+  test_excess_return: 0.0
+  test_max_drawdown: -0.3
+  replay_2020_total_return: -0.090593
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-aware branch and
+  option-value-haircut rejection evidence
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- yearly_2020_total_return
+- yearly_2020_excess_return
+- max_drawdown
+- total_trades
+- win_rate
+- entry_source_2020_option_loss
+- entry_source_test_option_profit
+- average_position_scale
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+cv_adoption_threshold: 必须同时优于 baseline 的训练段、2020 修复和 2025-2026 测试段；否则只作为诊断资产。
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 100
+spot_decision: 本轮使用已有 daily_value_gap_amounts，不重复计算基础基准；必须在 VM/spot host 执行。
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_option_position_sizing.csv
+- 缺少 yearly_option_position_sizing.csv
+- 缺少 entry_source_2020_option_position_sizing.csv
+- 所有非 baseline 方案无法同时优于 train、2020 和 test baseline
+artifacts_required:
+- summary_option_position_sizing.csv
+- yearly_option_position_sizing.csv
+- entry_source_2020_option_position_sizing.csv
+- entry_source_test_option_position_sizing.csv
+- adjustment_option_position_sizing.csv
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+automation:
+  output_dir: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933
+  gatekeeper_after_run: false
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --base-ranks-path
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - --reuse-ranks
+  - --cost-model-enabled
+  verdict:
+    table_path: summary_option_position_sizing.csv
+    yearly_table_path: yearly_option_position_sizing.csv
+    filters:
+      period: train
+    rank_by: score
+    rank_desc: true
+    thresholds:
+      excess_return:
+        min: 0.0
+      max_drawdown:
+        min: -0.3
+    train_single_year_dd_ceiling: -0.15
+status: COMPLETE
+escalation:
+- 训练段过关但 2020 仍显著跑输
+- 2020 改善但 2025-2026 测试段被明显伤害
+- 运行时间超过 60 分钟
+notes: 这是循环根据既有复盘自动注入上下文后生成的新方向，不改 current.yaml，不改 baseline_registry。关键区别：不禁止买入，不整体折价期权价值，只降低可疑期权型候选的实际暴露。
+ideation:
+  source: claude
+  proposal_id: tiered_or_option_position_sizing
+  family: option_position_sizing
+  why_not_rejected_repeat: '禁止方向（global_option_entry_gate / regime_conditioned_option_entry_gate
+    / global_option_value_haircut / panic_family_reruns）均属于"禁买"或"改理论价格"机制； 本测试仅在进场时对高风险子集降低排序金额和买入金额，不禁买、不改理论价格，属于
+    position_sizing 路径。 已测方案均为单门槛+单一固定 scale；双层（温和宽集+深度极端交集）在本路径中未见记录。 pnl_feedback
+    不重复：本提案不依赖已平仓盈亏历史，不属于 rolling_option_source_pnl_feedback 方向。
+
+    '
+  risk: 主要风险（数据缺口）：scripts/evaluate_cb_arb_option_position_sizing.py 当前是否支持 双层/分级参数配置未在现有运行记录中确认；若执行器不支持多层
+    scale，需先修改脚本或降级为 单层 OR+固定 scale（后者可能与 run 212511 重复，该 run 详情暂缺）。 次要风险（机制失效）：OR
+    并集（约240笔）在训练期同时涵盖部分盈利期权， 分层折扣仍可能损伤训练期 score，重蹈单条件 position_sizing 被拒模式； 如 READY
+    run 060047（AND 交集）先完成且结果为 reject， 则本提案的深度层（极端 AND 交集）的假设依据将进一步削弱，应在 060047 结果出来后再决定是否启动。
+  fallback_reason: null
+updated_at: '2026-05-17T22:40:05Z'

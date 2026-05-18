@@ -1,0 +1,209 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'The strategy''s 2020 stress failure (excess_return -0.195, win_rate 0.293,
+  score -0.240) is driven by continuing to enter value-gap trades during a sustained
+  market drawdown, when the arbitrage mechanism breaks down because forced selling
+  compresses both the bond and equity components simultaneously. A market-level entry
+  gate that suspends new entries when the CSI 300 rolling N-day return falls below
+  a threshold should cut bad-entry frequency during crash regimes, repairing 2020
+  and train drawdown without materially reducing trade count during normal periods.
+
+  '
+source_insight: 'Baseline 2020: total_return=-0.091, excess_return=-0.195, win_rate=0.293,
+  max_drawdown=-0.179, score=-0.240. Baseline train max_drawdown -0.324 vs test -0.098.
+  All 11 position-sizing variants also failed 2020 (best: score -0.185); the progressive
+  stocklike variant that won on train still scored -0.185 in 2020. This confirms the
+  problem is not HOW MUCH to buy but WHEN to stop entering. A market-regime gate is
+  orthogonal to every closed direction, all of which were bond-level or option-level
+  position-size signals.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - global_entry_filter
+  - regime_conditioning
+  type: categorical
+  description: Mechanics requested by the generated proposal.
+new_data_sources:
+- path: CSI 300 daily close (already loaded by backtester for benchmark; no new source)
+- path: existing bond candidate pipeline unchanged
+hard_floors:
+  stress_2020: stress_2020 score > -0.10 for selected variant (vs baseline -0.240)
+  train: train score > 0.10 for selected variant (vs baseline 0.050)
+  validate: validate score >= 0.28 for selected variant (vs baseline 0.355)
+  joint: at least one variant passes all three periods simultaneously
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 50.0
+stop_conditions:
+- executor match fails
+- budget exceeds cap
+- required artifacts are missing
+artifacts_required:
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: no strict executor match
+proposal:
+  proposal_id: cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517
+  strategy_id: cb_arb_value_gap_switch
+  family: entry_gate
+  hypothesis: 'The strategy''s 2020 stress failure (excess_return -0.195, win_rate
+    0.293, score -0.240) is driven by continuing to enter value-gap trades during
+    a sustained market drawdown, when the arbitrage mechanism breaks down because
+    forced selling compresses both the bond and equity components simultaneously.
+    A market-level entry gate that suspends new entries when the CSI 300 rolling N-day
+    return falls below a threshold should cut bad-entry frequency during crash regimes,
+    repairing 2020 and train drawdown without materially reducing trade count during
+    normal periods.
+
+    '
+  source_insight: 'Baseline 2020: total_return=-0.091, excess_return=-0.195, win_rate=0.293,
+    max_drawdown=-0.179, score=-0.240. Baseline train max_drawdown -0.324 vs test
+    -0.098. All 11 position-sizing variants also failed 2020 (best: score -0.185);
+    the progressive stocklike variant that won on train still scored -0.185 in 2020.
+    This confirms the problem is not HOW MUCH to buy but WHEN to stop entering. A
+    market-regime gate is orthogonal to every closed direction, all of which were
+    bond-level or option-level position-size signals.
+
+    '
+  expected_improvement: '2020 score from -0.240 to >= -0.10; train score from 0.050
+    to >= 0.15; train max_drawdown from -0.324 to <= -0.22; test score maintained
+    >= 0.28 (baseline 0.355, allow 0.075 regression for added safety).
+
+    '
+  mechanics:
+  - global_entry_filter
+  - regime_conditioning
+  required_executor: evaluate_cb_arb_value_gap_switch
+  required_data:
+  - CSI 300 daily close (already loaded by backtester for benchmark; no new source)
+  - existing bond candidate pipeline unchanged
+  test_design:
+    variants:
+    - name: gate_n20_t12_buf0
+      N: 20
+      threshold: 0.12
+      buffer_days: 0
+    - name: gate_n20_t12_buf5
+      N: 20
+      threshold: 0.12
+      buffer_days: 5
+    - name: gate_n15_t10_buf3
+      N: 15
+      threshold: 0.1
+      buffer_days: 3
+    - name: gate_n30_t15_buf5
+      N: 30
+      threshold: 0.15
+      buffer_days: 5
+    - name: gate_n10_t08_buf0
+      N: 10
+      threshold: 0.08
+      buffer_days: 0
+    periods:
+    - label: train
+      start: '20190101'
+      end: '20241231'
+    - label: stress_2020
+      start: '20200101'
+      end: '20201231'
+    - label: validate
+      start: '20250101'
+      end: '20260508'
+    baseline: baseline_no_position_scale
+  success_criteria:
+    stress_2020: stress_2020 score > -0.10 for selected variant (vs baseline -0.240)
+    train: train score > 0.10 for selected variant (vs baseline 0.050)
+    validate: validate score >= 0.28 for selected variant (vs baseline 0.355)
+    joint: at least one variant passes all three periods simultaneously
+  falsifiers:
+    train: if train score does not improve above 0.10 after gate application and train
+      max_drawdown remains worse than -0.30, the gate is not filtering bad entries
+      but suppressing broad trade flow across all regimes, indicating the CSI 300
+      rolling-return signal is spuriously correlated with normal entry periods and
+      the mechanism does not hold on in-sample data
+    test: if validate (out-of-sample 2025-2026) score drops below 0.20 for all variants,
+      the gate is over-triggering on post-2024 normal corrections that are structurally
+      dissimilar to 2020, invalidating the generalization assumption and indicating
+      the threshold was fit to crash depth rather than crash structure; the mechanism
+      does not transfer out-of-sample
+    validate: if validate score drops below 0.20 for all variants, the gate is over-triggering
+      on 2025-2026 normal corrections that are structurally dissimilar to 2020, invalidating
+      the generalization assumption and indicating the threshold was fit to crash
+      depth rather than crash structure
+    over_suppression: if gate suppresses >30% of train trades with no 2020 improvement,
+      threshold is too conservative and signal is noise
+    no_2020_fix: if no variant achieves 2020 score > -0.10, the loss driver is bond-selection
+      quality inside the crash, not entry frequency, and a different hypothesis is
+      needed
+  risk: 'Short corrections in validate period (2025-2026) may briefly trigger gate
+    and suppress valid entries. Mitigation: sweep multiple thresholds; prioritize
+    variants where validate trade count drops <15% from baseline 191. Risk of 2020-only
+    overfit: mitigated by requiring simultaneous train improvement, not just 2020
+    repair.
+
+    '
+  why_not_repeated_failure: 'All four closed directions (conditional_option_position_sizing,
+    static_candidate_position_scale, close_to_bond_floor_threshold, moneyness_stock_to_conv_threshold)
+    operated on bond-level or option-level features to modulate position size. They
+    could not differentiate good from bad entries during the 2020 crash because the
+    crash was market-wide. This proposal operates on a market-level rolling-return
+    signal to gate entry frequency entirely — a different axis. The failure mode being
+    targeted (sustained 60-day drawdown with universal compression) is structurally
+    visible only at the index level.
+
+    '
+  related_prior_runs:
+  - run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    relationship: 'Position sizing failed 2020 even in its best variant (score -0.185
+      vs baseline -0.240; marginal improvement, still deeply negative). This confirms
+      sizing is not the lever. Market drawdown gate targets entry timing, not size.
+
+      '
+  implementation_assumption: 'CSI 300 daily close is already available in backtester
+    context for benchmark calculation. Rolling return is 1-2 lines of pandas on an
+    existing series. Gate is a boolean mask on the daily entry decision; no structural
+    changes to candidate scoring, sizing, or exit logic required.
+
+    '
+  budget_estimate_cny: 14.0
+  ai_provider: claude
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 37e7f68284ddf94e
+  provenance:
+    ai_provider: claude
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 37e7f68284ddf94e
+  rewrite_provenance:
+  - round: 1
+    provider_id: claude
+    response_hash: d255fa8f67a99216
+  - round: 2
+    provider_id: claude
+    response_hash: 4745167c281f434f
+  - round: 3
+    provider_id: claude
+    response_hash: 31191c75c15e9eea
+  rewrite_status: valid
+  rewrite_rounds_used: 3
+  rewrite_last_errors: []
+  proposal_path: data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/proposal.yaml

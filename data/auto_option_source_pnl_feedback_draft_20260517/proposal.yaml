@@ -1,0 +1,48 @@
+expected_improvement: Improve 2020 drawdown without reducing 2025-2026 option-source
+  winners as much as static position sizing did.
+falsifiers:
+  test_excess_lt_baseline: true
+  train_excess_lt_zero: true
+  validate_2020_total_return_lt_baseline: true
+family: option_source_realized_pnl_feedback
+hypothesis: Use realized option-source trade outcome feedback to reduce future option-source
+  exposure only after that source is recently losing, avoiding static CB feature cuts
+  that damaged the sealed test.
+implementation_assumption: Requires a new executor that can compute option-source
+  rolling realized PnL from prior trades before scaling future option-source candidates.
+mechanics:
+- rolling_pnl_feedback
+proposal_id: auto_option_source_pnl_feedback_draft_20260517
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_2020_option_position_sizing.csv
+- data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_test_option_position_sizing.csv
+required_executor: option_source_pnl_feedback_scaler
+risk: Feedback can be late and may become equivalent to a previously rejected broad
+  trailing PnL regime if it is not limited to option-source trades.
+source_insight: Last review rejected static option-position sizing because it improved
+  2020 but cut 2025-2026 winners; the next test should change when exposure is reduced,
+  not which static CB feature triggers the cut.
+strategy_id: cb_arb_value_gap_switch
+success_criteria:
+  test_dd_max_abs: 0.15
+  test_excess_min: 0.37976
+  train_excess_min: 0.0
+  validate_2020_total_return_min: -0.090593
+test_design:
+  test_period: 2025-2026 sealed
+  train_period: 2019-2024
+  validate_period: 2020 stress slice inside train
+why_not_repeated_failure: It does not reuse closed static candidate position scale,
+  bond-floor threshold, or moneyness threshold mechanics; it asks for a new executor
+  because current executor cannot test rolling feedback.
+ai_provider: local_smoke_adapter
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 3d008438763f67e8
+provenance:
+  ai_provider: local_smoke_adapter
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 3d008438763f67e8
+proposal_path: data/auto_option_source_pnl_feedback_draft_20260517/proposal.yaml

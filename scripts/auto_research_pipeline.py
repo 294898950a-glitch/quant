@@ -211,7 +211,10 @@ def command_from_spec(spec: dict[str, Any], spec_path: Path, output_dir: Path) -
         "{spec_path}": rel(spec_path),
         "{output_dir}": rel(output_dir),
     }
-    return [replace_placeholders(part, replacements) for part in parts]
+    resolved = [replace_placeholders(part, replacements) for part in parts]
+    if resolved and resolved[0] == ".venv/bin/python" and not (REPO_ROOT / resolved[0]).exists():
+        resolved[0] = sys.executable or "python3"
+    return resolved
 
 
 def replace_placeholders(value: str, replacements: dict[str, str]) -> str:
@@ -685,7 +688,7 @@ def update_experiments(
 ) -> None:
     if dry_run:
         return
-    data = read_yaml(EXPERIMENTS)
+    data = read_yaml(EXPERIMENTS) if EXPERIMENTS.exists() else {"schema_version": 1, "experiments": []}
     experiments = data.setdefault("experiments", [])
     if not isinstance(experiments, list):
         raise PipelineError("experiments.yaml experiments must be list")

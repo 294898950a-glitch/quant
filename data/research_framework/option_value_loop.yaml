@@ -1,0 +1,586 @@
+schema_version: 1
+enabled: true
+updated_at: '2026-05-18T07:36:41'
+objective: Optimize cb_arb option false-undervaluation without repeating rejected
+  global filters/haircuts.
+strategy_id: cb_arb_value_gap_switch
+vm_host: root@100.91.245.108
+remote_repo: /root/projects/quant
+local_repo: /home/jay/projects/quant
+poll_seconds: 600
+max_auto_budget_yuan: 100
+auto_discover_ready_specs: true
+ideation:
+  enabled: true
+  provider: claude
+  command: claude
+  model: sonnet
+  max_budget_usd: 0.5
+  timeout_seconds: 480
+  allow_fallback: false
+  prompt_injection: true
+  context_sources:
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/current.yaml
+  - data/research_framework/strategies.yaml
+  - data/research_framework/baseline_registry.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/research_insights.yaml
+  - data/research_framework/protocol_rules.yaml
+  - recent data/* result artifacts
+  supported_executors:
+  - option_position_sizing
+  - option_source_pnl_feedback_scaler
+  max_contract_rewrite_attempts: 3
+discovery:
+  strategy_id: cb_arb_value_gap_switch
+  include_tokens:
+  - option
+  - 期权
+  - undervalue
+  - undervaluation
+  - value gap
+  - 估值
+  exclude_statuses:
+  - COMPLETE
+  - ARCHIVED
+  - RUNNING
+forbidden_families:
+- global_option_entry_gate
+- regime_conditioned_option_entry_gate
+- global_option_value_haircut
+- panic_family_reruns
+rules:
+- Local machine only schedules and monitors; cb_arb backtests must execute on VM/spot
+  host.
+- Every queued run must have a READY spec.yaml with spot_minutes > 0 and local_minutes
+  = 0.
+- If queue is empty, auto-discover new READY option-related specs and enqueue them.
+- If no READY spec exists, inject runtime YAML plus recent result artifacts into the
+  ideation prompt and generate one new READY spec.
+- Do not promote current.yaml or baseline_registry from this loop.
+- If a run fails or is rejected, record it and move to the next queued mechanism only
+  if it is not in forbidden_families.
+default_sync_paths:
+- scripts/auto_research_pipeline.py
+- scripts/research_sanity_checker.py
+- scripts/gatekeeper.py
+- scripts/validate_spec.py
+- scripts/validate_data_schema.py
+- scripts/validate_compute_budget.py
+- scripts/generate_option_value_next_spec.py
+- strategies/cb_arb
+- data/research_framework/protocol_rules.yaml
+- data/research_framework/runtime_entrypoints.yaml
+- data/research_framework/compute_budget_config.json
+- data/research_framework/data_schema_expectations.yaml
+- data/research_framework/experiments.yaml
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+- data/cb_warehouse/stk_daily.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+queue:
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  discovered_at: '2026-05-17T15:14:18'
+  started_at: '2026-05-17T15:16:00'
+  remote_pid: '2604544'
+  completed_at: '2026-05-17T21:11:33'
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_212511
+  family: auto_discovered_option_value
+  status: blocked
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_212511/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_212511
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  discovered_at: '2026-05-17T21:28:54'
+  blocked_at: '2026-05-17T21:31:00'
+  block_reason: Claude idea requires rolling option-source PnL executor; current static
+    position-sizing executor is not compatible.
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  discovered_at: '2026-05-18T00:44:50'
+  started_at: '2026-05-18T00:47:41'
+  remote_pid: '2766451'
+  manual_state_repair: remote pipeline was already running; local ssh launcher did
+    not return
+  completed_at: '2026-05-18T01:28:10'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  discovered_at: '2026-05-18T02:22:12'
+  started_at: '2026-05-18T02:24:09'
+  remote_pid: '2792726'
+  vm_id: singapore_vm
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  completed_at: '2026-05-18T02:59:43'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  discovered_at: '2026-05-18T02:31:49'
+  requeued_at: '2026-05-18T03:19:29'
+  requeue_reason: synced cb_arb strategy core and made experiments.yaml optional on
+    worker hosts
+  started_at: '2026-05-18T03:25:08'
+  remote_pid: '23478'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  completed_at: '2026-05-18T03:50:38'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  discovered_at: '2026-05-18T03:37:12'
+  started_at: '2026-05-18T03:40:16'
+  remote_pid: '2818599'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  completed_at: '2026-05-18T04:23:39'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  discovered_at: '2026-05-18T03:53:52'
+  started_at: '2026-05-18T03:59:52'
+  remote_pid: '29469'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  completed_at: '2026-05-18T04:23:58'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  discovered_at: '2026-05-18T04:13:15'
+  started_at: '2026-05-18T04:29:23'
+  remote_pid: '36459'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  completed_at: '2026-05-18T04:53:18'
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  discovered_at: '2026-05-18T06:00:47'
+  started_at: '2026-05-18T06:06:08'
+  remote_pid: '59384'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  completed_at: '2026-05-18T07:02:35'
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  discovered_at: '2026-05-18T06:09:33'
+  started_at: '2026-05-18T06:12:30'
+  remote_pid: '2902738'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  completed_at: '2026-05-18T07:05:45'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407
+  family: auto_discovered_option_value
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/generate_option_value_next_spec.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  discovered_at: '2026-05-18T07:05:45'
+  started_at: '2026-05-18T07:12:12'
+  remote_pid: '77722'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  completed_at: '2026-05-18T07:36:41'
+history:
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-17T15:14:18'
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
+  status: running
+  message: remote process already started; local ssh wait cleared after launcher fix
+  at: '2026-05-17T15:18:00'
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-17T21:11:33'
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_212511
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_212511/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-17T21:28:54'
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_212511
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_212511/spec.yaml
+  status: blocked
+  message: Claude idea requires rolling option-source PnL executor; current static
+    position-sizing executor is not compatible.
+  at: '2026-05-17T21:31:00'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T00:44:50'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259/spec.yaml
+  status: running
+  message: remote process already started; local ssh launcher was killed after confirming
+    remote pid 2766451
+  at: '2026-05-18T00:47:41'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_004259/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T01:28:10'
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T02:22:12'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212/spec.yaml
+  status: running
+  message: started remote pid 2792726 on singapore_vm
+  at: '2026-05-18T02:24:09'
+  vm_id: singapore_vm
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T02:31:49'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: running
+  message: started remote pid 5397 on guangzhou_spot
+  at: '2026-05-18T02:37:32'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: running
+  message: started remote pid 10566 on guangzhou_spot
+  at: '2026-05-18T02:49:50'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: running
+  message: started remote pid 13224 on guangzhou_spot
+  at: '2026-05-18T02:55:53'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_022212/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T02:59:43'
+  vm_id: singapore_vm
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: running
+  message: started remote pid 2806033 on singapore_sig
+  at: '2026-05-18T03:02:37'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: running
+  message: started remote pid 16685 on guangzhou_spot
+  at: '2026-05-18T03:10:46'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: running
+  message: started remote pid 19929 on guangzhou_spot
+  at: '2026-05-18T03:18:01'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: running
+  message: started remote pid 23478 on guangzhou_spot
+  at: '2026-05-18T03:25:08'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T03:37:12'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712/spec.yaml
+  status: running
+  message: started remote pid 2818599 on singapore_sig
+  at: '2026-05-18T03:40:16'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_023149/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T03:50:38'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T03:53:52'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352/spec.yaml
+  status: running
+  message: started remote pid 29469 on guangzhou_spot
+  at: '2026-05-18T03:59:52'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T04:13:15'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_033712/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T04:23:39'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_035352/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T04:23:58'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315/spec.yaml
+  status: running
+  message: started remote pid 36459 on guangzhou_spot
+  at: '2026-05-18T04:29:23'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T04:53:18'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T06:00:47'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047/spec.yaml
+  status: running
+  message: started remote pid 59384 on guangzhou_spot
+  at: '2026-05-18T06:06:08'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T06:09:33'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933/spec.yaml
+  status: running
+  message: started remote pid 2902738 on singapore_sig
+  at: '2026-05-18T06:12:30'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060047/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T07:02:35'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933
+  spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_060933/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T07:05:45'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407/spec.yaml
+  status: queued
+  message: auto-discovered READY option-related spec
+  at: '2026-05-18T07:05:45'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407/spec.yaml
+  status: running
+  message: started remote pid 77722 on guangzhou_spot
+  at: '2026-05-18T07:12:12'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_070407/spec.yaml
+  status: complete
+  message: remote run artifacts synced
+  at: '2026-05-18T07:36:41'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+vm_hosts:
+- id: guangzhou_spot
+  host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  enabled: true
+  proxy_host: root@100.91.245.108
+  proxy_repo: /root/projects/quant
+  identity_file_on_proxy: /tmp/quant_spot.pem
+  instance_id: ins-5lb9zo12
+  note: Tencent SA9.4XLARGE32 ap-guangzhou spot. Current public IP was assigned after
+    starting the stopped instance on 2026-05-18.
+- id: singapore_sig
+  host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  enabled: true
+  note: Always-on Singapore sig VM.

@@ -1,0 +1,58 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-value-haircut_2026-05-17
+reviewer: codex
+ack_at: '2026-05-17T13:35:00+08:00'
+q1_floor_binding:
+  computed_data:
+    best_train_variant: ratio_1p5_or_mny_1p6_weight_0p25
+    train_excess: 0.418475
+    train_max_drawdown: -0.258385
+    test_excess: -0.139723
+    baseline_test_excess: 0.379760
+  computed_at: '2026-05-17T13:35:00+08:00'
+  description: Hard floors and train/test consistency.
+  answer: "Train floor passes for the best train variant, but test performance collapses from baseline +0.379760 excess to -0.139723 excess. It cannot be accepted."
+  pass: false
+q2_selection_score:
+  computed_data:
+    selected_by_train_score: ratio_1p5_or_mny_1p6_weight_0p25
+    selected_score: 0.353879
+    best_test_variant: baseline_no_haircut
+    best_test_score: 0.355320
+  computed_at: '2026-05-17T13:35:00+08:00'
+  description: Candidate selection quality.
+  answer: "The best train candidate is not the best test candidate. The best test row is the baseline with no haircut, so the experiment does not beat current strategy."
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    baseline_train_excess: 0.131363
+    baseline_test_excess: 0.379760
+    best_nonbaseline_test_excess: 0.165353
+  computed_at: '2026-05-17T13:35:00+08:00'
+  description: Alignment against current cb_arb_value_gap_switch baseline.
+  answer: "No haircut variant beats baseline on the sealed 2025-2026 test segment. The best non-baseline test excess is +0.165353, far below baseline +0.379760."
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: "categorical fixed variants; no monotonic grid adoption"
+  computed_at: '2026-05-17T13:35:00+08:00'
+  description: Edge-of-grid or monotonic concern.
+  answer: "Aggressive variants improve 2020 and train more, but test gets worse. This is an overfit pattern, not a monotonic adoption signal."
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    note: "trade overlap not needed; aggregate train/test conflict is sufficient"
+  computed_at: '2026-05-17T13:35:00+08:00'
+  description: Trade overlap baseline vs selected.
+  answer: "Not separately analyzed because aggregate metrics already reject the mechanism."
+  pass: true
+q6_trigger_timing:
+  description: Trigger timing leakage.
+  applicable: false
+q7_path_contamination:
+  description: Path/data contamination.
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: "Global option-value haircut repairs 2020 in some variants but destroys the 2025-2026 test edge. Baseline remains the best test performer."
+auto_computed_at: '2026-05-17T13:35:00+08:00'

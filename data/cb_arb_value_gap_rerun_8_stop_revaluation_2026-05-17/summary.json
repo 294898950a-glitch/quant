@@ -1,0 +1,70 @@
+{
+  "train_start": "20190101",
+  "train_end": "20241231",
+  "test_start": "20250101",
+  "test_end": "20260508",
+  "base_params": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 180.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0,
+    "cost_model_enabled": 1.0,
+    "slippage_pct": 0.0015,
+    "market_impact_coeff": 0.001,
+    "market_impact_cap_pct": 0.02,
+    "holding_cost_pct": 0.0
+  },
+  "configs": [
+    {
+      "name": "normal_revalue",
+      "description": "止损复查仍用原估值",
+      "overrides": {}
+    },
+    {
+      "name": "vol_70",
+      "description": "止损复查时波动价值按 70% 估",
+      "overrides": {
+        "vol_multiplier_factor": 0.7
+      }
+    },
+    {
+      "name": "vol_50",
+      "description": "止损复查时波动价值按 50% 估",
+      "overrides": {
+        "vol_multiplier_factor": 0.5
+      }
+    },
+    {
+      "name": "spread_plus_100",
+      "description": "止损复查时信用折价增加 100bp",
+      "overrides": {
+        "credit_spread_add_bp": 100.0
+      }
+    },
+    {
+      "name": "spread_plus_200",
+      "description": "止损复查时信用折价增加 200bp",
+      "overrides": {
+        "credit_spread_add_bp": 200.0
+      }
+    },
+    {
+      "name": "vol_70_spread_100",
+      "description": "止损复查时波动价值 70% 且信用折价增加 100bp",
+      "overrides": {
+        "vol_multiplier_factor": 0.7,
+        "credit_spread_add_bp": 100.0
+      }
+    },
+    {
+      "name": "vol_50_spread_200",
+      "description": "止损复查时波动价值 50% 且信用折价增加 200bp",
+      "overrides": {
+        "vol_multiplier_factor": 0.5,
+        "credit_spread_add_bp": 200.0
+      }
+    }
+  ]
+}

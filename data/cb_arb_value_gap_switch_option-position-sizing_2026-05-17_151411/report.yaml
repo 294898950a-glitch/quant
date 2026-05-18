@@ -1,0 +1,38 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+status: COMPLETE
+three_exits_section:
+  train_exit: train winner selected progressive_stocklike_position_scale.
+  validation_exit: sealed test winner remained baseline_no_position_scale.
+  decision_exit: reject because no variant beat baseline across train, 2020 repair, and sealed test together.
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- conditional_option_position_sizing
+- static_candidate_position_scale
+- close_to_bond_floor_threshold
+- moneyness_stock_to_conv_threshold
+learnings:
+- Reducing position size for suspicious option-like candidates improved 2020 loss but damaged sealed 2025-2026 return.
+- This run does not justify replacing the current baseline with static candidate position sizing.
+follow_up_actions:
+- Keep this result as a closed direction for future strategy generation.
+- Prefer testing valuation error identification before adding another static position scaling variant.
+summary: No position sizing variant beat baseline across train, 2020 repair, and sealed
+  test together.
+notes: Result reviewed by code-generated review.yaml and recent_results_digest.yaml.
+references:
+- summary_option_position_sizing.csv
+- yearly_option_position_sizing.csv
+- entry_source_2020_option_position_sizing.csv
+- entry_source_test_option_position_sizing.csv
+- adjustment_option_position_sizing.csv
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+related_reports:
+- data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17/report.yaml
+- data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/report.yaml

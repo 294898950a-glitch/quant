@@ -91,6 +91,22 @@ CONFIGS: list[dict[str, Any]] = [
 ]
 
 
+def _with_cost_params(params: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
+    if not args.cost_model_enabled:
+        return dict(params)
+    out = dict(params)
+    out.update(
+        {
+            "cost_model_enabled": 1.0,
+            "slippage_pct": float(args.slippage_pct),
+            "market_impact_coeff": float(args.market_impact_coeff),
+            "market_impact_cap_pct": float(args.market_impact_cap_pct),
+            "holding_cost_pct": float(args.holding_cost_pct),
+        }
+    )
+    return out
+
+
 def _row(
     name: str,
     description: str,
@@ -150,6 +166,14 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Comma-separated config names to run. Defaults to all non-baseline configs.",
     )
+    p.add_argument("--panic-dates-file", type=Path, default=None)
+    p.add_argument("--panic-signal-column", default="panic_day_trained")
+    p.add_argument("--panic-effective-lag-days", type=int, default=1)
+    p.add_argument("--cost-model-enabled", action="store_true")
+    p.add_argument("--slippage-pct", type=float, default=0.0015)
+    p.add_argument("--market-impact-coeff", type=float, default=0.0010)
+    p.add_argument("--market-impact-cap-pct", type=float, default=0.02)
+    p.add_argument("--holding-cost-pct", type=float, default=0.0)
     return p.parse_args()
 
 
@@ -157,6 +181,7 @@ def main() -> int:
     args = _parse_args()
     output_dir = args.output_dir or args.data_root / "value_gap_panic_bond_anchor"
     output_dir.mkdir(parents=True, exist_ok=True)
+    base = _with_cost_params(BASE, args)
     start_all = min(args.train_start, args.test_start)
     end_all = max(args.train_end, args.test_end)
     ranks = _load_or_build_value_ranks(
@@ -184,7 +209,11 @@ def main() -> int:
     for cfg in configs:
         name = str(cfg["name"])
         description = str(cfg["description"])
-        params = {**BASE, **dict(cfg["params"])}
+        params = {**base, **dict(cfg["params"])}
+        if args.panic_dates_file is not None:
+            params["panic_dates_file"] = str(args.panic_dates_file)
+            params["panic_signal_column"] = str(args.panic_signal_column)
+            params["panic_effective_lag_days"] = int(args.panic_effective_lag_days)
         train = _run_value_gap_backtest(
             ranks[(ranks["trade_date"] >= args.train_start) & (ranks["trade_date"] <= args.train_end)],
             args.train_start,
@@ -240,7 +269,7 @@ def main() -> int:
                 "train_end": args.train_end,
                 "test_start": args.test_start,
                 "test_end": args.test_end,
-                "base": BASE,
+                "base": base,
                 "configs": configs,
             },
             ensure_ascii=False,

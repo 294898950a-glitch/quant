@@ -1,0 +1,12 @@
+name,source,count,avg_pnl_pct,sum_pnl_amount,wins,avg_close_to_bond_floor,avg_moneyness_stock_to_conv
+baseline_no_haircut,option,191,0.051628,729505.32,116,1.762356,1.395611
+ratio_1p4_weight_0p75,option,234,0.013155,171383.66,139,1.405185,1.151032
+ratio_1p4_weight_0p5,option,213,0.013112,159110.12,142,1.330425,1.087263
+ratio_1p5_weight_0p75,option,255,0.014715,245946.11,160,1.434007,1.165865
+ratio_1p5_weight_0p5,option,273,0.015164,212729.3,180,1.391954,1.131822
+moneyness_1p6_weight_0p75,option,223,0.038021,515561.38,140,1.52866,1.197302
+moneyness_1p6_weight_0p5,option,237,0.037335,504519.26,149,1.523574,1.190015
+ratio_1p5_or_mny_1p6_weight_0p75,option,255,0.014715,245946.11,160,1.434007,1.165865
+ratio_1p5_or_mny_1p6_weight_0p5,option,273,0.015164,212729.3,180,1.391954,1.131822
+ratio_1p5_or_mny_1p6_weight_0p25,option,272,0.015182,211725.1,179,1.391168,1.131184
+progressive_stocklike_haircut,option,228,0.012626,147804.69,141,1.354926,1.111534

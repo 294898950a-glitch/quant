@@ -1,0 +1,45 @@
+$ /usr/bin/python3 scripts/evaluate_cb_arb_option_pnl_feedback.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule score_4state --output-dir data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315 --base-ranks-path data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet --reuse-ranks --cost-model-enabled
+
+OK: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_041315/spec.yaml
+
+validate_spec.py: 1 spec(s), 0 error(s), 0 warning(s)
+
+=== cb_basic.parquet ===
+  OK (1012 rows, 18 cols)
+
+=== cb_daily.parquet ===
+  WARN: missing recommended columns: ['cb_over_rate', 'pct_chg']
+
+=== cb_call.parquet ===
+  WARN: missing recommended columns: ['call_type']
+
+=== stk_daily.parquet ===
+  OK (2678144 rows, 8 cols)
+
+=== stk_daily_qfq.parquet ===
+  OK (2678144 rows, 8 cols)
+
+=== summary ===
+WARN: 2 recommended-column warning(s)
+validate_compute_budget.py: OK
+verdict: pass  (fatal=0, warning=0)
+recommendation: pass; spec semantic OK
+[option_pnl_feedback] baseline_no_feedback train_excess=0.131363 test_excess=0.37976
+[option_pnl_feedback] feedback_20d_min2_scale_0p75 train_excess=-0.016084 test_excess=0.356864
+[option_pnl_feedback] feedback_20d_min2_scale_0p5 train_excess=-0.112011 test_excess=0.355252
+[option_pnl_feedback] feedback_20d_min2_scale_0p25 train_excess=-0.129667 test_excess=0.294015
+[option_pnl_feedback] feedback_20d_min3_scale_0p75 train_excess=-0.048854 test_excess=0.356864
+[option_pnl_feedback] feedback_20d_min3_scale_0p5 train_excess=-0.083222 test_excess=0.355252
+[option_pnl_feedback] feedback_20d_min3_scale_0p25 train_excess=-0.144347 test_excess=0.294015
+[option_pnl_feedback] feedback_40d_min2_scale_0p75 train_excess=-0.104583 test_excess=0.347986
+[option_pnl_feedback] feedback_40d_min2_scale_0p5 train_excess=0.020366 test_excess=0.338353
+[option_pnl_feedback] feedback_40d_min2_scale_0p25 train_excess=0.021469 test_excess=0.396344
+[option_pnl_feedback] feedback_40d_min3_scale_0p75 train_excess=-0.104583 test_excess=0.347986
+[option_pnl_feedback] feedback_40d_min3_scale_0p5 train_excess=0.020366 test_excess=0.338353
+[option_pnl_feedback] feedback_40d_min3_scale_0p25 train_excess=-0.013277 test_excess=0.376542
+[option_pnl_feedback] feedback_60d_min2_scale_0p75 train_excess=-0.049071 test_excess=0.409458
+[option_pnl_feedback] feedback_60d_min2_scale_0p5 train_excess=-0.063765 test_excess=0.458109
+[option_pnl_feedback] feedback_60d_min2_scale_0p25 train_excess=0.053029 test_excess=0.430233
+[option_pnl_feedback] feedback_60d_min3_scale_0p75 train_excess=-0.049071 test_excess=0.409458
+[option_pnl_feedback] feedback_60d_min3_scale_0p5 train_excess=-0.063765 test_excess=0.458109
+[option_pnl_feedback] feedback_60d_min3_scale_0p25 train_excess=0.053029 test_excess=0.35764

@@ -1,0 +1,61 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+reviewer: codex
+ack_at: '2026-05-17T15:33:44'
+q1_floor_binding:
+  description: Hard floors and train/test consistency.
+  answer: Selected train winner improves train and 2020, but fails sealed test versus baseline.
+  computed_data:
+    best_train_variant: progressive_stocklike_position_scale
+    train_excess: 0.385756
+    test_excess: 0.118782
+    baseline_test_excess: 0.37976
+  computed_at: '2026-05-17T15:33:44'
+  pass: false
+q2_selection_score:
+  description: Candidate selection quality.
+  answer: Train score selects progressive_stocklike_position_scale, while sealed test best is baseline_no_position_scale.
+  computed_data:
+    selected_by_train_score: progressive_stocklike_position_scale
+    selected_score: 0.336715
+    best_test_variant: baseline_no_position_scale
+    best_test_score: 0.35532
+  pass: false
+q3_baseline_alignment:
+  description: Alignment against current cb_arb_value_gap_switch baseline.
+  answer: Candidate does not align with baseline on sealed test because baseline test excess is materially higher.
+  computed_data:
+    baseline_train_excess: 0.131363
+    baseline_test_excess: 0.37976
+    selected_test_excess: 0.118782
+  computed_at: '2026-05-17T15:33:44'
+  pass: false
+q4_monotonic:
+  description: Edge-of-grid or monotonic concern.
+  answer: Categorical fixed variants; no monotonic promotion without manual review.
+  computed_data:
+    grid_type: categorical_fixed_variants
+    candidates_count: 11
+  computed_at: '2026-05-17T15:33:44'
+  pass: true
+q5_trade_overlap:
+  description: Trade overlap baseline vs selected.
+  answer: Aggregate train/test/2020 checks are used for automatic decision.
+  computed_data:
+    selected_total_trades_test: 272
+    baseline_total_trades_test: 191
+    selected_total_trades_2020: 110
+    baseline_total_trades_2020: 75
+  computed_at: '2026-05-17T15:33:44'
+  pass: true
+q6_trigger_timing:
+  description: Trigger timing leakage.
+  applicable: false
+q7_path_contamination:
+  description: Path/data contamination.
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: No position sizing variant beat baseline across train, 2020 repair,
+  and sealed test together.
+auto_computed_at: '2026-05-17T15:33:44'

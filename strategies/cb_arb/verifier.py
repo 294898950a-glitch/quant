@@ -245,6 +245,11 @@ class CBArbConfig:
     rating_floor_int: int = _DEFAULT_RATING_FLOOR
     fee_pct: float = _DEFAULT_FEE_PCT
     initial_capital: float = _DEFAULT_INITIAL_CAPITAL
+    cost_model_enabled: bool = False
+    slippage_pct: float = 0.0
+    market_impact_coeff: float = 0.0
+    market_impact_cap_pct: float = 0.0
+    holding_cost_pct: float = 0.0
 
     def credit_spread_dict(self) -> dict[str, float]:
         """构造 cb_pricer 的 credit_spread_bp dict, 用本配置的 AAA/AA 拟合."""
@@ -324,6 +329,46 @@ def _unpack_config(
         cfg.initial_capital = float(cap)
 
     return cfg
+
+
+def apply_cost_model(
+    price: float,
+    qty: float,
+    side: str,
+    cfg: CBArbConfig,
+    avg_amount_5d: float | None = None,
+    holding_days: int | float = 0,
+) -> dict[str, float]:
+    """Return cash paid/received after fee, slippage and size-based impact."""
+    gross = max(0.0, float(price) * float(qty))
+    fee = gross * float(getattr(cfg, "fee_pct", 0.0))
+    if not getattr(cfg, "cost_model_enabled", False):
+        if side == "sell":
+            return {"cash_amount": gross - fee, "gross_amount": gross, "fee": fee}
+        return {"cash_amount": gross + fee, "gross_amount": gross, "fee": fee}
+
+    slippage = gross * max(0.0, float(getattr(cfg, "slippage_pct", 0.0)))
+    avg_amount = float(avg_amount_5d or 0.0)
+    impact_pct = 0.0
+    if avg_amount > 0 and gross > 0:
+        impact_pct = float(getattr(cfg, "market_impact_coeff", 0.0)) * gross / avg_amount
+        impact_pct = min(max(0.0, impact_pct), max(0.0, float(getattr(cfg, "market_impact_cap_pct", 0.0))))
+    impact = gross * impact_pct
+    holding_cost = 0.0
+    if side == "sell":
+        holding_cost = gross * max(0.0, float(getattr(cfg, "holding_cost_pct", 0.0))) * max(0.0, float(holding_days)) / 365.0
+        cash_amount = gross - fee - slippage - impact - holding_cost
+    else:
+        cash_amount = gross + fee + slippage + impact
+    return {
+        "cash_amount": max(0.0, cash_amount),
+        "gross_amount": gross,
+        "fee": fee,
+        "slippage": slippage,
+        "market_impact": impact,
+        "holding_cost": holding_cost,
+        "impact_pct": impact_pct,
+    }
 
 
 # --------------------------------------------------------------------------- #
@@ -572,8 +617,19 @@ def run_backtest(
     return _run_backtest_core(cfg, oos_event_ids)
 
 
+def run_backtest_dynamic(
+    default_cfg: CBArbConfig,
+    config_by_date: dict[str, CBArbConfig] | None = None,
+    oos_event_ids: set[str] | None = None,
+) -> BacktestResult:
+    """Run cb_arb with an optional per-date config schedule."""
+    return _run_backtest_core(default_cfg, oos_event_ids, config_by_date=config_by_date)
+
+
 def _run_backtest_core(
-    cfg: CBArbConfig, oos_event_ids: set[str] | None
+    cfg: CBArbConfig,
+    oos_event_ids: set[str] | None,
+    config_by_date: dict[str, CBArbConfig] | None = None,
 ) -> BacktestResult:
     """核心循环: 跑一遍, 在 IS / OOS / pool 子集分别算 metrics."""
     # ---- 数据 ----
@@ -615,10 +671,17 @@ def _run_backtest_core(
         (stk_daily["stk_code"].isin(relevant_stk_codes))
         & (stk_daily["trade_date"].isin(days_set))
     ].copy()
-    # 算每个 stk_code 的滚动年化波动
-    vol_map = _compute_realized_vol_window(
-        stk_daily, relevant_stk_codes, days_to_run, cfg.vol_window_days
-    )
+    # 算每个 stk_code 的滚动年化波动. 动态配置可能每天使用不同窗口。
+    scheduled_cfgs = [cfg]
+    if config_by_date:
+        scheduled_cfgs.extend(config_by_date.values())
+    vol_windows = sorted({int(c.vol_window_days) for c in scheduled_cfgs})
+    vol_maps = {
+        window: _compute_realized_vol_window(
+            stk_daily, relevant_stk_codes, days_to_run, window
+        )
+        for window in vol_windows
+    }
     # 当日正股价
     stk_close_map: dict[tuple[str, str], float] = {
         (row.stk_code, row.trade_date): float(row.close)
@@ -656,11 +719,15 @@ def _run_backtest_core(
     equity_history: list[tuple[str, float]] = []
     holdings: dict[str, _Position] = {}
     trades: list[TradeRecord] = []
-    credit_spread_dict = cfg.credit_spread_dict()
+    credit_spread_by_cfg: dict[int, dict[str, float]] = {}
     today_dt_cache: dict[str, datetime] = {}
 
     # ---- 主循环 ----
     for date in days_to_run:
+        day_cfg = config_by_date.get(date, cfg) if config_by_date else cfg
+        credit_spread_dict = credit_spread_by_cfg.setdefault(
+            id(day_cfg), day_cfg.credit_spread_dict()
+        )
         rows_today = daily_by_date.get(date)
         if rows_today is None or rows_today.empty:
             # 无市价 — equity 按上日结
@@ -684,12 +751,12 @@ def _run_backtest_core(
             if not stk_code:
                 continue
             # 过滤池
-            if spec_d["rating_int"] < cfg.rating_floor_int:
+            if spec_d["rating_int"] < day_cfg.rating_floor_int:
                 continue
-            if spec_d["issue_size_yuan"] < cfg.min_remaining_size:
+            if spec_d["issue_size_yuan"] < day_cfg.min_remaining_size:
                 continue
             avg_amt = float(getattr(r, "amount_20d", 0.0))
-            if avg_amt < cfg.min_avg_amount:
+            if avg_amt < day_cfg.min_avg_amount:
                 continue
             mat = spec_d["maturity_date"]
             if not mat or len(mat) != 8:
@@ -714,10 +781,10 @@ def _run_backtest_core(
             stock_price = stk_close_map.get((stk_code, date))
             if stock_price is None or stock_price <= 0:
                 continue
-            vol = vol_map.get((stk_code, date))
+            vol = vol_maps.get(day_cfg.vol_window_days, {}).get((stk_code, date))
             if vol is None or not math.isfinite(vol) or vol <= 0:
                 continue
-            vol_use = min(_VOL_CAP, vol * cfg.vol_multiplier)
+            vol_use = min(_VOL_CAP, vol * day_cfg.vol_multiplier)
 
             conv_price = spec_d["conv_price"]
             if not math.isfinite(conv_price) or conv_price <= 0:
@@ -761,10 +828,10 @@ def _run_backtest_core(
         n = len(deviations)
         # 排名: 0 = 最便宜
         rank_map: dict[str, int] = {ts: i for i, (ts, _, _) in enumerate(deviations)}
-        n_buy = max(1, int(round(n * cfg.rank_buy_pct)))
+        n_buy = max(1, int(round(n * day_cfg.rank_buy_pct)))
         # 排名 < n_buy 是买入候选
         # rank_sell_pct: 持仓中 rank/n >= rank_sell_pct → 卖出
-        sell_threshold_rank = cfg.rank_sell_pct * n
+        sell_threshold_rank = day_cfg.rank_sell_pct * n
 
         # ---- 1. 卖出 ----
         # 优先级: 强赎 / max_holding_days / stop_loss / rank_sell
@@ -786,12 +853,12 @@ def _run_backtest_core(
                 ).days
             except Exception:
                 holding_days = 0
-            if holding_days >= cfg.max_holding_days:
+            if holding_days >= day_cfg.max_holding_days:
                 to_sell.append((ts, "max_holding_days"))
                 continue
             # 止损
             pnl = (cur_close - pos.entry_price) / pos.entry_price
-            if pnl <= cfg.stop_loss_pct:
+            if pnl <= day_cfg.stop_loss_pct:
                 to_sell.append((ts, "stop_loss"))
                 continue
             # rank_sell: 持仓在当日还能算偏离 → 看 rank
@@ -804,7 +871,7 @@ def _run_backtest_core(
             if pos is None:
                 continue
             exit_price = close_map.get(ts, pos.entry_price)
-            proceeds = exit_price * pos.qty * (1 - cfg.fee_pct)
+            proceeds = exit_price * pos.qty * (1 - day_cfg.fee_pct)
             cash += proceeds
             try:
                 hd = (datetime.strptime(date, "%Y%m%d")
@@ -829,7 +896,7 @@ def _run_backtest_core(
             ))
 
         # ---- 2. 买入 ----
-        slots_avail = cfg.max_holdings - len(holdings)
+        slots_avail = day_cfg.max_holdings - len(holdings)
         if slots_avail > 0 and cash > 100:
             # 取 buy candidates rank < n_buy 且不在 holdings
             cur_equity = _compute_equity(cash, holdings, close_map)
@@ -844,14 +911,14 @@ def _run_backtest_core(
                     continue
                 # 资金上限
                 pos_cash = _resolve_position_size(
-                    cash, cur_equity, cfg.max_position_pct, cfg.max_holdings
+                    cash, cur_equity, day_cfg.max_position_pct, day_cfg.max_holdings
                 )
                 if pos_cash < mkt * 1.0:  # 至少买 1 张
                     continue
-                qty = math.floor(pos_cash / mkt / (1 + cfg.fee_pct))
+                qty = math.floor(pos_cash / mkt / (1 + day_cfg.fee_pct))
                 if qty < 1:
                     continue
-                cost = qty * mkt * (1 + cfg.fee_pct)
+                cost = qty * mkt * (1 + day_cfg.fee_pct)
                 if cost > cash:
                     continue
                 cash -= cost
@@ -877,7 +944,8 @@ def _run_backtest_core(
             last_close[r.ts_code] = float(r.close)
     for ts, pos in list(holdings.items()):
         exit_price = last_close.get(ts, pos.entry_price)
-        proceeds = exit_price * pos.qty * (1 - cfg.fee_pct)
+        day_cfg = config_by_date.get(last_date, cfg) if config_by_date else cfg
+        proceeds = exit_price * pos.qty * (1 - day_cfg.fee_pct)
         cash += proceeds
         try:
             hd = (datetime.strptime(last_date, "%Y%m%d")
@@ -990,6 +1058,7 @@ def prev_prices(holdings: dict[str, _Position]) -> dict[str, float]:
 
 __all__ = [
     "run_backtest",
+    "run_backtest_dynamic",
     "CBArbConfig",
     "RATING_TO_INT",
     "IS_END",
@@ -998,4 +1067,5 @@ __all__ = [
     "reset_cache",
     "_get_cb_index",
     "_index_total_return",
+    "apply_cost_model",
 ]

@@ -1,0 +1,150 @@
+{
+  "train_start": "20190101",
+  "train_end": "20241231",
+  "test_start": "20250101",
+  "test_end": "20260508",
+  "base_params": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 180.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0
+  },
+  "configs": [
+    {
+      "name": "baseline_no_regime_entry_gate",
+      "description": "当前主策略入口；不按市场状态限制期权型低估买入",
+      "params": {}
+    },
+    {
+      "name": "weak_signal_0",
+      "description": "仅弱市：期权型买入不允许弱势信号",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_bad_signals_weak": 0
+      }
+    },
+    {
+      "name": "weak_signal_1",
+      "description": "仅弱市：期权型买入最多 1 个弱势信号",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_bad_signals_weak": 1
+      }
+    },
+    {
+      "name": "weak_ratio_1p15",
+      "description": "仅弱市：期权型买入要求价格/债底 <= 1.15",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_weak": 1.15
+      }
+    },
+    {
+      "name": "weak_ratio_1p25",
+      "description": "仅弱市：期权型买入要求价格/债底 <= 1.25",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_weak": 1.25
+      }
+    },
+    {
+      "name": "weak_ratio_1p25_signal_1",
+      "description": "仅弱市：期权型买入要求价格/债底 <= 1.25 且弱势信号 <= 1",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_weak": 1.25,
+        "option_entry_max_bad_signals_weak": 1
+      }
+    },
+    {
+      "name": "flat_weak_signal_1",
+      "description": "仅弱震荡：期权型买入最多 1 个弱势信号",
+      "params": {
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_bad_signals_flat_weak": 1
+      }
+    },
+    {
+      "name": "flat_weak_ratio_1p25",
+      "description": "仅弱震荡：期权型买入要求价格/债底 <= 1.25",
+      "params": {
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_flat_weak": 1.25
+      }
+    },
+    {
+      "name": "weak_strict_flat_mild",
+      "description": "弱市严格，弱震荡轻度限制；强市和普通市场放开",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_weak": 1.2,
+        "option_entry_max_bad_signals_weak": 0,
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_flat_weak": 1.35,
+        "option_entry_max_bad_signals_flat_weak": 1
+      }
+    },
+    {
+      "name": "weak_mild_flat_signal",
+      "description": "弱市价格接近债底，弱震荡只看弱势信号",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_weak": 1.3,
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_bad_signals_flat_weak": 1
+      }
+    },
+    {
+      "name": "weak_and_flat_signal_1",
+      "description": "弱市和弱震荡都最多允许 1 个弱势信号",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_bad_signals_weak": 1,
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_bad_signals_flat_weak": 1
+      }
+    },
+    {
+      "name": "weak_signal_0_flat_signal_2",
+      "description": "弱市不允许弱势信号，弱震荡最多 2 个弱势信号",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_bad_signals_weak": 0,
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_bad_signals_flat_weak": 2
+      }
+    },
+    {
+      "name": "weak_ratio_1p15_flat_ratio_1p35",
+      "description": "弱市要求更接近债底，弱震荡允许稍远",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_weak": 1.15,
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_close_to_bond_floor_flat_weak": 1.35
+      }
+    },
+    {
+      "name": "weak_share_0p90",
+      "description": "仅弱市：期权低估占比不能超过 90%",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_option_share_weak": 0.9
+      }
+    },
+    {
+      "name": "weak_share_0p95_flat_share_0p95",
+      "description": "弱市和弱震荡：期权低估占比不能超过 95%",
+      "params": {
+        "option_entry_gate_enabled_weak": 1.0,
+        "option_entry_max_option_share_weak": 0.95,
+        "option_entry_gate_enabled_flat_weak": 1.0,
+        "option_entry_max_option_share_flat_weak": 0.95
+      }
+    }
+  ],
+  "cost_model_enabled": true,
+  "regime_rule": "score_4state"
+}

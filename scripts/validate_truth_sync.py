@@ -19,9 +19,12 @@ still making manual preflight useful before staging.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import re
 import subprocess
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -38,6 +41,7 @@ CURRENT_YAML = "data/research_framework/current.yaml"
 BASELINE_YAML = "data/research_framework/baseline_registry.yaml"
 STRATEGIES_YAML = "data/research_framework/strategies.yaml"
 WAIVER_DIR = "data/research_framework/truth_sync_waivers/"
+AUDIT_LOG = REPO_ROOT / "data" / "research_framework" / "protected_action_audit.jsonl"
 
 TRUTH_SYNC_PATHS = {CURRENT_YAML, BASELINE_YAML}
 WAIVER_REQUIRED = {"schema_version", "date", "decision", "reason", "changed_paths", "reviewer"}
@@ -237,6 +241,105 @@ def has_waiver_for_triggers(triggers: list[dict[str, str]], covered_paths: list[
     return all(t["path"] in covered for t in triggers)
 
 
+def audit_relevant_paths(paths: list[str], triggers: list[dict[str, str]]) -> list[str]:
+    relevant = set(TRUTH_SYNC_PATHS)
+    relevant.add(STRATEGIES_YAML)
+    relevant.update(t["path"] for t in triggers)
+    relevant.update(p for p in paths if is_waiver_path(p))
+    return sorted(p for p in paths if p in relevant)
+
+
+def diff_for_paths(paths: list[str], source: str) -> str:
+    if not paths:
+        return ""
+    args = ["diff", "--cached", "--"] if source == "staged" else ["diff", "--"]
+    result = run_git(args + paths)
+    if result.returncode != 0:
+        return result.stderr.strip()
+    return result.stdout
+
+
+def audit_event_hash(
+    *,
+    source: str,
+    relevant_paths: list[str],
+    triggers: list[dict[str, str]],
+    status: str,
+    diff_text: str,
+) -> str:
+    payload = {
+        "source": source,
+        "relevant_paths": relevant_paths,
+        "triggers": triggers,
+        "status": status,
+        "diff_sha256": hashlib.sha256(diff_text.encode("utf-8")).hexdigest(),
+    }
+    return hashlib.sha256(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")
+    ).hexdigest()[:24]
+
+
+def existing_audit_hashes(path: Path = AUDIT_LOG) -> set[str]:
+    if not path.exists():
+        return set()
+    hashes: set[str] = set()
+    for line in path.read_text(encoding="utf-8").splitlines():
+        if not line.strip():
+            continue
+        try:
+            row = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        value = row.get("event_hash")
+        if isinstance(value, str):
+            hashes.add(value)
+    return hashes
+
+
+def append_protected_action_audit(
+    *,
+    paths: list[str],
+    source: str,
+    triggers: list[dict[str, str]],
+    errors: list[str],
+    waiver_covered: list[str],
+    audit_path: Path = AUDIT_LOG,
+) -> str | None:
+    relevant_paths = audit_relevant_paths(paths, triggers)
+    if not relevant_paths:
+        return None
+    status = "blocked" if errors else "accepted_by_mechanical_sync"
+    diff_text = diff_for_paths(relevant_paths, source)
+    event_hash = audit_event_hash(
+        source=source,
+        relevant_paths=relevant_paths,
+        triggers=triggers,
+        status=status,
+        diff_text=diff_text,
+    )
+    if event_hash in existing_audit_hashes(audit_path):
+        return event_hash
+    row = {
+        "schema_version": 1,
+        "recorded_at": datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"),
+        "event_hash": event_hash,
+        "source": source,
+        "status": status,
+        "relevant_paths": relevant_paths,
+        "triggers": triggers,
+        "truth_sync_paths_changed": [p for p in paths if p in TRUTH_SYNC_PATHS],
+        "waiver_covered_paths": sorted(set(waiver_covered)),
+        "errors": errors,
+        "actor": "validate_truth_sync.py",
+        "note": "Automatic trace only. This record does not grant approval; it records truth/protected changes even when unauthorized.",
+    }
+    audit_path.parent.mkdir(parents=True, exist_ok=True)
+    with audit_path.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
+        fh.write("\n")
+    return event_hash
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--waivers-only", action="store_true",
@@ -274,10 +377,20 @@ def main() -> int:
             f"or {WAIVER_DIR}<slug>.yaml"
         )
 
+    audit_hash = append_protected_action_audit(
+        paths=paths,
+        source=source,
+        triggers=triggers,
+        errors=errors,
+        waiver_covered=waiver_covered,
+    )
+
     if errors:
         print(f"validate_truth_sync.py: FAIL ({source})")
         for err in errors:
             print(f"  ERROR {err}")
+        if audit_hash:
+            print(f"  audit_event_hash: {audit_hash}")
         return 1
 
     if triggers:
@@ -288,6 +401,8 @@ def main() -> int:
         print(f"validate_truth_sync.py: OK ({source}, {len(triggers)} trigger(s), {reason})")
     else:
         print(f"validate_truth_sync.py: OK ({source}, no truth-sync triggers)")
+    if audit_hash:
+        print(f"validate_truth_sync.py: audit_event_hash={audit_hash}")
     return 0
 
 

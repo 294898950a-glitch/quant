@@ -1,0 +1,26 @@
+$ .venv/bin/python scripts/evaluate_cb_arb_panic_bond_anchor.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule score_4state --output-dir data/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17 --panic-dates-file data/cb_arb_concurrent_supervised_20260511_094500/panic_detector_training/panic_detector_trained_daily.csv --panic-signal-column panic_day_trained --panic-effective-lag-days 1 --cost-model-enabled
+
+[repair] ranked 100/1779 20190603
+[repair] ranked 200/1779 20191030
+[repair] ranked 300/1779 20200327
+[repair] ranked 400/1779 20200824
+[repair] ranked 500/1779 20210120
+[repair] ranked 600/1779 20210623
+[repair] ranked 700/1779 20211119
+[repair] ranked 800/1779 20220420
+[repair] ranked 900/1779 20220914
+[repair] ranked 1000/1779 20230216
+[repair] ranked 1100/1779 20230714
+[repair] ranked 1200/1779 20231211
+[repair] ranked 1300/1779 20240515
+[repair] ranked 1400/1779 20241014
+[repair] ranked 1500/1779 20250312
+[repair] ranked 1600/1779 20250806
+[repair] ranked 1700/1779 20260105
+[panic_bond_anchor] buy_anchor_05 train_excess=-0.02537 test_excess=0.323608
+[panic_bond_anchor] buy_anchor_10 train_excess=-0.039336 test_excess=0.302283
+[panic_bond_anchor] buy_anchor_15 train_excess=-0.07313 test_excess=0.348235
+[panic_bond_anchor] sell_anchor_05 train_excess=-0.525302 test_excess=0.210455
+[panic_bond_anchor] sell_anchor_10 train_excess=-0.335375 test_excess=0.156916
+[panic_bond_anchor] sell_anchor_15 train_excess=-0.089744 test_excess=0.192906
+[panic_bond_anchor] wrote data/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17

@@ -9,18 +9,18 @@ schema_version: 1
 
 strategies:
   - id: cb_arb
-    full_name: cb_arb 主策略 (verifier yaml-current)
+    full_name: cb_arb legacy relative-rank verifier
     type: convertible_bond_arbitrage
     implementation: strategies/cb_arb/verifier.py
     config: strategies/cb_arb/tunable_space.yaml
-    status: wip
+    status: stale
     research_direction: open
 
   - id: cb_arb_value_gap_switch
-    full_name: cb_arb value-gap switch (评估分支)
+    full_name: cb_arb 主策略 (absolute value-gap switch)
     type: convertible_bond_arbitrage
     parent: cb_arb
-    relationship: research_branch  # 派生于 cb_arb 主策略, 不替换
+    relationship: current_main
     implementation: scripts/evaluate_cb_arb_value_gap_switch.py
     status: wip
     research_direction: open
@@ -51,7 +51,7 @@ hypotheses:
 
   - id: value-gap-switch-medium-signal
     strategy_id: cb_arb_value_gap_switch
-    one_line: "绝对价值差额排名 + panic detector 比百分比偏离率更稳, 6 年 OOS 跑赢 ≥ 5% 累计"
+    one_line: "当前主策略: 绝对价值差额排名 + panic detector, 仍需继续修复成本和回撤问题"
     falsifiers:
       - "累计 excess (复利) 跨年 < 0%"
       - "任何单年 dd vs benchmark > 15%"

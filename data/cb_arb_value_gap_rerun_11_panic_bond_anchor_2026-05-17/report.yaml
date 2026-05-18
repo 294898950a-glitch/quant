@@ -1,0 +1,45 @@
+schema_version: 1
+run_id: cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  exit_1_mechanical: 'Test 2025-2026 (~1.5y) mechanical pass: best variant buy_anchor_15
+    excess=+0.348, dd=-0.127. Both above hard_floors (0, -0.3).'
+  exit_2_falsifier: 'Train 2019-2024 (6y) fails decision_contract falsifiers: cumulative
+    excess -0.073 negative or marginal; max_dd -0.357 breaches -0.15 single-year ceiling
+    (2020 alone -19% to -22% across variants).'
+  exit_3_pattern_match: Matches prior panic-family rejection (panic_detector_dead_end,
+    single_filter_dead_end). 4th time panic-family variants exhibit test-mechanical-pass
+    / train-falsifier-fail pattern.
+compute_cost_yuan: 6.25
+confirmed_invalid_directions:
+- 'panic bond-anchor 6-variant grid: all variants share 2020 single-year dd > 15%
+  breach'
+- test-only mechanical thresholds (excess>0, dd>-30%) insufficient for promotion decision
+  when train period systematically fails
+learnings:
+- Short test window (1.5y) can produce positive aggregate excess while 6y train aggregate
+  fails — lookback / short-window false positive.
+- Panic family interventions (revaluation / option-weight / bond-anchor) consistently
+  fail train period across all rerun batches.
+- auto_research_pipeline mechanical thresholds (adoption_pass) do not include train
+  falsifier checks; AI must manually flag in retro until pipeline upgraded.
+follow_up_actions:
+- Do NOT promote any rerun variant to baseline_registry.
+- Codify train-period falsifier checks into auto_research_pipeline.derive_verdict
+  (see research_insights.yaml open_threads.enforce_train_period_falsifiers_in_pipeline).
+- Avoid restarting panic family without new action mechanism (per panic_detector_dead_end
+  insight).
+status: COMPLETE
+notes: Retro distilled by Claude after Codex VM batch. mechanical decision 'passed_mechanical_thresholds_not_promoted'
+  is correct per current.yaml decision_contract.falsifiers, not weakened.
+references:
+- data/research_framework/research_insights.yaml cb_arb_value_gap_panic_reruns_2026_05_17
+- data/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17/summary.json
+- data/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17/l4_ack.yaml
+- data/research_framework/run_manifests/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17.yaml
+related_reports:
+- data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17/report.yaml
+- data/cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17/report.yaml
+- data/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17/report.yaml

@@ -1,0 +1,35 @@
+$ .venv/bin/python scripts/evaluate_cb_arb_regime_option_entry_gate.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule score_4state --output-dir data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17 --reuse-ranks --cost-model-enabled
+
+[repair] ranked 100/1779 20190603
+[repair] ranked 200/1779 20191030
+[repair] ranked 300/1779 20200327
+[repair] ranked 400/1779 20200824
+[repair] ranked 500/1779 20210120
+[repair] ranked 600/1779 20210623
+[repair] ranked 700/1779 20211119
+[repair] ranked 800/1779 20220420
+[repair] ranked 900/1779 20220914
+[repair] ranked 1000/1779 20230216
+[repair] ranked 1100/1779 20230714
+[repair] ranked 1200/1779 20231211
+[repair] ranked 1300/1779 20240515
+[repair] ranked 1400/1779 20241014
+[repair] ranked 1500/1779 20250312
+[repair] ranked 1600/1779 20250806
+[repair] ranked 1700/1779 20260105
+[regime_option_entry_gate] baseline_no_regime_entry_gate train_excess=0.131363 test_excess=0.37976
+[regime_option_entry_gate] weak_signal_0 train_excess=0.093122 test_excess=0.383073
+[regime_option_entry_gate] weak_signal_1 train_excess=0.101356 test_excess=0.37976
+[regime_option_entry_gate] weak_ratio_1p15 train_excess=0.10961 test_excess=0.383072
+[regime_option_entry_gate] weak_ratio_1p25 train_excess=0.084544 test_excess=0.383072
+[regime_option_entry_gate] weak_ratio_1p25_signal_1 train_excess=0.063335 test_excess=0.383072
+[regime_option_entry_gate] flat_weak_signal_1 train_excess=0.034107 test_excess=0.386831
+[regime_option_entry_gate] flat_weak_ratio_1p25 train_excess=-0.084271 test_excess=0.381335
+[regime_option_entry_gate] weak_strict_flat_mild train_excess=0.02459 test_excess=0.368081
+[regime_option_entry_gate] weak_mild_flat_signal train_excess=0.019776 test_excess=0.388471
+[regime_option_entry_gate] weak_and_flat_signal_1 train_excess=0.046441 test_excess=0.386831
+[regime_option_entry_gate] weak_signal_0_flat_signal_2 train_excess=0.063459 test_excess=0.383073
+[regime_option_entry_gate] weak_ratio_1p15_flat_ratio_1p35 train_excess=0.008113 test_excess=0.368081
+[regime_option_entry_gate] weak_share_0p90 train_excess=-0.040512 test_excess=0.383072
+[regime_option_entry_gate] weak_share_0p95_flat_share_0p95 train_excess=-0.100551 test_excess=0.368264
+[regime_option_entry_gate] wrote data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17

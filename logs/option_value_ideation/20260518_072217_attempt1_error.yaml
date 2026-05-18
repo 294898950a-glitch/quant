@@ -1,0 +1,6 @@
+attempt: 1
+error_type: TimeoutExpired
+error: Command '['claude', '--print', '--output-format', 'text', '--model', 'sonnet',
+  '--max-budget-usd', '0.5', '--tools', '', '--permission-mode', 'dontAsk', '--no-session-persistence',
+  '--append-system-prompt', '你是量化研究任务设计员。你只输出 YAML，不输出 Markdown。你必须根据给定记录提出一个可执行测试，不能凭空要求不存在的数据。如果资料不足，也必须在
+  YAML 里说明风险，不要发散。']' timed out after 240 seconds

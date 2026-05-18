@@ -1,0 +1,13 @@
+$ .venv/bin/python scripts/evaluate_cb_arb_option_position_sizing.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule score_4state --output-dir data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411 --base-ranks-path data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet --reuse-ranks --cost-model-enabled
+
+[option_position_sizing] baseline_no_position_scale train_excess=0.131363 test_excess=0.37976 adjusted_rows=0
+[option_position_sizing] ratio_1p5_scale_0p75 train_excess=0.0742 test_excess=0.292862 adjusted_rows=24995
+[option_position_sizing] ratio_1p5_scale_0p5 train_excess=0.002379 test_excess=0.220717 adjusted_rows=24995
+[option_position_sizing] ratio_1p5_scale_0p25 train_excess=-0.020682 test_excess=0.098642 adjusted_rows=24995
+[option_position_sizing] moneyness_1p6_scale_0p75 train_excess=0.191179 test_excess=0.320112 adjusted_rows=18237
+[option_position_sizing] moneyness_1p6_scale_0p5 train_excess=0.170924 test_excess=0.303252 adjusted_rows=18237
+[option_position_sizing] moneyness_1p6_scale_0p25 train_excess=0.205919 test_excess=0.287758 adjusted_rows=18237
+[option_position_sizing] ratio_1p5_or_mny_1p6_scale_0p75 train_excess=0.076425 test_excess=0.292862 adjusted_rows=34276
+[option_position_sizing] ratio_1p5_or_mny_1p6_scale_0p5 train_excess=0.049981 test_excess=0.220717 adjusted_rows=34276
+[option_position_sizing] ratio_1p5_or_mny_1p6_scale_0p25 train_excess=0.198593 test_excess=0.098642 adjusted_rows=34276
+[option_position_sizing] progressive_stocklike_position_scale train_excess=0.385756 test_excess=0.118782 adjusted_rows=51690

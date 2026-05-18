@@ -1,0 +1,78 @@
+{
+  "train_start": "20190101",
+  "train_end": "20241231",
+  "test_start": "20250101",
+  "test_end": "20260508",
+  "base": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 180.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0,
+    "cost_model_enabled": 1.0,
+    "slippage_pct": 0.0015,
+    "market_impact_coeff": 0.001,
+    "market_impact_cap_pct": 0.02,
+    "holding_cost_pct": 0.0
+  },
+  "configs": [
+    {
+      "name": "buy_anchor_05",
+      "description": "恐慌日只允许债底上方5%以内的期权型候选买入/换仓",
+      "params": {
+        "panic_rule": "agent_combo",
+        "panic_option_bond_anchor_enabled": 1.0,
+        "panic_option_bond_floor_buffer": 0.05
+      }
+    },
+    {
+      "name": "buy_anchor_10",
+      "description": "恐慌日只允许债底上方10%以内的期权型候选买入/换仓",
+      "params": {
+        "panic_rule": "agent_combo",
+        "panic_option_bond_anchor_enabled": 1.0,
+        "panic_option_bond_floor_buffer": 0.1
+      }
+    },
+    {
+      "name": "buy_anchor_15",
+      "description": "恐慌日只允许债底上方15%以内的期权型候选买入/换仓",
+      "params": {
+        "panic_rule": "agent_combo",
+        "panic_option_bond_anchor_enabled": 1.0,
+        "panic_option_bond_floor_buffer": 0.15
+      }
+    },
+    {
+      "name": "sell_anchor_05",
+      "description": "恐慌日持仓也必须在债底上方5%以内，否则卖出",
+      "params": {
+        "panic_rule": "agent_combo",
+        "panic_option_bond_anchor_enabled": 1.0,
+        "panic_option_bond_anchor_sell_enabled": 1.0,
+        "panic_option_bond_floor_buffer": 0.05
+      }
+    },
+    {
+      "name": "sell_anchor_10",
+      "description": "恐慌日持仓也必须在债底上方10%以内，否则卖出",
+      "params": {
+        "panic_rule": "agent_combo",
+        "panic_option_bond_anchor_enabled": 1.0,
+        "panic_option_bond_anchor_sell_enabled": 1.0,
+        "panic_option_bond_floor_buffer": 0.1
+      }
+    },
+    {
+      "name": "sell_anchor_15",
+      "description": "恐慌日持仓也必须在债底上方15%以内，否则卖出",
+      "params": {
+        "panic_rule": "agent_combo",
+        "panic_option_bond_anchor_enabled": 1.0,
+        "panic_option_bond_anchor_sell_enabled": 1.0,
+        "panic_option_bond_floor_buffer": 0.15
+      }
+    }
+  ]
+}

@@ -1,0 +1,153 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_universe-filter-retest_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: Claude outbox 2026-05-17 14:05 CST L1/DIRECT_UNIVERSE_RETEST_GO
+hypothesis: 排除特定 CB sub-populations 后，baseline cb_arb_value_gap_switch 在 train + validate
+  都 improve，且 2020 drawdown 改善。
+source_insight: option-source value gap 在当前 full universe 下表现为 good/bad inseparable；同
+  family entry/filter/valuation 修法已 reject。Universe retest 检查是否是特定 sub-population
+  导致结构性 tradeoff，而不是继续改 strategy logic。
+parameter_space:
+- name: universe_filter_variant
+  range:
+  - 0
+  - 5
+  type: int
+  description: '6 fixed variants: full universe control, exclude far-above-bond-floor,
+    exclude high moneyness, exclude short maturity, exclude small size, combined low-risk
+    universe.'
+- name: close_to_bond_floor_threshold
+  range:
+  - 1.5
+  - 1.500001
+  type: float
+  description: Train-window permanent exclusion if close/bond_floor ever exceeds 1.5.
+- name: moneyness_stock_to_conv_threshold
+  range:
+  - 1.6
+  - 1.600001
+  type: float
+  description: Train-window permanent exclusion if stock_price/conv_price ever exceeds
+    1.6.
+- name: remaining_maturity_years_threshold
+  range:
+  - 1.0
+  - 1.000001
+  type: float
+  description: Train-window permanent exclusion if remaining maturity ever falls below
+    1 year.
+- name: issue_size_threshold_yi
+  range:
+  - 10.0
+  - 10.000001
+  type: float
+  description: Static permanent exclusion if cb_basic.issue_size is below 10 yi.
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  description: Existing value-gap rank base artifact; reused when present to avoid
+    recomputing base ranks.
+- path: data/cb_warehouse/cb_basic.parquet
+  description: Issue size, maturity date, stock code, and conversion price for universe
+    attributes.
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  description: Adjusted stock closes for stock/conv_price moneyness.
+grid:
+  dimensions:
+  - universe_filter_variant
+  candidates_count: 6
+  description: Fixed attribution-driven universe filters; exclusion code sets are
+    learned from train window and applied unchanged to validate/test.
+hard_floors:
+  train_excess_delta_vs_baseline: 0.005
+  validate_excess_delta_vs_baseline: 0.0
+  improvement_2020_loss_depth_delta_vs_baseline: 0.05
+  worst_yearly_max_drawdown_2019_2024: -0.15
+hard_floors_baseline_source: baseline_full_universe in the same cost-on replay.
+auxiliary_metrics:
+- train_excess_return
+- validate_excess_return
+- test_excess_return
+- yearly_2020_total_return
+- yearly_2020_excess_return
+- yearly_2020_max_drawdown
+- excluded_count
+- entry_source_pnl
+cv_design: walk-forward
+cv_holdout_years:
+- 2023
+- 2024
+- 2025
+- 2026
+cv_adoption_threshold: A non-baseline universe must improve train excess by >= 0.5pp,
+  not degrade validate excess, improve 2020 max drawdown by >= 5pp, and keep every
+  2019-2024 single-year max drawdown >= -15%. Test is reported as sealed final evidence,
+  not tuned.
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 180
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 100
+spot_decision: 3 spot-hours estimated mechanically at 18.75 CNY with safety multiplier;
+  auto-approved under 100 CNY. Must execute on VM/spot host, not local workstation.
+stop_conditions:
+- script exits non-zero
+- missing summary_universe_filter.csv
+- missing yearly_universe_filter.csv
+- missing entry_source_universe_filter.csv
+- no non-baseline universe satisfies pre-registered train/validate/2020/drawdown floors
+artifacts_required:
+- summary_universe_filter.csv
+- yearly_universe_filter.csv
+- entry_source_universe_filter.csv
+- universe_filter_membership.csv
+- adoption_universe_filter.csv
+- summary.json
+- report.yaml
+- diagnostic.yaml
+- l4_ack.yaml
+automation:
+  output_dir: data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17
+  gatekeeper_after_run: false
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_universe_filter.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20221231'
+  - --validate-start
+  - '20230101'
+  - --validate-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --base-ranks-path
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - --reuse-ranks
+  - --cost-model-enabled
+  verdict:
+    pass_field: adoption_pass
+    yearly_table_path: yearly_universe_filter.csv
+    train_single_year_dd_ceiling: -0.15
+status: COMPLETE
+escalation:
+- 'Any non-baseline universe passes all mechanical floors: propose user review before
+  promotion.'
+- Budget estimate exceeds 100 CNY or VM placement unavailable.
+notes: Formal framework experiment only. Does not update current.yaml, baseline_registry.yaml,
+  or live status. Force-created through new_research.py because Claude/user direction
+  explicitly chose this backlog thread after same-family repair rejects.
+updated_at: '2026-05-17T06:27:08Z'

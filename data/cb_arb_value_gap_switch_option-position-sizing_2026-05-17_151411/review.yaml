@@ -1,0 +1,434 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+strategy_id: cb_arb_value_gap_switch
+reviewed_at: '2026-05-17T14:16:59+00:00'
+reviewer: code
+reviewer_version: result_reviewer_v0.1
+review_status: complete
+facts:
+  source_artifacts:
+  - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/diagnostic.yaml
+    sha256: 721c7761740a1ac24f9b0b0ec4a48a6a43d46f171b1229126b81d4d9f3a68ab5
+  - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/report.yaml
+    sha256: 6f9124749d702d34fdae147b6e55aa758e52280423d968ad0d9cd494e6792507
+  - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
+    sha256: 244e43452211cd8bbe0bc35027046f0c19a58dcb92564500a092285bc48663b2
+  - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/summary.json
+    sha256: e5cb5a792af1133719cb62b85ba29a287a43b6f9857dc1585205c53b1f6ef8c7
+  - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/summary_option_position_sizing.csv
+    sha256: 8831ab14fdfb7f8ee841324c6c8e3a10b97511e22736575b4e8e5f458d0e8e5d
+  - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/yearly_option_position_sizing.csv
+    sha256: 7de2a13f0e2c175d422a156c4efd38f809e6bd9358565ac4dc1d881ea25cc823
+  missing_artifacts: []
+  parse_errors: []
+  experiment:
+    run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    date: '2026-05-17'
+    strategy_id: cb_arb_value_gap_switch
+    hypothesis: 对期权型低估候选，根据价格/债底距离和正股/转股价深度，动态降低排序金额和实际买入金额，可以保留正常期权修复收益的同时减少错误暴露。
+    status: COMPLETE
+    candidate_count: 11
+    adoption_pass: false
+    cv_design: single-window
+    cv_holdout_years:
+    - 2025
+    - 2026
+  key_metrics:
+    best_train:
+      name: progressive_stocklike_position_scale
+      description: 越像股票、越远离债底，买入金额和排序金额越低
+      period: train
+      start: '20190101'
+      end: '20241231'
+      total_return: 0.658071
+      excess_return: 0.385756
+      max_drawdown: -0.196165
+      win_rate: 0.5051
+      total_trades: 1174
+      n_days: 1456
+      score: 0.336715
+    best_test:
+      name: baseline_no_position_scale
+      description: 当前主策略，不调整候选排序和买入金额
+      period: test
+      start: '20250101'
+      end: '20260508'
+      total_return: 0.732025
+      excess_return: 0.37976
+      max_drawdown: -0.097762
+      win_rate: 0.6073
+      total_trades: 191
+      n_days: 323
+      score: 0.35532
+    selected_test:
+      name: progressive_stocklike_position_scale
+      description: 越像股票、越远离债底，买入金额和排序金额越低
+      period: test
+      start: '20250101'
+      end: '20260508'
+      total_return: 0.471048
+      excess_return: 0.118782
+      max_drawdown: -0.088358
+      win_rate: 0.5956
+      total_trades: 272
+      n_days: 323
+      score: 0.096693
+    baseline_train:
+      name: baseline_no_position_scale
+      description: 当前主策略，不调整候选排序和买入金额
+      period: train
+      start: '20190101'
+      end: '20241231'
+      total_return: 0.403678
+      excess_return: 0.131363
+      max_drawdown: -0.324048
+      win_rate: 0.4533
+      total_trades: 986
+      n_days: 1456
+      score: 0.050351
+    baseline_test:
+      name: baseline_no_position_scale
+      description: 当前主策略，不调整候选排序和买入金额
+      period: test
+      start: '20250101'
+      end: '20260508'
+      total_return: 0.732025
+      excess_return: 0.37976
+      max_drawdown: -0.097762
+      win_rate: 0.6073
+      total_trades: 191
+      n_days: 323
+      score: 0.35532
+    baseline_2020:
+      name: baseline_no_position_scale
+      description: 当前主策略，不调整候选排序和买入金额
+      period: '2020'
+      start: '20200101'
+      end: '20201231'
+      total_return: -0.090593
+      excess_return: -0.19476
+      max_drawdown: -0.179066
+      win_rate: 0.2933
+      total_trades: 75
+      n_days: 243
+      score: -0.239526
+    selected_2020:
+      name: progressive_stocklike_position_scale
+      description: 越像股票、越远离债底，买入金额和排序金额越低
+      period: '2020'
+      start: '20200101'
+      end: '20201231'
+      total_return: -0.046826
+      excess_return: -0.150993
+      max_drawdown: -0.135423
+      win_rate: 0.3636
+      total_trades: 110
+      n_days: 243
+      score: -0.184849
+    candidate_count: 11
+    adoption_pass: false
+    status: COMPLETE
+  csv_artifacts:
+    summary_option_position_sizing.csv:
+      rows: 22
+      columns:
+      - name
+      - description
+      - period
+      - start
+      - end
+      - position_scale_config_json
+      - params_json
+      - total_return
+      - excess_return
+      - max_drawdown
+      - win_rate
+      - total_trades
+      - n_days
+      - score
+      sample_rows:
+      - name: baseline_no_position_scale
+        description: 当前主策略，不调整候选排序和买入金额
+        period: train
+        start: 20190101
+        end: 20241231
+        position_scale_config_json: '{"description": "\u5f53\u524d\u4e3b\u7b56\u7565\uff0c\u4e0d\u8c03\u6574\u5019\u9009\u6392\u5e8f\u548c\u4e70\u5165\u91d1\u989d",
+          "mode": "none", "name": "baseline_no_position_scale"}'
+        params_json: '{"candidate_position_scale_enabled": 0.0, "cost_model_enabled":
+          1.0, "holding_cost_pct": 0.0, "market_impact_cap_pct": 0.02, "market_impact_coeff":
+          0.001, "max_hold_days": 180.0, "min_gap_pct": 0.0, "sell_gap_pct": 0.0,
+          "slippage_pct": 0.0015, "stop_gap_ratio_floor": 0.3, "stop_signal_threshold":
+          999.0, "switch_hurdle_pct": 0.03}'
+        total_return: 0.403678
+        excess_return: 0.131363
+        max_drawdown: -0.324048
+        win_rate: 0.4533
+        total_trades: 986
+        n_days: 1456
+        score: 0.050351
+      - name: baseline_no_position_scale
+        description: 当前主策略，不调整候选排序和买入金额
+        period: test
+        start: 20250101
+        end: 20260508
+        position_scale_config_json: '{"description": "\u5f53\u524d\u4e3b\u7b56\u7565\uff0c\u4e0d\u8c03\u6574\u5019\u9009\u6392\u5e8f\u548c\u4e70\u5165\u91d1\u989d",
+          "mode": "none", "name": "baseline_no_position_scale"}'
+        params_json: '{"candidate_position_scale_enabled": 0.0, "cost_model_enabled":
+          1.0, "holding_cost_pct": 0.0, "market_impact_cap_pct": 0.02, "market_impact_coeff":
+          0.001, "max_hold_days": 180.0, "min_gap_pct": 0.0, "sell_gap_pct": 0.0,
+          "slippage_pct": 0.0015, "stop_gap_ratio_floor": 0.3, "stop_signal_threshold":
+          999.0, "switch_hurdle_pct": 0.03}'
+        total_return: 0.732025
+        excess_return: 0.37976
+        max_drawdown: -0.097762
+        win_rate: 0.6073
+        total_trades: 191
+        n_days: 323
+        score: 0.35532
+      - name: ratio_1p5_scale_0p75
+        description: 期权型低估且价格/债底 > 1.5 时，买入金额和排序金额乘以 0.75
+        period: train
+        start: 20190101
+        end: 20241231
+        position_scale_config_json: '{"description": "\u671f\u6743\u578b\u4f4e\u4f30\u4e14\u4ef7\u683c/\u503a\u5e95
+          > 1.5 \u65f6\uff0c\u4e70\u5165\u91d1\u989d\u548c\u6392\u5e8f\u91d1\u989d\u4e58\u4ee5
+          0.75", "mode": "ratio", "name": "ratio_1p5_scale_0p75", "position_scale":
+          0.75, "ratio_threshold": 1.5}'
+        params_json: '{"candidate_position_scale_enabled": 1.0, "cost_model_enabled":
+          1.0, "holding_cost_pct": 0.0, "market_impact_cap_pct": 0.02, "market_impact_coeff":
+          0.001, "max_hold_days": 180.0, "min_gap_pct": 0.0, "sell_gap_pct": 0.0,
+          "slippage_pct": 0.0015, "stop_gap_ratio_floor": 0.3, "stop_signal_threshold":
+          999.0, "switch_hurdle_pct": 0.03}'
+        total_return: 0.346515
+        excess_return: 0.0742
+        max_drawdown: -0.307392
+        win_rate: 0.4532
+        total_trades: 993
+        n_days: 1456
+        score: -0.002648
+    yearly_option_position_sizing.csv:
+      rows: 66
+      columns:
+      - name
+      - description
+      - period
+      - start
+      - end
+      - position_scale_config_json
+      - params_json
+      - total_return
+      - excess_return
+      - max_drawdown
+      - win_rate
+      - total_trades
+      - n_days
+      - score
+      sample_rows:
+      - name: baseline_no_position_scale
+        description: 当前主策略，不调整候选排序和买入金额
+        period: 2019
+        start: 20190101
+        end: 20191231
+        position_scale_config_json: '{"description": "\u5f53\u524d\u4e3b\u7b56\u7565\uff0c\u4e0d\u8c03\u6574\u5019\u9009\u6392\u5e8f\u548c\u4e70\u5165\u91d1\u989d",
+          "mode": "none", "name": "baseline_no_position_scale"}'
+        params_json: '{"candidate_position_scale_enabled": 0.0, "cost_model_enabled":
+          1.0, "holding_cost_pct": 0.0, "market_impact_cap_pct": 0.02, "market_impact_coeff":
+          0.001, "max_hold_days": 180.0, "min_gap_pct": 0.0, "sell_gap_pct": 0.0,
+          "slippage_pct": 0.0015, "stop_gap_ratio_floor": 0.3, "stop_signal_threshold":
+          999.0, "switch_hurdle_pct": 0.03}'
+        total_return: 0.379211
+        excess_return: 0.171845
+        max_drawdown: -0.107991
+        win_rate: 0.5854
+        total_trades: 164
+        n_days: 244
+        score: 0.144847
+      - name: baseline_no_position_scale
+        description: 当前主策略，不调整候选排序和买入金额
+        period: 2020
+        start: 20200101
+        end: 20201231
+        position_scale_config_json: '{"description": "\u5f53\u524d\u4e3b\u7b56\u7565\uff0c\u4e0d\u8c03\u6574\u5019\u9009\u6392\u5e8f\u548c\u4e70\u5165\u91d1\u989d",
+          "mode": "none", "name": "baseline_no_position_scale"}'
+        params_json: '{"candidate_position_scale_enabled": 0.0, "cost_model_enabled":
+          1.0, "holding_cost_pct": 0.0, "market_impact_cap_pct": 0.02, "market_impact_coeff":
+          0.001, "max_hold_days": 180.0, "min_gap_pct": 0.0, "sell_gap_pct": 0.0,
+          "slippage_pct": 0.0015, "stop_gap_ratio_floor": 0.3, "stop_signal_threshold":
+          999.0, "switch_hurdle_pct": 0.03}'
+        total_return: -0.090593
+        excess_return: -0.19476
+        max_drawdown: -0.179066
+        win_rate: 0.2933
+        total_trades: 75
+        n_days: 243
+        score: -0.239526
+      - name: baseline_no_position_scale
+        description: 当前主策略，不调整候选排序和买入金额
+        period: 2021
+        start: 20210101
+        end: 20211231
+        position_scale_config_json: '{"description": "\u5f53\u524d\u4e3b\u7b56\u7565\uff0c\u4e0d\u8c03\u6574\u5019\u9009\u6392\u5e8f\u548c\u4e70\u5165\u91d1\u989d",
+          "mode": "none", "name": "baseline_no_position_scale"}'
+        params_json: '{"candidate_position_scale_enabled": 0.0, "cost_model_enabled":
+          1.0, "holding_cost_pct": 0.0, "market_impact_cap_pct": 0.02, "market_impact_coeff":
+          0.001, "max_hold_days": 180.0, "min_gap_pct": 0.0, "sell_gap_pct": 0.0,
+          "slippage_pct": 0.0015, "stop_gap_ratio_floor": 0.3, "stop_signal_threshold":
+          999.0, "switch_hurdle_pct": 0.03}'
+        total_return: 0.06207
+        excess_return: -0.059628
+        max_drawdown: -0.092588
+        win_rate: 0.5583
+        total_trades: 120
+        n_days: 243
+        score: -0.082775
+  falsifiers:
+    hard_floors:
+      train_excess_return: 0.0
+      train_max_drawdown: -0.3
+      test_excess_return: 0.0
+      test_max_drawdown: -0.3
+      replay_2020_total_return: -0.090593
+    hard_floors_baseline_source: current cb_arb_value_gap_switch cost-aware branch
+      and option-value-haircut rejection evidence
+    stop_conditions:
+    - 脚本退出非 0
+    - 缺少 summary_option_position_sizing.csv
+    - 缺少 yearly_option_position_sizing.csv
+    - 缺少 entry_source_2020_option_position_sizing.csv
+    - 所有非 baseline 方案无法同时优于 train、2020 和 test baseline
+    adoption_pass: false
+    report_summary: No position sizing variant beat baseline across train, 2020 repair,
+      and sealed test together.
+    diagnostic_verdict_rationale: No position sizing variant beat baseline across
+      train, 2020 repair, and sealed test together.
+  decision:
+    l6_exit_decision: reject
+    report_status: COMPLETE
+    report_summary: No position sizing variant beat baseline across train, 2020 repair,
+      and sealed test together.
+    diagnostic_verdict: reject
+    diagnostic_summary: No position sizing variant beat baseline across train, 2020
+      repair, and sealed test together.
+    adoption_pass: false
+interpretation:
+  pending_ai_review: true
+  machine_summary: 'cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411:
+    review_status=complete; decision=reject; No position sizing variant beat baseline
+    across train, 2020 repair, and sealed test together.'
+verification:
+  used: false
+  rounds_used: 0
+closed_directions:
+- run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  strategy_id: cb_arb_value_gap_switch
+  decision: reject
+  direction_tags:
+  - conditional_option_position_sizing
+  - static_candidate_position_scale
+  - close_to_bond_floor_threshold
+  - moneyness_stock_to_conv_threshold
+  reason: No position sizing variant beat baseline across train, 2020 repair, and
+    sealed test together.
+  source: report.yaml
+next_directions: []
+materials_for_ideator:
+  one_line_summary: 'cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411:
+    review_status=complete; decision=reject; No position sizing variant beat baseline
+    across train, 2020 repair, and sealed test together.'
+  useful_facts:
+  - strategy_id: cb_arb_value_gap_switch
+  - hypothesis: 对期权型低估候选，根据价格/债底距离和正股/转股价深度，动态降低排序金额和实际买入金额，可以保留正常期权修复收益的同时减少错误暴露。
+  - candidate_count: 11
+  - adoption_pass: false
+  - best_train:
+      name: progressive_stocklike_position_scale
+      description: 越像股票、越远离债底，买入金额和排序金额越低
+      period: train
+      start: '20190101'
+      end: '20241231'
+      total_return: 0.658071
+      excess_return: 0.385756
+      max_drawdown: -0.196165
+      win_rate: 0.5051
+      total_trades: 1174
+      n_days: 1456
+      score: 0.336715
+  - best_test:
+      name: baseline_no_position_scale
+      description: 当前主策略，不调整候选排序和买入金额
+      period: test
+      start: '20250101'
+      end: '20260508'
+      total_return: 0.732025
+      excess_return: 0.37976
+      max_drawdown: -0.097762
+      win_rate: 0.6073
+      total_trades: 191
+      n_days: 323
+      score: 0.35532
+  - selected_test:
+      name: progressive_stocklike_position_scale
+      description: 越像股票、越远离债底，买入金额和排序金额越低
+      period: test
+      start: '20250101'
+      end: '20260508'
+      total_return: 0.471048
+      excess_return: 0.118782
+      max_drawdown: -0.088358
+      win_rate: 0.5956
+      total_trades: 272
+      n_days: 323
+      score: 0.096693
+  - baseline_test:
+      name: baseline_no_position_scale
+      description: 当前主策略，不调整候选排序和买入金额
+      period: test
+      start: '20250101'
+      end: '20260508'
+      total_return: 0.732025
+      excess_return: 0.37976
+      max_drawdown: -0.097762
+      win_rate: 0.6073
+      total_trades: 191
+      n_days: 323
+      score: 0.35532
+  - selected_2020:
+      name: progressive_stocklike_position_scale
+      description: 越像股票、越远离债底，买入金额和排序金额越低
+      period: '2020'
+      start: '20200101'
+      end: '20201231'
+      total_return: -0.046826
+      excess_return: -0.150993
+      max_drawdown: -0.135423
+      win_rate: 0.3636
+      total_trades: 110
+      n_days: 243
+      score: -0.184849
+  - decision:
+      l6_exit_decision: reject
+      report_status: COMPLETE
+      report_summary: No position sizing variant beat baseline across train, 2020
+        repair, and sealed test together.
+      diagnostic_verdict: reject
+      diagnostic_summary: No position sizing variant beat baseline across train, 2020
+        repair, and sealed test together.
+      adoption_pass: false
+  - hard_floors:
+      train_excess_return: 0.0
+      train_max_drawdown: -0.3
+      test_excess_return: 0.0
+      test_max_drawdown: -0.3
+      replay_2020_total_return: -0.090593
+  open_questions: []
+  suggested_mechanics: []
+  do_not_repeat_tags:
+  - conditional_option_position_sizing
+  - static_candidate_position_scale
+  - close_to_bond_floor_threshold
+  - moneyness_stock_to_conv_threshold
+  related_runs:
+  - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+provenance:
+  facts_extractor_version: result_reviewer_v0.1
+  artifact_bundle_hash: 3892b24fa5879a9fbda9302509754e7a7874ee9157b87be1623207e9ea5f2a8e

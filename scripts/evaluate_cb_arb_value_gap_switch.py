@@ -59,6 +59,8 @@ class Position:
     cost: float
     entry_gap_amount: float
     entry_gap_pct: float
+    entry_gap_source: str = "unknown"
+    entry_position_cash_scale: float = 1.0
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -171,6 +173,7 @@ def _candidate_grid() -> list[dict[str, float]]:
     return rows
 
 
+@lru_cache(maxsize=16)
 def _build_timely_signal_maps(start: str, end: str) -> dict[str, dict[str, int]]:
     cb = _load_cb_daily().copy()
     cb["trade_date"] = cb["trade_date"].astype(str)
@@ -570,6 +573,189 @@ def _gap_source(row_by_ts: dict[str, Any], ts: str, params: dict[str, float]) ->
     return source
 
 
+def _gap_source_shares(row: Any, params: dict[str, float]) -> tuple[str, float, float]:
+    if not all(hasattr(row, key) for key in ("bond_floor", "option_value", "close", "theoretical")):
+        return "unknown", 0.0, 0.0
+    close = float(row.close)
+    bond_floor = float(row.bond_floor)
+    option_value = float(row.option_value)
+    theoretical = float(row.theoretical)
+    if theoretical - close <= 0:
+        return "not_undervalued", 0.0, 0.0
+    bond_gap = max(0.0, bond_floor - close)
+    option_gap = max(0.0, theoretical - max(close, bond_floor))
+    total = bond_gap + option_gap
+    if total <= 0:
+        return "mixed", 0.0, 0.0
+    bond_share = bond_gap / total
+    option_share = option_gap / total
+    if bond_share >= float(params.get("source_bond_threshold", 0.60)):
+        return "bond", bond_share, option_share
+    if option_share >= float(params.get("source_option_threshold", 0.60)):
+        return "option", bond_share, option_share
+    return "mixed", bond_share, option_share
+
+
+def _option_source_pnl_feedback_state(
+    trades: list[dict[str, Any]],
+    date: str,
+    params: dict[str, float],
+) -> dict[str, Any]:
+    if float(params.get("option_source_pnl_feedback_enabled", 0.0)) <= 0:
+        return {"active": False, "count": 0, "sum_pnl_amount": 0.0, "avg_pnl_pct": 0.0}
+    lookback_days = int(params.get("option_source_pnl_feedback_lookback_days", 40))
+    min_trades = int(params.get("option_source_pnl_feedback_min_trades", 2))
+    trigger_sum = float(params.get("option_source_pnl_feedback_trigger_sum_pnl", 0.0))
+    trigger_avg = float(params.get("option_source_pnl_feedback_trigger_avg_pnl_pct", 0.0))
+    try:
+        cur = datetime.strptime(date, "%Y%m%d")
+    except Exception:
+        return {"active": False, "count": 0, "sum_pnl_amount": 0.0, "avg_pnl_pct": 0.0}
+
+    recent: list[dict[str, Any]] = []
+    for trade in trades:
+        if str(trade.get("entry_gap_source") or "") != "option":
+            continue
+        exit_date = str(trade.get("exit_date") or "")
+        try:
+            exit_dt = datetime.strptime(exit_date, "%Y%m%d")
+        except Exception:
+            continue
+        if exit_dt >= cur:
+            continue
+        if (cur - exit_dt).days <= lookback_days:
+            recent.append(trade)
+
+    pnl_amounts = [float(t.get("pnl_amount", 0.0) or 0.0) for t in recent]
+    pnl_pcts = [float(t.get("pnl_pct", 0.0) or 0.0) for t in recent]
+    count = len(recent)
+    sum_pnl = sum(pnl_amounts)
+    avg_pnl = sum(pnl_pcts) / count if count else 0.0
+    active = count >= min_trades and (sum_pnl <= trigger_sum or avg_pnl <= trigger_avg)
+    return {
+        "active": bool(active),
+        "count": count,
+        "sum_pnl_amount": float(sum_pnl),
+        "avg_pnl_pct": float(avg_pnl),
+        "lookback_days": lookback_days,
+        "scale": float(params.get("option_source_pnl_feedback_scale", 0.5)),
+    }
+
+
+def _apply_option_source_pnl_feedback(
+    rows: pd.DataFrame,
+    trades: list[dict[str, Any]],
+    date: str,
+    params: dict[str, float],
+) -> pd.DataFrame:
+    state = _option_source_pnl_feedback_state(trades, date, params)
+    if rows.empty or not bool(state.get("active")):
+        return rows
+    if not {"value_gap_amount", "value_gap_pct_of_cash", "position_cash"} <= set(rows.columns):
+        return rows
+
+    adjusted = rows.copy()
+    if "position_cash_scale" not in adjusted.columns:
+        adjusted["position_cash_scale"] = 1.0
+
+    option_mask_values: list[bool] = []
+    for row in adjusted.itertuples(index=False):
+        source, _, _ = _gap_source_shares(row, params)
+        option_mask_values.append(source == "option")
+    option_mask = pd.Series(option_mask_values, index=adjusted.index)
+    if not bool(option_mask.any()):
+        return adjusted
+
+    scale = max(0.0, min(1.0, float(state.get("scale", 0.5))))
+    adjusted.loc[option_mask, "position_cash_scale"] = (
+        adjusted.loc[option_mask, "position_cash_scale"].astype(float) * scale
+    )
+    adjusted.loc[option_mask, "value_gap_amount"] = (
+        adjusted.loc[option_mask, "value_gap_amount"].astype(float) * scale
+    )
+    adjusted.loc[option_mask, "value_gap_pct_of_cash"] = (
+        adjusted.loc[option_mask, "value_gap_amount"].astype(float)
+        / adjusted.loc[option_mask, "position_cash"].astype(float)
+    )
+    adjusted["option_source_pnl_feedback_active"] = bool(state["active"])
+    adjusted["option_source_pnl_feedback_count"] = int(state["count"])
+    adjusted["option_source_pnl_feedback_sum_pnl"] = float(state["sum_pnl_amount"])
+    adjusted["option_source_pnl_feedback_avg_pnl_pct"] = float(state["avg_pnl_pct"])
+    return adjusted
+
+
+def _option_entry_gate_ok(
+    row_by_ts: dict[str, Any],
+    ts: str,
+    date: str,
+    params: dict[str, float],
+    timely_signal_maps: dict[str, dict[str, int]],
+) -> bool:
+    if float(params.get("option_entry_gate_enabled", 0.0)) <= 0:
+        return True
+    row = row_by_ts.get(ts)
+    if row is None:
+        return False
+    source, _, option_share = _gap_source_shares(row, params)
+    if source != "option":
+        return True
+
+    if not all(hasattr(row, key) for key in ("bond_floor", "close")):
+        return False
+    bond_floor = float(row.bond_floor)
+    close = float(row.close)
+    if bond_floor <= 0:
+        return False
+
+    max_ratio = float(params.get("option_entry_max_close_to_bond_floor", 999.0))
+    if close / bond_floor > max_ratio:
+        return False
+
+    max_option_share = float(params.get("option_entry_max_option_share", 999.0))
+    if option_share > max_option_share:
+        return False
+
+    max_bad_signals = int(params.get("option_entry_max_bad_signals", 999))
+    if max_bad_signals < 999:
+        signal_count = int(timely_signal_maps.get(ts, {}).get(date, 0))
+        if signal_count > max_bad_signals:
+            return False
+
+    return True
+
+
+_OPTION_ENTRY_GATE_KEYS = (
+    "option_entry_gate_enabled",
+    "option_entry_max_close_to_bond_floor",
+    "option_entry_max_option_share",
+    "option_entry_max_bad_signals",
+)
+
+
+def _option_entry_params_for_regime(params: dict[str, float], regime: str) -> dict[str, float]:
+    effective = dict(params)
+    for key in _OPTION_ENTRY_GATE_KEYS:
+        regime_key = f"{key}_{regime}"
+        if regime_key in params:
+            effective[key] = params[regime_key]
+    return effective
+
+
+def _has_option_entry_gate(params: dict[str, float]) -> bool:
+    if float(params.get("option_entry_gate_enabled", 0.0)) > 0:
+        return True
+    return any(
+        key.startswith("option_entry_gate_enabled_") and float(value) > 0
+        for key, value in params.items()
+    )
+
+
+def _option_entry_needs_timely_signals(params: dict[str, float]) -> bool:
+    keys = ["option_entry_max_bad_signals"]
+    keys.extend(k for k in params if k.startswith("option_entry_max_bad_signals_"))
+    return any(int(params.get(k, 999)) < 999 for k in keys)
+
+
 def _panic_option_bond_anchor_ok(row_by_ts: dict[str, Any], ts: str, params: dict[str, float]) -> bool:
     if float(params.get("panic_option_bond_anchor_enabled", 0.0)) <= 0:
         return True
@@ -808,7 +994,10 @@ def _run_value_gap_backtest(
     stop_gap_ratio_floor = float(params.get("stop_gap_ratio_floor", 0.0))
     stop_signal_threshold = int(params.get("stop_signal_threshold", 999))
     timely_signal_maps = (
-        _build_timely_signal_maps(start, end) if stop_signal_threshold < 999 else {}
+        _build_timely_signal_maps(start, end)
+        if stop_signal_threshold < 999
+        or (_has_option_entry_gate(params) and _option_entry_needs_timely_signals(params))
+        else {}
     )
     panic_delay_enabled = float(params.get("panic_option_delay_enabled", 0.0)) > 0
     panic_dates = (
@@ -886,6 +1075,8 @@ def _run_value_gap_backtest(
                 "exit_reason": reason,
                 "entry_gap_amount": round(pos.entry_gap_amount, 2),
                 "entry_gap_pct": round(pos.entry_gap_pct, 6),
+                "entry_gap_source": pos.entry_gap_source,
+                "entry_position_cash_scale": round(pos.entry_position_cash_scale, 6),
             }
         )
 
@@ -923,6 +1114,7 @@ def _run_value_gap_backtest(
             ranked_today = ranked_today.copy()
             if date in panic_dates and panic_option_weight_scope != "triggered_revalue":
                 ranked_today = _apply_panic_option_value_weight(ranked_today, params)
+            ranked_today = _apply_option_source_pnl_feedback(ranked_today, trades, date, params)
             ranked_today = ranked_today.sort_values("value_gap_amount", ascending=False)
             row_by_ts = {r.ts_code: r for r in ranked_today.itertuples(index=False)}
             if use_triggered_panic_weight:
@@ -940,6 +1132,7 @@ def _run_value_gap_backtest(
             stop_revalue_today = stop_revalue_today.copy()
             if date in panic_dates and panic_option_weight_scope != "triggered_revalue":
                 stop_revalue_today = _apply_panic_option_value_weight(stop_revalue_today, params)
+            stop_revalue_today = _apply_option_source_pnl_feedback(stop_revalue_today, trades, date, params)
             stop_row_by_ts = {r.ts_code: r for r in stop_revalue_today.itertuples(index=False)}
             if use_triggered_panic_weight:
                 panic_weight_stop_today = _apply_panic_option_value_weight(stop_revalue_today, params)
@@ -965,6 +1158,19 @@ def _run_value_gap_backtest(
                 r
                 for r in candidates
                 if _panic_option_bond_anchor_ok(row_by_ts, str(r.ts_code), params)
+            ]
+        option_entry_params = _option_entry_params_for_regime(params, str(regime))
+        if _has_option_entry_gate(option_entry_params):
+            candidates = [
+                r
+                for r in candidates
+                if _option_entry_gate_ok(
+                    row_by_ts,
+                    str(r.ts_code),
+                    date,
+                    option_entry_params,
+                    timely_signal_maps,
+                )
             ]
 
         opportunity_protect_enabled = float(params.get("panic_opportunity_protect_enabled", 0.0)) > 0
@@ -1304,7 +1510,14 @@ def _run_value_gap_backtest(
             if _is_force_redeemed_on_date(ts, date, call_index):
                 continue
             mkt = float(cand.close)
-            pos_cash = min(cash, cur_equity * float(cfg.max_position_pct))
+            position_scale = 1.0
+            if float(params.get("candidate_position_scale_enabled", 0.0)) > 0:
+                try:
+                    position_scale = float(getattr(cand, "position_cash_scale", 1.0) or 1.0)
+                except (TypeError, ValueError):
+                    position_scale = 1.0
+                position_scale = max(0.0, min(1.0, position_scale))
+            pos_cash = min(cash, cur_equity * float(cfg.max_position_pct) * position_scale)
             if pos_cash < mkt:
                 continue
             estimated_cost = apply_cost_model(
@@ -1351,6 +1564,8 @@ def _run_value_gap_backtest(
                 cost=cost,
                 entry_gap_amount=float(cand.value_gap_amount),
                 entry_gap_pct=float(cand.value_gap_pct_of_cash),
+                entry_gap_source=_gap_source(row_by_ts, ts, params),
+                entry_position_cash_scale=float(position_scale),
             )
             cur_equity = _equity(cash, holdings, close_map)
 

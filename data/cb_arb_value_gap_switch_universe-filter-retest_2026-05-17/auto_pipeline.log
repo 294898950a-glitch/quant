@@ -1,0 +1,21 @@
+$ .venv/bin/python scripts/evaluate_cb_arb_universe_filter.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20221231 --validate-start 20230101 --validate-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule score_4state --output-dir data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17 --base-ranks-path data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet --reuse-ranks --cost-model-enabled
+
+[universe_filter] baseline_full_universe train excess=0.205456 dd=-0.147988 excluded=0
+[universe_filter] baseline_full_universe validate excess=-0.029677 dd=-0.270153 excluded=0
+[universe_filter] baseline_full_universe test excess=0.37976 dd=-0.097762 excluded=0
+[universe_filter] exclude_far_above_bond_floor train excess=-0.300876 dd=-0.211239 excluded=355
+[universe_filter] exclude_far_above_bond_floor validate excess=0.068777 dd=-0.203762 excluded=355
+[universe_filter] exclude_far_above_bond_floor test excess=0.446959 dd=-0.15031 excluded=355
+[universe_filter] exclude_high_moneyness train excess=-0.049916 dd=-0.165248 excluded=175
+[universe_filter] exclude_high_moneyness validate excess=0.054437 dd=-0.23653 excluded=175
+[universe_filter] exclude_high_moneyness test excess=0.323258 dd=-0.147739 excluded=175
+[universe_filter] exclude_short_maturity train excess=-0.147086 dd=-0.149872 excluded=231
+[universe_filter] exclude_short_maturity validate excess=-0.029677 dd=-0.270153 excluded=231
+[universe_filter] exclude_short_maturity test excess=0.37976 dd=-0.097762 excluded=231
+[universe_filter] exclude_small_size train excess=-0.042857 dd=-0.195429 excluded=368
+[universe_filter] exclude_small_size validate excess=-0.014868 dd=-0.223597 excluded=368
+[universe_filter] exclude_small_size test excess=0.011632 dd=-0.127186 excluded=368
+[universe_filter] combined_lowrisk_universe train excess=-0.358389 dd=-0.155093 excluded=441
+[universe_filter] combined_lowrisk_universe validate excess=0.046862 dd=-0.219166 excluded=441
+[universe_filter] combined_lowrisk_universe test excess=0.452725 dd=-0.15031 excluded=441
+[universe_filter] wrote data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17

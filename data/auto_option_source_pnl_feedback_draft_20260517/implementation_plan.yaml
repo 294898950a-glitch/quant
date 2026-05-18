@@ -1,0 +1,5 @@
+proposal_id: auto_option_source_pnl_feedback_draft_20260517
+missing_executor: option_source_pnl_feedback_scaler
+mechanics:
+- rolling_pnl_feedback
+reason: no strict executor match

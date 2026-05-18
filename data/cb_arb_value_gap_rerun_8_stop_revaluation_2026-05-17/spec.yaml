@@ -1,0 +1,87 @@
+schema_version: 1
+run_id: cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user request: rerun idea 8 because previous results are not trusted'
+hypothesis: 止损触发时重新估值，只在剩余低估不足或新标的明显更好时卖出/换仓，可以减少恐慌中错卖。
+source_insight: 主策略已经改为绝对低估金额排序；本次只重跑止损复查估值，不推广结果。
+parameter_space:
+- name: stop_revaluation_variant
+  range:
+  - 0
+  - 6
+  type: int
+  description: 7 个固定复查方案，从原估值到波动/信用折价组合。
+new_data_sources:
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+- path: data/cb_warehouse/cb_daily.parquet
+grid:
+  dimensions:
+  - stop_revaluation_variant
+  candidates_count: 7
+hard_floors:
+  test_excess_return: 0.0
+  test_max_drawdown: -0.3
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-aware rerun floor
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+- total_trades
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 30
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_stop_revaluation.csv
+- 测试段最优配置 excess_return < 0 或 max_drawdown < -0.30
+artifacts_required:
+- summary_stop_revaluation.csv
+- yearly_stop_revaluation.csv
+- exit_2020_stop_revaluation.csv
+- summary.json
+status: COMPLETE
+automation:
+  output_dir: data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17
+  gatekeeper_after_run: false
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_stop_revaluation.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --cost-model-enabled
+  verdict:
+    table_path: summary_stop_revaluation.csv
+    filters:
+      period: test
+    rank_by: score
+    rank_desc: true
+    thresholds:
+      excess_return:
+        min: 0.0
+      max_drawdown:
+        min: -0.3
+notes: Framework rerun on VM. Uses historical cb_arb concurrent-supervised data root
+  and cost model.
+updated_at: '2026-05-16T23:20:00Z'

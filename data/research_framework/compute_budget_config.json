@@ -6,7 +6,8 @@
   "sig_yuan_per_hour": 0.0,
   "local_yuan_per_hour": 0.0,
   "spot_allowed_hosts": [
-    "VM-0-9-opencloudos"
+    "VM-0-9-opencloudos",
+    "VM-0-4-ubuntu"
   ],
   "safety_multiplier": 1.25,
   "notes": [

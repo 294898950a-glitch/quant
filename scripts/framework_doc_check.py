@@ -48,6 +48,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SCRIPTS = REPO_ROOT / "scripts"
+TRUTH_SYNC_PATHS = {
+    "data/research_framework/current.yaml",
+    "data/research_framework/baseline_registry.yaml",
+    "data/research_framework/strategies.yaml",
+}
 
 
 def is_markdown_artifact(path: Path) -> bool:
@@ -123,6 +128,25 @@ def dispatch(path: Path) -> tuple[str, list[str]]:
     return ("", [])
 
 
+def needs_truth_sync_check(path: Path) -> bool:
+    abs_path = path.resolve()
+    try:
+        rel = abs_path.relative_to(REPO_ROOT)
+    except ValueError:
+        return False
+    rel_str = str(rel)
+    return rel_str in TRUTH_SYNC_PATHS or (
+        rel_str.startswith("data/research_framework/run_manifests/")
+        and rel_str.endswith(".yaml")
+    )
+
+
+def run_validator(script: str, args: list[str]) -> int:
+    cmd = [sys.executable, str(SCRIPTS / script)] + args
+    result = subprocess.run(cmd, cwd=REPO_ROOT)
+    return result.returncode
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Post-write document check (real-time, AI 自救窗口)"
@@ -148,22 +172,32 @@ def main() -> int:
     if not args.quiet:
         print(f"framework_doc_check.py: 触发 {validator} on {args.path}")
 
-    cmd = [sys.executable, str(SCRIPTS / validator)] + validator_args
-    result = subprocess.run(cmd, cwd=REPO_ROOT)
+    return_code = run_validator(validator, validator_args)
 
-    if result.returncode == 0:
+    if return_code == 0:
         if not args.quiet:
             print(f"  ✓ {validator} OK")
-        return 0
-    elif result.returncode == 2 and validator == "validate_data_schema.py":
+    elif return_code == 2 and validator == "validate_data_schema.py":
         # warn-only, 不当 fatal
         if not args.quiet:
             print(f"  ⚠ {validator} 警告 (warn-only)")
-        return 0
     else:
-        print(f"  ✗ {validator} FATAL (exit {result.returncode})", file=sys.stderr)
+        print(f"  ✗ {validator} FATAL (exit {return_code})", file=sys.stderr)
         print(f"  AI: 立即修这个文件, 不要带着错继续往下做.", file=sys.stderr)
         return 1
+
+    if needs_truth_sync_check(args.path):
+        if not args.quiet:
+            print(f"framework_doc_check.py: 触发 validate_truth_sync.py on {args.path}")
+        truth_rc = run_validator("validate_truth_sync.py", [])
+        if truth_rc != 0:
+            print(f"  ✗ validate_truth_sync.py FATAL (exit {truth_rc})", file=sys.stderr)
+            print(f"  AI: 立即修这个文件, 不要带着错继续往下做.", file=sys.stderr)
+            return 1
+        if not args.quiet:
+            print("  ✓ validate_truth_sync.py OK")
+
+    return 0
 
 
 if __name__ == "__main__":

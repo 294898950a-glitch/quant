@@ -1,0 +1,107 @@
+schema_version: 1
+run_id: cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user request: rerun idea 9 because previous results are not trusted'
+hypothesis: 恐慌日只对期权价值做距离债底分层折价，并保留机会保护，可以避免把恐慌波动错误当成免费价值。
+source_insight: 恐慌时收益来源更偏债底，期权价值需要按债底距离折价，而不是全局打折。
+parameter_space:
+- name: panic_option_weight_variant
+  range:
+  - 0
+  - 4
+  type: int
+  description: 5 个固定期权折价方案。
+new_data_sources:
+- path: data/cb_arb_concurrent_supervised_20260511_094500/panic_detector_training/panic_detector_trained_daily.csv
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+- path: data/cb_warehouse/cb_daily.parquet
+grid:
+  dimensions:
+  - panic_option_weight_variant
+  candidates_count: 5
+hard_floors:
+  test_excess_return: 0.0
+  test_max_drawdown: -0.3
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-aware rerun floor
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+- total_trades
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 30
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_panic_option_weight.csv
+- 测试段最优配置 excess_return < 0 或 max_drawdown < -0.30
+artifacts_required:
+- summary_panic_option_weight.csv
+- yearly_panic_option_weight.csv
+- exit_2020_panic_option_weight.csv
+- summary.json
+status: COMPLETE
+automation:
+  output_dir: data/cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17
+  gatekeeper_after_run: false
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_panic_option_weight.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --panic-dates-file
+  - data/cb_arb_concurrent_supervised_20260511_094500/panic_detector_training/panic_detector_trained_daily.csv
+  - --panic-signal-column
+  - panic_day_trained
+  - --panic-effective-lag-days
+  - '1'
+  - --panic-option-value-weight-scope
+  - triggered_revalue
+  - --panic-opportunity-protect
+  - --panic-opportunity-protect-days
+  - '20'
+  - --panic-opportunity-bad-days
+  - '5'
+  - --panic-opportunity-switch-hurdle-pct
+  - '0.15'
+  - --panic-opportunity-exit-on-recovery
+  - --panic-opportunity-recovery-days
+  - '4'
+  - --panic-opportunity-trigger-mode
+  - medium
+  - --cost-model-enabled
+  verdict:
+    table_path: summary_panic_option_weight.csv
+    filters:
+      period: test
+    rank_by: score
+    rank_desc: true
+    thresholds:
+      excess_return:
+        min: 0.0
+      max_drawdown:
+        min: -0.3
+notes: Framework rerun on VM. Uses trained panic signal and cost model.
+updated_at: '2026-05-16T23:29:07Z'

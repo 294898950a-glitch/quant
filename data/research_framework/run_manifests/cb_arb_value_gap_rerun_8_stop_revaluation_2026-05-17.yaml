@@ -1,0 +1,150 @@
+schema_version: 1
+batch_id: cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17
+strategy_id: cb_arb_value_gap_switch
+hypothesis_id: cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17
+data_window:
+  start: unknown
+  end: unknown
+config_path: data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17/spec.yaml
+config_hash: 621498f0530c2dbff225b4b98de1b9f3
+entrypoint:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_stop_revaluation.py
+- --data-root
+- data/cb_arb_concurrent_supervised_20260511_094500
+- --train-start
+- '20190101'
+- --train-end
+- '20241231'
+- --test-start
+- '20250101'
+- --test-end
+- '20260508'
+- --fixed-source
+- '2'
+- --rule
+- score_4state
+- --output-dir
+- data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17
+- --cost-model-enabled
+git_commit: 8bb2f53
+git_dirty:
+- ' D data/cb_pead/raw/cb_down_events_full.csv'
+- ' D data/cb_redemption/heartbeat'
+- ' D data/cb_redemption/optimizer_baseline.json'
+- ' D data/cb_redemption/outbox.jsonl'
+- ' D data/cb_redemption/runs.jsonl'
+- ' D data/cb_redemption/sealed_pools.json'
+- ' D data/cb_redemption/state.json'
+- ' D data/cb_redemption/tried_directions.jsonl'
+- ' M data/cb_warehouse/cb_basic.parquet'
+- ' M data/cb_warehouse/cb_daily.parquet'
+- ' D data/cb_warehouse/strong_timeline_snapshots.parquet'
+- ' D strategies/cb_redemption/CLAUDE.md'
+- ' D strategies/cb_redemption/PLAN.md'
+- ' M strategies/cb_redemption/auditor.py'
+- ' D strategies/cb_redemption/backtest.py'
+- ' D strategies/cb_redemption/config.py'
+- ' D strategies/cb_redemption/data.py'
+- ' M strategies/cb_redemption/editor.py'
+- ' M strategies/cb_redemption/hypothesizer.py'
+- ' M strategies/cb_redemption/judge.py'
+- ' D strategies/cb_redemption/main.py'
+- ' M strategies/cb_redemption/memory.py'
+- ' D strategies/cb_redemption/monitor.py'
+- ' D strategies/cb_redemption/notion_logger.py'
+- ' D strategies/cb_redemption/optimizer.py'
+- ' M strategies/cb_redemption/orchestrator.py'
+- ' D strategies/cb_redemption/predict.py'
+- ' D strategies/cb_redemption/push.py'
+- ' D strategies/cb_redemption/signals.py'
+- ' M strategies/cb_redemption/tests/test_auditor.py'
+- ' M strategies/cb_redemption/tests/test_editor.py'
+- ' M strategies/cb_redemption/tests/test_hypothesizer.py'
+- ' M strategies/cb_redemption/tests/test_judge.py'
+- ' M strategies/cb_redemption/tests/test_memory.py'
+- ' M strategies/cb_redemption/tests/test_orchestrator.py'
+- ' D strategies/cb_redemption/train_model.py'
+- ' M strategies/cb_redemption/tunable_space.yaml'
+- ?? .codex_backups/
+- ?? data/cb_arb/
+- ?? data/cb_arb_breadth_confirm_ensemble_2026-05-15/
+- ?? data/cb_arb_concurrent_supervised_20260511_094500/
+- ?? data/cb_arb_cost_realism_test_2026-05-16/
+- ?? data/cb_arb_main_strategy_baseline_2026-05-15/
+- ?? data/cb_arb_market_breadth_panic_2026-05-15/
+- ?? data/cb_arb_regime_switch_2026-05-15/
+- ?? data/cb_arb_rerun_fixed_20260510_124155/
+- ?? data/cb_arb_rerun_holdout_20260510_143000/
+- ?? data/cb_arb_rerun_holdout_fixed_20260510_144000/
+- ?? data/cb_arb_rerun_isolated_llm_fixed_20260511_075300/
+- ?? data/cb_arb_two_line_cross_validation_2026-05-15/
+- ?? data/cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17/
+- ?? data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17/
+- ?? data/cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17/
+- ?? data/cb_arb_value_gap_rerun_batch_2026-05-17/
+- ?? data/cb_warehouse/cb_call.parquet
+- ?? data/cb_warehouse/stk_daily.parquet
+- ?? data/cb_warehouse/stk_daily_qfq.parquet
+- ?? data/csi500_grid/
+- ?? data/icbc_grid/
+- ?? data/research_framework/
+- ?? data/shenhua_grid/
+- ?? data/sp500_grid/
+- ?? data/yangtze_grid/
+- ?? data/yzm_grid/
+- ?? logs/
+- ?? reports/
+- ?? scripts/
+- ?? strategies/__init__.py
+- ?? strategies/cb_arb/
+- ?? strategies/cb_redemption/benchmarks.py
+- ?? strategies/cb_redemption/evaluator.py
+- ?? strategies/cb_redemption/holdout_splitter.py
+- ?? strategies/cb_redemption/llm_queue.py
+- ?? strategies/cb_redemption/pool_stats.py
+- ?? strategies/cb_redemption/result_types.py
+- ?? strategies/cb_redemption/sanity_checker.py
+- ?? strategies/cb_redemption/tests/test_benchmarks.py
+- ?? strategies/cb_redemption/tests/test_evaluator.py
+- ?? strategies/cb_redemption/tests/test_evaluator_integration.py
+- ?? strategies/cb_redemption/tests/test_holdout_splitter.py
+- ?? strategies/cb_redemption/tests/test_outbox_to_telegram.py
+- ?? strategies/cb_redemption/tests/test_pool_stats.py
+- ?? strategies/cb_redemption/tests/test_sanity_checker.py
+- ?? strategies/csi500_grid/
+- ?? strategies/icbc_grid/
+- ?? strategies/shenhua_grid/
+- ?? strategies/sp500_grid/
+- ?? strategies/yangtze_grid/
+- ?? strategies/yzm_grid/
+dirty_policy: allowed_with_list
+data_snapshot: {}
+compute_host: VM-0-9-opencloudos
+compute_cost_yuan: 6.25
+start_at: '2026-05-16T22:53:21Z'
+end_at: '2026-05-16T23:19:59Z'
+exit_code: 0
+result_artifact: data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17
+artifact_hash: 78182e6b7909acf6028cc343217ef1d7
+artifact_hash_manifest: null
+result_summary: passed_mechanical_thresholds_not_promoted
+promotion_status: experiment
+reviewer: auto
+verdict_at: '2026-05-16T23:19:59Z'
+automation:
+  budget:
+    estimated_budget_yuan: 6.25
+    auto_limit_yuan: 30.0
+    decision: auto-approve
+    inputs:
+      sig_minutes: 0.0
+      spot_minutes: 60.0
+      local_minutes: 0.0
+      fixed_yuan: 0.0
+      safety_multiplier: 1.25
+  verdict:
+    decision: passed_mechanical_thresholds_not_promoted
+    pass_field: adoption_pass
+    pass_value: true
+    summary_path: data/cb_arb_value_gap_rerun_8_stop_revaluation_2026-05-17/summary_stop_revaluation.csv

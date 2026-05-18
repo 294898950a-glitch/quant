@@ -1,0 +1,37 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_universe-filter-retest_2026-05-17
+date: '2026-05-17'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  exit_1_mechanical: "6 universe-filter variants tested. No variant satisfies the pre-registered train+validate+2020 floors. Baseline remains selected; adoption_pass=false."
+  exit_2_falsifier: "All non-baseline filters regress train_excess materially versus baseline: far_above -0.506332, high_moneyness -0.255372, short_maturity -0.352542, small_size -0.248313, combined -0.563845."
+  exit_3_pattern_match: "Universe exclusion can improve 2020 drawdown and sometimes validate/test, but it removes too much 2019-2022 train edge. This extends the same option-source tradeoff rather than producing a deployable repair."
+compute_cost_yuan: 18.75
+confirmed_invalid_directions:
+  - "Exclude CBs whose train-window close/bond_floor ever exceeds 1.5."
+  - "Exclude CBs whose train-window stock/conversion moneyness ever exceeds 1.6."
+  - "Exclude CBs whose train-window remaining maturity ever falls below 1 year."
+  - "Exclude CBs with issue_size below 10 yi."
+  - "Combined low-risk universe filter using far-above-bond-floor, high-moneyness, or short-maturity exclusion."
+learnings:
+  - "Universe filters can improve 2020 max drawdown: combined_lowrisk_universe improves 2020 max_drawdown from -0.179066 to -0.097157."
+  - "The improvement is not free: combined_lowrisk_universe train_excess falls from baseline +0.205456 to -0.358389."
+  - "far_above_bond_floor and combined_lowrisk_universe improve test_excess versus baseline, but both breach train robustness and have 2025 max_drawdown around -0.150310."
+  - "The current universe is not repaired by simple permanent exclusions; the train edge depends on the same sub-populations that create part of the risk."
+follow_up_actions:
+  - "Do not promote any universe-filter variant."
+  - "Do not update current.yaml or baseline_registry.yaml from this run."
+  - "Escalate to user for commit/split decision and strategic direction before another same-family batch."
+status: COMPLETE
+notes: "VM run completed all 6 variants. The local monitor exited before polling, so Codex synced artifacts manually from root@100.91.245.108 and filled review artifacts without rerunning the backtest."
+references:
+  - data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17/summary_universe_filter.csv
+  - data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17/yearly_universe_filter.csv
+  - data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17/adoption_universe_filter.csv
+  - data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17/entry_source_universe_filter.csv
+  - data/cb_arb_value_gap_switch_universe-filter-retest_2026-05-17/universe_filter_membership.csv
+related_reports:
+  - data/cb_arb_value_gap_switch_option-entry-gate_2026-05-17/report.yaml
+  - data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17/report.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/report.yaml

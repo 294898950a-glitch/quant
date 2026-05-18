@@ -1,0 +1,6 @@
+proposal_id: cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517
+missing_executor: evaluate_cb_arb_value_gap_switch
+mechanics:
+- global_entry_filter
+- regime_conditioning
+reason: no strict executor match

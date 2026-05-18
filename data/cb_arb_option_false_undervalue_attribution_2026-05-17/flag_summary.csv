@@ -1,0 +1,8 @@
+flag,selected_trades,selected_loss_trades,selected_profit_trades,selected_loss_amount_abs,selected_profit_amount,loss_capture_rate,profit_capture_rate,avg_pnl_selected,avg_pnl_not_selected
+flag_strong_stock_ret20,355,241,114,509172.9,479693.68,0.494925,0.434644,-83.04,184.34
+flag_far_from_bond_floor,116,81,35,322889.8,145191.96,0.313854,0.131557,-1531.88,313.73
+flag_high_vol60,837,479,358,934587.17,1053410.22,0.908435,0.954482,141.96,-523.4
+flag_short_vol_below_long,236,134,102,231197.59,189941.54,0.224728,0.172104,-174.81,169.51
+flag_long_maturity,854,486,368,976874.34,1049581.7,0.949538,0.951013,85.14,32.09
+flag_hot_option_setup,64,47,17,172629.87,116262.08,0.167799,0.105344,-880.75,153.12
+flag_hot_trend_sigma_setup,3,2,1,1483.18,72.69,0.001442,6.6e-05,-470.16,83.08

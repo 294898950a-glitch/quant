@@ -1,0 +1,41 @@
+schema_version: 1
+run_id: cb_arb_option_false_undervalue_attribution_2026-05-17
+status: COMPLETE
+scope: local attribution only; no VM/spot; no strategy change
+inputs:
+  data_root: data/cb_arb_concurrent_supervised_20260511_094500
+  ranks_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  years:
+  - 2019
+  - 2024
+hypothesis: False option-sourced undervaluation concentrates where CB price is far
+  above bond floor, stock has recently trended up, and historical volatility is high.
+key_metrics:
+  option_trade_count: 921
+  hot_option_setup:
+    flag: flag_hot_option_setup
+    selected_trades: 64
+    selected_loss_trades: 47
+    selected_profit_trades: 17
+    selected_loss_amount_abs: 172629.87
+    selected_profit_amount: 116262.08
+    loss_capture_rate: 0.167799
+    profit_capture_rate: 0.105344
+    avg_pnl_selected: -880.75
+    avg_pnl_not_selected: 153.12
+  hot_trend_sigma_setup:
+    flag: flag_hot_trend_sigma_setup
+    selected_trades: 3
+    selected_loss_trades: 2
+    selected_profit_trades: 1
+    selected_loss_amount_abs: 1483.18
+    selected_profit_amount: 72.69
+    loss_capture_rate: 0.001442
+    profit_capture_rate: 6.6e-05
+    avg_pnl_selected: -470.16
+    avg_pnl_not_selected: 83.08
+artifacts:
+- option_trade_features.csv
+- flag_summary.csv
+- bin_summary.csv
+- year_summary.csv
