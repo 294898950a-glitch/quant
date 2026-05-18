@@ -37,3 +37,23 @@
 {"action": "paused", "payload": {"pause_flag": "data/research_framework/orchestrator_paused.flag"}, "ts": "2026-05-18T08:08:18"}
 {"action": "paused", "payload": {"pause_flag": "data/research_framework/orchestrator_paused.flag"}, "ts": "2026-05-18T08:18:18"}
 {"action": "paused", "payload": {"pause_flag": "data/research_framework/orchestrator_paused.flag"}, "ts": "2026-05-18T08:28:18"}
+{"action": "ideate", "payload": {"provider": "claude"}, "ts": "2026-05-18T08:38:19"}
+{"action": "compile", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139", "spec_path": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139/spec.yaml"}, "ts": "2026-05-18T08:41:54"}
+{"action": "run", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139", "remote_pid": "86488", "spec_path": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139/spec.yaml", "vm_id": "guangzhou_spot"}, "ts": "2026-05-18T08:47:21"}
+{"action": "ideate", "payload": {"provider": "claude"}, "ts": "2026-05-18T08:57:25"}
+{"action": "compile", "payload": {"item_id": "cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016", "spec_path": "data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016/spec.yaml"}, "ts": "2026-05-18T09:00:34"}
+{"action": "run", "payload": {"item_id": "cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016", "remote_pid": "2976827", "spec_path": "data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016/spec.yaml", "vm_id": "singapore_sig"}, "ts": "2026-05-18T09:03:19"}
+{"action": "review", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139", "run_dir": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139"}, "ts": "2026-05-18T09:13:50"}
+{"action": "digest", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139", "result": "complete", "run_dir": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_084139"}, "ts": "2026-05-18T09:13:50"}
+{"action": "ideate", "payload": {"provider": "claude"}, "ts": "2026-05-18T09:13:54"}
+{"action": "compile", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627", "spec_path": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627/spec.yaml"}, "ts": "2026-05-18T09:16:42"}
+{"action": "run", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627", "remote_pid": "93438", "spec_path": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627/spec.yaml", "vm_id": "guangzhou_spot"}, "ts": "2026-05-18T09:23:17"}
+{"action": "review", "payload": {"item_id": "cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016", "run_dir": "data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016"}, "ts": "2026-05-18T09:44:01"}
+{"action": "digest", "payload": {"item_id": "cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016", "result": "complete", "run_dir": "data/cb_arb_value_gap_switch_option-position-sizing_2026-05-18_090016"}, "ts": "2026-05-18T09:44:01"}
+{"action": "review", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627", "run_dir": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627"}, "ts": "2026-05-18T09:44:32"}
+{"action": "digest", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627", "result": "complete", "run_dir": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_091627"}, "ts": "2026-05-18T09:44:32"}
+{"action": "ideate", "payload": {"provider": "claude"}, "ts": "2026-05-18T09:44:32"}
+{"action": "compile", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_094700", "spec_path": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_094700/spec.yaml"}, "ts": "2026-05-18T09:47:16"}
+{"action": "run", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_094700", "remote_pid": "101249", "spec_path": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_094700/spec.yaml", "vm_id": "guangzhou_spot"}, "ts": "2026-05-18T09:54:28"}
+{"action": "ideate", "payload": {"provider": "claude"}, "ts": "2026-05-18T10:04:32"}
+{"action": "compile", "payload": {"item_id": "cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_100838", "spec_path": "data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_100838/spec.yaml"}, "ts": "2026-05-18T10:08:52"}

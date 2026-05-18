@@ -1,0 +1,148 @@
+proposal_id: mild_scale_option_pnl_feedback
+executor: option_source_pnl_feedback_scaler
+family: option_source_pnl_feedback
+script: scripts/evaluate_cb_arb_option_pnl_feedback.py
+strategy_id: cb_arb_value_gap_switch
+hypothesis: 所有 pnl_feedback 轮次使用 scale=0.5，对训练期期权来源正收益段误伤过重导致训练分持续低于 baseline； 将 scale
+  提升至 0.70–0.90（极温和缩减），在信号触发时对训练期收益的拖累可忽略不计， 同时保留 60d/min2 这一在测试期持续领先的参数组合的方向性保护效果，
+  有望在不改变训练期选胜结果的前提下验证"信号有效但力度过大"假说。
+source_insight: 8 轮 option_source_pnl_feedback 实验（022212/023149/033712/035352/041315/070407
+  等） 中训练期最优者始终为 baseline_no_feedback（score=0.050351）， 测试期最优者始终为 feedback_60d_min2_scale_0p5（score=0.433669）——方向稳定，
+  但 scale=0.5 在训练期造成系统性误触；所有轮次均未测试 scale 区间 0.70–0.90， 这是唯一尚未被参数网格覆盖的空白区域。
+why_not_rejected_repeat: 不是全局期权买入封锁（global_option_entry_gate），不是整体期权估值打折（global_option_value_haircut），
+  不是状态条件过滤（regime_conditioned_option_entry_gate），也不是重新运行 panic 系列； 属于 option_source_pnl_feedback
+  family 内部 scale 参数精细化扫描， 覆盖之前所有轮次从未测试过的极温和缩减区间（0.70–0.90）。
+risk: 训练期期权来源整体净正收益（+75K，2019-2024），即使 scale=0.90 也会在信号触发时轻微降低训练分， 若训练期 baseline 优势（score=0.050）足以压制所有温和变体，
+  则此方向将第 9 次确认 option_source_pnl_feedback family 结构性失败， 届时需停止该 family 并上报用户做策略层决策。
+periods:
+  train:
+    start: '20190101'
+    end: '20241231'
+  test:
+    start: '20250101'
+    end: '20260508'
+  stress:
+    start: '20200101'
+    end: '20201231'
+adoption_gate:
+  require_train_beats_baseline: true
+  require_test_beats_baseline: true
+  require_stress_not_worse_than_baseline: true
+  baseline_name: baseline_no_feedback
+candidates:
+- name: baseline_no_feedback
+  description: 当前主策略，不使用已平仓期权来源盈亏反馈（anchor）
+  option_source_pnl_feedback_enabled: 0.0
+- name: feedback_60d_min2_scale_0p70
+  description: 60 天回看、≥2 笔亏损触发、买入金额乘以 0.70
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 60
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.7
+- name: feedback_60d_min2_scale_0p75
+  description: 60 天回看、≥2 笔亏损触发、买入金额乘以 0.75
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 60
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.75
+- name: feedback_60d_min2_scale_0p80
+  description: 60 天回看、≥2 笔亏损触发、买入金额乘以 0.80
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 60
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.8
+- name: feedback_60d_min2_scale_0p85
+  description: 60 天回看、≥2 笔亏损触发、买入金额乘以 0.85
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 60
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.85
+- name: feedback_60d_min2_scale_0p90
+  description: 60 天回看、≥2 笔亏损触发、买入金额乘以 0.90（近无害缩减）
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 60
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.9
+- name: feedback_90d_min2_scale_0p70
+  description: 90 天回看（未测试中间值）、≥2 笔、scale=0.70
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 90
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.7
+- name: feedback_90d_min2_scale_0p80
+  description: 90 天回看、≥2 笔、scale=0.80
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 90
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.8
+- name: feedback_90d_min2_scale_0p85
+  description: 90 天回看、≥2 笔、scale=0.85
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 90
+  option_source_pnl_feedback_min_trades: 2
+  option_source_pnl_feedback_scale: 0.85
+- name: feedback_90d_min3_scale_0p70
+  description: 90 天回看、≥3 笔（中等门槛）、scale=0.70
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 90
+  option_source_pnl_feedback_min_trades: 3
+  option_source_pnl_feedback_scale: 0.7
+- name: feedback_90d_min3_scale_0p80
+  description: 90 天回看、≥3 笔、scale=0.80
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 90
+  option_source_pnl_feedback_min_trades: 3
+  option_source_pnl_feedback_scale: 0.8
+- name: feedback_90d_min3_scale_0p85
+  description: 90 天回看、≥3 笔、scale=0.85
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 90
+  option_source_pnl_feedback_min_trades: 3
+  option_source_pnl_feedback_scale: 0.85
+- name: feedback_120d_min3_scale_0p75
+  description: 120 天回看（已测长窗口）、≥3 笔、scale=0.75（温和，区别于此前 0.5）
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 120
+  option_source_pnl_feedback_min_trades: 3
+  option_source_pnl_feedback_scale: 0.75
+- name: feedback_120d_min3_scale_0p85
+  description: 120 天回看、≥3 笔、scale=0.85
+  option_source_pnl_feedback_enabled: 1.0
+  option_source_pnl_feedback_lookback_days: 120
+  option_source_pnl_feedback_min_trades: 3
+  option_source_pnl_feedback_scale: 0.85
+candidate_count: 14
+execution:
+  backtest_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  max_auto_budget_yuan: 100
+  local_role: spec_generation_and_monitoring_only
+  poll_seconds: 600
+differentiation_from_prior_runs:
+  scale_range_previously_tested:
+  - 0.5
+  scale_range_this_run:
+  - 0.7
+  - 0.75
+  - 0.8
+  - 0.85
+  - 0.9
+  lookback_days_previously_tested:
+  - 60
+  - 120
+  - 180
+  lookback_days_new_this_run:
+  - 90
+  min_trades_previously_tested:
+  - 2
+  - 4
+  - 6
+  min_trades_new_this_run:
+  - 3
+  key_gap_filled: 所有前 8 轮均未测试 scale > 0.5 区间；本轮为该方向的最终参数空白覆盖
+falsifier_stop_condition:
+  description: 若本轮所有 14 个反馈变体训练分仍低于 baseline_no_feedback（0.050351）， 则判定 option_source_pnl_feedback
+    family 存在结构性失败， 不再继续该方向，必须停止并上报用户选择新研究方向。
+  action_on_trigger: escalate_to_user_stop_family
+_ideation_source: claude
+_contract_attempt: 1

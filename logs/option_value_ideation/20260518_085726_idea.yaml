@@ -1,0 +1,23 @@
+proposal_id: position_sizing_extreme_tail_ratio_1p8
+executor: option_position_sizing
+family: option_position_sizing
+hypothesis: 仅对债底比率极端偏离（bond_floor_ratio > 1.8）的期权来源候选施加中度折扣（scale 0.3~0.5），该阈值远高于已失败的
+  1.4/1.5 门槛；训练期触发频次极低可保留训练分，同时精准压缩历史归因净亏最集中的极端子集。
+source_insight: '前两轮 option_position_sizing（060047、060933）均因门槛过宽（ratio≤1.5 或 progressive
+  全量模式）覆盖 226-272 笔交易、同时压缩了训练期正常期权来源收益而失败； research_insights 中 option_false_undervalue_attribution
+  显示 ratio>1.5 仅 116 笔净亏 -177K、ratio>1.4 为 226 笔净亏 -255K，更极端阈值（>1.8）预计覆盖更少笔数且亏损集中度更高；
+  当前 READY 轮次 084139 已覆盖 pnl_feedback 温和 scale 方向（60d/min2 scale 0.70-0.90）， position_sizing
+  极端阈值方向尚属空白。
+
+  '
+why_not_rejected_repeat: '已禁家族 global_option_value_haircut / global_option_entry_gate
+  均修改理论价格或硬性禁买； option_position_sizing 既不改价格也不禁买； 已失败的 position_sizing 轮次均使用 ratio≤1.5（宽覆盖）或
+  progressive 全量模式， ratio>1.8 的极端阈值从未出现于任何候选网格，属于未覆盖参数区间，不属于重复方向； executor script（scripts/evaluate_cb_arb_option_position_sizing.py）已支持阈值参数，
+  仅需扩展 ratio 上限。
+
+  '
+risk: ratio>1.8 在 2019-2024 训练期触发次数可能极少（估计 <30 笔）， scale 效果在统计上不显著，训练分仍与 baseline
+  持平或略低， 三段联合检验（train/2020/test）中无法拉开差距； 测试期 2025-2026 若同样触发极少则保护作用也不明显； 若 executor
+  当前仅枚举预设候选而不支持任意 ratio 浮点阈值， 则 Codex 需先确认参数空间可扩展后再执行，否则本 spec 无法直接运行。
+_ideation_source: claude
+_contract_attempt: 1
