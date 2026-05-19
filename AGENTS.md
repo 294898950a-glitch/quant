@@ -15,6 +15,13 @@ Supporting registries such as `strategies.yaml`, `baseline_registry.yaml`,
 `ai_providers.yaml`, and `framework_stability_todos.yaml` are not default AI
 context. The specific component that needs them must load them directly.
 
+Global architecture rule:
+
+The autonomous research framework has only five active nodes:
+state_and_rules, ideation, proposal_gate, runner, and review_memory. Older
+Python files may remain as compatibility implementation files, but they are not
+separate architecture nodes.
+
 Operational rule:
 
 Load `runtime_entrypoints.yaml` first. It names the files that must be injected

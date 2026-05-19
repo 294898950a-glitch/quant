@@ -77,6 +77,7 @@ def main() -> int:
     exits.append(run_validator("validate_truth_sync.py"))
     exits.append(run_validator("validate_no_background_llm.py"))
     exits.append(run_validator("validate_module_decoupling.py"))
+    exits.append(run_validator("validate_architecture_pruned.py"))
     exits.append(run_validator("validate_data_schema.py"))
     exits.append(run_validator("validate_spec.py"))
     exits.append(run_validator("validate_report.py"))

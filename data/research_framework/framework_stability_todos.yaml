@@ -68,6 +68,15 @@ items:
   - strategies.yaml、baseline_registry.yaml 改为支持性登记簿，不再默认注入。
   - ai_providers.yaml 改为代码拥有的登记簿，不再默认注入给研究员。
   - framework_stability_todos.yaml 改为维护待办，不再默认注入给研究员。
+- id: framework_stability_12_global_architecture_pruning
+  status: in_progress
+  priority: critical
+  title: 全局架构砍成 5 个节点
+  requirement: 从第一性原理出发，整个 quant 自动研究框架只保留状态、出题、审题、执行、复盘 5 个主动节点；旧 10 组件只能作为实现文件或兼容层存在。
+  implementation:
+  - autonomous_research_acceptance_criteria.yaml 从旧 10 组件表改为 5 个 active_components。
+  - 旧组件映射到新节点，不再作为独立架构节点。
+  - 新增 validate_architecture_pruned.py，强制 active_components 不能超过 5 个。
 - id: framework_stability_10_stop_on_system_error
   status: todo
   priority: critical

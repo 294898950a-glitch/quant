@@ -1,7 +1,8 @@
-"""Autonomous research framework components.
+"""Autonomous research framework compatibility modules.
 
-This namespace contains the guarded meta-framework only. Strategy logic,
-baseline promotion, and current-strategy truth remain outside these modules.
+The active architecture has 5 nodes: state_and_rules, ideation, proposal_gate,
+runner, and review_memory. The modules exported here are implementation files
+inside those nodes, not separate architecture nodes.
 """
 
 __all__ = [
