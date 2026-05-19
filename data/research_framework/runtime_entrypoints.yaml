@@ -6,15 +6,11 @@ runtime_context:
   prompt_contract:
     load_order:
       - current_state
-      - strategy_registry
-      - baseline_registry
       - experiment_registry
       - research_insights
-      - ai_provider_registry
       - strategy_ideator_config
-      - framework_stability_todos
       - protocol_rules
-    instruction: "Load these files directly into the AI context before research or architecture work. Do not use docs/INDEX.md as an entrypoint."
+    instruction: "Load only these core runtime files directly into the AI context before research or architecture work. Supporting registries are code-owned and must be read by the specific component that needs them, not injected into every AI turn."
 
   files:
     current_state:
@@ -26,12 +22,14 @@ runtime_context:
       path: data/research_framework/strategies.yaml
       format: yaml
       role: strategy_id and hypothesis_id registry
-      required: true
+      required: false
+      load_scope: supporting_registry
     baseline_registry:
       path: data/research_framework/baseline_registry.yaml
       format: yaml
       role: machine-readable official baseline records
-      required: true
+      required: false
+      load_scope: supporting_registry
     experiment_registry:
       path: data/research_framework/experiments.yaml
       format: yaml
@@ -46,7 +44,8 @@ runtime_context:
       path: data/research_framework/ai_providers.yaml
       format: yaml
       role: registered AI providers; strategy ideation can use only providers declared here
-      required: true
+      required: false
+      load_scope: code_owned_registry
     strategy_ideator_config:
       path: data/research_framework/strategy_ideator.yaml
       format: yaml
@@ -56,7 +55,8 @@ runtime_context:
       path: data/research_framework/framework_stability_todos.yaml
       format: yaml
       role: machine-readable framework stability backlog and acceptance checks
-      required: true
+      required: false
+      load_scope: maintenance_backlog
     protocol_rules:
       path: data/research_framework/protocol_rules.yaml
       format: yaml

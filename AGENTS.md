@@ -6,10 +6,14 @@ Machine-owned runtime files:
 
 - `data/research_framework/runtime_entrypoints.yaml`
 - `data/research_framework/current.yaml`
-- `data/research_framework/strategies.yaml`
-- `data/research_framework/baseline_registry.yaml`
 - `data/research_framework/experiments.yaml`
+- `data/research_framework/research_insights.yaml`
+- `data/research_framework/strategy_ideator.yaml`
 - `data/research_framework/protocol_rules.yaml`
+
+Supporting registries such as `strategies.yaml`, `baseline_registry.yaml`,
+`ai_providers.yaml`, and `framework_stability_todos.yaml` are not default AI
+context. The specific component that needs them must load them directly.
 
 Operational rule:
 

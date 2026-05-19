@@ -58,6 +58,16 @@ items:
   - Hermes 入口不再自行判断是否需要新方向，只唤醒推进器并展示推进器返回的状态。
   - 新增共享状态判断模块，推进器统一决定当前只能监控、启动已排队任务，还是请求新方向。
   - 新增模块解耦检查，防止 Hermes、推进器、研究入口互相越界调用。
+- id: framework_stability_11_runtime_node_pruning
+  status: in_progress
+  priority: high
+  title: 砍掉默认运行上下文节点
+  requirement: 从第一性原理出发，AI 每轮只读取当前决策必需文件；支持性登记簿由具体组件按需读取，不能全部塞进提示。
+  implementation:
+  - 默认 AI 注入从 9 个节点降到 5 个节点。
+  - strategies.yaml、baseline_registry.yaml 改为支持性登记簿，不再默认注入。
+  - ai_providers.yaml 改为代码拥有的登记簿，不再默认注入给研究员。
+  - framework_stability_todos.yaml 改为维护待办，不再默认注入给研究员。
 - id: framework_stability_10_stop_on_system_error
   status: todo
   priority: critical

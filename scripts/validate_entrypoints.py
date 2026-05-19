@@ -58,13 +58,28 @@ def main() -> int:
         return 1
 
     files = runtime.get("runtime_context", {}).get("files")
+    prompt_contract = runtime.get("runtime_context", {}).get("prompt_contract")
+    load_order = []
+    if isinstance(prompt_contract, dict):
+        raw_load_order = prompt_contract.get("load_order")
+        if isinstance(raw_load_order, list):
+            load_order = [str(item) for item in raw_load_order]
+    if not load_order:
+        issues.append("runtime_entrypoints.yaml missing prompt_contract.load_order")
+    elif len(load_order) > 5:
+        issues.append("runtime prompt load_order must stay at 5 or fewer core nodes")
     if not isinstance(files, dict) or not files:
         issues.append("runtime_entrypoints.yaml missing runtime_context.files")
     else:
+        unknown_load_keys = [key for key in load_order if key not in files]
+        for key in unknown_load_keys:
+            issues.append(f"runtime load_order references unknown file key: {key}")
         for key, spec in files.items():
             if not isinstance(spec, dict):
                 issues.append(f"runtime_context.files.{key} must be mapping")
                 continue
+            if spec.get("required") is True and key not in load_order:
+                issues.append(f"required runtime file {key} must appear in prompt load_order")
             rel = spec.get("path")
             if not isinstance(rel, str) or not rel:
                 issues.append(f"runtime_context.files.{key}.path missing")

@@ -1,27 +1,25 @@
-"""Generate the next option false-undervaluation research spec from injected context.
-
-This is the ideation entrypoint for option_value_loop. It injects the current
-machine-readable research state into a Claude prompt, asks for one
-implementable next test, records the prompt/response, then compiles that idea
-into a READY spec.yaml.
-"""
+"""Compile a Hermes-provided option false-undervaluation idea into a spec."""
 
 from __future__ import annotations
 
 import argparse
-import sys
 import csv
-import subprocess
+import sys
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
 
+REPO_ROOT = Path(__file__).resolve().parent.parent
+SCRIPT_DIR = REPO_ROOT / "scripts"
+for path in (REPO_ROOT, SCRIPT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
+
 from hermes_access_guard import require_ticket
 
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
 STATE_PATH = REPO_ROOT / "data" / "research_framework" / "option_value_loop.yaml"
 CURRENT_PATH = REPO_ROOT / "data" / "research_framework" / "current.yaml"
 INSIGHTS_PATH = REPO_ROOT / "data" / "research_framework" / "research_insights.yaml"
@@ -63,9 +61,15 @@ def _truncate(text: str, max_chars: int) -> str:
 
 def _runtime_context(max_file_chars: int = 12000) -> dict[str, Any]:
     entry = _load_yaml(RUNTIME_ENTRYPOINTS_PATH, {})
-    files = ((entry.get("runtime_context") or {}).get("files") or {}) if isinstance(entry, dict) else {}
+    runtime = (entry.get("runtime_context") or {}) if isinstance(entry, dict) else {}
+    files = (runtime.get("files") or {}) if isinstance(runtime, dict) else {}
+    contract = (runtime.get("prompt_contract") or {}) if isinstance(runtime, dict) else {}
+    load_order = contract.get("load_order") or []
+    if not isinstance(load_order, list) or not load_order:
+        load_order = list(files)
     loaded: dict[str, Any] = {}
-    for name, meta in files.items():
+    for name in load_order:
+        meta = files.get(str(name)) if isinstance(files, dict) else None
         if not isinstance(meta, dict):
             continue
         rel_path = meta.get("path")
