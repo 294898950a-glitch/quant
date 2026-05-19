@@ -13,6 +13,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from framework.autonomous.ideation_cycle import IdeationCycle  # noqa: E402
 from framework.autonomous.paths import ResearchPaths  # noqa: E402
+from scripts.hermes_access_guard import require_ticket  # noqa: E402
 
 
 DEFAULT_PATHS = ResearchPaths.from_repo_root(REPO_ROOT)
@@ -33,6 +34,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> int:
     args = parse_args()
+    require_ticket("strategy_ideation_once")
     payload = IdeationCycle(paths=DEFAULT_PATHS).run_once(
         config_path=args.config,
         digest_path=args.digest,

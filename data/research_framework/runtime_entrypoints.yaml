@@ -10,6 +10,9 @@ runtime_context:
       - baseline_registry
       - experiment_registry
       - research_insights
+      - ai_provider_registry
+      - strategy_ideator_config
+      - framework_stability_todos
       - protocol_rules
     instruction: "Load these files directly into the AI context before research or architecture work. Do not use docs/INDEX.md as an entrypoint."
 
@@ -38,6 +41,21 @@ runtime_context:
       path: data/research_framework/research_insights.yaml
       format: yaml
       role: machine-readable cross-experiment lessons and open threads
+      required: true
+    ai_provider_registry:
+      path: data/research_framework/ai_providers.yaml
+      format: yaml
+      role: registered AI providers; strategy ideation can use only providers declared here
+      required: true
+    strategy_ideator_config:
+      path: data/research_framework/strategy_ideator.yaml
+      format: yaml
+      role: common strategy ideation entry configuration
+      required: true
+    framework_stability_todos:
+      path: data/research_framework/framework_stability_todos.yaml
+      format: yaml
+      role: machine-readable framework stability backlog and acceptance checks
       required: true
     protocol_rules:
       path: data/research_framework/protocol_rules.yaml

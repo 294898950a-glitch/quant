@@ -40,6 +40,10 @@ class ResearchPaths:
         return self.research_framework_dir / "evidence_tool_registry.yaml"
 
     @property
+    def ai_providers(self) -> Path:
+        return self.research_framework_dir / "ai_providers.yaml"
+
+    @property
     def framework_change_log(self) -> Path:
         return self.research_framework_dir / "framework_change_log.jsonl"
 

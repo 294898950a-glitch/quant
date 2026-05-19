@@ -10,6 +10,7 @@ starts the existing VM completion monitor.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import posixpath
@@ -28,12 +29,21 @@ except ImportError:
     print("ERROR: pyyaml required", file=sys.stderr)
     sys.exit(2)
 
+SCRIPT_DIR = Path(__file__).resolve().parent
+REPO_ROOT = SCRIPT_DIR.parent
+for path in (REPO_ROOT, SCRIPT_DIR):
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+from framework.autonomous.workflow_state import count_status, decide_scheduler_action
+from hermes_access_guard import require_ticket
+
+
 STATE_PATH = REPO_ROOT / "data" / "research_framework" / "option_value_loop.yaml"
 LOG_PATH = REPO_ROOT / "logs" / "option_value_loop.log"
 STATUS_PATH = REPO_ROOT / "logs" / "option_value_loop_status.json"
 PID_PATH = REPO_ROOT / ".option-value-loop.pid"
+ONCE_LOCK_PATH = REPO_ROOT / "logs" / "option_value_loop_once.lock"
 AUDIT_LOG_PATH = REPO_ROOT / "data" / "research_framework" / "orchestrator_log.jsonl"
 RESTART_LOG_PATH = REPO_ROOT / "logs" / "option_value_loop_restarts.jsonl"
 PAUSE_FLAG_PATH = REPO_ROOT / "data" / "research_framework" / "orchestrator_paused.flag"
@@ -115,10 +125,17 @@ def save_state(state: dict[str, Any]) -> None:
     tmp.replace(STATE_PATH)
 
 
-def run(cmd: list[str], *, check: bool = True, capture: bool = True) -> subprocess.CompletedProcess[str]:
+def run(
+    cmd: list[str],
+    *,
+    check: bool = True,
+    capture: bool = True,
+    env: dict[str, str] | None = None,
+) -> subprocess.CompletedProcess[str]:
     result = subprocess.run(
         cmd,
         cwd=REPO_ROOT,
+        env=env,
         text=True,
         stdout=subprocess.PIPE if capture else None,
         stderr=subprocess.STDOUT if capture else None,
@@ -313,6 +330,13 @@ def command_script_paths(spec: dict[str, Any]) -> list[str]:
     return paths
 
 
+def spec_family(spec: dict[str, Any]) -> str:
+    ideation = spec.get("ideation") or {}
+    if isinstance(ideation, dict) and ideation.get("family"):
+        return str(ideation["family"])
+    return str(spec.get("family") or "")
+
+
 def discover_ready_specs(state: dict[str, Any]) -> list[dict[str, Any]]:
     if not state.get("auto_discover_ready_specs", False):
         return []
@@ -339,11 +363,14 @@ def discover_ready_specs(state: dict[str, Any]) -> list[dict[str, Any]]:
             continue
         if not isinstance(spec, dict):
             continue
+        family = spec_family(spec)
+        if family and family in set(state.get("forbidden_families") or []):
+            continue
         run_id = str(spec.get("run_id") or spec_path.parent.name)
         discovered.append(
             {
                 "id": run_id,
-                "family": "auto_discovered_option_value",
+                "family": family or "auto_discovered_option_value",
                 "status": "queued",
                 "spec_path": rel_spec,
                 "process_pattern": run_id,
@@ -355,56 +382,17 @@ def discover_ready_specs(state: dict[str, Any]) -> list[dict[str, Any]]:
 
 
 def generate_next_spec_if_idle(state: dict[str, Any]) -> None:
-    ideation = state.get("ideation") or {}
-    if not isinstance(ideation, dict) or not ideation.get("enabled", False):
-        return
-    if ideation.get("blocked_reason"):
-        write_status("ideation_blocked_no_supported_executor", {
-            "blocked_reason": ideation.get("blocked_reason"),
-            "blocked_at": ideation.get("blocked_at"),
-        })
-        return
     write_status(
-        "ideating_next_spec",
+        "needs_hermes_research_direction",
         {
-            "provider": ideation.get("provider") or ideation.get("command") or "unknown",
-            "timeout_seconds": ideation.get("timeout_seconds"),
+            "note": (
+                "No queued READY specs. Background LLM ideation is disabled; "
+                "Hermes must generate or add a READY spec in its current turn."
+            )
         },
     )
-    audit("ideate", {"provider": ideation.get("provider") or ideation.get("command") or "unknown"})
-    result = run(
-        [
-            "python3",
-            "scripts/generate_option_value_next_spec.py",
-            "--state",
-            rel(STATE_PATH),
-        ],
-        check=False,
-    )
-    if result.returncode == 0:
-        return
-    output = result.stdout or ""
-    unsupported = (
-        "unsupported family" in output
-        or "not supported by current executor" in output
-        or "no READY spec generated" in output
-    )
-    if unsupported:
-        ideation["blocked_reason"] = "generated idea requires an executor that is not implemented"
-        ideation["blocked_at"] = now_iso()
-        ideation["blocked_error"] = output[-4000:]
-        state["ideation"] = ideation
-        save_state(state)
-        write_status("ideation_blocked_no_supported_executor", {
-            "blocked_reason": ideation["blocked_reason"],
-        })
-        log("ideation blocked: generated idea requires an unimplemented executor")
-        return
-    raise RuntimeError(
-        f"command failed rc={result.returncode}: "
-        "python3 scripts/generate_option_value_next_spec.py --state "
-        f"{rel(STATE_PATH)}\n{output}"
-    )
+    audit("needs_hermes_research_direction", {"reason": "background_llm_ideation_disabled"})
+    log("needs Hermes research direction; background LLM ideation disabled")
 
 
 def ideation_blocked(state: dict[str, Any]) -> bool:
@@ -588,9 +576,21 @@ def sync_remote_run_dir(state: dict[str, Any], item: dict[str, Any], run_dir: Pa
     remote_repo = str(vm["remote_repo"])
     rel_dir = rel(run_dir)
     run_dir.mkdir(parents=True, exist_ok=True)
+    result_filter = [
+        "--include=*/",
+        "--include=*.yaml",
+        "--include=*.json",
+        "--include=*.csv",
+        "--include=*.log",
+        "--include=*.txt",
+        "--exclude=*",
+    ]
     proxy_host = str(vm.get("proxy_host") or "").strip()
     if not proxy_host:
-        run(["rsync", "-av", f"{vm_host}:{remote_repo}/{rel_dir}/", f"{rel_dir}/"], check=False)
+        run(
+            ["rsync", "-av", *result_filter, f"{vm_host}:{remote_repo}/{rel_dir}/", f"{rel_dir}/"],
+            check=False,
+        )
         return
     safe = "".join(ch if ch.isalnum() or ch in "._-" else "_" for ch in rel_dir)
     stage = f"/tmp/quant_proxy_pull_{safe}"
@@ -603,6 +603,8 @@ def sync_remote_run_dir(state: dict[str, Any], item: dict[str, Any], run_dir: Pa
                 f"mkdir -p {shlex.quote(stage)}",
                 (
                     "rsync -av "
+                    "--include='*/' --include='*.yaml' --include='*.json' "
+                    "--include='*.csv' --include='*.log' --include='*.txt' --exclude='*' "
                     f"-e {shlex.quote(ssh_cmd)} "
                     f"{shlex.quote(vm_host + ':' + posixpath.join(remote_repo, rel_dir) + '/')} "
                     f"{shlex.quote(stage + '/')}"
@@ -611,7 +613,7 @@ def sync_remote_run_dir(state: dict[str, Any], item: dict[str, Any], run_dir: Pa
         ),
         check=False,
     )
-    run(["rsync", "-av", f"{proxy_host}:{stage}/", f"{rel_dir}/"], check=False)
+    run(["rsync", "-av", *result_filter, f"{proxy_host}:{stage}/", f"{rel_dir}/"], check=False)
 
 
 def settle_running_items(state: dict[str, Any], queue: list[Any]) -> int:
@@ -670,7 +672,7 @@ def settle_running_items(state: dict[str, Any], queue: list[Any]) -> int:
     return changed
 
 
-def tick() -> str:
+def tick(*, allow_ideation: bool = True) -> str:
     if is_paused():
         write_status("paused", {"pause_flag": rel(PAUSE_FLAG_PATH)})
         audit("paused", {"pause_flag": rel(PAUSE_FLAG_PATH)})
@@ -685,18 +687,24 @@ def tick() -> str:
         raise ValueError("option_value_loop.queue must be list")
 
     settled_count = settle_running_items(state, queue)
+    decision = decide_scheduler_action(state)
+    running_count = count_status(state, "running")
 
-    if not any(isinstance(item, dict) and item.get("status") == "queued" for item in queue):
+    if decision.action != "start_or_continue_queued":
+        if decision.action == "monitor_running":
+            write_status(
+                "waiting_remote_running",
+                {
+                    "running_count": running_count,
+                    "settled_count": settled_count,
+                    "note": "Remote work is still running; no new direction may be generated.",
+                },
+            )
+            return "waiting_remote_running"
         discovered = discover_ready_specs(state)
         if not discovered:
             generate_next_spec_if_idle(state)
-            if ideation_blocked(state):
-                write_status("ideation_blocked_no_supported_executor", {
-                    "blocked_reason": (state.get("ideation") or {}).get("blocked_reason"),
-                    "blocked_at": (state.get("ideation") or {}).get("blocked_at"),
-                })
-                return "ideation_blocked_no_supported_executor"
-            discovered = discover_ready_specs(state)
+            return "needs_hermes_research_direction"
         if discovered:
             queue.extend(discovered)
             state["queue"] = queue
@@ -725,16 +733,28 @@ def tick() -> str:
         if not available_vms:
             break
         family = str(item.get("family") or "")
-        if family in set(state.get("forbidden_families") or []):
+        forbidden = set(state.get("forbidden_families") or [])
+        spec_raw = item.get("spec_path")
+        spec_family_name = ""
+        if isinstance(spec_raw, str) and spec_raw:
+            spec_path_for_family = Path(spec_raw)
+            if not spec_path_for_family.is_absolute():
+                spec_path_for_family = REPO_ROOT / spec_path_for_family
+            try:
+                spec_data = yaml.safe_load(spec_path_for_family.read_text(encoding="utf-8")) or {}
+                if isinstance(spec_data, dict):
+                    spec_family_name = spec_family(spec_data)
+            except Exception:
+                spec_family_name = ""
+        if family in forbidden or spec_family_name in forbidden:
             item["status"] = "blocked"
             item["blocked_at"] = now_iso()
-            item["block_reason"] = f"family {family} is forbidden"
+            item["block_reason"] = f"family {spec_family_name or family} is forbidden"
             mark_history(state, item, "blocked", item["block_reason"])
             save_state(state)
             write_status("blocked_forbidden_family", {"item_id": item.get("id")})
             return "blocked_forbidden_family"
 
-        spec_raw = item.get("spec_path")
         if not isinstance(spec_raw, str) or not spec_raw:
             item["status"] = "failed"
             item["failed_at"] = now_iso()
@@ -832,15 +852,37 @@ def daemon_loop(poll_seconds: int) -> int:
             PID_PATH.unlink()
 
 
+def tick_once_under_lock(*, allow_ideation: bool) -> str:
+    ONCE_LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with ONCE_LOCK_PATH.open("w", encoding="utf-8") as lock_fh:
+        try:
+            fcntl.flock(lock_fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            write_status(
+                "skipped_locked",
+                {"lock_path": rel(ONCE_LOCK_PATH), "note": "another option-value tick is already active"},
+            )
+            audit("skipped_locked", {"lock_path": rel(ONCE_LOCK_PATH)})
+            return "skipped_locked"
+        return tick(allow_ideation=allow_ideation)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--once", action="store_true")
+    parser.add_argument(
+        "--no-ideation",
+        action="store_true",
+        help="Compatibility flag; background LLM ideation is disabled unconditionally.",
+    )
     parser.add_argument("--poll-seconds", type=int, default=None)
     args = parser.parse_args()
 
     if args.once:
-        print(tick())
+        require_ticket("option_value_loop_once")
+        print(tick_once_under_lock(allow_ideation=not args.no_ideation))
         return 0
+    require_ticket("option_value_loop_daemon")
     state = load_state()
     poll_seconds = int(args.poll_seconds or state.get("poll_seconds") or 600)
     return daemon_loop(poll_seconds)

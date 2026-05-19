@@ -1,0 +1,65 @@
+schema_version: 1
+updated_at: '2026-05-19T09:25:00+08:00'
+owner: hermes
+purpose: Machine-readable backlog for framework stability fixes found during quant automation review.
+items:
+- id: framework_stability_02_no_background_llm
+  status: done
+  completed_at: '2026-05-19T09:28:00+08:00'
+  priority: critical
+  title: 禁止后台自己调用 LLM
+  requirement: 脚本只能检查状态、同步结果、启动已有任务；需要新方向时，只能由 Hermes 当轮读取记录后生成，不能让后台自己偷偷问 Claude。
+  acceptance:
+  - 后台推进脚本没有任何 Claude/LLM 调用路径。
+  - 无 READY 任务时状态停在 needs_hermes_research_direction。
+  - 生成新方向只能由统一研究入口完成；该入口只能使用 ai_providers.yaml 中已登记且启用的 provider。
+  - 后台只接收已经存在的 READY spec。
+  implementation:
+  - scripts/option_value_loop_daemon.py 不再调用生成器，空闲时只写 needs_hermes_research_direction。
+  - scripts/generate_option_value_next_spec.py 只接受统一研究入口或 Hermes 当轮提供的 --idea-yaml，不再自行调用 Claude。
+  - data/research_framework/ai_providers.yaml 记录允许使用的 LLM provider；data/research_framework/strategy_ideator.yaml 指向同一个入口。
+  - scripts/validate_no_background_llm.py 加入 framework_preflight，防止后台 LLM 调用路径回归。
+- id: framework_stability_03_remote_truth
+  status: todo
+  priority: critical
+  title: 状态必须以结果文件为准
+  requirement: 不能只看本地队列 running；每次醒来都要查远端进程、结果文件、错误日志，并立刻改本地状态。
+- id: framework_stability_04_small_result_sync
+  status: todo
+  priority: high
+  title: 同步只拉小结果文件
+  requirement: 只拉 report.yaml、l4_ack.yaml、diagnostic.yaml、summary.json、csv、log；parquet 等大文件需要时手动拉。
+- id: framework_stability_05_failed_task_state
+  status: todo
+  priority: high
+  title: 失败任务必须有失败状态
+  requirement: 远端报错后 spec 不能继续标 COMPLETE/RUNNING，必须写成失败或归档，并记录真实错误原因。
+- id: framework_stability_06_parameter_compatibility
+  status: todo
+  priority: high
+  title: 脚本参数要统一检查
+  requirement: 主策略加参数后，所有子评测脚本都要兼容；共享参数函数必须没有就跳过，不能假设每个脚本都有同样参数。
+- id: framework_stability_07_closed_direction_hard_constraint
+  status: todo
+  priority: high
+  title: 关闭失败方向要硬约束
+  requirement: 某个方向连续失败后，不能靠提示词提醒；系统必须阻止同方向继续排队。
+- id: framework_stability_08_wakeup_health_gate
+  status: todo
+  priority: critical
+  title: Hermes 每轮先做健康检查
+  requirement: 每 10 分钟第一步先检查多个入口、旧 cron、后台 LLM、假 running、失败未归档任务、框架检查；不通过就修系统，不跑任务。
+- id: framework_stability_09_role_separation
+  status: in_progress
+  priority: high
+  title: 推进和研究分开
+  requirement: 推进器只做机械动作，研究员只负责出方向，执行器只负责跑测试，记录员只负责写结果。
+  implementation:
+  - Hermes 入口不再自行判断是否需要新方向，只唤醒推进器并展示推进器返回的状态。
+  - 新增共享状态判断模块，推进器统一决定当前只能监控、启动已排队任务，还是请求新方向。
+  - 新增模块解耦检查，防止 Hermes、推进器、研究入口互相越界调用。
+- id: framework_stability_10_stop_on_system_error
+  status: todo
+  priority: critical
+  title: 出错后不要继续跑下一轮
+  requirement: 发现同步失败、状态不一致、远端报错、框架检查失败时，先修系统，不再继续生成新策略。

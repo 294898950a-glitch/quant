@@ -18,6 +18,8 @@ from typing import Any
 
 import yaml
 
+from hermes_access_guard import require_ticket
+
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 STATE_PATH = REPO_ROOT / "data" / "research_framework" / "option_value_loop.yaml"
@@ -192,58 +194,6 @@ def _build_prompt(
     return yaml.safe_dump(payload, allow_unicode=True, sort_keys=False)
 
 
-def _call_claude_yaml(prompt: str, state: dict[str, Any], system_prompt: str) -> dict[str, Any]:
-    ideation = state.get("ideation") if isinstance(state, dict) else {}
-    model = "sonnet"
-    max_budget_usd = "0.50"
-    timeout_seconds = 240
-    command = "claude"
-    if isinstance(ideation, dict):
-        model = str(ideation.get("model") or model)
-        max_budget_usd = str(ideation.get("max_budget_usd") or max_budget_usd)
-        timeout_seconds = int(ideation.get("timeout_seconds") or timeout_seconds)
-        command = str(ideation.get("command") or command)
-    cmd = [
-        command,
-        "--print",
-        "--output-format",
-        "text",
-        "--model",
-        model,
-        "--max-budget-usd",
-        max_budget_usd,
-        "--tools",
-        "",
-        "--permission-mode",
-        "dontAsk",
-        "--no-session-persistence",
-        "--append-system-prompt",
-        system_prompt,
-    ]
-    result = subprocess.run(
-        cmd,
-        cwd=REPO_ROOT,
-        input=prompt,
-        text=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        timeout=timeout_seconds,
-        check=False,
-    )
-    if result.returncode != 0:
-        raise RuntimeError(f"claude ideation failed rc={result.returncode}: {result.stderr.strip()}")
-    return _safe_yaml_from_text(result.stdout)
-
-
-def _call_claude(prompt: str, state: dict[str, Any]) -> dict[str, Any]:
-    system_prompt = (
-        "你是量化研究任务设计员。你只输出 YAML，不输出 Markdown。"
-        "你必须根据给定记录提出一个可执行测试，不能凭空要求不存在的数据。"
-        "如果资料不足，也必须在 YAML 里说明风险，不要发散。"
-    )
-    return _call_claude_yaml(prompt, state, system_prompt)
-
-
 def _fallback_idea(insight: dict[str, Any]) -> dict[str, Any]:
     return {
         "proposal_id": "rolling_option_source_pnl_feedback",
@@ -312,70 +262,8 @@ def _ideate(state: dict[str, Any], strategy_id: str, insight: dict[str, Any], fo
             encoding="utf-8",
         )
         return idea
-
-    retry_feedback: dict[str, Any] | None = None
-    max_attempts = 3
-    ideation = state.get("ideation") if isinstance(state, dict) else {}
-    if isinstance(ideation, dict):
-        max_attempts = int(ideation.get("max_contract_rewrite_attempts") or max_attempts)
-    last_error: Exception | None = None
-    for attempt in range(1, max_attempts + 1):
-        prompt = _build_prompt(state, strategy_id, retry_feedback)
-        (IDEATION_LOG_DIR / f"{stamp}_attempt{attempt}_prompt.yaml").write_text(prompt, encoding="utf-8")
-        try:
-            idea = _call_claude(prompt, state)
-            idea["_ideation_source"] = "claude"
-            idea["_contract_attempt"] = attempt
-            _validate_idea_contract(idea)
-            (IDEATION_LOG_DIR / f"{stamp}_idea.yaml").write_text(
-                yaml.safe_dump(idea, allow_unicode=True, sort_keys=False),
-                encoding="utf-8",
-            )
-            if attempt > 1:
-                (IDEATION_LOG_DIR / f"{stamp}_rewrite_success.yaml").write_text(
-                    yaml.safe_dump(
-                        {
-                            "attempt": attempt,
-                            "previous_feedback": retry_feedback,
-                        },
-                        allow_unicode=True,
-                        sort_keys=False,
-                    ),
-                    encoding="utf-8",
-                )
-            return idea
-        except Exception as exc:
-            last_error = exc
-            error_payload: dict[str, Any] = {
-                "attempt": attempt,
-                "error_type": type(exc).__name__,
-                "error": str(exc),
-            }
-            idea_for_feedback: dict[str, Any] = {}
-            if "idea" in locals() and isinstance(idea, dict):
-                idea_for_feedback = idea
-                error_payload["idea"] = idea
-            (IDEATION_LOG_DIR / f"{stamp}_attempt{attempt}_error.yaml").write_text(
-                yaml.safe_dump(error_payload, allow_unicode=True, sort_keys=False),
-                encoding="utf-8",
-            )
-            if isinstance(exc, RuntimeError) and "no READY spec generated" in str(exc):
-                retry_feedback = _local_check_feedback(exc, idea_for_feedback)
-                continue
-            if bool((state.get("ideation") or {}).get("allow_fallback", False)):
-                fallback = _fallback_idea(insight)
-                fallback["_ideation_source"] = "fallback"
-                fallback["_fallback_reason"] = f"{type(exc).__name__}: {exc}"
-                _validate_idea_contract(fallback)
-                (IDEATION_LOG_DIR / f"{stamp}_idea.yaml").write_text(
-                    yaml.safe_dump(fallback, allow_unicode=True, sort_keys=False),
-                    encoding="utf-8",
-                )
-                return fallback
-            raise
-
     raise RuntimeError(
-        f"Claude failed local executor/family check after {max_attempts} attempt(s): {last_error}"
+        "background LLM ideation is disabled; provide --idea-yaml generated by Hermes in the current turn"
     )
 
 
@@ -801,12 +689,27 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--state", type=Path, default=STATE_PATH)
     parser.add_argument("--force-fallback", action="store_true")
+    parser.add_argument(
+        "--idea-yaml",
+        type=Path,
+        default=None,
+        help="Compile a Hermes-provided idea YAML into a READY spec. This script does not call an LLM.",
+    )
     args = parser.parse_args()
 
+    require_ticket("generate_option_value_spec")
     state = _load_yaml(args.state, {})
     strategy_id = str(state.get("strategy_id") or _current_strategy_id()) if isinstance(state, dict) else _current_strategy_id()
     insight = _option_insight()
-    idea = _ideate(state if isinstance(state, dict) else {}, strategy_id, insight, args.force_fallback)
+    if args.idea_yaml is None:
+        raise RuntimeError(
+            "background LLM ideation is disabled; Hermes must provide --idea-yaml from its current turn"
+        )
+    idea = _load_yaml(args.idea_yaml, {})
+    if not isinstance(idea, dict):
+        raise ValueError("--idea-yaml must contain a YAML object")
+    idea.setdefault("_ideation_source", "hermes_current_turn")
+    _validate_idea_contract(idea)
     suffix = (
         "option-pnl-feedback"
         if str(idea.get("executor") or "") == PNL_FEEDBACK_EXECUTOR

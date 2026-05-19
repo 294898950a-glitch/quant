@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Short-lived Hermes access tickets for quant automation writes."""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import secrets
+import uuid
+from datetime import datetime
+from pathlib import Path
+from time import time
+from typing import Any
+
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+TICKET_DIR = REPO_ROOT / "logs" / "hermes_tickets"
+AUDIT_PATH = REPO_ROOT / "data" / "research_framework" / "hermes_access_audit.jsonl"
+DEFAULT_TTL_SECONDS = 15 * 60
+HERMES_ISSUER = "quant_current_driver"
+
+
+def _now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def _hash_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+
+def _audit(event: str, action: str, payload: dict[str, Any] | None = None) -> None:
+    AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
+    row = {
+        "event": event,
+        "action": action,
+        "pid": os.getpid(),
+        "ts": _now_iso(),
+        "payload": payload or {},
+    }
+    with AUDIT_PATH.open("a", encoding="utf-8") as fh:
+        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+
+
+def _ticket_path_from_env() -> Path:
+    raw = os.environ.get("QUANT_HERMES_TICKET_PATH", "").strip()
+    if not raw:
+        raise PermissionError("missing QUANT_HERMES_TICKET_PATH")
+    path = Path(raw)
+    if not path.is_absolute():
+        path = REPO_ROOT / path
+    resolved = path.resolve()
+    ticket_root = TICKET_DIR.resolve()
+    try:
+        resolved.relative_to(ticket_root)
+    except ValueError as exc:
+        raise PermissionError("Hermes ticket path is outside logs/hermes_tickets") from exc
+    return resolved
+
+
+def issue_ticket(
+    action: str,
+    *,
+    allowed_actions: list[str] | None = None,
+    ttl_seconds: int = DEFAULT_TTL_SECONDS,
+) -> dict[str, str]:
+    """Create a one-use ticket and return path plus plaintext token."""
+    issuer = os.environ.get("QUANT_HERMES_ISSUER", "").strip()
+    if issuer != HERMES_ISSUER:
+        _audit("issuer_denied", action, {"issuer": issuer or "(missing)"})
+        raise PermissionError(f"Hermes issuer identity required: {HERMES_ISSUER}")
+    TICKET_DIR.mkdir(parents=True, exist_ok=True)
+    token = secrets.token_urlsafe(32)
+    ticket_id = f"{datetime.now().strftime('%Y%m%d_%H%M%S')}_{uuid.uuid4().hex[:12]}"
+    actions = allowed_actions or [action]
+    ticket_path = TICKET_DIR / f"{ticket_id}.json"
+    payload = {
+        "schema_version": 1,
+        "ticket_id": ticket_id,
+        "issuer": "hermes",
+        "project": "quant",
+        "action": action,
+        "allowed_actions": actions,
+        "issued_at_epoch": int(time()),
+        "expires_at_epoch": int(time()) + int(ttl_seconds),
+        "token_hash": _hash_token(token),
+        "used": False,
+    }
+    ticket_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _audit("issued", action, {"ticket_id": ticket_id, "allowed_actions": actions, "ttl_seconds": ttl_seconds})
+    return {"ticket_id": ticket_id, "token": token, "path": str(ticket_path)}
+
+
+def verify_ticket(action: str, *, consume: bool = True) -> dict[str, Any]:
+    """Validate the Hermes ticket carried in environment variables."""
+    try:
+        ticket_path = _ticket_path_from_env()
+        token = os.environ.get("QUANT_HERMES_TICKET_TOKEN", "").strip()
+        if not token:
+            raise PermissionError("missing QUANT_HERMES_TICKET_TOKEN")
+        if not ticket_path.exists():
+            raise PermissionError("Hermes ticket file does not exist")
+        data = json.loads(ticket_path.read_text(encoding="utf-8"))
+        if not isinstance(data, dict):
+            raise PermissionError("Hermes ticket is malformed")
+        if data.get("issuer") != "hermes" or data.get("project") != "quant":
+            raise PermissionError("Hermes ticket issuer/project mismatch")
+        if int(data.get("expires_at_epoch") or 0) < int(time()):
+            raise PermissionError("Hermes ticket expired")
+        if consume and data.get("used"):
+            raise PermissionError("Hermes ticket already used")
+        allowed = data.get("allowed_actions") or [data.get("action")]
+        if action not in allowed:
+            raise PermissionError(f"Hermes ticket does not allow action {action}")
+        if data.get("token_hash") != _hash_token(token):
+            raise PermissionError("Hermes ticket token mismatch")
+    except Exception as exc:
+        _audit("denied", action, {"reason": f"{type(exc).__name__}: {exc}"})
+        raise
+
+    if consume:
+        data["used"] = True
+        data["used_at_epoch"] = int(time())
+        data["used_for_action"] = action
+        data["used_by_pid"] = os.getpid()
+        ticket_path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    _audit("allowed", action, {"ticket_id": data.get("ticket_id"), "consume": consume})
+    return data
+
+
+def require_ticket(action: str, *, consume: bool = True) -> None:
+    try:
+        verify_ticket(action, consume=consume)
+    except Exception as exc:
+        raise SystemExit(f"DENIED: Hermes ticket required for {action}: {exc}") from exc

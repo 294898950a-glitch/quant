@@ -1,18 +1,45 @@
 schema_version: 1
-active_provider: codex
+active_provider: claude
+policy:
+  allowed_entrypoint: scripts/run_strategy_ideation_once.py
+  background_call_allowed: false
+  provider_must_be_registered: true
 providers:
-  codex:
-    kind: local_adapter
-    model: codex
   claude:
-    kind: external_adapter
-    api_key_env: ANTHROPIC_API_KEY
-    model: claude
+    enabled: true
+    kind: command_adapter
+    model: sonnet
+    allowed_entrypoint: scripts/run_strategy_ideation_once.py
+    prompt_mode: stdin
+    timeout_seconds: 240
+    command:
+    - claude
+    - -p
+    - --output-format
+    - text
+    - --model
+    - sonnet
+    - --max-budget-usd
+    - '0.5'
+    - --tools
+    - ''
+  codex:
+    enabled: false
+    kind: registered_external
+    model: codex
+    allowed_entrypoint: scripts/run_strategy_ideation_once.py
+    note: Registered but not enabled until a non-interactive command contract is confirmed.
   openai:
-    kind: external_adapter
+    enabled: false
+    kind: registered_external
     api_key_env: OPENAI_API_KEY
     model: gpt
+    allowed_entrypoint: scripts/run_strategy_ideation_once.py
+    note: Registered provider; requires adapter/client wiring before activation.
   deepseek:
-    kind: external_adapter
+    enabled: false
+    kind: registered_external
     api_key_env: DEEPSEEK_API_KEY
     model: deepseek-chat
+    allowed_entrypoint: scripts/run_strategy_ideation_once.py
+    note: Registered provider; requires adapter/client wiring before activation.

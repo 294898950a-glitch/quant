@@ -1,8 +1,9 @@
 schema_version: 1
 enabled: true
-provider: claude
-command: claude
-model: sonnet
+provider_registry: data/research_framework/ai_providers.yaml
+provider: from_registry
+allowed_entrypoint: scripts/run_strategy_ideation_once.py
+model: from_registry
 max_budget_usd: 0.5
 timeout_seconds: 240
 allow_fallback: false

@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import hashlib
 import json
-import shlex
-import subprocess
 from pathlib import Path
 from typing import Any
 
 try:
     from framework.autonomous.artifacts import ArtifactStore
+    from framework.autonomous.ai_provider_adapter import RegisteredProviderAdapter
     from framework.autonomous.evidence_tool_registry import EvidenceToolRegistry
     from framework.autonomous.framework_change_recorder import record_framework_change
     from framework.autonomous.paths import ResearchPaths
@@ -19,6 +17,7 @@ try:
     from framework.autonomous.verification_tool import EvidenceToolkit
 except ModuleNotFoundError:  # importlib-based tests may load files directly
     from artifacts import ArtifactStore  # type: ignore
+    from ai_provider_adapter import RegisteredProviderAdapter  # type: ignore
     from evidence_tool_registry import EvidenceToolRegistry  # type: ignore
     from framework_change_recorder import record_framework_change  # type: ignore
     from paths import ResearchPaths  # type: ignore
@@ -29,59 +28,26 @@ except ModuleNotFoundError:  # importlib-based tests may load files directly
     from verification_tool import EvidenceToolkit  # type: ignore
 
 
-class ClaudeCommandAdapter:
-    def __init__(self, config: dict[str, Any], repo_root: Path | str = Path(".")) -> None:
+class RegisteredAIProviderAdapter:
+    def __init__(
+        self,
+        config: dict[str, Any],
+        repo_root: Path | str = Path("."),
+        providers_path: Path | str | None = None,
+    ) -> None:
         self.config = config
         self.repo_root = Path(repo_root)
+        registry_path = providers_path or self.repo_root / str(
+            config.get("provider_registry") or "data/research_framework/ai_providers.yaml"
+        )
+        self.adapter = RegisteredProviderAdapter(
+            Path(registry_path),
+            repo_root=self.repo_root,
+            entrypoint=str(config.get("allowed_entrypoint") or "scripts/run_strategy_ideation_once.py"),
+        )
 
     def call_active_provider(self, prompt: str, schema: dict[str, Any]):
-        provider = str(self.config.get("provider") or "claude")
-        if provider != "claude":
-            raise ValueError(f"only claude command provider is wired for this entrypoint, got {provider}")
-        content = self._call_claude(prompt)
-        return type(
-            "ProviderResponse",
-            (),
-            {
-                "content": content,
-                "provider_id": provider,
-                "response_hash": hashlib.sha256(content.encode("utf-8")).hexdigest()[:16],
-                "retries_used": 0,
-            },
-        )()
-
-    def _call_claude(self, prompt: str) -> str:
-        command = str(self.config.get("command") or "claude")
-        cmd = [
-            command,
-            "-p",
-            "--output-format",
-            "text",
-            "--model",
-            str(self.config.get("model") or "sonnet"),
-            "--max-budget-usd",
-            str(self.config.get("max_budget_usd") or 0.5),
-            "--tools",
-            "",
-        ]
-        timeout = int(self.config.get("timeout_seconds") or 240)
-        result = subprocess.run(
-            cmd,
-            cwd=self.repo_root,
-            input=prompt,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            check=False,
-            timeout=timeout,
-        )
-        if result.returncode != 0:
-            raise RuntimeError(
-                "claude command failed "
-                f"rc={result.returncode}: {' '.join(shlex.quote(part) for part in cmd[:8])}\n"
-                f"{result.stderr or result.stdout}"
-            )
-        return result.stdout.strip()
+        return self.adapter.call_active_provider(prompt, schema)
 
 
 class IdeationCycle:
@@ -123,7 +89,7 @@ class IdeationCycle:
         instruction = proposal_instruction(closed_tags, digest)
         instruction["pre_ideation_evidence_from_tool"] = pre_ideation_evidence
         instruction["available_evidence_tools"] = tool_registry_store.manifest(tool_registry)
-        ai_adapter = self.ai_adapter or ClaudeCommandAdapter(config, repo_root=self.paths.repo_root)
+        ai_adapter = self.ai_adapter or RegisteredAIProviderAdapter(config, repo_root=self.paths.repo_root)
         proposal = propose(
             closed_tags=closed_tags,
             recent_digest=digest,

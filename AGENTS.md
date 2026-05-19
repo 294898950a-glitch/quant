@@ -34,6 +34,10 @@ Hard boundaries:
 - Before any AI proposes or registers a new evidence tool, inject the existing
   tool manifest with ids, paths, callables, descriptions, and manifest hash.
   New tool registration must include why existing tools are insufficient.
+- Quant automation write entrypoints must be advanced through the Hermes
+  10-minute driver. Direct calls to the option-value loop or next-spec
+  generator require a short-lived Hermes ticket in environment variables; calls
+  without that ticket must be rejected and audited.
 - Commits that change autonomous framework entry behavior must also stage a
   changed `AGENTS.md` or `CLAUDE.md`; the pre-commit hook blocks unchanged
   bootstrap entrypoints for those framework changes.
