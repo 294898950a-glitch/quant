@@ -3,25 +3,26 @@ run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
 status: prepared
 spec_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/spec.yaml
 decision_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/data_quality_decision.yaml
-mode: deterministic_spec_path_rewrite
-old_data_root: data/cb_arb_concurrent_supervised_20260511_094500
-new_data_root: .
+mode: deterministic_warehouse_column_derivation
+old_data_root: .
+new_data_root: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root
+derived_columns:
+  cb_daily:
+  - pct_chg
+  - cb_over_rate
+  cb_call:
+  - call_type
 fix_plan:
-- action: rewrite_spec_data_root
-  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/cb_basic.parquet
-  replacement_path: data/cb_warehouse/cb_basic.parquet
-  new_data_root: .
-- action: rewrite_spec_data_root
-  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/cb_daily.parquet
-  replacement_path: data/cb_warehouse/cb_daily.parquet
-  new_data_root: .
-- action: rewrite_spec_data_root
-  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/cb_call.parquet
-  replacement_path: data/cb_warehouse/cb_call.parquet
-  new_data_root: .
-- action: rewrite_spec_data_root
-  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/stk_daily_qfq.parquet
-  replacement_path: data/cb_warehouse/stk_daily_qfq.parquet
-  new_data_root: .
-principle: original data was not overwritten; only the run spec data-root pointer
-  was normalized
+- action: derive_warehouse_columns
+  path: data/cb_warehouse/cb_daily.parquet
+  columns:
+  - cb_over_rate
+  - pct_chg
+  new_data_root: prepared_data/data_root
+- action: derive_warehouse_columns
+  path: data/cb_warehouse/cb_call.parquet
+  columns:
+  - call_type
+  new_data_root: prepared_data/data_root
+principle: original data was not overwritten; enriched inputs are run-local prepared
+  data

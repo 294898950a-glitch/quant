@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import yaml
 import pytest
+import pandas as pd
 
 from scripts import auto_research_pipeline as pipeline
 from scripts import repair_data_quality
@@ -238,6 +239,97 @@ def test_data_root_repair_updates_spec_without_base_ranks(tmp_path, monkeypatch)
     assert report["mode"] == "deterministic_spec_path_rewrite"
     assert updated["automation"]["command"][-1] == "."
     assert "data/cb_warehouse/cb_daily.parquet" in updated["automation"]["sync_paths"]
+
+
+def test_deterministic_data_gate_repairs_derivable_recommended_columns(tmp_path, monkeypatch):
+    monkeypatch.setattr(validate_data_quality, "REPO_ROOT", tmp_path)
+    summary = {
+        "schema_version": 1,
+        "data_files": [
+            {
+                "path": "data/cb_warehouse/cb_daily.parquet",
+                "exists": True,
+                "readable": True,
+                "rows": 10,
+                "missing_required_columns": [],
+                "missing_recommended_columns": ["pct_chg", "cb_over_rate"],
+            },
+            {
+                "path": "data/cb_warehouse/cb_call.parquet",
+                "exists": True,
+                "readable": True,
+                "rows": 10,
+                "missing_required_columns": [],
+                "missing_recommended_columns": ["call_type"],
+            },
+        ],
+    }
+
+    decision = validate_data_quality.deterministic_decision(summary)
+
+    assert decision["status"] == "repair_candidate"
+    assert {item["action"] for item in decision["fix_plan"]} == {"derive_warehouse_columns"}
+
+
+def test_warehouse_column_repair_writes_run_local_data(tmp_path, monkeypatch):
+    monkeypatch.setattr(repair_data_quality, "REPO_ROOT", tmp_path)
+    warehouse = tmp_path / "data" / "cb_warehouse"
+    warehouse.mkdir(parents=True)
+    pd.DataFrame(
+        [{"ts_code": "113001.SH", "stk_code": "600001.SH", "conv_price": 10.0}]
+    ).to_parquet(warehouse / "cb_basic.parquet", index=False)
+    pd.DataFrame(
+        [
+            {"ts_code": "113001.SH", "trade_date": "20200101", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "vol": 10},
+            {"ts_code": "113001.SH", "trade_date": "20200102", "open": 101.0, "high": 102.0, "low": 100.0, "close": 101.0, "vol": 20},
+        ]
+    ).to_parquet(warehouse / "cb_daily.parquet", index=False)
+    pd.DataFrame(
+        [{"ts_code": "113001.SH", "ann_date": "20200101", "call_date": "20200102", "is_call": "公告实施强赎"}]
+    ).to_parquet(warehouse / "cb_call.parquet", index=False)
+    pd.DataFrame(
+        [
+            {"stk_code": "600001.SH", "trade_date": "20200101", "open": 10.0, "high": 11.0, "low": 9.0, "close": 10.0},
+            {"stk_code": "600001.SH", "trade_date": "20200102", "open": 11.0, "high": 12.0, "low": 10.0, "close": 11.0},
+        ]
+    ).to_parquet(warehouse / "stk_daily_qfq.parquet", index=False)
+
+    run_dir = tmp_path / "data" / "run_b"
+    run_dir.mkdir()
+    spec_path = run_dir / "spec.yaml"
+    decision_path = run_dir / "data_quality_decision.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_b",
+                "automation": {
+                    "command": ["python3", "scripts/evaluate.py", "--data-root", "."],
+                    "sync_paths": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    decision_path.write_text(
+        yaml.safe_dump(
+            {
+                "status": "repair_candidate",
+                "fix_plan": [{"action": "derive_warehouse_columns", "path": "data/cb_warehouse/cb_daily.parquet"}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = repair_data_quality.repair(spec_path, decision_path)
+    updated = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    prepared_root = tmp_path / updated["automation"]["command"][-1]
+    repaired_daily = pd.read_parquet(prepared_root / "data" / "cb_warehouse" / "cb_daily.parquet")
+    repaired_call = pd.read_parquet(prepared_root / "data" / "cb_warehouse" / "cb_call.parquet")
+
+    assert report["mode"] == "deterministic_warehouse_column_derivation"
+    assert {"pct_chg", "cb_over_rate"} <= set(repaired_daily.columns)
+    assert "call_type" in repaired_call.columns
+    assert updated["automation"]["command"][-1].endswith("prepared_data/data_root")
 
 
 def test_derive_verdict_from_run_summary(tmp_path):

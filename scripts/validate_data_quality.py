@@ -23,6 +23,10 @@ WAREHOUSE_REL_PATHS = (
     "data/cb_warehouse/cb_call.parquet",
     "data/cb_warehouse/stk_daily_qfq.parquet",
 )
+DERIVABLE_RECOMMENDED_COLUMNS = {
+    "data/cb_warehouse/cb_daily.parquet": {"pct_chg", "cb_over_rate"},
+    "data/cb_warehouse/cb_call.parquet": {"call_type"},
+}
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -247,14 +251,31 @@ def deterministic_decision(summary: dict[str, Any]) -> dict[str, Any]:
             warnings.append(f"{path} has duplicate key rows: {duplicate_rows}")
         missing_recommended = item.get("missing_recommended_columns") or []
         if missing_recommended:
-            warnings.append(f"{path} missing recommended columns: {missing_recommended}")
+            warehouse_rel = _warehouse_rel_from_path(path)
+            derivable = DERIVABLE_RECOMMENDED_COLUMNS.get(warehouse_rel or "", set())
+            repairable = sorted(set(missing_recommended) & derivable)
+            not_repairable = sorted(set(missing_recommended) - derivable)
+            if repairable:
+                repair_key = ("derive_warehouse_columns", warehouse_rel or path)
+                if repair_key not in seen_repairs:
+                    fix_plan.append(
+                        {
+                            "action": "derive_warehouse_columns",
+                            "path": warehouse_rel or path,
+                            "columns": repairable,
+                            "new_data_root": "prepared_data/data_root",
+                        }
+                    )
+                    seen_repairs.add(repair_key)
+            if not_repairable:
+                warnings.append(f"{path} missing recommended columns: {not_repairable}")
 
     if blocking:
         status = "fail"
         reason = "deterministic data gate found blocking data defects"
     elif fix_plan:
         status = "repair_candidate"
-        reason = "deterministic data gate found missing old warehouse paths that can be redirected to current warehouse"
+        reason = "deterministic data gate found data issues with registered deterministic repairs"
     else:
         status = "pass"
         reason = "deterministic data gate passed"
@@ -406,7 +427,7 @@ def _judge_prompt(summary: dict[str, Any]) -> str:
         "confidence: high 或 medium 或 low\n"
         "blocking_issues: 列表\n"
         "warnings: 列表\n"
-        "fix_plan: 列表；只有 status=repair_candidate 时填写，只能包含 rename_field、derive_alias、rewrite_spec_data_root\n"
+        "fix_plan: 列表；只有 status=repair_candidate 时填写，只能包含 rename_field、derive_alias、rewrite_spec_data_root、derive_warehouse_columns\n"
         "decision_reason: 一句话\n\n"
         "数据摘要：\n"
         f"{json.dumps(compact, ensure_ascii=False, indent=2)}\n"

@@ -235,3 +235,9 @@
 {"action": "data_quality_judge", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_124752_6a8b33d950d7"}, "pid": 27021, "ts": "2026-05-20T12:47:53"}
 {"action": "data_quality_repair", "event": "issued", "payload": {"allowed_actions": ["data_quality_repair"], "ticket_id": "20260520_124753_9fb4e1c7e310", "ttl_seconds": 900}, "pid": 27012, "ts": "2026-05-20T12:47:53"}
 {"action": "data_quality_repair", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_124753_9fb4e1c7e310"}, "pid": 27030, "ts": "2026-05-20T12:47:54"}
+{"action": "research_queue_runner_once", "event": "issued", "payload": {"allowed_actions": ["research_queue_runner_once"], "ticket_id": "20260520_125001_9d7313bb91cf", "ttl_seconds": 900}, "pid": 27409, "ts": "2026-05-20T12:50:01"}
+{"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_125001_9d7313bb91cf"}, "pid": 27410, "ts": "2026-05-20T12:50:01"}
+{"action": "data_quality_judge", "event": "issued", "payload": {"allowed_actions": ["data_quality_judge"], "ticket_id": "20260520_125245_76dc227eb4ec", "ttl_seconds": 900}, "pid": 27906, "ts": "2026-05-20T12:52:45"}
+{"action": "data_quality_judge", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_125245_76dc227eb4ec"}, "pid": 27926, "ts": "2026-05-20T12:52:46"}
+{"action": "data_quality_repair", "event": "issued", "payload": {"allowed_actions": ["data_quality_repair"], "ticket_id": "20260520_125246_d41a3c733721", "ttl_seconds": 900}, "pid": 27906, "ts": "2026-05-20T12:52:46"}
+{"action": "data_quality_repair", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_125246_d41a3c733721"}, "pid": 27935, "ts": "2026-05-20T12:52:46"}

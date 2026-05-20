@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 import yaml
+import pandas as pd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 AI_PROVIDERS = REPO_ROOT / "data" / "research_framework" / "ai_providers.yaml"
@@ -321,6 +322,142 @@ def _has_rewrite_spec_data_root_fix(decision: dict[str, Any]) -> bool:
     return False
 
 
+def _has_derive_warehouse_columns_fix(decision: dict[str, Any]) -> bool:
+    for item in decision.get("fix_plan") or []:
+        if isinstance(item, dict) and str(item.get("action") or "") == "derive_warehouse_columns":
+            return True
+        if isinstance(item, str) and item == "derive_warehouse_columns":
+            return True
+    return False
+
+
+def _copy_or_enrich_warehouse(source_root: Path, prepared_data_root: Path) -> dict[str, list[str]]:
+    warehouse_out = prepared_data_root / "data" / "cb_warehouse"
+    warehouse_out.mkdir(parents=True, exist_ok=True)
+    written: dict[str, list[str]] = {}
+
+    cb_basic_src = warehouse_source(source_root, "data/cb_warehouse/cb_basic.parquet")
+    cb_daily_src = warehouse_source(source_root, "data/cb_warehouse/cb_daily.parquet")
+    cb_call_src = warehouse_source(source_root, "data/cb_warehouse/cb_call.parquet")
+    stk_qfq_src = warehouse_source(source_root, "data/cb_warehouse/stk_daily_qfq.parquet")
+    if not all((cb_basic_src, cb_daily_src, cb_call_src, stk_qfq_src)):
+        missing = [
+            name
+            for name, path in {
+                "cb_basic": cb_basic_src,
+                "cb_daily": cb_daily_src,
+                "cb_call": cb_call_src,
+                "stk_daily_qfq": stk_qfq_src,
+            }.items()
+            if path is None
+        ]
+        raise ValueError(f"cannot derive warehouse columns; missing source files: {missing}")
+
+    basic = pd.read_parquet(cb_basic_src)
+    daily = pd.read_parquet(cb_daily_src)
+    call = pd.read_parquet(cb_call_src)
+    stock = pd.read_parquet(stk_qfq_src)
+
+    daily = daily.copy()
+    daily["trade_date"] = daily["trade_date"].astype(str)
+    daily = daily.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+    if "pct_chg" not in daily.columns:
+        daily["pct_chg"] = (
+            daily.groupby("ts_code")["close"]
+            .pct_change()
+            .fillna(0.0)
+            .astype(float)
+            * 100.0
+        )
+        written.setdefault("cb_daily", []).append("pct_chg")
+    if "cb_over_rate" not in daily.columns:
+        basic_small = basic[["ts_code", "stk_code", "conv_price"]].copy()
+        basic_small["conv_price"] = pd.to_numeric(basic_small["conv_price"], errors="coerce")
+        stock_small = stock[["stk_code", "trade_date", "close"]].copy()
+        stock_small["trade_date"] = stock_small["trade_date"].astype(str)
+        stock_small = stock_small.rename(columns={"close": "stock_close"})
+        merged = daily[["ts_code", "trade_date", "close"]].merge(basic_small, on="ts_code", how="left")
+        merged = merged.merge(stock_small, on=["stk_code", "trade_date"], how="left")
+        conv_value = pd.to_numeric(merged["stock_close"], errors="coerce") / merged["conv_price"] * 100.0
+        cb_close = pd.to_numeric(merged["close"], errors="coerce")
+        daily["cb_over_rate"] = ((cb_close / conv_value) - 1.0).replace([float("inf"), -float("inf")], pd.NA) * 100.0
+        written.setdefault("cb_daily", []).append("cb_over_rate")
+
+    call = call.copy()
+    if "call_type" not in call.columns:
+        if "is_call" in call.columns:
+            call["call_type"] = call["is_call"].fillna("").astype(str)
+        else:
+            call["call_type"] = ""
+        written.setdefault("cb_call", []).append("call_type")
+
+    basic.to_parquet(warehouse_out / "cb_basic.parquet", index=False)
+    daily.to_parquet(warehouse_out / "cb_daily.parquet", index=False)
+    call.to_parquet(warehouse_out / "cb_call.parquet", index=False)
+    stock.to_parquet(warehouse_out / "stk_daily_qfq.parquet", index=False)
+    return written
+
+
+def repair_warehouse_columns(spec_path: Path, decision_path: Path, decision: dict[str, Any]) -> dict[str, Any]:
+    spec = read_yaml(spec_path)
+    automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
+    command = automation.get("command") or []
+    if not isinstance(command, list):
+        raise ValueError("spec automation.command must be list")
+    old_data_root = command_value(command, "--data-root")
+    source_root = ensure_path(old_data_root)
+    prepared_root = spec_path.parent / "prepared_data"
+    prepared_data_root = prepared_root / "data_root"
+    derived_columns = _copy_or_enrich_warehouse(source_root, prepared_data_root)
+
+    new_data_root = rel(prepared_data_root)
+    command = update_command_path(command, "--data-root", new_data_root)
+    automation["command"] = command
+    sync_paths = [str(path) for path in automation.get("sync_paths") or []]
+    sync_paths.extend([rel(prepared_root), new_data_root])
+    seen: set[str] = set()
+    automation["sync_paths"] = [path for path in sync_paths if not (path in seen or seen.add(path))]
+    spec["automation"] = automation
+
+    report_path = prepared_root / "data_fix_report.yaml"
+    report = {
+        "schema_version": 1,
+        "run_id": str(spec.get("run_id") or spec_path.parent.name),
+        "status": "prepared",
+        "spec_path": rel(spec_path),
+        "decision_path": rel(decision_path),
+        "mode": "deterministic_warehouse_column_derivation",
+        "old_data_root": old_data_root,
+        "new_data_root": new_data_root,
+        "derived_columns": derived_columns,
+        "fix_plan": decision.get("fix_plan") or [],
+        "principle": "original data was not overwritten; enriched inputs are run-local prepared data",
+    }
+    write_yaml(report_path, report)
+    spec["data_quality_repair"] = {
+        "status": "prepared",
+        "mode": "deterministic_warehouse_column_derivation",
+        "old_data_root": old_data_root,
+        "new_data_root": new_data_root,
+        "source_decision": rel(decision_path),
+        "data_fix_report": rel(report_path),
+        "derived_columns": derived_columns,
+    }
+    write_yaml(spec_path, spec)
+    return {
+        "schema_version": 1,
+        "run_id": str(spec.get("run_id") or spec_path.parent.name),
+        "status": "prepared",
+        "spec_path": rel(spec_path),
+        "mode": "deterministic_warehouse_column_derivation",
+        "old_data_root": old_data_root,
+        "new_data_root": new_data_root,
+        "derived_columns": derived_columns,
+        "data_fix_report": rel(report_path),
+        "spec_updated": True,
+    }
+
+
 def repair_spec_data_root(spec_path: Path, decision_path: Path, decision: dict[str, Any]) -> dict[str, Any]:
     spec = read_yaml(spec_path)
     automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
@@ -383,6 +520,8 @@ def repair_spec_data_root(spec_path: Path, decision_path: Path, decision: dict[s
 def repair(spec_path: Path, decision_path: Path | None = None, attempts: int = 3) -> dict[str, Any]:
     decision_file = decision_path or spec_path.parent / "data_quality_decision.yaml"
     decision = read_yaml(decision_file)
+    if str(decision.get("status") or "").lower() in {"repair_candidate", "fixable"} and _has_derive_warehouse_columns_fix(decision):
+        return repair_warehouse_columns(spec_path, decision_file, decision)
     if str(decision.get("status") or "").lower() in {"repair_candidate", "fixable"} and _has_rewrite_spec_data_root_fix(decision):
         return repair_spec_data_root(spec_path, decision_file, decision)
     context = build_repair_context(spec_path, decision_file)
