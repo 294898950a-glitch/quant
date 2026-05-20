@@ -17,6 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 AI_PROVIDERS = REPO_ROOT / "data" / "research_framework" / "ai_providers.yaml"
 EXPECTATIONS = REPO_ROOT / "data" / "research_framework" / "data_schema_expectations.yaml"
 ENTRYPOINT = "scripts/validate_data_quality.py"
+WAREHOUSE_REL_PATHS = (
+    "data/cb_warehouse/cb_basic.parquet",
+    "data/cb_warehouse/cb_daily.parquet",
+    "data/cb_warehouse/cb_call.parquet",
+    "data/cb_warehouse/stk_daily_qfq.parquet",
+)
 
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
@@ -143,12 +149,7 @@ def _candidate_data_paths(spec: dict[str, Any]) -> list[str]:
     if base_ranks:
         command_paths.append(base_ranks)
     if data_root:
-        for rel_path in (
-            "data/cb_warehouse/cb_basic.parquet",
-            "data/cb_warehouse/cb_daily.parquet",
-            "data/cb_warehouse/cb_call.parquet",
-            "data/cb_warehouse/stk_daily_qfq.parquet",
-        ):
+        for rel_path in WAREHOUSE_REL_PATHS:
             command_paths.append(str(Path(data_root) / rel_path))
     paths.extend(command_paths)
     if not command_paths:
@@ -176,6 +177,98 @@ def _candidate_data_paths(spec: dict[str, Any]) -> list[str]:
             seen.add(path)
             unique.append(path)
     return unique
+
+
+def _warehouse_rel_from_path(raw_path: str) -> str | None:
+    text = raw_path.replace("\\", "/")
+    for rel_path in WAREHOUSE_REL_PATHS:
+        marker = "/" + rel_path
+        if text == rel_path or text.endswith(marker) or marker in text:
+            return rel_path
+    return None
+
+
+def _current_warehouse_has(rel_path: str) -> bool:
+    return (REPO_ROOT / rel_path).exists()
+
+
+def deterministic_decision(summary: dict[str, Any]) -> dict[str, Any]:
+    """Return the non-AI risk gate decision for run data.
+
+    This gate handles facts that should not depend on model judgment:
+    missing files, unreadable inputs, required schema breakage, and obvious
+    corrupt price rows. The AI judge may add concerns only after this gate
+    passes or after a repairable path issue is fixed.
+    """
+    blocking: list[str] = []
+    warnings: list[str] = []
+    fix_plan: list[dict[str, Any]] = []
+    seen_repairs: set[tuple[str, str]] = set()
+
+    for item in summary.get("data_files") or []:
+        if not isinstance(item, dict):
+            continue
+        path = str(item.get("path") or "")
+        if item.get("exists") is False:
+            warehouse_rel = _warehouse_rel_from_path(path)
+            if warehouse_rel and _current_warehouse_has(warehouse_rel):
+                repair_key = ("rewrite_spec_data_root", warehouse_rel)
+                if repair_key not in seen_repairs:
+                    fix_plan.append(
+                        {
+                            "action": "rewrite_spec_data_root",
+                            "missing_path": path,
+                            "replacement_path": warehouse_rel,
+                            "new_data_root": ".",
+                        }
+                    )
+                    seen_repairs.add(repair_key)
+                continue
+            blocking.append(f"required data file missing: {path}")
+            continue
+        if item.get("readable") is False:
+            blocking.append(f"required data file unreadable: {path} {item.get('error') or ''}".strip())
+            continue
+        missing_required = item.get("missing_required_columns") or []
+        if missing_required:
+            blocking.append(f"{path} missing required columns: {missing_required}")
+        expected_min_rows = item.get("expected_min_rows")
+        if expected_min_rows is not None:
+            try:
+                if int(item.get("rows") or 0) < int(expected_min_rows):
+                    blocking.append(f"{path} rows below expected minimum: {item.get('rows')} < {expected_min_rows}")
+            except (TypeError, ValueError):
+                blocking.append(f"{path} has invalid expected_min_rows: {expected_min_rows}")
+        for key in ("nonpositive_close_rows", "nonpositive_ohlc_rows", "bad_ohlc_rows"):
+            if int(item.get(key) or 0) > 0:
+                blocking.append(f"{path} has {key}: {item.get(key)}")
+        duplicate_rows = int(item.get("duplicate_key_rows") or 0)
+        if duplicate_rows:
+            warnings.append(f"{path} has duplicate key rows: {duplicate_rows}")
+        missing_recommended = item.get("missing_recommended_columns") or []
+        if missing_recommended:
+            warnings.append(f"{path} missing recommended columns: {missing_recommended}")
+
+    if blocking:
+        status = "fail"
+        reason = "deterministic data gate found blocking data defects"
+    elif fix_plan:
+        status = "repair_candidate"
+        reason = "deterministic data gate found missing old warehouse paths that can be redirected to current warehouse"
+    else:
+        status = "pass"
+        reason = "deterministic data gate passed"
+
+    return {
+        "schema_version": 1,
+        "status": status,
+        "confidence": "high",
+        "decision_source": "deterministic_data_gate",
+        "blocking_issues": blocking,
+        "warnings": warnings,
+        "fix_plan": fix_plan,
+        "decision_reason": reason,
+    }
 
 
 def _date_bounds(series: pd.Series) -> dict[str, str | None]:
@@ -369,6 +462,9 @@ def compact_for_ai(summary: dict[str, Any]) -> dict[str, Any]:
 
 
 def judge_summary(summary: dict[str, Any]) -> dict[str, Any]:
+    gate_decision = deterministic_decision(summary)
+    if str(gate_decision.get("status") or "").lower() != "pass":
+        return gate_decision
     adapter = RegisteredProviderAdapter(AI_PROVIDERS, repo_root=REPO_ROOT, entrypoint=ENTRYPOINT)
     response = adapter.call_active_provider(_judge_prompt(summary), schema={})
     content = _strip_markdown_fence(response.content)
@@ -383,6 +479,7 @@ def judge_summary(summary: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("AI data-quality response status must be pass, repair_candidate, or fail")
     data["ai_provider"] = response.provider_id
     data["response_hash"] = response.response_hash
+    data["deterministic_gate"] = gate_decision
     return data
 
 
@@ -402,11 +499,11 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--spec", help="spec.yaml path used when creating a summary")
     parser.add_argument("--summary-only", action="store_true", help="print JSON summary and do not call AI")
+    parser.add_argument("--hard-decision-only", action="store_true", help="print deterministic data gate decision and do not call AI")
     parser.add_argument("--judge-summary-stdin", action="store_true", help="read JSON summary from stdin and ask AI")
     args = parser.parse_args()
 
     if args.judge_summary_stdin:
-        require_ticket("data_quality_judge")
         summary = json.loads(sys.stdin.read())
     else:
         if not args.spec:
@@ -419,6 +516,11 @@ def main() -> int:
     if args.summary_only:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
+
+    if args.hard_decision_only:
+        decision = deterministic_decision(summary)
+        print(yaml.safe_dump(decision, allow_unicode=True, sort_keys=False))
+        return 0 if str(decision.get("status")).lower() == "pass" else 1
 
     require_ticket("data_quality_judge")
     try:

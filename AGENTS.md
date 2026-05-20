@@ -40,6 +40,9 @@ Hard boundaries:
 - Truth changes must update `data/research_framework/current.yaml` and/or
   `data/research_framework/baseline_registry.yaml`, or add a waiver under
   `data/research_framework/truth_sync_waivers/`.
+- Data quality must pass the deterministic gate before a run can start; old
+  missing data-root pointers may be rewritten to the current warehouse, but
+  unfixable missing/unreadable/broken required data blocks the flow.
 - Evidence tools for strategy ideation and review must go through
   `framework/autonomous/verification_tool.py::EvidenceToolkit` and be registered
   in `data/research_framework/evidence_tool_registry.yaml` before use.

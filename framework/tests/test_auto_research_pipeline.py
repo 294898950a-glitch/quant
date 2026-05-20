@@ -5,6 +5,8 @@ import yaml
 import pytest
 
 from scripts import auto_research_pipeline as pipeline
+from scripts import repair_data_quality
+from scripts import validate_data_quality
 from framework.autonomous import run_recorder
 
 
@@ -158,6 +160,7 @@ def test_backfill_record_cannot_trigger_next_research(tmp_path, monkeypatch):
 def test_data_quality_ai_judge_requires_ticket():
     source = pipeline.Path("scripts/validate_data_quality.py").read_text(encoding="utf-8")
     assert 'require_ticket("data_quality_judge")' in source
+    assert 'if args.judge_summary_stdin:\n        require_ticket("data_quality_judge")' not in source
     assert "repair_candidate" in source
     assert "status: pass 或 repair_candidate 或 fail" in source
 
@@ -173,6 +176,68 @@ def test_data_repairer_is_separate_and_revalidated():
     assert "RegisteredProviderAdapter" in repairer
     assert "generated_repair.py" in repairer
     assert "original data was not overwritten" in repairer
+
+
+def test_deterministic_data_gate_repairs_old_warehouse_pointer(tmp_path, monkeypatch):
+    monkeypatch.setattr(validate_data_quality, "REPO_ROOT", tmp_path)
+    for rel_path in validate_data_quality.WAREHOUSE_REL_PATHS:
+        path = tmp_path / rel_path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("placeholder", encoding="utf-8")
+    summary = {
+        "schema_version": 1,
+        "data_files": [
+            {
+                "path": f"data/old_run/{rel_path}",
+                "exists": False,
+                "readable": False,
+            }
+            for rel_path in validate_data_quality.WAREHOUSE_REL_PATHS
+        ],
+    }
+
+    decision = validate_data_quality.deterministic_decision(summary)
+
+    assert decision["status"] == "repair_candidate"
+    assert decision["decision_source"] == "deterministic_data_gate"
+    assert {item["action"] for item in decision["fix_plan"]} == {"rewrite_spec_data_root"}
+
+
+def test_data_root_repair_updates_spec_without_base_ranks(tmp_path, monkeypatch):
+    monkeypatch.setattr(repair_data_quality, "REPO_ROOT", tmp_path)
+    run_dir = tmp_path / "data" / "run_a"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    decision_path = run_dir / "data_quality_decision.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_a",
+                "automation": {
+                    "command": ["python3", "scripts/evaluate.py", "--data-root", "data/old_run"],
+                    "sync_paths": [],
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+    decision_path.write_text(
+        yaml.safe_dump(
+            {
+                "status": "repair_candidate",
+                "fix_plan": [{"action": "rewrite_spec_data_root", "new_data_root": "."}],
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    report = repair_data_quality.repair(spec_path, decision_path)
+    updated = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+
+    assert report["status"] == "prepared"
+    assert report["mode"] == "deterministic_spec_path_rewrite"
+    assert updated["automation"]["command"][-1] == "."
+    assert "data/cb_warehouse/cb_daily.parquet" in updated["automation"]["sync_paths"]
 
 
 def test_derive_verdict_from_run_summary(tmp_path):

@@ -312,8 +312,79 @@ def update_spec_for_prepared_data(spec_path: Path, context: dict[str, Any], repa
     return spec
 
 
+def _has_rewrite_spec_data_root_fix(decision: dict[str, Any]) -> bool:
+    for item in decision.get("fix_plan") or []:
+        if isinstance(item, dict) and str(item.get("action") or "") == "rewrite_spec_data_root":
+            return True
+        if isinstance(item, str) and item == "rewrite_spec_data_root":
+            return True
+    return False
+
+
+def repair_spec_data_root(spec_path: Path, decision_path: Path, decision: dict[str, Any]) -> dict[str, Any]:
+    spec = read_yaml(spec_path)
+    automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
+    command = automation.get("command") or []
+    if not isinstance(command, list):
+        raise ValueError("spec automation.command must be list")
+    old_data_root = command_value(command, "--data-root")
+    command = update_command_path(command, "--data-root", ".")
+    automation["command"] = command
+
+    sync_paths = [str(path) for path in automation.get("sync_paths") or []]
+    sync_paths.extend(
+        [
+            "data/cb_warehouse/cb_basic.parquet",
+            "data/cb_warehouse/cb_daily.parquet",
+            "data/cb_warehouse/cb_call.parquet",
+            "data/cb_warehouse/stk_daily_qfq.parquet",
+        ]
+    )
+    seen: set[str] = set()
+    automation["sync_paths"] = [path for path in sync_paths if not (path in seen or seen.add(path))]
+    spec["automation"] = automation
+
+    report_path = spec_path.parent / "prepared_data" / "data_fix_report.yaml"
+    report = {
+        "schema_version": 1,
+        "run_id": str(spec.get("run_id") or spec_path.parent.name),
+        "status": "prepared",
+        "spec_path": rel(spec_path),
+        "decision_path": rel(decision_path),
+        "mode": "deterministic_spec_path_rewrite",
+        "old_data_root": old_data_root,
+        "new_data_root": ".",
+        "fix_plan": decision.get("fix_plan") or [],
+        "principle": "original data was not overwritten; only the run spec data-root pointer was normalized",
+    }
+    write_yaml(report_path, report)
+    spec["data_quality_repair"] = {
+        "status": "prepared",
+        "mode": "deterministic_spec_path_rewrite",
+        "old_data_root": old_data_root,
+        "new_data_root": ".",
+        "source_decision": rel(decision_path),
+        "data_fix_report": rel(report_path),
+    }
+    write_yaml(spec_path, spec)
+    return {
+        "schema_version": 1,
+        "run_id": str(spec.get("run_id") or spec_path.parent.name),
+        "status": "prepared",
+        "spec_path": rel(spec_path),
+        "mode": "deterministic_spec_path_rewrite",
+        "old_data_root": old_data_root,
+        "new_data_root": ".",
+        "data_fix_report": rel(report_path),
+        "spec_updated": True,
+    }
+
+
 def repair(spec_path: Path, decision_path: Path | None = None, attempts: int = 3) -> dict[str, Any]:
     decision_file = decision_path or spec_path.parent / "data_quality_decision.yaml"
+    decision = read_yaml(decision_file)
+    if str(decision.get("status") or "").lower() in {"repair_candidate", "fixable"} and _has_rewrite_spec_data_root_fix(decision):
+        return repair_spec_data_root(spec_path, decision_file, decision)
     context = build_repair_context(spec_path, decision_file)
     workspace = spec_path.parent / "repair_workspace"
     errors: list[str] = []

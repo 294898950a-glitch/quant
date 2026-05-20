@@ -567,6 +567,11 @@ def sync_paths(state: dict[str, Any], item: dict[str, Any], spec_path: Path, vm:
     paths.append(rel(spec_path))
     run_dir = spec_path.parent
     paths.append(rel(run_dir))
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+    if isinstance(spec, dict):
+        automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
+        automation_sync_paths = automation.get("sync_paths") if isinstance(automation.get("sync_paths"), list) else []
+        paths.extend(automation_sync_paths)
     seen: set[str] = set()
     for path_raw in paths:
         path = Path(path_raw)

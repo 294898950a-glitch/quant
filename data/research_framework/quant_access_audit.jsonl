@@ -224,3 +224,8 @@
 {"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_121001_d7ec5bfc92f0"}, "pid": 18627, "ts": "2026-05-20T12:10:02"}
 {"action": "research_queue_runner_once", "event": "issued", "payload": {"allowed_actions": ["research_queue_runner_once"], "ticket_id": "20260520_122001_1372948f73cb", "ttl_seconds": 900}, "pid": 21810, "ts": "2026-05-20T12:20:01"}
 {"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_122001_1372948f73cb"}, "pid": 21811, "ts": "2026-05-20T12:20:01"}
+{"action": "research_queue_runner_once", "event": "issued", "payload": {"allowed_actions": ["research_queue_runner_once"], "ticket_id": "20260520_123001_35fc509e4179", "ttl_seconds": 900}, "pid": 23944, "ts": "2026-05-20T12:30:01"}
+{"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_123001_35fc509e4179"}, "pid": 23951, "ts": "2026-05-20T12:30:01"}
+{"action": "data_quality_judge", "event": "denied", "payload": {"reason": "PermissionError: missing QUANT_AUTOMATION_TICKET_PATH"}, "pid": 25475, "ts": "2026-05-20T12:35:28"}
+{"action": "data_quality_judge", "event": "issued", "payload": {"allowed_actions": ["data_quality_judge"], "ticket_id": "20260520_123647_3438014d0fc4", "ttl_seconds": 900}, "pid": 26016, "ts": "2026-05-20T12:36:47"}
+{"action": "data_quality_judge", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_123647_3438014d0fc4"}, "pid": 26018, "ts": "2026-05-20T12:36:49"}

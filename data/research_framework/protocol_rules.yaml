@@ -35,6 +35,7 @@ rules:
     automatic_pipeline: scripts/auto_research_pipeline.py
     automatic_steps:
       - load_spec
+      - deterministic_data_quality_gate
       - require_data_quality_decision
       - repair_candidate_data_quality
       - revalidate_after_data_repair
