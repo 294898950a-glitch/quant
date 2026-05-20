@@ -58,8 +58,7 @@ compute_estimate:
   spot_minutes: 120
   local_minutes: 0
   estimated_cost_yuan: 15.0
-spot_decision: 单规则候选，但内部 grid 包含~168组参数 × ~2分钟/组 ≈ 120分钟 VM spot。必须在VM/spot
-  host执行。
+spot_decision: 单规则候选，但内部 grid 包含~168组参数 × ~2分钟/组 ≈ 120分钟 VM spot。必须在VM/spot host执行。
 stop_conditions:
 - 脚本退出非0
 - 缺少 summary.json 或 train_summary.csv
@@ -88,7 +87,7 @@ automation:
   - .venv/bin/python
   - scripts/evaluate_cb_arb_value_gap_switch.py
   - --data-root
-  - data/cb_arb_concurrent_supervised_20260511_094500
+  - .
   - --train-start
   - '20190101'
   - --train-end
@@ -119,9 +118,9 @@ notes: Hermes选择的第10个研究方向，在所有9个家族耗尽之后。t
   现有 evaluate_cb_arb_value_gap_switch.py 无需新执行器。不改current.yaml，不改baseline_registry。compute_estimate仅作记录，不作为预算审批。
 archive_reason: auto_research_pipeline produced summary outputs but did not produce
   report.yaml, l4_ack.yaml, or diagnostic.yaml; research_queue marked the item failed
-  on 2026-05-19. Later recovered review artifacts are noncanonical, and the
-  result is rejected, so the run must remain an archived failed direction rather
-  than a complete reviewed experiment.
+  on 2026-05-19. Later recovered review artifacts are noncanonical, and the result
+  is rejected, so the run must remain an archived failed direction rather than a complete
+  reviewed experiment.
 escalation:
 - archived_incomplete_artifacts
 ideation:
@@ -135,3 +134,10 @@ ideation:
   risk: 核心风险：trend_guard 只有3个状态（strong/weak/neutral），可能不如 score_4state 的4状态精细；趋势确认机制可能在2020年急跌时反应滞后。但这是用已有评估器可以快速验证
     的方向，不产生新的工程开销。
 updated_at: '2026-05-19T13:10:46Z'
+data_quality_repair:
+  status: prepared
+  mode: deterministic_spec_path_rewrite
+  old_data_root: data/cb_arb_concurrent_supervised_20260511_094500
+  new_data_root: .
+  source_decision: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/data_quality_decision.yaml
+  data_fix_report: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_fix_report.yaml

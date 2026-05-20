@@ -1,0 +1,29 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+spec_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/spec.yaml
+validated_at: '2026-05-20T12:47:53'
+summary_sha256: 0fb9e54a123f5d510f7a79f5c971893fee71474e5373798b65fb8ef2f6dad01b
+status: repair_candidate
+confidence: high
+decision_source: deterministic_data_gate
+blocking_issues: []
+warnings: []
+fix_plan:
+- action: rewrite_spec_data_root
+  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/cb_basic.parquet
+  replacement_path: data/cb_warehouse/cb_basic.parquet
+  new_data_root: .
+- action: rewrite_spec_data_root
+  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/cb_daily.parquet
+  replacement_path: data/cb_warehouse/cb_daily.parquet
+  new_data_root: .
+- action: rewrite_spec_data_root
+  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/cb_call.parquet
+  replacement_path: data/cb_warehouse/cb_call.parquet
+  new_data_root: .
+- action: rewrite_spec_data_root
+  missing_path: data/cb_arb_concurrent_supervised_20260511_094500/data/cb_warehouse/stk_daily_qfq.parquet
+  replacement_path: data/cb_warehouse/stk_daily_qfq.parquet
+  new_data_root: .
+decision_reason: deterministic data gate found missing old warehouse paths that can
+  be redirected to current warehouse

@@ -229,3 +229,9 @@
 {"action": "data_quality_judge", "event": "denied", "payload": {"reason": "PermissionError: missing QUANT_AUTOMATION_TICKET_PATH"}, "pid": 25475, "ts": "2026-05-20T12:35:28"}
 {"action": "data_quality_judge", "event": "issued", "payload": {"allowed_actions": ["data_quality_judge"], "ticket_id": "20260520_123647_3438014d0fc4", "ttl_seconds": 900}, "pid": 26016, "ts": "2026-05-20T12:36:47"}
 {"action": "data_quality_judge", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_123647_3438014d0fc4"}, "pid": 26018, "ts": "2026-05-20T12:36:49"}
+{"action": "research_queue_runner_once", "event": "issued", "payload": {"allowed_actions": ["research_queue_runner_once"], "ticket_id": "20260520_124001_e55101d24f68", "ttl_seconds": 900}, "pid": 26625, "ts": "2026-05-20T12:40:01"}
+{"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_124001_e55101d24f68"}, "pid": 26626, "ts": "2026-05-20T12:40:01"}
+{"action": "data_quality_judge", "event": "issued", "payload": {"allowed_actions": ["data_quality_judge"], "ticket_id": "20260520_124752_6a8b33d950d7", "ttl_seconds": 900}, "pid": 27012, "ts": "2026-05-20T12:47:52"}
+{"action": "data_quality_judge", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_124752_6a8b33d950d7"}, "pid": 27021, "ts": "2026-05-20T12:47:53"}
+{"action": "data_quality_repair", "event": "issued", "payload": {"allowed_actions": ["data_quality_repair"], "ticket_id": "20260520_124753_9fb4e1c7e310", "ttl_seconds": 900}, "pid": 27012, "ts": "2026-05-20T12:47:53"}
+{"action": "data_quality_repair", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260520_124753_9fb4e1c7e310"}, "pid": 27030, "ts": "2026-05-20T12:47:54"}
