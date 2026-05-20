@@ -145,7 +145,6 @@ def fill_template(out_path: Path, run_id: str, strategy_id: str,
         "compute_estimate": {
             "sig_minutes": 0, "spot_minutes": 0, "estimated_cost_yuan": 0.0,
         },
-        "budget_cap_yuan": 30,
         "spot_decision": "<TODO>",
         "stop_conditions": ["<TODO>"],
         "artifacts_required": ["ranked.csv", "trades.csv", "daily_equity.csv",

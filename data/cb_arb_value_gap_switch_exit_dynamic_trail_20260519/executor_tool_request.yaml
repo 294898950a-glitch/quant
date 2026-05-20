@@ -1,0 +1,235 @@
+tool_request_id: dynamic_exit_gap_decay_executor_v1
+why_existing_tools_insufficient: Both reviewed executors (option_position_sizing and
+  option_source_pnl_feedback_scaler) lack the capability to implement or test a new
+  exit rule (C007). They can only handle static position scaling and PnL feedback;
+  neither can modify the exit logic or evaluate a dynamic trailing stop based on value
+  gap retracement.
+reviewed_existing_executor_ids:
+- option_position_sizing
+- option_source_pnl_feedback_scaler
+registry_entry:
+  id: dynamic_exit_gap_decay_executor
+  version: 1
+  status: draft
+  strategy_id: cb_arb_value_gap_switch
+  family: dynamic_exit_gap_decay
+  script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  owner: ai_draft
+  description: Evaluate the dynamic trailing exit gap decay proposal by applying a
+    retracement-based exit rule to the daily value gap series.
+  can_test:
+  - new_exit_rule
+  can_test_capability_ids:
+  - C007
+  cannot_test:
+  - rolling_pnl_feedback
+  - new_valuation_formula
+  - new_data_source
+  cannot_test_capability_ids:
+  - C004
+  - C006
+  - C008
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    description: Base value-gap ranks with theoretical value, bond floor, option value,
+      position cash, and tradable gap amount.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_basic.parquet
+    description: CB basic table with stock code and conversion price.
+    schema_hash: null
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted stock prices for compatibility with shared rank
+      loader.
+    schema_hash: null
+  required_config_fields:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  command_template:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  - --data-root
+  - '{data_root}'
+  - --train-start
+  - '{train_start}'
+  - --train-end
+  - '{train_end}'
+  - --test-start
+  - '{test_start}'
+  - --test-end
+  - '{test_end}'
+  - --output-dir
+  - '{output_dir}'
+  default_config: {}
+  artifacts_produced:
+  - summary.json
+  - report.yaml
+  - l4_ack.yaml
+  - diagnostic.yaml
+  budget_estimate:
+    sig_minutes: 0
+    spot_minutes: 90
+    local_minutes: 0
+    estimated_cost_yuan: 0.0
+  vm_local_limits:
+    vm_required: true
+    local_allowed: false
+  obsolescence_date: null
+implementation_outline:
+  script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  main_inputs:
+  - data_root
+  - output_dir
+  core_steps:
+  - load existing base ranks
+  - apply proposal-specific rule
+  - produce required artifacts
+  code_constraints:
+  - use existing project data files
+  - do not change current strategy truth
+validation_plan:
+- python3 -m py_compile scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+- run a small data smoke test
+- verify all required artifacts are produced
+ai_provider: deepseek
+design_response_hash: cc9dc963f13d60d4
+code_response_hash: c4a838edbae78f7a
+compile_reason: no strict executor match
+tool_design:
+  tool_request_id: dynamic_exit_gap_decay_executor_v1
+  why_existing_tools_insufficient: Both reviewed executors (option_position_sizing
+    and option_source_pnl_feedback_scaler) lack the capability to implement or test
+    a new exit rule (C007). They can only handle static position scaling and PnL feedback;
+    neither can modify the exit logic or evaluate a dynamic trailing stop based on
+    value gap retracement.
+  reviewed_existing_executor_ids:
+  - option_position_sizing
+  - option_source_pnl_feedback_scaler
+  registry_entry:
+    id: dynamic_exit_gap_decay_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: dynamic_exit_gap_decay
+    script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    owner: ai_draft
+    description: Evaluate the dynamic trailing exit gap decay proposal by applying
+      a retracement-based exit rule to the daily value gap series.
+    can_test:
+    - new_exit_rule
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - rolling_pnl_feedback
+    - new_valuation_formula
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C006
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base value-gap ranks with theoretical value, bond floor, option
+        value, position cash, and tradable gap amount.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stock code and conversion price.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for compatibility with shared rank
+        loader.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 90
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  implementation_outline:
+    script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    main_inputs:
+    - data_root
+    - output_dir
+    core_steps:
+    - load existing base ranks
+    - apply proposal-specific rule
+    - produce required artifacts
+    code_constraints:
+    - use existing project data files
+    - do not change current strategy truth
+  validation_plan:
+  - python3 -m py_compile scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  - run a small data smoke test
+  - verify all required artifacts are produced
+  ai_provider: deepseek
+  response_hash: cc9dc963f13d60d4
+  compile_reason: no strict executor match
+  validation_errors: []
+  status: draft_tool_design
+tool_code_response:
+  files:
+  - path: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    purpose: Complete draft evaluator implementation.
+    content: "#!/usr/bin/env python3\nimport argparse\nimport json\nimport sys\nimport\
+      \ yaml\nfrom pathlib import Path\n\nimport pandas as pd\nimport numpy as np\n\
+      \nsys.path.insert(0, str(Path(__file__).resolve().parent.parent))\n\nfrom framework.experiments.runner\
+      \ import run_experiment\nfrom strategy.cb_arb_value_gap_switch.strategy import\
+      \ CBArbValueGapSwitchStrategy\n\nclass DynamicTrailingExitStrategy(CBArbValueGapSwitchStrategy):\n\
+      \    \"\"\"Exit when VA_GAP retraces a fraction from its peak since entry.\"\
+      \"\"\n\n    def __init__(self, retrace_frac=0.5, min_hold_days=5, **kwargs):\n\
+      \        super().__init__(**kwargs)\n        self."
+  ai_provider: deepseek
+  response_hash: c4a838edbae78f7a
+  validation_errors:
+  - 'files[1].content is not valid Python: invalid syntax'
+  status: invalid_tool_code_response
+files:
+- path: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  purpose: Complete draft evaluator implementation.
+  content: "#!/usr/bin/env python3\nimport argparse\nimport json\nimport sys\nimport\
+    \ yaml\nfrom pathlib import Path\n\nimport pandas as pd\nimport numpy as np\n\n\
+    sys.path.insert(0, str(Path(__file__).resolve().parent.parent))\n\nfrom framework.experiments.runner\
+    \ import run_experiment\nfrom strategy.cb_arb_value_gap_switch.strategy import\
+    \ CBArbValueGapSwitchStrategy\n\nclass DynamicTrailingExitStrategy(CBArbValueGapSwitchStrategy):\n\
+    \    \"\"\"Exit when VA_GAP retraces a fraction from its peak since entry.\"\"\
+    \"\n\n    def __init__(self, retrace_frac=0.5, min_hold_days=5, **kwargs):\n \
+    \       super().__init__(**kwargs)\n        self."
+tool_code_attempts: 2
+validation_errors:
+- 'code: files[1].content is not valid Python: invalid syntax'
+written_files: []
+status: invalid_tool_code_response

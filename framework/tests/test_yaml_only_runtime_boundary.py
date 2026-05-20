@@ -3,7 +3,6 @@
 Stress tests the runtime invariants set by the yaml-only refactor:
 - validate_entrypoints.py: only AGENTS.md + CLAUDE.md allowed as markdown
 - framework_doc_check.py: every yaml runtime path routes to correct validator
-- outbox_protocol_preflight.py: L0 yaml preconditions (l0_*.yaml) enforced
 - search_ledger.py: yaml ledger searchable
 
 Run: .venv/bin/python -m pytest framework/tests/test_yaml_only_runtime_boundary.py -v
@@ -15,11 +14,9 @@ not internal functions) and tmp_path for isolated repo state.
 from __future__ import annotations
 
 import importlib.util
-import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
 import pytest
 import yaml
@@ -247,12 +244,11 @@ def test_validate_entrypoints_missing_protocol_rules(tmp_path: Path):
     ("data/cb_arb_test_20260517/diagnostic.yaml", "validate_l5_diagnostic.py"),
     # framework yaml routes
     ("data/research_framework/baseline_registry.yaml", "validate_baseline_registry.py"),
-    ("data/research_framework/current.yaml", "validate_current_md.py"),
+    ("data/research_framework/current.yaml", "validate_current_yaml.py"),
     ("data/research_framework/runtime_entrypoints.yaml", "validate_entrypoints.py"),
     ("data/research_framework/protocol_rules.yaml", "validate_entrypoints.py"),
     ("data/research_framework/experiments.yaml", "validate_entrypoints.py"),
     ("data/research_framework/truth_sync_waivers/foo.yaml", "validate_truth_sync.py"),
-    ("data/research_framework/compute_budget_config.json", "validate_compute_budget.py"),
     ("data/research_framework/run_manifests/foo.yaml", "validate_run_manifest.py"),
     # skip routes
     ("README.txt", ""),
@@ -276,171 +272,6 @@ def test_framework_doc_check_skips_outside_repo(tmp_path: Path):
     outside.write_text("test")
     validator, _ = fdc.dispatch(outside)
     assert validator == ""
-
-
-# ==================== D. outbox_protocol_preflight subprocess ====================
-
-
-def _make_outbox_files(tmp_path: Path, claude_msg: str) -> tuple[Path, Path, Path, Path]:
-    claude_box = tmp_path / "claude.md"
-    codex_box = tmp_path / "codex.md"
-    state_file = tmp_path / "state.md"
-    cache = tmp_path / "cache.jsonl"
-    claude_box.write_text(claude_msg)
-    codex_box.write_text("")
-    state_file.write_text("")
-    return claude_box, codex_box, state_file, cache
-
-
-def _run_preflight(claude_box: Path, codex_box: Path, state_file: Path, cache: Path,
-                   protocol_doc: Path, repo: Path,
-                   ledger: Path | None = None) -> subprocess.CompletedProcess:
-    args = [
-        sys.executable, str(SCRIPTS / "outbox_protocol_preflight.py"),
-        "check",
-        "--claude-box", str(claude_box),
-        "--codex-box", str(codex_box),
-        "--state-file", str(state_file),
-        "--cache", str(cache),
-        "--protocol-doc", str(protocol_doc),
-        "--repo", str(repo),
-    ]
-    if ledger:
-        args += ["--ledger", str(ledger)]
-    return subprocess.run(args, capture_output=True, text=True, cwd=REPO_ROOT)
-
-
-def test_outbox_preflight_missing_protocol_header(tmp_path: Path):
-    """Message without protocol-redline-vX.Y header → MISSING-PROTOCOL."""
-    msg = """### 2026-05-17 10:00 CST - Claude - L1/DIRECT
-
-Body without header.
-"""
-    claude, codex, state, cache = _make_outbox_files(tmp_path, msg)
-    protocol_doc = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
-    r = _run_preflight(claude, codex, state, cache, protocol_doc, tmp_path)
-    # exit code 20 = HANDOFF
-    assert r.returncode in {20}, f"got {r.returncode}; {r.stdout}; {r.stderr}"
-    assert "MISSING-PROTOCOL" in r.stdout
-
-
-def test_outbox_preflight_version_mismatch(tmp_path: Path):
-    """Message protocol-redline-v0.1 vs local v1.5 → VERSION-MISMATCH."""
-    msg = """### 2026-05-17 10:00 CST - Claude - L1/DIRECT
-
-<!-- protocol-redline-v0.1 -->
-Body.
-"""
-    claude, codex, state, cache = _make_outbox_files(tmp_path, msg)
-    protocol_doc = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
-    r = _run_preflight(claude, codex, state, cache, protocol_doc, tmp_path)
-    assert r.returncode == 20
-    assert "VERSION-MISMATCH" in r.stdout
-
-
-def test_outbox_preflight_version_missing_local(tmp_path: Path):
-    """If protocol_doc points to non-existent file → VERSION-MISSING-LOCAL."""
-    msg = """### 2026-05-17 10:00 CST - Claude - L1/DIRECT
-
-<!-- protocol-redline-v1.5 -->
-Body.
-"""
-    claude, codex, state, cache = _make_outbox_files(tmp_path, msg)
-    missing_protocol = tmp_path / "does_not_exist.yaml"
-    r = _run_preflight(claude, codex, state, cache, missing_protocol, tmp_path)
-    assert r.returncode == 20
-    assert "VERSION-MISSING-LOCAL" in r.stdout
-
-
-def test_outbox_preflight_l1_direct_missing_l0_yaml(tmp_path: Path):
-    """L1 DIRECT entry-id 1.1 without l0_intuition.yaml → MISSING-L0-PRECONDITION."""
-    msg = """### 2026-05-17 10:00 CST - Claude - L1/DIRECT
-
-<!-- protocol-redline-v1.5 -->
-<!-- l0-entry-id: 1.1 -->
-Project: quant
-Task: L1 test
-run-id: cb_arb_test_20260517
-
-L1 hypothesis: test
-parameter_space: foo
-hard_floors: bar
-output_artifacts: baz
-compute_estimate: 10s
-data_sources: none
-true_cv_design: leave-one-year-out
-stop_conditions: timeout
-"""
-    claude, codex, state, cache = _make_outbox_files(tmp_path, msg)
-    protocol_doc = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
-    repo = tmp_path / "fakerepo"
-    repo.mkdir()
-    r = _run_preflight(claude, codex, state, cache, protocol_doc, repo)
-    assert r.returncode == 20
-    # path l0_intuition.yaml missing
-    assert "l0_intuition.yaml" in r.stdout or "L0" in r.stdout
-
-
-def test_outbox_preflight_l1_direct_l0_yaml_missing_schema(tmp_path: Path):
-    """L0 yaml without schema_version → fail."""
-    msg = """### 2026-05-17 10:00 CST - Claude - L1/DIRECT
-
-<!-- protocol-redline-v1.5 -->
-<!-- l0-entry-id: 1.1 -->
-run-id: cb_arb_test_20260517
-
-L1 hypothesis: t
-parameter_space: t
-hard_floors: t
-output_artifacts: t
-compute_estimate: t
-data_sources: t
-true_cv_design: t
-stop_conditions: t
-"""
-    claude, codex, state, cache = _make_outbox_files(tmp_path, msg)
-    protocol_doc = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
-    repo = tmp_path / "fakerepo"
-    (repo / "data" / "cb_arb_test_20260517").mkdir(parents=True)
-    (repo / "data" / "cb_arb_test_20260517" / "l0_intuition.yaml").write_text(
-        yaml.safe_dump({"intuition_ladder": {"strong": "x", "medium": "y", "weak": "z"}})
-        # missing schema_version
-    )
-    r = _run_preflight(claude, codex, state, cache, protocol_doc, repo)
-    assert r.returncode == 20
-    assert "schema_version" in r.stdout.lower() or "L0" in r.stdout
-
-
-def test_outbox_preflight_l1_direct_l0_yaml_missing_ladder(tmp_path: Path):
-    """L0 yaml without strong/medium/weak ladder → fail."""
-    msg = """### 2026-05-17 10:00 CST - Claude - L1/DIRECT
-
-<!-- protocol-redline-v1.5 -->
-<!-- l0-entry-id: 1.1 -->
-run-id: cb_arb_test_20260517
-
-L1 hypothesis: t
-parameter_space: t
-hard_floors: t
-output_artifacts: t
-compute_estimate: t
-data_sources: t
-true_cv_design: t
-stop_conditions: t
-"""
-    claude, codex, state, cache = _make_outbox_files(tmp_path, msg)
-    protocol_doc = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
-    repo = tmp_path / "fakerepo"
-    (repo / "data" / "cb_arb_test_20260517").mkdir(parents=True)
-    (repo / "data" / "cb_arb_test_20260517" / "l0_intuition.yaml").write_text(
-        yaml.safe_dump({
-            "schema_version": 1,
-            "intuition_ladder": {"strong": "x"},  # missing medium/weak
-        })
-    )
-    r = _run_preflight(claude, codex, state, cache, protocol_doc, repo)
-    assert r.returncode == 20
-    assert "intuition" in r.stdout.lower() or "ladder" in r.stdout.lower() or "L0" in r.stdout
 
 
 # ==================== E. search_ledger smoke tests ====================
@@ -483,35 +314,30 @@ def test_experiments_yaml_has_migrated_reject_patterns():
     assert len(rejected) >= 8, f"expected ≥8 rejected entries (ledger migration), got {len(rejected)}"
 
 
-def test_research_insights_yaml_has_source_attribution():
-    """research_insights.yaml should have source_migration block pointing to git history."""
+def test_research_insights_yaml_marks_legacy_markdown_removed():
+    """research_insights.yaml should mark legacy Markdown sources as removed."""
     path = REPO_ROOT / "data" / "research_framework" / "research_insights.yaml"
     data = yaml.safe_load(path.read_text())
     assert "source_migration" in data
     src = data["source_migration"]
-    assert "from_git_paths" in src
-    assert any(".md" in p for p in src["from_git_paths"]), \
-        "source_migration.from_git_paths should reference original .md paths"
+    assert src.get("legacy_markdown_removed") is True
+    assert "from_git_paths" not in src
+    assert "Markdown runtime and report files removed" in src.get("reason", "")
 
 
-def test_experiments_yaml_commit_refs_resolvable():
-    """experiments.yaml commit_ref values should be git-show resolvable."""
+def test_experiments_yaml_has_no_removed_markdown_source_refs():
+    """experiments.yaml should not keep refs to removed Markdown/report artifacts."""
     path = REPO_ROOT / "data" / "research_framework" / "experiments.yaml"
     data = yaml.safe_load(path.read_text())
     entries = data.get("experiments", [])
-    refs_with_commit = [
-        e["commit_ref"] for e in entries
-        if e.get("commit_ref") and ":" in e["commit_ref"]
-    ]
-    assert len(refs_with_commit) >= 1, "at least one entry should have commit_ref"
-    # Sample first one
-    sample = refs_with_commit[0]
-    commit_hash = sample.split(":")[0]
-    r = subprocess.run(
-        ["git", "cat-file", "-e", commit_hash],
-        cwd=REPO_ROOT, capture_output=True, text=True,
-    )
-    assert r.returncode == 0, f"commit_ref {commit_hash} not resolvable: {r.stderr}"
+    stale = []
+    stale_tokens = ("docs/research_framework/", "reports/", ".md")
+    for entry in entries:
+        for field in ("commit_ref", "source"):
+            value = entry.get(field)
+            if isinstance(value, str) and any(token in value for token in stale_tokens):
+                stale.append((entry.get("id"), field, value))
+    assert not stale
 
 
 # ==================== G. truth_sync edge cases ====================

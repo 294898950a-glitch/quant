@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
 """Cross-session quant project health watcher.
 
-Designed to be called by Hermes cron every 15 min. Outputs a structured
-report to stdout. If any alert condition triggers, exit code 2 and emit
-the alert markers (⚠/❌) for Hermes prompt injection.
-
-Hermes-side wiring (example):
-    hermes cron create "*/15 * * * *" \\
-        --name quant_watcher \\
-        --workdir /home/jay/projects/quant \\
-        --script /home/jay/projects/quant/scripts/quant_health_check.py \\
-        --deliver telegram \\
-        "你是 quant 项目守护者。下面是健康检查报告。如有 ⚠ 或 ❌ 行，请总结并发送 Telegram 通知给我；否则保持 silent，不发消息。"
+Designed for an external monitor. It outputs a structured report to stdout.
+If any alert condition triggers, exit code 2 and alert markers are emitted.
 
 Exit codes:
   0 = healthy
@@ -31,7 +22,6 @@ from pathlib import Path
 
 REPO_ROOT = Path("/home/jay/projects/quant")
 WSL_CODEX_OUTBOX = Path("/mnt/c/Users/陈教授/Desktop/ai/projects/quant/codex/outbox.md")
-WSL_CLAUDE_OUTBOX = Path("/mnt/c/Users/陈教授/Desktop/ai/projects/quant/claude/outbox.md")
 
 # Thresholds
 CODEX_SILENCE_ALERT_HOURS = 2
@@ -49,8 +39,8 @@ def _hours_ago(path: Path) -> float | None:
     return delta.total_seconds() / 3600
 
 
-def _daemon_status() -> dict | None:
-    status_path = REPO_ROOT / "logs" / "option_value_loop_status.json"
+def _runner_status() -> dict | None:
+    status_path = REPO_ROOT / "logs" / "research_queue_status.json"
     if not status_path.exists():
         return None
     try:
@@ -60,25 +50,20 @@ def _daemon_status() -> dict | None:
 
 
 def _daily_spend_yuan() -> float | None:
-    """Sum compute_cost_yuan from manifests created in last 24h."""
-    manifests_dir = REPO_ROOT / "data" / "research_framework" / "run_manifests"
-    if not manifests_dir.exists():
-        return None
-    import yaml
+    """Estimate daily spend by counting recent batch dirs.
+
+    Each cb_arb_value_gap_switch_* directory created in the last 24h with a
+    summary.json counts as a completed VM batch (~¥6/batch typical). This is
+    a coarse estimate because report.yaml compute_cost_yuan is often not filled
+    by auto reviewer (known Bug 4 gap).
+    """
     cutoff = datetime.now(tz=timezone.utc).timestamp() - 24 * 3600
-    total = 0.0
-    for manifest_path in manifests_dir.glob("*.yaml"):
-        if manifest_path.stat().st_mtime < cutoff:
-            continue
-        try:
-            data = yaml.safe_load(manifest_path.read_text())
-            auto = (data or {}).get("automation") or {}
-            budget = auto.get("budget") or {}
-            cost = budget.get("estimated_budget_yuan") or 0
-            total += float(cost)
-        except Exception:
-            continue
-    return total
+    batch_dirs = list((REPO_ROOT / "data").glob("cb_arb_value_gap_switch_*/summary.json"))
+    completed_recent = sum(
+        1 for p in batch_dirs if p.stat().st_mtime >= cutoff
+    )
+    # Typical per-batch cost observed this session: ~¥6.25
+    return completed_recent * 6.25
 
 
 def _preflight_ok() -> tuple[bool, str]:
@@ -125,10 +110,10 @@ def main() -> int:
     else:
         print(f"✓ Codex outbox active ({codex_hours*60:.0f} min ago)")
 
-    # 2. Daemon status
-    status = _daemon_status()
+    # 2. Runner status
+    status = _runner_status()
     if status is None:
-        warnings.append("⚠ option_value_loop_status.json missing")
+        warnings.append("⚠ research_queue_status.json missing")
     else:
         loop_status = status.get("status", "unknown")
         if loop_status == "error":
@@ -139,11 +124,11 @@ def main() -> int:
             except Exception:
                 error_minutes = -1
             if error_minutes > DAEMON_ERROR_ALERT_MINUTES:
-                alerts.append(f"❌ Daemon status=error for {error_minutes:.0f} min (> {DAEMON_ERROR_ALERT_MINUTES})")
+                alerts.append(f"❌ Runner status=error for {error_minutes:.0f} min (> {DAEMON_ERROR_ALERT_MINUTES})")
             else:
-                warnings.append(f"⚠ Daemon status=error, {error_minutes:.0f} min")
+                warnings.append(f"⚠ Runner status=error, {error_minutes:.0f} min")
         else:
-            print(f"✓ Daemon status={loop_status}")
+            print(f"✓ Runner status={loop_status}")
 
     # 3. Pause flag
     pause_flag = REPO_ROOT / "data" / "research_framework" / "orchestrator_paused.flag"

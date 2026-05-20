@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-17T05:29:04Z'
+updated_at: '2026-05-18T11:40:05.254365'
 authority: machine
 purpose: Machine-readable experiment registry. AI reads this instead of Markdown experiment
   summaries.
@@ -100,7 +100,6 @@ experiments:
   hypothesis: Revive true forced-redemption strategy using 5-factor weights.
   reject_reason: Historical framework audit verdict=data_mining; factor design has
     lookahead pollution and current code path was deleted.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Historical redemption strategy was archived after framework audit verdict=data_mining.
   key_metrics:
     holdout_compliance: false
@@ -116,7 +115,6 @@ experiments:
   hypothesis: Filter cb_arb exposure when CSI500 has a same-day large drop.
   reject_reason: Mixed 2 win, 2 flat, 2 loss result; 2022 reversed and dating repair
     failed.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: 'CSI500 same-day drop filter produced mixed results: 2 win, 2 flat, 2 loss;
     2022 reversed and dating repair failed.'
   key_metrics:
@@ -133,7 +131,6 @@ experiments:
   status: rejected
   hypothesis: Use medium_recovery3_hurdle0p10 as unconditional full-year parameters.
   reject_reason: Only passed 2/4 main floors; not robust across regimes.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Unconditional full-year medium recovery=3 and hurdle=0.10 only passed 2/4
     main floors; not robust across regimes.
   key_metrics:
@@ -150,7 +147,6 @@ experiments:
   hypothesis: Use cb_arb own rolling PnL or rolling excess as a regime classifier.
   reject_reason: 0/108 grid candidates passed 4 floors, CV passed only 3/6, and the
     first 2020 risk trigger was too late.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Using cb_arb own rolling PnL or rolling excess as regime classifier failed
     every grid and triggered too late for 2020 panic.
   key_metrics:
@@ -172,7 +168,6 @@ experiments:
   hypothesis: Use convertible-bond pool drawdown breadth as a panic detector.
   reject_reason: 0/162 grid candidates passed 4 floors; signal was path-sensitive
     and contaminated 2024.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Convertible-bond pool drawdown breadth signal detected 2020 in time but
     remained path-sensitive and contaminated 2024.
   key_metrics:
@@ -194,7 +189,6 @@ experiments:
   hypothesis: Use breadth plus pool-mean confirmation with an AND trigger.
   reject_reason: 0/108 candidates passed 4 floors; the two signals were highly correlated
     and the AND trigger degenerated into a single signal.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Breadth plus pool-mean confirmation degenerated into the same single-signal
     behavior because the two signals were highly correlated.
   key_metrics:
@@ -217,7 +211,6 @@ experiments:
     action mappings.
   reject_reason: Same-day cross-sectional metrics cannot separate true from false
     panic, and perfect panic detection would not fix 2020 post-panic underperformance.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: 'Panic detector family is rejected: same-day cross-sectional metrics cannot
     separate true from false panic, and perfect panic detection would not fix 2020
     post-panic underperformance.'
@@ -240,7 +233,6 @@ experiments:
   hypothesis: Fix cb_arb with a single entry, exit, holding, or trade-type filter.
   reject_reason: 2020 losses were broad across trades, months, and exit reasons rather
     than concentrated in one filterable type.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Single entry, exit, or holding filter cannot fix 2020 because losses were
     broad across trades, months, and exit reasons.
   key_metrics:
@@ -261,7 +253,6 @@ experiments:
   hypothesis: Use a year-selective meta wrapper to avoid bad cb_arb years.
   reject_reason: Wrapper depends on a rejected detector and does not solve broad full-year
     weakness in 2020.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Year-selective meta wrapper depends on a rejected detector and cannot solve
     full-year broad weakness in 2020.
   key_metrics:
@@ -279,7 +270,6 @@ experiments:
   hypothesis: Restart self-loop LLM tuning over the 13-dimensional cb_arb yaml space.
   reject_reason: Iter 24 underperformed HDRF by about 26pp in 2019, the hypothesizer
     stalled, and ensembles did not beat naked HDRF.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Self-loop LLM tuning over 13 yaml dimensions underperformed HDRF/value-gap
     route; hypothesizer stalled and ensemble weights did not beat naked HDRF.
   key_metrics:
@@ -303,7 +293,6 @@ experiments:
   hypothesis: Use arXiv Arbitrage-Free XVA 1608.02690 as a cb_arb strategy source.
   reject_reason: Weakly related to cb_arb strategy signals; XVA valuation adjustment
     does not provide strategy-layer signal.
-  commit_ref: 98fda90be4c7:docs/research_framework/experience_ledger.md
   summary: Arbitrage-Free XVA paper passed a hard screen but is weakly related to
     cb_arb strategy signals.
   key_metrics:
@@ -334,17 +323,16 @@ experiments:
   current_strategy_effect: auto-run record only; does not promote current strategy
   automation:
     decision: passed_mechanical_thresholds_not_promoted
-    budget:
-      estimated_budget_yuan: 6.25
-      auto_limit_yuan: 30.0
-      decision: auto-approve
+    updated_at: '2026-05-16T23:20:00Z'
+    compute:
+      decision: record-only
       inputs:
         sig_minutes: 0.0
         spot_minutes: 60.0
         local_minutes: 0.0
         fixed_yuan: 0.0
         safety_multiplier: 1.25
-    updated_at: '2026-05-16T23:20:00Z'
+      estimated_compute_cost_yuan: 6.25
 - id: cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17
   strategy_id: cb_arb_value_gap_switch
   hypothesis_id: cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17
@@ -368,17 +356,16 @@ experiments:
   current_strategy_effect: auto-run record only; does not promote current strategy
   automation:
     decision: passed_mechanical_thresholds_not_promoted
-    budget:
-      estimated_budget_yuan: 6.25
-      auto_limit_yuan: 30.0
-      decision: auto-approve
+    updated_at: '2026-05-16T23:29:07Z'
+    compute:
+      decision: record-only
       inputs:
         sig_minutes: 0.0
         spot_minutes: 60.0
         local_minutes: 0.0
         fixed_yuan: 0.0
         safety_multiplier: 1.25
-    updated_at: '2026-05-16T23:29:07Z'
+      estimated_compute_cost_yuan: 6.25
 - id: cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17
   strategy_id: cb_arb_value_gap_switch
   hypothesis_id: cb_arb_value_gap_rerun_11_panic_bond_anchor_2026-05-17
@@ -402,17 +389,16 @@ experiments:
   current_strategy_effect: auto-run record only; does not promote current strategy
   automation:
     decision: passed_mechanical_thresholds_not_promoted
-    budget:
-      estimated_budget_yuan: 6.25
-      auto_limit_yuan: 30.0
-      decision: auto-approve
+    updated_at: '2026-05-16T23:39:28Z'
+    compute:
+      decision: record-only
       inputs:
         sig_minutes: 0.0
         spot_minutes: 60.0
         local_minutes: 0.0
         fixed_yuan: 0.0
         safety_multiplier: 1.25
-    updated_at: '2026-05-16T23:39:28Z'
+      estimated_compute_cost_yuan: 6.25
 - id: cb_arb_value_gap_switch_option-entry-gate_2026-05-17
   strategy_id: cb_arb_value_gap_switch
   hypothesis_id: cb_arb_value_gap_switch_option-entry-gate_2026-05-17
@@ -436,17 +422,16 @@ experiments:
   current_strategy_effect: auto-run record only; does not promote current strategy
   automation:
     decision: passed_mechanical_thresholds_not_promoted
-    budget:
-      estimated_budget_yuan: 18.75
-      auto_limit_yuan: 100.0
-      decision: auto-approve
+    updated_at: '2026-05-17T01:25:33Z'
+    compute:
+      decision: record-only
       inputs:
         sig_minutes: 0.0
         spot_minutes: 180.0
         local_minutes: 0.0
         fixed_yuan: 0.0
         safety_multiplier: 1.25
-    updated_at: '2026-05-17T01:25:33Z'
+      estimated_compute_cost_yuan: 18.75
 - id: cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
   strategy_id: cb_arb_value_gap_switch
   hypothesis_id: cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17
@@ -470,17 +455,16 @@ experiments:
   current_strategy_effect: auto-run record only; does not promote current strategy
   automation:
     decision: failed_mechanical_thresholds
-    budget:
-      estimated_budget_yuan: 15.62
-      auto_limit_yuan: 100.0
-      decision: auto-approve
+    updated_at: '2026-05-17T03:29:05Z'
+    compute:
+      decision: record-only
       inputs:
         sig_minutes: 0.0
         spot_minutes: 150.0
         local_minutes: 0.0
         fixed_yuan: 0.0
         safety_multiplier: 1.25
-    updated_at: '2026-05-17T03:29:05Z'
+      estimated_compute_cost_yuan: 15.62
 - id: cb_arb_value_gap_switch_option-value-haircut_2026-05-17
   strategy_id: cb_arb_value_gap_switch
   hypothesis_id: cb_arb_value_gap_switch_option-value-haircut_2026-05-17
@@ -525,53 +509,74 @@ experiments:
   current_strategy_effect: auto-run record only; does not promote current strategy
   automation:
     decision: passed_mechanical_but_falsifier_failed
-    budget:
-      estimated_budget_yuan: 4.69
-      auto_limit_yuan: 100.0
-      decision: auto-approve
+    updated_at: '2026-05-17T05:29:04Z'
+    compute:
+      decision: record-only
       inputs:
         sig_minutes: 0.0
         spot_minutes: 45.0
         local_minutes: 0.0
         fixed_yuan: 0.0
         safety_multiplier: 1.25
-    updated_at: '2026-05-17T05:29:04Z'
+      estimated_compute_cost_yuan: 4.69
+- id: cb_arb_value_gap_switch_stop-source-stress_2026-05-18
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: stop-source-stress-at-exit
+  branch: auto
+  status: rejected
+  summary: 退出端按来源区分止损重估——债底型/期权型分别打折。所有变体均输给无压力的 normal_revalue 基线。
+  key_metrics:
+    baseline_train_excess: 0.1787
+    best_stress_train_excess: 0.1197
+    baseline_test_excess: 0.4657
+    best_stress_test_excess: 0.4381
+    baseline_2020_excess: -0.1867
+    best_stress_2020_excess: -0.1338
+    train_degradation_pp: -5.89
+    2020_improvement_pp: 5.29
+  decision: reject
+  decision_reason: 退出端 source-stress 修复 2020 (+5.3pp) 但代价是训练段退化 5.9pp，与 entry-side
+    families 同结构取舍。确认死胡同。
+  artifacts:
+  - data/cb_arb_value_gap_switch_stop-source-stress_2026-05-18
+  affects_current_strategy: false
+  current_strategy_effect: auto-run rejected; stop_source_stress family is dead-end
+  automation:
+    decision: rejected
+    vm: guangzhou_spot
+    remote_pid: '133784'
+    launched_at: '2026-05-18T11:40:05.254340'
+    completed_at: '2026-05-18T11:43:00'
 research_insights:
 - id: cb_arb_2020_fundamental_dead_zone_20260517
-  source: c298496830ba:reports/cb_arb_research_complete_retro_2026-05-17.md
   summary: '2020 is a fundamental dead zone for cb_arb: weakness was broad across
     trades, not a tail event that a single filter can remove.'
   implications:
   - Do not relaunch single-filter fixes for 2020.
   - Any future cb_arb work must explain broad cross-trade weakness.
 - id: cb_arb_panic_detector_family_dead_20260517
-  source: c298496830ba:reports/cb_arb_research_complete_retro_2026-05-17.md
   summary: The panic-detector family is rejected because same-day cross-sectional
     metrics cannot separate true and false panic, and post-panic action did not restore
     alpha.
   implications:
   - Do not rerun panic detector variants without a new, non-equivalent mechanism.
 - id: cb_arb_2024_overlay_false_positive_20260517
-  source: c298496830ba:reports/cb_arb_research_complete_retro_2026-05-17.md
   summary: Naked 2024 baseline was roughly OK; rejected panic overlays created the
     large 2024 path damage.
   implications:
   - Do not use 2024 overlay damage as evidence that naked baseline needed the same
     overlay.
 - id: cb_arb_hdrf_beats_self_loop_20260517
-  source: c298496830ba:reports/cb_arb_research_complete_retro_2026-05-17.md
   summary: Leave-one-year-out HDRF plus user domain insight beat the sealed-pool self-loop
     tuning route; 2019 showed about a 26pp gap.
   implications:
   - Prefer leave-one-year-out evidence over sealed-pool tuning when the two conflict.
 - id: cb_arb_cost_realism_wall_20260517
-  source: c298496830ba:reports/cb_arb_research_complete_retro_2026-05-17.md
   summary: Cost realism degraded main cb_arb by -6.76pp and value-gap switch by -7.47pp,
     above the 5pp fatal threshold.
   implications:
   - Cost-off results are not deployment-valid for cb_arb.
 - id: cb_arb_main_vs_value_gap_amendment_20260517
-  source: c298496830ba:reports/cb_arb_research_complete_retro_2026-05-17.md
   summary: Main relative-ranking cb_arb is distinct from the absolute value-gap variant;
     2019 main was -9.85% while value-gap was +16.1%, a roughly 26pp signal.
   implications:
@@ -579,3 +584,105 @@ research_insights:
     is rejected.
   - Promoting absolute value-gap into current strategy truth still requires explicit
     user approval and proper validation.
+- id: cb_arb_value_gap_switch_low-freq-concentrated_2026-05-18
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: low-freq-concentrated-v1
+  branch: auto
+  status: rejected
+  summary: 低频集中持仓500候选grid因远程VM进程崩溃失败，无可用 artifacts。
+  key_metrics:
+    error: remote process exited but required artifacts are missing
+    candidates_attempted: 500
+    vm: guangzhou_spot
+    pid: '192758'
+  artifacts: []
+  affects_current_strategy: false
+  current_strategy_effect: infrastructure failure; 缩小grid到8候选后重试(v2)
+- id: cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: low-freq-concentrated-v2
+  branch: auto
+  status: rejected
+  summary: 低频集中持仓(5-8只, 8-15%单仓上限, 180-365天持有期)所有变体统一劣于基线。train excess -0.228至-0.291
+    vs 基线+0.131；test best +0.327但train max_dd -0.489。这是option-source家族之外的portfolio
+    mechanics方向，但结果确认了同样的结构性取舍：test提升以train严重退化为代价。
+  key_metrics:
+    candidates: 8
+    configs: 2x2x2 grid (holdings=5,8 x position=0.08,0.15 x days=180,365)
+    baseline_train_excess: 0.131
+    best_train_excess: -0.22825
+    best_test_excess: 0.327245
+    best_test_config: h8_p15 (8只, 15%上限)
+    worst_train_max_dd: -0.489336
+    note: max_holding_days参数对结果无影响(d180/d365结果完全相同)，网格收敛到基线90天持有期。
+    adoption_pass: false
+  artifacts:
+  - data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/grid_summary.json
+  - data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/auto_pipeline.log
+  affects_current_strategy: false
+  current_strategy_effect: portfolio mechanics方向确认死胡同；低频集中不解决cb_arb的结构性问题。
+- id: cb_arb_value_gap_switch_universe-filter_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: universe-filter-v1
+  branch: auto
+  status: rejected
+  summary: 永久性排除远离债底、深度价内、短期限、小规模转债——所有过滤变体均劣于全量基线。排除型 universe filter 在train段严重退化(-0.25至-0.56pp
+    vs 基线)，即使validate/test偶有正面表现，train 段全面劣化确认此方向无效。
+  key_metrics:
+    candidates: 6
+    best_variant: baseline_full_universe
+    adoption_pass: false
+    train_excess_delta_worst: -0.563845
+    test_excess_delta_best: 0.072965
+    validate_excess_delta_best: 0.098454
+    all_variants_train_degradation: true
+  artifacts:
+  - data/cb_arb_value_gap_switch_universe-filter_2026-05-19/summary.json
+  - data/cb_arb_value_gap_switch_universe-filter_2026-05-19/adoption_universe_filter.csv
+  - data/cb_arb_value_gap_switch_universe-filter_2026-05-19/report.yaml
+  affects_current_strategy: false
+  current_strategy_effect: universe filter家族正式拒绝；已加入forbidden_families。排除CB类型不改善反而损害
+    价值差额信号的稳定性。
+- id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: regime-classifier-variant-trend-guard
+  branch: auto
+  status: rejected
+  summary: '将市场状态分类从 score_4state 替换为 trend_guard（趋势动量+回撤+广度三维确认）。 train 超额从 baseline
+    +0.131 提升至 +0.271 (+14pp)，但 test 超额从 +0.380 降至 +0.293 (-8.7pp)。train max_dd -0.352
+    仅超硬底线 0.2pp。max_hold_days > 90 全面 恶化。确认第10次同一结构性取舍。
+
+    '
+  key_metrics:
+    candidates: 96
+    top_n_test: 10
+    adoption_pass: false
+    baseline_train_excess: 0.1314
+    best_train_excess: 0.2711
+    baseline_test_excess: 0.3798
+    best_test_excess: 0.2928
+    train_excess_delta_pp: 13.97
+    test_excess_delta_pp: -8.69
+    train_max_dd: -0.3522
+    best_config:
+      switch_hurdle: 0.01
+      max_hold_days: 90
+      min_gap_pct: 0.01
+    max_hold_90_train_excess_mean: 0.142
+    max_hold_180_train_excess_mean: -0.024
+    max_hold_360_train_excess_mean: -0.052
+  decision: reject
+  decision_reason: '第10次确认同一结构性取舍——任何改善 train/2020 的机制都必然牺牲 test 收益。 trend_guard classifier
+    将参数空间从4维压缩为2维（switch_hurdle × max_hold_days）， 其中 max_hold_days > 90 全面破坏。唯一可行配置
+    trade 18.5% test 超额换取 106% train 超额提升。 regime_classifier_variant 家族确认耗尽。
+
+    '
+  artifacts:
+  - data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/summary.json
+  - data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/train_summary.csv
+  - data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/test_summary.csv
+  - data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/report.yaml
+  - data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/diagnostic.yaml
+  - data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/l4_ack.yaml
+  affects_current_strategy: false
+  current_strategy_effect: regime_classifier_variant家族正式拒绝；加入forbidden_families。第10个/最后一个自主研究方向耗尽。

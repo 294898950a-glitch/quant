@@ -10,7 +10,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from framework.digest import (  # noqa: E402
+from framework.autonomous.recent_results_digest import (  # noqa: E402
     DEFAULT_CURRENT_PATH,
     DEFAULT_DIGEST_PATH,
     update_current_with_recent_results_digest,

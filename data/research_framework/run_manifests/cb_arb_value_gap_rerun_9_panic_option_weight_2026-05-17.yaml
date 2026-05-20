@@ -153,18 +153,17 @@ promotion_status: experiment
 reviewer: auto
 verdict_at: '2026-05-16T23:29:06Z'
 automation:
-  budget:
-    estimated_budget_yuan: 6.25
-    auto_limit_yuan: 30.0
-    decision: auto-approve
+  verdict:
+    decision: passed_mechanical_thresholds_not_promoted
+    pass_field: adoption_pass
+    pass_value: true
+    summary_path: data/cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17/summary_panic_option_weight.csv
+  compute:
+    decision: record-only
     inputs:
       sig_minutes: 0.0
       spot_minutes: 60.0
       local_minutes: 0.0
       fixed_yuan: 0.0
       safety_multiplier: 1.25
-  verdict:
-    decision: passed_mechanical_thresholds_not_promoted
-    pass_field: adoption_pass
-    pass_value: true
-    summary_path: data/cb_arb_value_gap_rerun_9_panic_option_weight_2026-05-17/summary_panic_option_weight.csv
+    estimated_compute_cost_yuan: 6.25

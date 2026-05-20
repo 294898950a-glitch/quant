@@ -118,16 +118,6 @@ promotion_status: rejected
 reviewer: auto
 verdict_at: '2026-05-17T05:29:03Z'
 automation:
-  budget:
-    estimated_budget_yuan: 4.69
-    auto_limit_yuan: 100.0
-    decision: auto-approve
-    inputs:
-      sig_minutes: 0.0
-      spot_minutes: 45.0
-      local_minutes: 0.0
-      fixed_yuan: 0.0
-      safety_multiplier: 1.25
   verdict:
     decision: passed_mechanical_but_falsifier_failed
     pass_field: adoption_pass
@@ -150,3 +140,12 @@ automation:
         worst_year: '2024'
         worst_max_drawdown: -0.167919
         ceiling: -0.15
+  compute:
+    decision: record-only
+    inputs:
+      sig_minutes: 0.0
+      spot_minutes: 45.0
+      local_minutes: 0.0
+      fixed_yuan: 0.0
+      safety_multiplier: 1.25
+    estimated_compute_cost_yuan: 4.69

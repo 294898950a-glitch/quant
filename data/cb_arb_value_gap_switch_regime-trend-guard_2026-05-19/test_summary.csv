@@ -1,0 +1,11 @@
+candidate,min_gap_pct,sell_gap_pct,switch_hurdle_pct,max_hold_days,stop_gap_ratio_floor,stop_signal_threshold,total_return,excess_return,max_drawdown,win_rate,total_trades,n_days,score
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.01, ""sell_gap_pct"": 0.0, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.01,0.0,0.01,90.0,0.0,999.0,0.64507,0.292805,-0.112458,0.6014,281,323,0.26469
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.01, ""sell_gap_pct"": 0.005, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.01,0.005,0.01,90.0,0.0,999.0,0.64507,0.292805,-0.112458,0.6014,281,323,0.26469
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.03, ""sell_gap_pct"": 0.0, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.03,0.0,0.01,90.0,0.0,999.0,0.614389,0.262124,-0.112458,0.6215,214,323,0.23401
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.03, ""sell_gap_pct"": 0.005, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.03,0.005,0.01,90.0,0.0,999.0,0.614389,0.262124,-0.112458,0.6215,214,323,0.23401
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.0, ""sell_gap_pct"": 0.0, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.03}",0.0,0.0,0.03,90.0,0.0,999.0,0.588082,0.235817,-0.112304,0.5893,336,323,0.207741
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.0, ""sell_gap_pct"": 0.005, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.03}",0.0,0.005,0.03,90.0,0.0,999.0,0.588082,0.235817,-0.112304,0.5893,336,323,0.207741
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.0, ""sell_gap_pct"": 0.0, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.0,0.0,0.01,90.0,0.0,999.0,0.566935,0.21467,-0.112458,0.5795,352,323,0.186555
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.0, ""sell_gap_pct"": 0.005, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.0,0.005,0.01,90.0,0.0,999.0,0.566935,0.21467,-0.112458,0.5795,352,323,0.186555
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.005, ""sell_gap_pct"": 0.0, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.005,0.0,0.01,90.0,0.0,999.0,0.50929,0.157025,-0.112458,0.5981,316,323,0.12891
+"{""max_hold_days"": 90.0, ""min_gap_pct"": 0.005, ""sell_gap_pct"": 0.005, ""stop_gap_ratio_floor"": 0.0, ""switch_hurdle_pct"": 0.01}",0.005,0.005,0.01,90.0,0.0,999.0,0.50929,0.157025,-0.112458,0.5981,316,323,0.12891

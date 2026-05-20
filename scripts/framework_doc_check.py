@@ -12,25 +12,21 @@ Usage:
 - data/<run-id>/spec.yaml → validate_spec.py
 - data/<run-id>/l4_ack.yaml → validate_l4_ack.py --run-dir
 - data/<run-id>/diagnostic.yaml → validate_l5_diagnostic.py --run-dir
-- data/research_framework/current.yaml → validate_current_md.py
+- data/research_framework/current.yaml → validate_current_yaml.py
 - data/research_framework/baseline_registry.yaml → validate_baseline_registry.py
 - data/research_framework/runtime_entrypoints.yaml → validate_entrypoints.py
 - data/research_framework/protocol_rules.yaml → validate_entrypoints.py
 - data/research_framework/experiments.yaml → validate_entrypoints.py
 - data/research_framework/truth_sync_waivers/*.yaml → validate_truth_sync.py
 - data/research_framework/strategies.yaml → validate_spec.py (依赖检查)
-- data/research_framework/compute_budget_config.json → validate_compute_budget.py
 - AGENTS.md / CLAUDE.md → validate_entrypoints.py
 - 其他路径 → skip (不在 framework 受管范围)
 
-设计 (cross-AI, 完全解耦):
+设计:
 - 本工具自成一体, 不依赖 GateKeeper
-- 由 2 层独立调用:
-  1. framework_watch_daemon (cross-AI 实时, 任何 AI / 编辑器都触发)
-  2. pre-commit hook (commit 前 retro 关, 防 daemon down)
-- AI 主动调也可以 (e.g. user / Codex / etc 想立刻验证某个文件)
+- 由 pre-commit hook 或 AI 主动调用
 - 失败 (exit != 0) 时, AI 工作流必须看到错并修
-- (原有 Claude Code PostToolUse hook 层 2026-05-17 删, 违反 cross-AI 哲学)
+- 不再保留后台实时 watcher; 项目推进只走内部定时入口
 
 Exit codes:
   0 = OK (含 skip 非受管路径)
@@ -62,7 +58,7 @@ def is_markdown_artifact(path: Path) -> bool:
 
 def dispatch(path: Path) -> tuple[str, list[str]]:
     """根据 path 推 (validator_script, args). 返回 ('', []) 表示 skip."""
-    # 兼容相对路径 (daemon / 用户手动调可能传 cwd 相对) + 绝对路径
+    # 兼容相对路径 (用户手动调可能传 cwd 相对) + 绝对路径
     abs_path = path.resolve()
     try:
         rel = abs_path.relative_to(REPO_ROOT)
@@ -97,7 +93,7 @@ def dispatch(path: Path) -> tuple[str, list[str]]:
         return ("validate_baseline_registry.py", [])
 
     if rel_str == "data/research_framework/current.yaml":
-        return ("validate_current_md.py", [])
+        return ("validate_current_yaml.py", [])
 
     if rel_str in {
         "data/research_framework/runtime_entrypoints.yaml",
@@ -109,10 +105,6 @@ def dispatch(path: Path) -> tuple[str, list[str]]:
     # data/research_framework/truth_sync_waivers/*.yaml
     if rel_str.startswith("data/research_framework/truth_sync_waivers/") and rel_str.endswith((".yaml", ".yml")):
         return ("validate_truth_sync.py", ["--waivers-only"])
-
-    # data/research_framework/compute_budget_config.json
-    if rel_str == "data/research_framework/compute_budget_config.json":
-        return ("validate_compute_budget.py", [])
 
     # 按 Codex 01:26 review: data/research_framework/run_manifests/*.yaml 漏了
     if rel_str.startswith("data/research_framework/run_manifests/") and rel_str.endswith(".yaml"):
@@ -153,7 +145,7 @@ def main() -> int:
     )
     parser.add_argument("path", type=Path, help="刚写的文件路径")
     parser.add_argument("--quiet", action="store_true",
-                        help="只在 fatal 时打印 (适合 daemon / hook 调用)")
+                        help="只在 fatal 时打印 (适合 hook 调用)")
     args = parser.parse_args()
 
     if not args.path.exists():

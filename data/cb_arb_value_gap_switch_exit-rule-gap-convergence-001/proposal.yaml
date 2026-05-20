@@ -1,0 +1,61 @@
+proposal_id: cb_arb_value_gap_switch_exit-rule-gap-convergence-001
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_dynamic
+hypothesis: A dynamic exit based on value gap convergence relative to entry gap can
+  lock in profits more reliably than a fixed sell threshold, reducing drawdown and
+  improving risk‑adjusted returns without degrading test‑period performance.
+source_insight: Baseline train excess is low (0.131) while test excess is high (0.380),
+  suggesting the current exit rule leaves gains on the table. Drawdowns are substantial
+  (train max DD –0.324, 2020 –0.179). A gap‑relative exit could capture convergence
+  before reversals.
+expected_improvement: 'Higher excess return in train and test, lower max drawdown,
+  higher Sharpe, without reducing win rate materially. Target: test excess >0.38 and
+  train max DD improved by at least 20 %.'
+capability_ids:
+- C007
+missing_capability_request: 'An executor that implements an adaptive exit rule: close
+  the position when value_gap / entry_value_gap < convergence_threshold (e.g., 0.5)
+  or after max_hold_days. Requires integration into the backtesting engine with daily
+  gap data.'
+required_executor: adaptive_gap_convergence_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+test_design: Grid search over convergence_threshold (0.3 to 0.8 step 0.1) and max_hold_days
+  (30, 60, 90, 120). Use same entry rule as baseline. Compare to baseline on train
+  (2019-2024), 2020 repair, and sealed test (2025‑2026). Evaluate excess return, max
+  drawdown, Sharpe, win rate.
+success_criteria:
+- Best test excess return >= baseline (0.380) and best train excess return higher
+  than baseline (0.131) by at least 0.05.
+- Max drawdown in train reduces by at least 20 % from baseline –0.324.
+- 2020 repair excess return not worse than baseline –0.195 by more than 0.05.
+falsifiers:
+- Test excess return drops below baseline by any amount, OR train max drawdown fails
+  to improve.
+- Win rate drops below 0.45 in train.
+- 2020 excess return worsens past –0.25.
+risk: Dynamic exit may lead to premature exits during trending markets, reducing total
+  return. Time‑based forced exit could introduce arbitrary churn.
+why_not_repeated_failure: This proposal modifies only the exit logic (not entry, position
+  sizing, regime classification, or universe filter). Prior rejected families explored
+  entry gates, position scaling, and regime‑dependent triggers; exit dynamics remain
+  untested. The closed_tags include stop_source_stress (stop loss) but not profit‑taking
+  exit rules.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: An executor can be built to read entry gap at trade time
+  and compare current gap to it daily; standard backtest integration is assumed.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 7fd3b369cf4d3f9b
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 7fd3b369cf4d3f9b
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_exit-rule-gap-convergence-001/proposal.yaml

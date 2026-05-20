@@ -12,8 +12,7 @@ env/
 
 # Logs
 logs/*.log
-logs/framework_watch_status.json
-logs/framework_watch_status.json.tmp
+logs/*.lock
 
 # OS
 .DS_Store
@@ -30,6 +29,9 @@ Thumbs.db
 .scratch/
 .clinerules-*
 logs/*.jsonl
+logs/hermes_tickets/
+logs/quant_tickets/
+logs/spot_idle_shutdown_state.json
 .claude/
 data/*/runs.jsonl
 data/*/runs.jsonl.local-backup-*
@@ -44,6 +46,7 @@ data/research_framework/decisions.jsonl
 data/research_framework/processed_claude_messages.jsonl
 data/research_framework/runs.jsonl
 data/research_framework/tried_directions.jsonl
+data/research_framework/hermes_access_audit.jsonl
 
 # Heavy generated batch artifacts (按 repo audit 2026-05-16 加)
 # 大批量回测产生的中间结果, 不进 git. 只 promote summary/manifest 进 git
@@ -62,4 +65,4 @@ archive/
 
 # Runtime state (not source)
 data/research_framework/orchestrator_paused.flag
-logs/option_value_loop_status.json
+logs/research_queue_status.json

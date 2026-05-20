@@ -1,0 +1,143 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_time_based_exit_2026-05-19
+date: '2026-05-19'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: Adding a time-based forced exit after N days if the value gap has not
+  narrowed (or widened) cuts dead-money positions, reduces tail risk and improves
+  risk-adjusted returns across regimes.
+source_insight: Regime trend guard analysis documented that max_hold > 90d universally
+  destroys performance; the baseline without early exit holds many trades beyond 90
+  days, contributing to train drawdowns and 2020 losses. A systematic time decay exit
+  directly addresses this without altering entry logic or sizing.
+parameter_space:
+- name: mechanics
+  range:
+  - new_exit_rule
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C007
+mechanics:
+- new_exit_rule
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  criteria:
+  - At least one candidate achieves test excess_return >= 0.34 (≈90% of baseline 0.38)
+    AND test max_drawdown < -0.098 AND test score ≥ 0.32.
+  - 2020 stress metrics do not deteriorate beyond -0.20 score (baseline -0.24).
+  - Train excess_return does not drop below 0.10 (baseline 0.13) and max_drawdown
+    improves.
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: no strict executor match
+proposal:
+  proposal_id: cb_arb_value_gap_switch_time_based_exit_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  family: exit_rule_time_decay
+  hypothesis: Adding a time-based forced exit after N days if the value gap has not
+    narrowed (or widened) cuts dead-money positions, reduces tail risk and improves
+    risk-adjusted returns across regimes.
+  source_insight: Regime trend guard analysis documented that max_hold > 90d universally
+    destroys performance; the baseline without early exit holds many trades beyond
+    90 days, contributing to train drawdowns and 2020 losses. A systematic time decay
+    exit directly addresses this without altering entry logic or sizing.
+  expected_improvement: 'Reduced max drawdown in train and test, better win rate and
+    score, while maintaining or only modestly decreasing total return and excess return.
+    Target: test excess_return within 10% of baseline (0.38) with lower drawdown.'
+  capability_ids:
+  - C007
+  missing_capability_request: 'Need executor for C007 (new_exit_rule) to implement
+    time-based exit logic based on holding days and gap change. Required hooks: access
+    to per-position entry date, current value gap, and ability to force exit at next
+    close.'
+  required_executor: 'missing: time_decay_exit_executor'
+  required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  test_design:
+    description: 'Sweep holding-day thresholds (30, 45, 60, 75, 90, 120) and exit
+      triggers: gap_not_narrowed_by_X% (e.g., 20%, 50%) or gap_current > gap_entry
+      * 1.05. Evaluate on train (2019‑2024), 2020 repair, and sealed test (2025‑2026)
+      against baseline. Primary metrics: excess_return, max_drawdown, win_rate, score.'
+  success_criteria:
+    criteria:
+    - At least one candidate achieves test excess_return >= 0.34 (≈90% of baseline
+      0.38) AND test max_drawdown < -0.098 AND test score ≥ 0.32.
+    - 2020 stress metrics do not deteriorate beyond -0.20 score (baseline -0.24).
+    - Train excess_return does not drop below 0.10 (baseline 0.13) and max_drawdown
+      improves.
+  falsifiers:
+    train:
+    - All candidates reduce test excess_return by more than 10% (below 0.34) without
+      meaningful drawdown improvement.
+    - Test max_drawdown deepens beyond baseline (-0.098) for all candidates.
+    - Trade count falls below 50% of baseline test trades (≈96), indicating strategy
+      inactivity.
+    - No candidate beats baseline on test score.
+    validate:
+    - All candidates reduce test excess_return by more than 10% (below 0.34) without
+      meaningful drawdown improvement.
+    - Test max_drawdown deepens beyond baseline (-0.098) for all candidates.
+    - Trade count falls below 50% of baseline test trades (≈96), indicating strategy
+      inactivity.
+    - No candidate beats baseline on test score.
+    test:
+    - All candidates reduce test excess_return by more than 10% (below 0.34) without
+      meaningful drawdown improvement.
+    - Test max_drawdown deepens beyond baseline (-0.098) for all candidates.
+    - Trade count falls below 50% of baseline test trades (≈96), indicating strategy
+      inactivity.
+    - No candidate beats baseline on test score.
+  risk: Time exits may prematurely close positions that later recover, cutting winners
+    short. Threshold overfitting to in‑sample may degrade test performance, similar
+    to past regime and sizing failures.
+  why_not_repeated_failure: This is not a sizing, regime‑classifier, entry‑gate, or
+    valuation variant. It targets exit logic, a family never directly tested for cb_arb_value_gap_switch.
+    Past runs altered only gap‑based stops, not purely time‑based decay, which addresses
+    the documented decay of returns for long‑held positions.
+  related_prior_runs:
+  - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  - cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+  implementation_assumption: New executor will track holding days per position. On
+    each day, if holding_days >= threshold and (gap_current/gap_entry > gap_change_threshold
+    or gap_change_sign condition), force sell at open/close. Otherwise continue current
+    exit logic.
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: a54008bb10058e58
+  provenance:
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: a54008bb10058e58
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_time_based_exit_2026-05-19/proposal.yaml
+  mechanics:
+  - new_exit_rule

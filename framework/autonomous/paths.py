@@ -50,3 +50,7 @@ class ResearchPaths:
     @property
     def strategy_ideator_config(self) -> Path:
         return self.research_framework_dir / "strategy_ideator.yaml"
+
+    @property
+    def research_queue(self) -> Path:
+        return self.research_framework_dir / "research_queue.yaml"

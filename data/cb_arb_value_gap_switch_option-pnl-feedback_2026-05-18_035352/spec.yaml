@@ -103,7 +103,6 @@ automation:
   - scripts/evaluate_cb_arb_option_pnl_feedback.py
   - scripts/evaluate_cb_arb_option_position_sizing.py
   - scripts/evaluate_cb_arb_value_gap_switch.py
-  - scripts/generate_option_value_next_spec.py
   - data/research_framework/runtime_entrypoints.yaml
   - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
   - data/cb_warehouse/cb_basic.parquet

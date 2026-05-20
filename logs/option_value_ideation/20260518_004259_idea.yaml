@@ -1,9 +1,0 @@
-proposal_id: rolling_option_source_pnl_feedback
-executor: option_source_pnl_feedback_scaler
-family: option_source_pnl_feedback
-hypothesis: 当最近已平仓的期权来源交易正在亏钱时，后续期权来源候选只降低投入和排序权重，可能减少错误期权估值暴露，同时保留正常期权收益。
-source_insight: 禁买和整体期权折价可以改善 2020，但会伤害 2025-2026 的期权来源收益。
-why_not_rejected_repeat: 它不是永久禁买，也不是整体期权折价；只有已实现的期权来源交易开始亏钱后，才暂时降低后续投入。
-risk: 如果错误来自估值本身而不是仓位暴露，降低仓位只能缓解亏损，不能修复判断。
-_ideation_source: fallback
-_fallback_reason: forced fallback

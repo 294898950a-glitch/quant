@@ -1,12 +1,16 @@
 schema_version: 1
-active_provider: claude
+active_provider: deepseek
 policy:
   allowed_entrypoint: scripts/run_strategy_ideation_once.py
+  allowed_entrypoints:
+  - scripts/run_strategy_ideation_once.py
+  - scripts/validate_data_quality.py
+  - scripts/repair_data_quality.py
   background_call_allowed: false
   provider_must_be_registered: true
 providers:
   claude:
-    enabled: true
+    enabled: false
     kind: command_adapter
     model: sonnet
     allowed_entrypoint: scripts/run_strategy_ideation_once.py
@@ -37,9 +41,18 @@ providers:
     allowed_entrypoint: scripts/run_strategy_ideation_once.py
     note: Registered provider; requires adapter/client wiring before activation.
   deepseek:
-    enabled: false
-    kind: registered_external
+    enabled: true
+    kind: openai_chat_completion
     api_key_env: DEEPSEEK_API_KEY
-    model: deepseek-chat
+    api_key_file: /mnt/c/Users/陈教授/Desktop/key/DEEPSEEK_API_KEY - tencent.txt
+    base_url: https://api.deepseek.com
+    model: deepseek-v4-pro
     allowed_entrypoint: scripts/run_strategy_ideation_once.py
-    note: Registered provider; requires adapter/client wiring before activation.
+    allowed_entrypoints:
+    - scripts/run_strategy_ideation_once.py
+    - scripts/validate_data_quality.py
+    - scripts/repair_data_quality.py
+    timeout_seconds: 240
+    temperature: 0.2
+    max_tokens: 8192
+    note: Active provider for project-owned strategy ideation; direct API call through OpenAI-compatible chat completions.

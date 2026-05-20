@@ -137,18 +137,17 @@ promotion_status: rejected
 reviewer: auto
 verdict_at: '2026-05-17T03:29:04Z'
 automation:
-  budget:
-    estimated_budget_yuan: 15.62
-    auto_limit_yuan: 100.0
-    decision: auto-approve
+  verdict:
+    decision: failed_mechanical_thresholds
+    pass_field: adoption_pass
+    pass_value: false
+    summary_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/summary_regime_option_entry_gate.csv
+  compute:
+    decision: record-only
     inputs:
       sig_minutes: 0.0
       spot_minutes: 150.0
       local_minutes: 0.0
       fixed_yuan: 0.0
       safety_multiplier: 1.25
-  verdict:
-    decision: failed_mechanical_thresholds
-    pass_field: adoption_pass
-    pass_value: false
-    summary_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/summary_regime_option_entry_gate.csv
+    estimated_compute_cost_yuan: 15.62

@@ -12,7 +12,6 @@ PROPOSAL_REQUIRED_FIELDS = {
     "hypothesis",
     "source_insight",
     "expected_improvement",
-    "mechanics",
     "required_executor",
     "required_data",
     "test_design",
@@ -25,7 +24,11 @@ PROPOSAL_REQUIRED_FIELDS = {
 }
 
 
-def validate_proposal(proposal: dict[str, Any], mechanics_vocab: set[str]) -> list[str]:
+def validate_proposal(
+    proposal: dict[str, Any],
+    mechanics_vocab: set[str],
+    capability_vocab: set[str] | None = None,
+) -> list[str]:
     errors: list[str] = []
     missing = sorted(PROPOSAL_REQUIRED_FIELDS - set(proposal))
     for field in missing:
@@ -33,15 +36,37 @@ def validate_proposal(proposal: dict[str, Any], mechanics_vocab: set[str]) -> li
     if missing:
         return errors
 
-    mechanics = proposal.get("mechanics")
-    if not isinstance(mechanics, list) or not mechanics:
-        errors.append("mechanics must be a non-empty list")
+    capability_ids = proposal.get("capability_ids")
+    missing_capability_request = proposal.get("missing_capability_request")
+    if capability_vocab is not None:
+        has_ids = isinstance(capability_ids, list) and bool(capability_ids)
+        has_missing_request = isinstance(missing_capability_request, (str, dict)) and bool(missing_capability_request)
+        if not has_ids and not has_missing_request:
+            errors.append("capability_ids must be a non-empty list unless missing_capability_request is provided")
+        else:
+            for cid in capability_ids or []:
+                if not isinstance(cid, str):
+                    errors.append("capability_ids entries must be strings")
+                elif cid not in capability_vocab:
+                    errors.append(f"unknown capability id {cid}")
     else:
-        for mechanic in mechanics:
+        mechanics = proposal.get("mechanics")
+        if not isinstance(mechanics, list) or not mechanics:
+            errors.append("mechanics must be a non-empty list")
+        else:
+            for mechanic in mechanics:
+                if not isinstance(mechanic, str):
+                    errors.append("mechanics entries must be strings")
+                elif mechanic not in mechanics_vocab:
+                    errors.append(f"unknown mechanics tag {mechanic}")
+
+    mechanics = proposal.get("mechanics")
+    if mechanics is not None and (not isinstance(mechanics, list) or not mechanics):
+        errors.append("mechanics must be a non-empty list when provided")
+    else:
+        for mechanic in mechanics or []:
             if not isinstance(mechanic, str):
                 errors.append("mechanics entries must be strings")
-            elif mechanic not in mechanics_vocab:
-                errors.append(f"unknown mechanics tag {mechanic}")
 
     required_data = proposal.get("required_data")
     if not isinstance(required_data, list):

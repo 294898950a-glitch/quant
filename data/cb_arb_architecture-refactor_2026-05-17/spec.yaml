@@ -10,7 +10,7 @@ source_insight: |
   当前 repo 的主要工程问题不是单一交易规则, 而是职责边界混在一起:
   1. `strategies/cb_arb/` 是主策略核心, 但新研究逻辑大量散落在 `scripts/evaluate_cb_arb_*.py`。
   2. `strategies/cb_redemption/` 名义上是强赎策略, 实际承载了通用评测、裁判、记录和自动循环框架。
-  3. `docs/research_framework/` 与 `data/research_framework/` 记录当前真值, 但部分内容和代码状态出现不同步。
+  3. `data/research_framework/` 记录当前真值, 但部分内容和代码状态出现不同步。
   4. Claude/Codex 通信在 Windows AI 目录下, 应作为协作外壳, 不应进入策略核心。
   用户要求先与 Claude Code 讨论好架构方案, 然后按完整 spec 标准实施。
 
@@ -64,9 +64,7 @@ spot_decision: "不需要 spot/VM; 本任务只做本地架构整理、文档、
 
 stop_conditions:
   - "Claude 明确反对迁移方向或要求先补设计时, 停止实施。"
-  - "Step A 完成标准: `docs/research_framework/architecture.md` 存在, `docs/INDEX.md` 可发现, 且 framework_doc_check/validate_current_md 不报 fatal。"
   - "Step B 完成标准: 顶层 `framework/` 壳可导入, 旧 `strategies.cb_redemption.*` 路径仍可导入, smoke test 证明新旧路径指向同一 module object。"
-  - "Step C 完成标准: `docs/research_framework/experiments_index.md` 列出当前 `scripts/evaluate_cb_arb_*.py` 和 `scripts/search_cb_arb_*.py`, 并明确 research experiment != strategy truth。"
   - "Step D 完成标准: 新增架构文档不再声称 framework 只存在于 `strategies/cb_redemption/`; 旧路径只作为兼容源/legacy home 描述。"
   - "发现会改变 cb_arb 主策略真值或实盘状态时, 停止并请求用户。"
   - "发现需要运行 heavy backtest、VM 或预算无法计算时, 停止并重新估预算。"
@@ -79,7 +77,6 @@ artifacts_required:
   - "Claude review / ACK in claude/outbox.md"
   - "architecture implementation diff"
   - "validation command output summary"
-  - "CURRENT.md or INDEX.md sync if entry/architecture truth changes"
 
 status: READY
 
@@ -102,5 +99,5 @@ notes: |
   预期实施顺序:
   1. Codex 写出最小重整方案并发给 Claude。
   2. Claude review / 修改 / ACK。
-  3. Claude 2026-05-17 02:43 CST 已 ACK: shell-first framework alias, CURRENT.md 保持策略真值层不改, scripts/ 先用 index 标界, spec 可 promote READY。
+  3. Claude 2026-05-17 02:43 CST 已 ACK: shell-first framework alias, current.yaml 保持策略真值层不改, spec 可 promote READY。
   4. 只跑轻量检查和目标测试, 不启动重回测或 VM。

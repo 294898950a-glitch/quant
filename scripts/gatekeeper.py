@@ -46,19 +46,17 @@ class GateKeeper:
     # === 公开方法 (按研究阶段) ===
 
     def before_run_grid(self, spec_path: Path) -> None:
-        """跑回测前: spec.yaml 合规 + 数据 schema OK + 预算配置 OK + sanity 检查."""
+        """跑回测前: spec.yaml 合规 + 数据 schema OK + sanity 检查."""
         self._log(f"[GateKeeper] before_run_grid: {spec_path}")
         self._must_run("validate_spec.py", [str(spec_path)],
                        fail_msg="spec.yaml 不合规, 拒跑回测")
         self._must_run("validate_data_schema.py", [],
                        fail_msg="数据 warehouse schema 不全, 拒跑")
-        self._must_run("validate_compute_budget.py", [],
-                       fail_msg="预算配置文件损坏, 拒跑")
         # 按 Codex framework holistic review Q2-A: sanity_checker 升级 yaml 后接入
         # (commit 升级 sanity_checker yaml schema 同 commit 接入). 检查 spec 字段
-        # 语义合理性 (range / hard_floors scale / 路径 / cv years / budget vs cost).
+        # 语义合理性 (range / hard_floors scale / 路径 / cv years / VM placement).
         self._must_run("research_sanity_checker.py", ["--spec", str(spec_path)],
-                       fail_msg="spec semantic 检查失败 (range/hard_floors/路径/budget), 拒跑")
+                       fail_msg="spec semantic 检查失败 (range/hard_floors/路径/placement), 拒跑")
         self._log("  ✓ 启动 grid 检查全过")
 
     def after_run_grid(self, run_dir: Path | None = None) -> None:
@@ -105,11 +103,11 @@ class GateKeeper:
                        fail_msg="quick_check 失败")
         self._log("  ✓ all clear")
 
-    # 按 Codex 01:50 review A-prime: GateKeeper 跟 realtime daemon/doc-check 模块
+    # 按 Codex 01:50 review A-prime: GateKeeper 跟 doc-check 模块
     # 完全解耦 - GateKeeper 只管 5 个研究 stage (before_run_grid / after_run_grid
     # / before_l5_diagnostic / before_commit_truth / quick_check). 实时文档检查
-    # 由 scripts/framework_doc_check.py 单独提供, 通过 daemon (cross-AI) /
-    # pre-commit hook (commit 前) / AI 手动调用 三层各自独立调用.
+    # 由 scripts/framework_doc_check.py 单独提供, 通过 pre-commit hook 或
+    # AI 手动调用.
 
     # === 内部方法 ===
 

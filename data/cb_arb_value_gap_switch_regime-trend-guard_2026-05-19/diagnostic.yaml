@@ -1,0 +1,56 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+diagnostic_date: '2026-05-19'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: >
+  trend_guard improved train results but failed to generalize to the test window.
+  It should not be adopted.
+verdict_rationale: >
+  The classifier collapses several parameter dimensions and repeats the same
+  train/test tradeoff seen in prior rejected directions: better 2020/train
+  behavior, weaker 2025-2026 upside capture.
+diagnostic_verdict: reject
+diagnostic_summary: >
+  trend_guard classifier produces identical market-state labels for nearly all
+  parameter combinations (min_gap, sell_gap, stop_gap_ratio_floor have zero effect
+  on the output — all 9 variants with same switch_hurdle produce identical metrics).
+  The classifier output space collapses to a single signal dimension, making the
+  parameter grid effectively 2-dimensional (switch_hurdle × max_hold_days).
+
+key_findings:
+  - id: parameter_collapse
+    severity: high
+    detail: >
+      min_gap_pct (0.0-0.03) and sell_gap_pct (0.0-0.005) have zero impact on
+      train metrics for any given switch_hurdle. All 9 candidates with same
+      switch_hurdle=0.01 produce identical train excess=0.2711 and max_dd=-0.3522.
+      This means the trend_guard signal dominates over all entry/exit threshold
+      parameters.
+  - id: max_hold_sensitivity
+    severity: high
+    detail: >
+      max_hold_days > 90 universally destructive. At 180d: excess drops to +0.038
+      (from +0.271). At 360d: excess goes negative to -0.065. Long holding periods
+      under trend_guard's classification regime amplify the 2020 drawdown.
+  - id: switch_hurdle_sweet_spot
+    severity: medium
+    detail: >
+      switch_hurdle=0.01 is the only viable setting. 0.0 gives excess=0.107,
+      0.02 gives excess=0.047, 0.03 gives excess=0.139 with worse max_dd=-0.377.
+  - id: test_train_gap
+    severity: high
+    detail: >
+      Test best excess (0.293) is 6% of total return below baseline test excess
+      (0.380). The train improvement (+14pp) does not translate to test. This is
+      consistent with overfitting to train-period regime patterns that do not
+      generalize to 2025-2026.
+
+root_cause: >
+  trend_guard uses ret_20d/ret_60d slope + drawdown + breadth signals for regime
+  classification. During 2020, these signals correctly identify bad conditions and
+  reduce exposure, improving train metrics. But in 2025-2026, the same signals
+  produce cautious/false-negative classifications that reduce upside capture.
+  Same structural tradeoff as every prior family.
+
+recommendation: add regime_classifier_variant to forbidden_families

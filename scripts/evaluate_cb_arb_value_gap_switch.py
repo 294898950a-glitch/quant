@@ -941,6 +941,15 @@ def _run_value_gap_backtest(
             )
             for name, cfg in cfgs.items()
         }
+    # 方向三: 降频+集中持仓 -- 允许命令行覆盖持仓参数
+    for name, cfg in cfgs.items():
+        if "max_holdings" in params:
+            cfg = replace(cfg, max_holdings=int(params["max_holdings"]))
+        if "max_position_pct" in params:
+            cfg = replace(cfg, max_position_pct=float(params["max_position_pct"]))
+        if "max_holding_days" in params:
+            cfg = replace(cfg, max_holding_days=int(params["max_holding_days"]))
+        cfgs[name] = cfg
     features = _build_daily_features(252, rule)
     cb_daily = _load_cb_daily().copy()
     cb_daily["trade_date"] = cb_daily["trade_date"].astype(str)
@@ -1603,22 +1612,33 @@ def _parse_args() -> argparse.Namespace:
     p.add_argument("--market-impact-coeff", type=float, default=0.0010)
     p.add_argument("--market-impact-cap-pct", type=float, default=0.02)
     p.add_argument("--holding-cost-pct", type=float, default=0.0)
+    p.add_argument("--max-holdings", type=int, default=None)
+    p.add_argument("--max-position-pct", type=float, default=None)
+    p.add_argument("--max-holding-days", type=int, default=None)
     return p.parse_args()
 
 
 def _with_cost_params(params: dict[str, Any], args: argparse.Namespace) -> dict[str, Any]:
-    if not args.cost_model_enabled:
-        return params
     out = dict(params)
-    out.update(
-        {
-            "cost_model_enabled": 1.0,
-            "slippage_pct": float(args.slippage_pct),
-            "market_impact_coeff": float(args.market_impact_coeff),
-            "market_impact_cap_pct": float(args.market_impact_cap_pct),
-            "holding_cost_pct": float(args.holding_cost_pct),
-        }
-    )
+    if args.cost_model_enabled:
+        out.update(
+            {
+                "cost_model_enabled": 1.0,
+                "slippage_pct": float(args.slippage_pct),
+                "market_impact_coeff": float(args.market_impact_coeff),
+                "market_impact_cap_pct": float(args.market_impact_cap_pct),
+                "holding_cost_pct": float(args.holding_cost_pct),
+            }
+        )
+    max_holdings = getattr(args, "max_holdings", None)
+    max_position_pct = getattr(args, "max_position_pct", None)
+    max_holding_days = getattr(args, "max_holding_days", None)
+    if max_holdings is not None:
+        out["max_holdings"] = max_holdings
+    if max_position_pct is not None:
+        out["max_position_pct"] = max_position_pct
+    if max_holding_days is not None:
+        out["max_holding_days"] = max_holding_days
     return out
 
 

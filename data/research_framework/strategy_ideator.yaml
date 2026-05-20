@@ -4,7 +4,6 @@ provider_registry: data/research_framework/ai_providers.yaml
 provider: from_registry
 allowed_entrypoint: scripts/run_strategy_ideation_once.py
 model: from_registry
-max_budget_usd: 0.5
 timeout_seconds: 240
 allow_fallback: false
 block_on_unimplemented_draft: true
@@ -31,8 +30,6 @@ defaults:
   l0_entry_id: 1
   cv_design: single-window
   cv_holdout_years: [2025, 2026]
-  budget_cap_yuan: 100
-  max_auto_budget_yuan: 100
   local_minutes: 0
   spot_minutes: 60
   run_prefix: auto_strategy
@@ -49,7 +46,8 @@ hard_limits:
   - "不能要求本地跑 cb_arb 回测；READY spec 必须交给 VM/spot host。"
   - "不能修改 current.yaml 或 baseline_registry.yaml。"
   - "必须保留 2025-2026 作为测试段。"
-  - "如果想法没有现成执行器，只能生成 DRAFT spec，不能生成 READY spec。"
+  - "如果想法没有现成执行器，第一次对话生成 DRAFT spec；后续由固定流程先要求工具设计和登记信息，设计通过后再要求草稿评测工具代码。"
+  - "不能为了匹配现有执行器反复重写同一个题目。"
   - "输出必须是 YAML 对象，不能有 Markdown 解释。"
 
 forbidden_families:
@@ -57,6 +55,12 @@ forbidden_families:
   - regime_conditioned_option_entry_gate
   - global_option_value_haircut
   - panic_family_reruns
+  - option_position_sizing
+  - option_source_pnl_feedback
+  - stop_source_stress
+  - low_freq_concentrated
+  - universe_filter
+  - regime_classifier_variant
 
 executors:
   option_position_sizing:

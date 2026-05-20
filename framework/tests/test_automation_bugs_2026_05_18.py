@@ -4,7 +4,7 @@ Categorized:
 - P0 (broken behavior, wastes compute):
   - Bug 1: 6 option-pnl-feedback batch summary CSV identical md5 (different hypothesis → same evaluator/grid)
   - Bug 2: position-sizing 2 VM jobs same spec → identical CSV (no dedup)
-  - Bug 3: orchestrator_log only "paused" action (production daemon doesn't use orchestrator)
+  - Bug 3: orchestrator_log only "paused" action (production runner doesn't use orchestrator)
 - P1 (schema violations, preflight FAIL):
   - Bug 4: result_reviewer.py writes report.yaml missing 5 required fields
   - Bug 5: l4_ack reviewer field accepts "codex_auto" but ALLOWED_REVIEWER = {claude, codex, user}
@@ -13,7 +13,7 @@ Categorized:
   - Bug 7: Loop pid restarted 4 times (no healthcheck recorded)
   - Bug 8: Codex outbox heartbeat noise (same content every 10min)
   - Bug 9: Cycle detection uses hypothesis hash, not mechanic_tag hash
-  - Bug 10: Production option-value daemon ignores user pause flag
+  - Bug 10: Production research queue runner ignores user pause flag
 
 Codex must make these tests pass.
 """
@@ -105,7 +105,7 @@ def test_bug_2_position_sizing_dual_vm_not_duplicate_work():
 
 def test_bug_3_orchestrator_log_records_more_than_paused():
     """Audit log should include all major actions: ideate / compile / run / review / digest.
-    27 entries all 'paused' = audit broken or production daemon doesn't use orchestrator."""
+    27 entries all 'paused' = audit broken or production runner doesn't use orchestrator."""
     log_path = REPO_ROOT / "data" / "research_framework" / "orchestrator_log.jsonl"
     if not log_path.exists():
         pytest.skip("orchestrator_log not yet created")
@@ -122,52 +122,180 @@ def test_bug_3_orchestrator_log_records_more_than_paused():
     intersection = actions & expected_at_least
     # If only "paused" exists, real loop work was not audited (BUG)
     assert len(actions) > 1, (
-        f"orchestrator_log contains only {actions}. Production daemon "
-        f"(option_value_loop_daemon.py) should also write audit entries for "
+        f"orchestrator_log contains only {actions}. Production runner "
+        f"(research_queue_runner.py) should also write audit entries for "
         f"ideate / compile / run / review / digest, but only 'paused' is recorded. "
         f"Total entries: {len(log_path.read_text().splitlines())}"
     )
 
 
-def test_bug_3b_production_daemon_writes_audit():
-    """option_value_loop_daemon.py should write orchestrator_log entries
+def test_bug_3b_production_runner_writes_audit():
+    """research_queue_runner.py should write orchestrator_log entries
     when it ideates / compiles / runs / reviews."""
-    daemon_path = REPO_ROOT / "scripts" / "option_value_loop_daemon.py"
-    if not daemon_path.exists():
-        pytest.skip("option_value_loop_daemon.py not present")
-    source = daemon_path.read_text()
+    runner_path = REPO_ROOT / "scripts" / "research_queue_runner.py"
+    if not runner_path.exists():
+        pytest.skip("research_queue_runner.py not present")
+    source = runner_path.read_text()
     # Source must reference orchestrator_log or audit log path
     has_audit = (
         "orchestrator_log" in source
         or ("audit" in source.lower() and "log" in source.lower())
     )
     assert has_audit, (
-        "option_value_loop_daemon.py does not reference orchestrator_log or audit log. "
-        "Production daemon should record each major action per acceptance criteria guard E."
+        "research_queue_runner.py does not reference orchestrator_log or audit log. "
+        "Production runner should record each major action per acceptance criteria guard E."
     )
 
 
-def test_bug_10_option_value_daemon_respects_pause_flag(tmp_path: Path, monkeypatch):
-    """Production option-value daemon must stop before ideation or VM scheduling
+def test_bug_10_research_queue_runner_respects_pause_flag(tmp_path: Path, monkeypatch):
+    """Production research queue runner must stop before ideation or VM scheduling
     when the user pause flag exists."""
-    daemon = _load(REPO_ROOT / "scripts" / "option_value_loop_daemon.py", "option_value_loop_daemon")
+    runner = _load(REPO_ROOT / "scripts" / "research_queue_runner.py", "research_queue_runner")
     pause_flag = tmp_path / "orchestrator_paused.flag"
     pause_flag.write_text("paused by regression test", encoding="utf-8")
-    missing_state = tmp_path / "missing_option_value_loop.yaml"
-    status_path = tmp_path / "option_value_loop_status.json"
+    missing_state = tmp_path / "missing_research_queue.yaml"
+    status_path = tmp_path / "research_queue_status.json"
     audit_path = tmp_path / "orchestrator_log.jsonl"
 
-    monkeypatch.setattr(daemon, "PAUSE_FLAG_PATH", pause_flag)
-    monkeypatch.setattr(daemon, "STATE_PATH", missing_state)
-    monkeypatch.setattr(daemon, "STATUS_PATH", status_path)
-    monkeypatch.setattr(daemon, "AUDIT_LOG_PATH", audit_path)
+    monkeypatch.setattr(runner, "PAUSE_FLAG_PATH", pause_flag)
+    monkeypatch.setattr(runner, "STATE_PATH", missing_state)
+    monkeypatch.setattr(runner, "STATUS_PATH", status_path)
+    monkeypatch.setattr(runner, "AUDIT_LOG_PATH", audit_path)
 
-    assert daemon.tick() == "paused"
+    assert runner.tick() == "paused"
 
     status = json.loads(status_path.read_text(encoding="utf-8"))
     assert status["status"] == "paused"
     rows = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
     assert rows[-1]["action"] == "paused"
+
+
+def test_research_queue_runner_respects_protected_user_escalation_block(tmp_path: Path, monkeypatch):
+    """If state explicitly requires a protected user decision, runner must stop."""
+    runner = _load(REPO_ROOT / "scripts" / "research_queue_runner.py", "research_queue_runner")
+    state_path = tmp_path / "research_queue.yaml"
+    status_path = tmp_path / "research_queue_status.json"
+    audit_path = tmp_path / "orchestrator_log.jsonl"
+    pause_flag = tmp_path / "missing_pause.flag"
+    state_path.write_text(
+        yaml.safe_dump(
+            {
+                "enabled": True,
+                "escalation": {
+                    "status": "blocked_awaiting_user",
+                    "reason": "all directions exhausted",
+                    "requires_user_decision": True,
+                    "user_options": {"A": "archive", "B": "new strategy"},
+                },
+                "queue": [{"id": "done", "status": "complete"}],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(runner, "STATE_PATH", state_path)
+    monkeypatch.setattr(runner, "STATUS_PATH", status_path)
+    monkeypatch.setattr(runner, "AUDIT_LOG_PATH", audit_path)
+    monkeypatch.setattr(runner, "PAUSE_FLAG_PATH", pause_flag)
+
+    assert runner.tick() == "blocked_awaiting_user"
+    status = json.loads(status_path.read_text(encoding="utf-8"))
+    assert status["status"] == "blocked_awaiting_user"
+    assert "all directions exhausted" in status["reason"]
+    rows = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    assert rows[-1]["action"] == "blocked_awaiting_user"
+
+
+def test_research_queue_runner_auto_resolves_exhaustion_block(tmp_path: Path, monkeypatch):
+    """Exhausted old directions are not a hard stop; they should enter project ideation."""
+    runner = _load(REPO_ROOT / "scripts" / "research_queue_runner.py", "research_queue_runner_auto_resolve")
+    state_path = tmp_path / "research_queue.yaml"
+    status_path = tmp_path / "research_queue_status.json"
+    audit_path = tmp_path / "orchestrator_log.jsonl"
+    pause_flag = tmp_path / "missing_pause.flag"
+    state_path.write_text(
+        yaml.safe_dump(
+            {
+                "enabled": True,
+                "escalation": {
+                    "status": "blocked_awaiting_user",
+                    "reason": "old directions exhausted",
+                },
+                "queue": [{"id": "done", "status": "complete"}],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(runner, "STATE_PATH", state_path)
+    monkeypatch.setattr(runner, "STATUS_PATH", status_path)
+    monkeypatch.setattr(runner, "AUDIT_LOG_PATH", audit_path)
+    monkeypatch.setattr(runner, "PAUSE_FLAG_PATH", pause_flag)
+    monkeypatch.setattr(runner, "generate_next_spec_if_idle", lambda state: "queued_ideation_spec")
+
+    assert runner.tick() == "queued_ideation_spec"
+
+
+def test_research_queue_completion_requires_review_and_digest(tmp_path: Path, monkeypatch):
+    """A remote run is not complete until artifacts are reviewed and digest is refreshed."""
+    runner = _load(REPO_ROOT / "scripts" / "research_queue_runner.py", "research_queue_runner_review_gate")
+    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
+    state_path = tmp_path / "data" / "research_framework" / "research_queue.yaml"
+    state_path.parent.mkdir(parents=True)
+    monkeypatch.setattr(runner, "STATE_PATH", state_path)
+
+    run_dir = tmp_path / "data" / "run_review_gate"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_review_gate",
+                "strategy_id": "cb_arb_value_gap_switch",
+                "artifacts_required": ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    for name in ("summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"):
+        (run_dir / name).write_text("{}\n", encoding="utf-8")
+
+    calls: list[str] = []
+    monkeypatch.setattr(runner, "remote_running_on_vm", lambda vm, pattern: False)
+    monkeypatch.setattr(runner, "sync_remote_run_dir", lambda state, item, run_dir: calls.append("sync"))
+    monkeypatch.setattr(runner, "item_vm_config", lambda state, item: {"id": "vm1", "host": "vm", "remote_repo": "/repo"})
+    monkeypatch.setattr(
+        runner,
+        "review_and_digest_run",
+        lambda run_path: calls.append("review_digest") or {
+            "review_path": "data/run_review_gate/review.yaml",
+            "digest_path": "data/research_framework/recent_results_digest.yaml",
+        },
+    )
+
+    state = {}
+    item = {"id": "run_review_gate", "status": "running", "spec_path": "data/run_review_gate/spec.yaml"}
+    queue = [item]
+
+    assert runner.settle_running_items(state, queue) == 1
+    assert calls == ["sync", "review_digest"]
+    assert item["status"] == "complete"
+    assert item["workflow_stage"] == "digested"
+    assert item["review_path"] == "data/run_review_gate/review.yaml"
+
+
+def test_ideation_uses_current_yaml_strategy_not_hardcoded():
+    """The ideator must read the current main strategy instead of hard-coding cb_arb."""
+    source = (REPO_ROOT / "framework" / "autonomous" / "ideation_cycle.py").read_text(encoding="utf-8")
+    assert '"allowed_strategy_id": "cb_arb_value_gap_switch"' not in source
+    assert "current_main_strategy_id" in source
+    assert "self.paths.current" in source
 
 
 # ====================== Bug 4-6: schema violations in auto-fill ======================
@@ -281,31 +409,24 @@ def test_bug_9_cycle_detection_uses_mechanic_tag_not_only_hypothesis():
 # ====================== Bug 7 + 8 (advisory tests, design checks) ======================
 
 
-def test_bug_7_loop_daemon_records_restart_history():
-    """option_value_loop_daemon.py should record process restart history.
-    Loop pid changed 4x (19741 → 5476 → 7824 → 24708) with no clear reason."""
-    daemon_path = REPO_ROOT / "scripts" / "option_value_loop_daemon.py"
-    if not daemon_path.exists():
+def test_bug_7_loop_runner_has_no_restart_mode():
+    """The production runner is now tick-only, so restart history is unnecessary."""
+    runner_path = REPO_ROOT / "scripts" / "research_queue_runner.py"
+    if not runner_path.exists():
         pytest.skip()
-    source = daemon_path.read_text().lower()
-    has_restart_logic = (
-        "restart" in source
-        or "pidfile" in source
-        or ("pid" in source and "previous" in source)
-    )
-    assert has_restart_logic, (
-        "option_value_loop_daemon should log restart events with previous pid "
-        "and reason. Currently silent on restart (pid changed 4x in this session)."
-    )
+    source = runner_path.read_text().lower()
+    assert "daemon_loop" not in source
+    assert "pid_path" not in source
+    assert "restart_log_path" not in source
 
 
 def test_bug_8_heartbeat_should_dedup_unchanged_status():
     """Heartbeat 'status_unchanged' should be a short single-line entry, not
     full 1669-byte content repeated every 10 minutes."""
-    daemon_path = REPO_ROOT / "scripts" / "option_value_loop_daemon.py"
-    if not daemon_path.exists():
+    runner_path = REPO_ROOT / "scripts" / "research_queue_runner.py"
+    if not runner_path.exists():
         pytest.skip()
-    source = daemon_path.read_text().lower()
+    source = runner_path.read_text().lower()
     has_dedup = (
         "status_changed" in source
         or "previous_status" in source
@@ -313,7 +434,7 @@ def test_bug_8_heartbeat_should_dedup_unchanged_status():
         or "unchanged" in source
     )
     assert has_dedup, (
-        "Daemon should emit minimal heartbeat when status unchanged. "
+        "research queue runner should emit minimal heartbeat when status unchanged. "
         "Currently emits full ~1669-byte content every 10 minutes regardless. "
         "Recommendation: full content only when status flips; otherwise 1 line."
     )

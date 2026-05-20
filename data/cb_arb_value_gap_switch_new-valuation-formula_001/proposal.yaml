@@ -1,0 +1,56 @@
+proposal_id: cb_arb_value_gap_switch_new-valuation-formula_001
+strategy_id: cb_arb_value_gap_switch
+family: valuation_formula_improvement
+hypothesis: Replacing the current theoretical valuation model (e.g., BSM with constant
+  volatility) with a more accurate convertible bond pricing model (e.g., Tsiveriotis-Fernandes
+  with stochastic credit spread) will reduce mispricing during credit stress and volatility
+  spikes, improving the signal-to-noise ratio of value gap signals across regimes.
+source_insight: Baseline train excess only 0.131 vs test 0.38, with 2020 excess -0.19,
+  indicating the value gap signal may be systematically biased in stressed markets.
+  A better valuation formula could correct this.
+expected_improvement: Train excess return (2019-2024) improve from 0.131 to >=0.25;
+  2020 excess improve from -0.19 to >=-0.10; test excess remain >=0.30.
+capability_ids:
+- C006
+required_executor: 'none (missing executor: valuation_formula_executor)'
+required_data: Existing CB price and stock data plus additional market data (e.g.,
+  government yield curves, CDS spreads, option implied volatility surfaces) to calibrate
+  new model.
+test_design:
+  description: Backtest on train 2019-2024 and test 2025-2026 using the new valuation
+    formula for value gap computation. Keep all other entry/exit rules identical to
+    baseline. Cross-validate model parameters on 2019-2021, evaluate on 2022-2024,
+    then sealed test.
+success_criteria:
+  description: Train excess return > 0.25 and 2020 excess > -0.10, test excess >=
+    0.30, and max drawdown not significantly worse than baseline (max drawdown > -0.15).
+falsifiers:
+  train: Train excess < 0.20 or 2020 excess < -0.15 or test excess < 0.25, or max
+    drawdown worse than -0.18.
+  validate: Train excess < 0.20 or 2020 excess < -0.15 or test excess < 0.25, or max
+    drawdown worse than -0.18.
+  test: Train excess < 0.20 or 2020 excess < -0.15 or test excess < 0.25, or max drawdown
+    worse than -0.18.
+risk: New model increases complexity and data dependencies; risk of overfitting to
+  2020 crisis pattern.
+why_not_repeated_failure: Prior rejections addressed position sizing and regime classification,
+  not the core theoretical valuation that generates the value gap signal. This direction
+  explores an orthogonal axis not covered by any closed family.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: A convertible bond pricing model with stochastic credit
+  spread and interest rate can be implemented and calibrated using available market
+  data (yield curves, credit curves, equity vol).
+missing_capability_request: valuation_formula_executor
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 02a77d6f26ba5ef4
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 02a77d6f26ba5ef4
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new-valuation-formula_001/proposal.yaml

@@ -1,0 +1,96 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_external-regime-gate_2026-05-18
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user strategic fork B: 保留绝对价值差额排名信号，改打法。方向一：外部市场状态开关。'
+hypothesis: |
+  用外部市场指标（中证500趋势、信用利差、波动率区间）判断市场是否处于系统性冲击，
+  只在正常状态下激活价值差额排名交易，在冲击期空仓。这样可以避免2020年全市场暴跌中
+  的错误买入，同时保留2025-2026牛市的收益来源。
+
+  与已驳回的恐慌检测器不同：之前用的是可转债池内部指标（宽度、回撤占比），同一天内
+  分不清真假恐慌。外部指标有本质区别——2020年2-3月信用利差和波动率会剧烈跳动，
+  而2024年10月小回调不会触发同等强度信号。
+
+source_insight: |
+  research_insights.yaml id=panic_detector_dead_end: 池内同日横截面指标分不清真假恐慌。
+  research_insights.yaml id=option_source_value_gap_structural_tradeoff: 修2020就丢2025-2026。
+  关键区分：外部市场指标不受可转债池内反馈回路污染。
+  research_insights.yaml id=universe_or_market_regime_retest: 待办项，但之前没试过外部指标。
+
+parameter_space:
+  - name: regime_indicator
+    range: [csi500_trend, credit_spread, realized_vol, composite]
+    type: enum
+    description: 外部市场状态判断指标
+  - name: gate_mode
+    range: [hard_cutoff, position_reduce, signal_discount]
+    type: enum
+    description: 状态不好时的处理方式（完全空仓/减仓/信号打折）
+  - name: lookback_days
+    range: [5, 10, 20, 40, 60]
+    type: int
+    description: 指标回头看天数
+  - name: threshold_percentile
+    range: [0.7, 0.8, 0.9]
+    type: float
+    description: 判定为冲击的分位数门槛
+
+new_data_sources:
+  - path: data/csi500_grid/raw/510500_daily.parquet
+    description: 中证500 ETF 日线（用于趋势判断）
+  - path: data/cb_warehouse/cb_daily.parquet
+    description: 可转债日线（用于信用利差和波动率计算）
+
+grid:
+  dimensions: [regime_indicator, gate_mode, lookback_days, threshold_percentile]
+  candidates_count: 180
+  description: 4 维 grid，枚举搜索最优外部状态判断方式和处理逻辑
+
+hard_floors:
+  replay_2019: 0.161312
+  replay_2020: -0.130604
+  replay_2021: -0.050441
+  replay_2022: 0.014425
+  replay_2023: -0.031027
+  replay_2024: 0.030085
+hard_floors_baseline_source: spec v1.1 normal-state baseline
+
+auxiliary_metrics:
+  - train_excess_return
+  - test_excess_return
+  - max_drawdown
+  - total_trades
+  - win_rate
+  - regime_accuracy
+
+cv_design: leave-one-year-out
+cv_holdout_years: [2019, 2020, 2021, 2022, 2023, 2024]
+cv_adoption_threshold: '≥ 5/6 holdout 改善或不退化 vs 当前 baseline，且 2020年显著改善（excess > -0.10）'
+
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 120
+  estimated_cost_yuan: 18.0
+budget_cap_yuan: 50
+spot_decision: '新评估脚本，需要 spot 跑完整 grid。180 候选 × 6 年 = 约 2 小时。'
+
+stop_conditions:
+  - 0 候选过 6 floor → 停研究
+  - 2020年所有候选 excess < -0.10 → 停研究（方向无效）
+  - 总算力 > 50 → 暂停
+
+artifacts_required:
+  - summary_regime_gate.csv
+  - yearly_regime_gate.csv
+  - regime_dates.csv
+  - summary.json
+
+status: DRAFT
+
+notes: |
+  新方向，不与任何已驳回方向重叠。
+  需要新评估脚本：evaluate_cb_arb_external_regime_gate.py
+  逻辑：先算外部指标 → 判断每天的市场状态 → 只在正常状态日运行 value_gap_switch 策略。
+  关键创新：用外部指标而非池内指标做状态判断。

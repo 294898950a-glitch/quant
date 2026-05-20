@@ -1,0 +1,71 @@
+proposal_id: cb_arb_value_gap_switch_exit_floor_moneyness_2026-05-19
+strategy_id: cb_arb_value_gap_switch
+family: dynamic_exit_rule
+hypothesis: Dynamic exit thresholds based on distance to bond floor and moneyness
+  will cut losses in unfavorable regimes without overfitting, improving train excess
+  return while preserving strong test performance.
+source_insight: Position sizing and regime guard improved train but degraded test,
+  suggesting overfitting to historical patterns. The baseline suffers high max drawdown
+  in train (-0.324) and poor 2020 (-0.195 excess). Exits are currently rigid (fixed
+  stop/gap close). Adapting exit rules to the convertible's proximity to bond floor
+  (bond-like vs. equity-like risk) may improve risk control in crisis periods without
+  introducing regime classification.
+expected_improvement: Increase train excess to >0.20 (from 0.13) and 2020 excess to
+  > -0.10 (from -0.19), while keeping test excess >= 0.35 (vs baseline 0.38).
+capability_ids:
+- C007
+required_executor: exit_rule_overlay
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+test_design: Implement an exit overlay that, for each open position, checks the current
+  distance to bond floor ( (price - bond_floor)/bond_floor ) and moneyness ( price
+  / conversion_price ). If distance is below a threshold (e.g., 0.05), the convertible
+  is near its floor and we exit early to protect against floor breach. If moneyness
+  is high (>1.2), the convertible is deep in-the-money (equity-like), we tighten the
+  stop-loss from e.g. 10% to 5%. Grid search over distance thresholds (0.02, 0.05,
+  0.10), moneyness thresholds (1.1, 1.2, 1.3), and stop multipliers (0.5, 0.75, 1.0
+  relative to baseline). Evaluate on train (2019-2024) with 2020 repair and sealed
+  test (2025-2026). Select best composite (train+2020) and verify test.
+success_criteria:
+- Train excess return > 0.20
+- 2020 excess return > -0.10
+- Test excess return >= 0.35 (no more than 0.03 drop from baseline 0.38)
+- Train max drawdown < -0.30
+falsifiers:
+- Test excess return falls below 0.33 (drop > 0.05 from baseline)
+- 2020 excess still < -0.15
+- No variant meets success criteria without violating test threshold
+risk: Exit rule may be data-mined to 2020 crash; guard against overfit by using only
+  two interpretable dimensions (floor distance, moneyness) and limiting grid size.
+  Could reduce number of trades, hurting test return if exit too early in stable periods.
+why_not_repeated_failure: This is not a position sizing variant (closed family), not
+  a regime classifier variant (exhausted), not an option entry gate, and not a PnL
+  feedback scaler. It introduces dynamic exit logic, a new mechanic not previously
+  tested in this workflow.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: A new executor module 'exit_rule_overlay' will be registered
+  to modify exit conditions. The bond floor is precomputed from cb_basic.parquet (conversion
+  value, bond cashflows). Baseline exit logic (stop loss at 10%, gap-closed exit)
+  will be augmented, not replaced entirely. The executor will be integrated into the
+  existing cb_arb_value_gap_switch framework.
+missing_capability_request:
+  capability_id: C007
+  executor_name: exit_rule_overlay
+  reason: No existing executor supports modifying exit rules; available executors
+    (option_position_sizing, option_source_pnl_feedback_scaler) are either in closed
+    families or do not handle exit logic.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: c79764bd9edc72f4
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: c79764bd9edc72f4
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_exit_floor_moneyness_2026-05-19/proposal.yaml

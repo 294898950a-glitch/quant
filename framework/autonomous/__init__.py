@@ -1,8 +1,8 @@
-"""Autonomous research framework compatibility modules.
+"""Autonomous research framework implementation modules.
 
 The active architecture has 5 nodes: state_and_rules, ideation, proposal_gate,
-runner, and review_memory. The modules exported here are implementation files
-inside those nodes, not separate architecture nodes.
+runner, and review_memory. The modules exported here live inside those nodes;
+they are not separate architecture nodes.
 """
 
 __all__ = [
@@ -11,12 +11,12 @@ __all__ = [
     "evidence_tool_registry",
     "executor_registry",
     "ideation_cycle",
-    "orchestrator",
     "paths",
     "proposal_rewrite_loop",
     "proposal_schema",
     "recent_results_digest",
     "result_reviewer",
+    "run_recorder",
     "spec_compiler",
     "strategy_ideator",
     "verification_tool",

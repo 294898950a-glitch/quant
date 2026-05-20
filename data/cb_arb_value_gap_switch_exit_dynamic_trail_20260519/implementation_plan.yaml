@@ -1,0 +1,5 @@
+proposal_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+missing_executor: new_exit_rule_executor
+mechanics:
+- new_exit_rule
+reason: no strict executor match

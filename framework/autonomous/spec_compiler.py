@@ -10,13 +10,19 @@ from typing import Any
 
 import yaml
 
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
 try:
     from framework.autonomous.artifacts import ArtifactStore
+    from framework.autonomous.executor_registry import capability_catalog, capability_ids_to_mechanics
     from framework.autonomous.executor_registry import match_executor
+    from framework.autonomous.executor_registry import validate_registry_schema
     from framework.autonomous.proposal_schema import validate_proposal
 except ModuleNotFoundError:  # importlib-based acceptance tests load files directly
     from artifacts import ArtifactStore  # type: ignore
+    from executor_registry import capability_catalog, capability_ids_to_mechanics  # type: ignore
     from executor_registry import match_executor  # type: ignore
+    from executor_registry import validate_registry_schema  # type: ignore
     from proposal_schema import validate_proposal  # type: ignore
 
 
@@ -46,24 +52,53 @@ def _registry_mechanics(registry: dict[str, Any]) -> set[str]:
     return vocab
 
 
+def _registry_capability_ids(registry: dict[str, Any]) -> set[str]:
+    return set(capability_catalog(registry))
+
+
 def _proposal_fingerprint(proposal: dict[str, Any]) -> str:
     payload = {
         "hypothesis": proposal.get("hypothesis"),
-        "mechanics": sorted(proposal.get("mechanics", [])),
+        "capability_ids": sorted(proposal.get("capability_ids", [])),
     }
     return hashlib.sha256(json.dumps(payload, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
 
-def _estimate_cost_yuan(executor: dict[str, Any]) -> float:
-    budget = executor.get("budget_estimate", {}) if isinstance(executor, dict) else {}
-    if budget.get("estimated_cost_yuan") is not None:
-        return float(budget["estimated_cost_yuan"])
-    # Current observed spot economics are roughly 6.25 CNY/hour.
-    return float(budget.get("spot_minutes", 0)) * 6.25 / 60.0 + float(budget.get("sig_minutes", 0)) * 0.0
-
-
 def _proposal_data(proposal: dict[str, Any]) -> set[str]:
     return {str(item["path"] if isinstance(item, dict) else item) for item in proposal.get("required_data", [])}
+
+
+def _normalized_proposal(proposal: dict[str, Any], mechanics: set[str], capability_ids: set[str]) -> dict[str, Any]:
+    normalized = dict(proposal)
+    normalized["mechanics"] = sorted(mechanics)
+    normalized["capability_ids"] = sorted(capability_ids)
+    return normalized
+
+
+def _closed_intersections(proposal: dict[str, Any], mechanics: set[str], closed_tags: dict[str, Any]) -> set[str]:
+    candidates = set(mechanics)
+    for key in ("family", "required_executor"):
+        value = proposal.get(key)
+        if value:
+            candidates.add(str(value))
+    for tag in proposal.get("closed_direction_tags", []) or []:
+        candidates.add(str(tag))
+    return candidates & set(closed_tags)
+
+
+def _missing_executor_data(executor: Any, repo_root: Path | None = None) -> list[str]:
+    root = repo_root or REPO_ROOT
+    data = _executor_value(executor, "required_data", []) or []
+    missing: list[str] = []
+    for item in data:
+        path_value = item.get("path") if isinstance(item, dict) else item
+        if not path_value:
+            continue
+        path = Path(str(path_value))
+        resolved = path if path.is_absolute() else root / path
+        if not resolved.exists():
+            missing.append(str(path_value))
+    return missing
 
 
 def _write_yaml(path: Path, data: dict[str, Any]) -> str:
@@ -80,6 +115,46 @@ def _executor_value(executor: Any, key: str, default: Any = None) -> Any:
     return getattr(executor, key, default)
 
 
+def _format_command_template(executor: Any, proposal: dict[str, Any], output_dir: Path) -> list[str]:
+    template = _executor_value(executor, "command_template", []) or []
+    if not isinstance(template, list):
+        return []
+    config = dict(_executor_value(executor, "default_config", {}) or {})
+    config.update(proposal.get("executor_config") or {})
+    config.setdefault("output_dir", str(output_dir))
+    formatted: list[str] = []
+    for item in template:
+        text = str(item)
+        for key, value in config.items():
+            text = text.replace("{" + str(key) + "}", str(value))
+        text = text.replace("{output_dir}", str(output_dir))
+        formatted.append(text)
+    return formatted
+
+
+def _executor_sync_paths(executor: Any) -> list[str]:
+    paths: list[str] = []
+    script = _executor_value(executor, "script_path")
+    if script:
+        paths.append(str(script))
+    for item in _executor_value(executor, "required_data", []) or []:
+        path = item.get("path") if isinstance(item, dict) else item
+        if path:
+            paths.append(str(path))
+    paths.extend(
+        [
+            "scripts/auto_research_pipeline.py",
+            "scripts/gatekeeper.py",
+            "scripts/validate_spec.py",
+            "scripts/research_sanity_checker.py",
+            "data/research_framework/runtime_entrypoints.yaml",
+            "data/research_framework/protocol_rules.yaml",
+            "data/research_framework/experiments.yaml",
+        ]
+    )
+    return list(dict.fromkeys(paths))
+
+
 def _run_id(proposal: dict[str, Any]) -> str:
     proposal_id = str(proposal.get("proposal_id") or "auto_strategy")
     return proposal_id.replace(" ", "_")
@@ -88,10 +163,10 @@ def _run_id(proposal: dict[str, Any]) -> str:
 def _base_spec(
     proposal: dict[str, Any],
     status: str,
-    budget_cap: float,
     reason: str,
+    mechanics: set[str] | None = None,
 ) -> dict[str, Any]:
-    mechanics = proposal.get("mechanics", [])
+    resolved_mechanics = sorted(mechanics if mechanics is not None else set(proposal.get("mechanics", [])))
     success = proposal.get("success_criteria", {})
     return {
         "schema_version": 1,
@@ -105,11 +180,13 @@ def _base_spec(
         "parameter_space": [
             {
                 "name": "mechanics",
-                "range": mechanics,
+                "range": resolved_mechanics,
                 "type": "categorical",
-                "description": "Mechanics requested by the generated proposal.",
+                "description": "Mechanics resolved from capability_ids requested by the generated proposal.",
             }
         ],
+        "capability_ids": sorted(proposal.get("capability_ids", [])),
+        "mechanics": resolved_mechanics,
         "new_data_sources": [
             {"path": str(item["path"] if isinstance(item, dict) else item)}
             for item in proposal.get("required_data", [])
@@ -123,10 +200,8 @@ def _base_spec(
             "local_minutes": 0,
             "estimated_cost_yuan": 0.0,
         },
-        "budget_cap_yuan": float(budget_cap),
         "stop_conditions": [
             "executor match fails",
-            "budget exceeds cap",
             "required artifacts are missing",
         ],
         "artifacts_required": ["implementation_plan.yaml", "spec.yaml"]
@@ -144,26 +219,57 @@ def compile(
     proposal: dict[str, Any],
     registry: dict[str, Any],
     closed_tags: dict[str, Any],
-    budget_cap: float,
     recent_proposals: list[dict[str, Any]],
     output_dir: Path | None = None,
 ) -> CompileResult:
-    vocab = _registry_mechanics(registry) | set(closed_tags) | set(proposal.get("mechanics", []))
-    errors = validate_proposal(proposal, vocab)
+    registry_errors = validate_registry_schema(registry)
+    if registry_errors:
+        return CompileResult("DRAFT", "executor registry invalid", errors=registry_errors)
+
+    vocab = _registry_mechanics(registry) | set(closed_tags)
+    capability_vocab = _registry_capability_ids(registry)
+    errors = validate_proposal(proposal, vocab, capability_vocab=capability_vocab or None)
     if errors:
         return CompileResult("REJECT", "proposal schema invalid", errors=errors)
 
-    mechanics = set(proposal.get("mechanics", []))
-    closed = mechanics & set(closed_tags)
+    capability_ids = set(str(item) for item in proposal.get("capability_ids", []))
+    if not capability_ids and proposal.get("missing_capability_request"):
+        spec_path = None
+        plan_path = None
+        if output_dir is not None:
+            out = Path(output_dir)
+            plan_path = _write_yaml(out / "implementation_plan.yaml", {
+                "proposal_id": proposal.get("proposal_id"),
+                "missing_capability_request": proposal.get("missing_capability_request"),
+                "reason": "no registered capability id fits this idea",
+            })
+            spec_path = _write_yaml(
+                out / "spec.yaml",
+                _base_spec(proposal, "DRAFT", "missing registered capability", mechanics=set()),
+            )
+        return CompileResult(
+            "DRAFT",
+            "missing registered capability",
+            spec_path=spec_path,
+            implementation_plan_path=plan_path or "implementation_plan.yaml",
+        )
+    mechanics = capability_ids_to_mechanics(capability_ids, registry) if capability_ids else set(proposal.get("mechanics", []))
+    proposal = _normalized_proposal(proposal, mechanics, capability_ids)
+    closed = _closed_intersections(proposal, mechanics, closed_tags)
     if closed:
-        return CompileResult("REJECT", f"mechanics intersect closed directions: {sorted(closed)}")
+        return CompileResult("REJECT", f"proposal intersects closed directions: {sorted(closed)}")
 
     current_fp = _proposal_fingerprint(proposal)
     for old in recent_proposals[-5:]:
         if _proposal_fingerprint(old) == current_fp:
             return CompileResult("REJECT", "proposal cycle/repeat detected")
 
-    match = match_executor(mechanics, _proposal_data(proposal), registry)
+    match = match_executor(
+        mechanics,
+        _proposal_data(proposal),
+        registry,
+        proposal_capability_ids=capability_ids,
+    )
     if match is None:
         plan_path = None
         spec_path = None
@@ -177,7 +283,7 @@ def compile(
             })
             spec_path = _write_yaml(
                 out / "spec.yaml",
-                _base_spec(proposal, "DRAFT", budget_cap, "no strict executor match"),
+                _base_spec(proposal, "DRAFT", "no strict executor match", mechanics=mechanics),
             )
         else:
             plan_path = "implementation_plan.yaml"
@@ -188,17 +294,45 @@ def compile(
             implementation_plan_path=plan_path,
         )
 
-    cost = _estimate_cost_yuan(match)
-    if cost > float(budget_cap):
-        return CompileResult("DRAFT", f"budget {cost:.2f} exceeds cap {budget_cap:.2f}", implementation_plan_path="implementation_plan.yaml")
+    matching_rules = registry.get("matching_rules") or {}
+    if isinstance(matching_rules, dict) and matching_rules.get("require_required_data_exists") is True:
+        missing_data = _missing_executor_data(match)
+        if missing_data:
+            spec_path = None
+            plan_path = None
+            if output_dir is not None:
+                out = Path(output_dir)
+                plan_path = _write_yaml(out / "implementation_plan.yaml", {
+                    "proposal_id": proposal.get("proposal_id"),
+                    "executor_id": _executor_value(match, "executor_id") or _executor_value(match, "id"),
+                    "missing_data": missing_data,
+                    "reason": "executor required data missing on disk",
+                })
+                spec_path = _write_yaml(
+                    out / "spec.yaml",
+                    _base_spec(proposal, "DRAFT", "executor required data missing", mechanics=mechanics),
+                )
+            return CompileResult(
+                "DRAFT",
+                "executor required data missing",
+                spec_path=spec_path,
+                implementation_plan_path=plan_path or "implementation_plan.yaml",
+            )
 
     spec_path = None
     if output_dir is not None:
-        ready_spec = _base_spec(proposal, "READY", budget_cap, "all guarded checks passed")
+        ready_spec = _base_spec(proposal, "READY", "all guarded checks passed", mechanics=mechanics)
+        command = _format_command_template(match, proposal, Path(output_dir))
         ready_spec.update({
             "executor_id": _executor_value(match, "executor_id") or _executor_value(match, "id"),
             "command_template": _executor_value(match, "command_template"),
             "budget_estimate": _executor_value(match, "budget_estimate"),
+            "automation": {
+                "output_dir": str(output_dir),
+                "command": command,
+                "sync_paths": _executor_sync_paths(match),
+                "verdict": {"pass_field": "adoption_pass"},
+            },
             "ideation_provenance": {
                 "ai_provider": proposal.get("ai_provider"),
                 "prompt_path": proposal.get("prompt_path"),

@@ -1,0 +1,122 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_universe-filter_2026-05-19
+date: '2026-05-19'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'Hermes quant cron tick 2026-05-19 — all option-source filtering/exiting/positioning families exhausted. Chose
+  universe-level restriction as genuinely new direction: permanently exclude structurally problematic CB types rather than
+  filtering at entry time.'
+hypothesis: 永久性排除远离债底(close/bond_floor > 1.5)、深度价内(moneyness > 1.6)、短剩余期限(<1年)或小规模(<10亿)的转债，可以从根本上减少期权型错误低估的来源，而不需要在每次交易时做条件判断。与已拒绝的entry-gate家族不同，universe
+  filter是永久性的、在样本外保持一致的，不会在不同市场状态下反复横跳。代价是减少可交易标的数量，但如果剩余标的的价值差额信号更可靠，净效果可能是正的。
+source_insight: 'research_insights id=option_false_undervalue_attribution_2026_05_17: far-from-bond-floor (>1.5) CBs capture
+  31% of losses but only 13% of profits; high-moneyness (>1.6) CBs capture 49% of losses but only 20% of profits. research_insights
+  id=option_source_value_gap_structural_tradeoff_2026_05_17: all entry-time filters have been rejected because they trade
+  off 2020 vs 2025-2026. Universe filtering is permanently applied and avoids the regime-dependent tradeoff. research_insights
+  id=single_filter_dead_end: 2020 weakness is broad — universe filtering addresses this by removing the structural source
+  of bad trades.'
+parameter_space:
+- name: config
+  range:
+  - baseline_full_universe
+  - exclude_far_above_bond_floor
+  - exclude_high_moneyness
+  - exclude_short_maturity
+  - exclude_small_size
+  - combined_lowrisk_universe
+  type: enum
+  description: 6 pre-defined universe filter configs in evaluate_cb_arb_universe_filter.py
+new_data_sources:
+- path: data/cb_warehouse/cb_daily.parquet
+  description: 可转债日线数据
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  description: 前复权正股价格
+- path: data/cb_warehouse/cb_basic.parquet
+  description: 转债基本信息(转股价/规模/到期日)
+grid:
+  dimensions:
+  - config
+  candidates_count: 6
+  description: 6个预定义universe filter组合，由evaluate_cb_arb_universe_filter.py内部遍历
+hard_floors:
+  train_excess_return: -0.15
+  validate_excess_return: -0.1
+  test_excess_return: -0.05
+  max_drawdown: -0.35
+  cost_on_excess_compound: -0.1
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-on baseline (excess=-0.1047, max_dd=-0.3516)
+auxiliary_metrics:
+- train_excess_return
+- validate_excess_return
+- test_excess_return
+- max_drawdown
+- total_trades
+- win_rate
+- option_source_pnl
+- bond_source_pnl
+- excluded_cb_count
+cv_design: single-window
+cv_holdout_years: [2025, 2026]
+cv_adoption_threshold: 至少1个filter config在validate和test上同时excess>0，且test excess不低于baseline_full_universe的90%，且任何单年max_dd不超过-15%
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 90
+  local_minutes: 0
+  estimated_cost_yuan: 9.38
+budget_cap_yuan: 100
+spot_decision: 6个config × ~15分钟/config = 90分钟VM。预算9.38元，远低于100元自动执行。
+stop_conditions:
+- 脚本退出非0
+- 缺少summary.json
+- 所有非baseline config的test excess < -0.05
+- 所有非baseline config的validate excess < baseline_full_universe
+artifacts_required:
+- summary.json
+- config_rows.csv
+- source_decomposition.csv
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: ARCHIVED
+archived_at: '2026-05-19T10:56:00+08:00'
+archive_reason: Generated while low-freq-concentrated-v2 was still running and repeats a forbidden universe_filter direction; archived to prevent rediscovery or rerun.
+automation:
+  output_dir: data/cb_arb_value_gap_switch_universe-filter_2026-05-19
+  gatekeeper_after_run: false
+  sync_paths:
+  - scripts/evaluate_cb_arb_universe_filter.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/analyze_cb_arb_repair_times.py
+  - scripts/evaluate_cb_arb_daily_regime_switch.py
+  - strategies/cb_arb/verifier.py
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/research_framework/runtime_entrypoints.yaml
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_universe_filter.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --output-dir
+  - '{output_dir}'
+  - --cost-model-enabled
+verdict:
+  table_path: config_rows.csv
+  rank_by: test_excess_return
+  rank_desc: true
+  thresholds:
+    test_excess_return:
+      min: -0.05
+    validate_excess_return:
+      min: -0.1
+    max_drawdown:
+      min: -0.35
+notes: Hermes选择的第2个新方向（第1个是low-freq-concentrated-v2，正在运行）。universe filter不同于entry gate：前者是永久性排除某些CB类型，后者是交易时的条件判断。这个方向直接回应了option_false_undervalue_attribution中的发现——远离债底和深度价内是损失的主要来源。使用现有的evaluate_cb_arb_universe_filter.py，无需新建脚本。不改current.yaml，不改baseline_registry。
+ideation:
+  source: hermes
+  proposal_id: universe_filter_v1
+  family: universe_filter
+  executor: evaluate_cb_arb_universe_filter
+  why_not_rejected_repeat: 不是option-source过滤/估值打折/仓位缩放/盈亏反馈/恐慌检测。是全新的universe construction方向——永久性改变候选池，而非交易时的条件过滤。直接针对option_false_undervalue_attribution中发现的远离债底+深度价内高亏损率问题。
+  risk: 核心风险：排除远离债底/深度价内的转债会大幅减少可交易标的（这些CB约占93%交易量），可能导致剩余bond-type CBs交易机会不足、信号不够分散。但这是测试这个三年来一直存在的假设的最直接方式——如果连永久性排除都不能改善，那说明option-source问题在当前的value-gap框架里是无解的。
+updated_at: '2026-05-19T10:23:21'

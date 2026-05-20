@@ -1,0 +1,77 @@
+proposal_id: 20260519-proposal-001
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_adaptive_hold
+hypothesis: Replacing the fixed max-hold and gap exit with a time-decaying expected
+  gap closure rule that shortens allowed hold days when the gap fails to close proportionally
+  will improve train/test alignment, reduce catastrophic 2020-like drawdowns, and
+  preserve the recent strong test performance.
+source_insight: Baseline train excess 0.131 vs test 0.380 signals overfitting to recent
+  regime; 2020 excess -0.195 shows fixed hold + gap rules allow large losses in adverse
+  markets. Recent regime trend guard run showed that max_hold >90 d universally destroyed
+  performance, confirming that prolonged holds without gap closure are toxic. A rule
+  that tracks (remaining gap / initial gap) and exits after a minimum hold if this
+  ratio exceeds a declining threshold may cut losing positions earlier while still
+  rewarding gap convergence.
+expected_improvement: Train excess raised from ~0.13 to >0.20, 2020 excess improved
+  from -0.195 to less negative or positive, test 2025-2026 excess maintained at ≥0.35,
+  and max drawdown in stress periods reduced.
+capability_ids:
+- C007
+required_executor: exit_rule_duration_adaptive
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+test_design:
+  description: Grid search over min_hold_days (5,10,15), initial_threshold_fraction
+    (0.5,0.7,1.0), and decay_period_factor (0.5,1.0,1.5). Train on 2019-2024, early
+    stop on 2020 out‑sample to avoid overfit, sealed test on 2025-2026. Compare against
+    fixed hold baseline with identical entry logic.
+success_criteria:
+  test_excess_gte: 0.35
+  train_excess_gte: 0.2
+  y2020_excess_gte: -0.15
+  max_drawdown_test_lte: -0.1
+falsifiers:
+  train:
+  - If train excess does not exceed 0.20
+  - If the rule increases turnover by >20% without a net improvement in train PnL
+  validate:
+  - If y2020 excess does not improve over baseline
+  test:
+  - If sealed test excess drops below 0.35
+  - If the rule increases turnover by >20% without a net improvement in test PnL
+risk: Parameter overfitting on a short test window; may introduce a new cliff when
+  the decay is too aggressive, causing premature exits in slow-convergence but ultimately
+  profitable trades.
+why_not_repeated_failure: Previous failed directions were position sizing, regime
+  classifiers, and entry gates; none altered the core exit mechanism with a dynamic
+  time-decaying gap threshold. This targets the structural weakness (prolonged, unclosed
+  gaps) that the trend guard run explicitly identified, using a mechanic (new exit
+  rule) not yet attempted.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: 'The executor will maintain for each open position the
+  entry‑gap value and, on each day, compute the ratio current_gap / entry_gap. After
+  min_hold_days, if this ratio exceeds a threshold that declines linearly over time
+  from initial_threshold_fraction to 0 over max_hold_days, the position is closed.
+  Needed data fields: date, security_id, theoretical_value, current_price, gap (provided
+  in required data).'
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 1d0d81c62fc684f1
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 1d0d81c62fc684f1
+rewrite_provenance:
+- round: 1
+  provider_id: deepseek
+  response_hash: d8fcfa6e22f9d4ce
+- round: 2
+  provider_id: deepseek
+  response_hash: 48a4d5907d7375f6
+rewrite_status: valid
+rewrite_rounds_used: 2
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/20260519-proposal-001/proposal.yaml

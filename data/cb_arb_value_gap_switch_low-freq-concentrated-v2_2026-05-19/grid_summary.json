@@ -1,0 +1,334 @@
+{
+  "run_at": "2026-05-19T11:20:47",
+  "configs_tested": 8,
+  "results": [
+    {
+      "config": {
+        "max_holdings": 5,
+        "max_position_pct": 0.08,
+        "max_holding_days": 180
+      },
+      "label": "h5_p8_d180",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": 0.043855,
+        "excess_return": -0.22846,
+        "max_drawdown": -0.246724,
+        "win_rate": 0.3675,
+        "total_trades": 302,
+        "n_days": 1456,
+        "score": -0.290141
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.234821,
+        "excess_return": -0.117444,
+        "max_drawdown": -0.041867,
+        "win_rate": 0.5682,
+        "total_trades": 88,
+        "n_days": 323,
+        "score": -0.127911
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h5_p8_d180"
+    },
+    {
+      "config": {
+        "max_holdings": 5,
+        "max_position_pct": 0.08,
+        "max_holding_days": 365
+      },
+      "label": "h5_p8_d365",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": 0.043855,
+        "excess_return": -0.22846,
+        "max_drawdown": -0.246724,
+        "win_rate": 0.3675,
+        "total_trades": 302,
+        "n_days": 1456,
+        "score": -0.290141
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.234821,
+        "excess_return": -0.117444,
+        "max_drawdown": -0.041867,
+        "win_rate": 0.5682,
+        "total_trades": 88,
+        "n_days": 323,
+        "score": -0.127911
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h5_p8_d365"
+    },
+    {
+      "config": {
+        "max_holdings": 5,
+        "max_position_pct": 0.15,
+        "max_holding_days": 180
+      },
+      "label": "h5_p15_d180",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": 0.044064,
+        "excess_return": -0.22825,
+        "max_drawdown": -0.419456,
+        "win_rate": 0.3675,
+        "total_trades": 302,
+        "n_days": 1456,
+        "score": -0.333114
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.475952,
+        "excess_return": 0.123687,
+        "max_drawdown": -0.077805,
+        "win_rate": 0.5682,
+        "total_trades": 88,
+        "n_days": 323,
+        "score": 0.104236
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h5_p15_d180"
+    },
+    {
+      "config": {
+        "max_holdings": 5,
+        "max_position_pct": 0.15,
+        "max_holding_days": 365
+      },
+      "label": "h5_p15_d365",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": 0.044064,
+        "excess_return": -0.22825,
+        "max_drawdown": -0.419456,
+        "win_rate": 0.3675,
+        "total_trades": 302,
+        "n_days": 1456,
+        "score": -0.333114
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 90.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 90.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.475952,
+        "excess_return": 0.123687,
+        "max_drawdown": -0.077805,
+        "win_rate": 0.5682,
+        "total_trades": 88,
+        "n_days": 323,
+        "score": 0.104236
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h5_p15_d365"
+    },
+    {
+      "config": {
+        "max_holdings": 8,
+        "max_position_pct": 0.08,
+        "max_holding_days": 180
+      },
+      "label": "h8_p8_d180",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": -0.019087,
+        "excess_return": -0.291402,
+        "max_drawdown": -0.33065,
+        "win_rate": 0.4246,
+        "total_trades": 358,
+        "n_days": 1456,
+        "score": -0.374065
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.489586,
+        "excess_return": 0.137321,
+        "max_drawdown": -0.072528,
+        "win_rate": 0.6038,
+        "total_trades": 106,
+        "n_days": 323,
+        "score": 0.119189
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h8_p8_d180"
+    },
+    {
+      "config": {
+        "max_holdings": 8,
+        "max_position_pct": 0.08,
+        "max_holding_days": 365
+      },
+      "label": "h8_p8_d365",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": -0.019087,
+        "excess_return": -0.291402,
+        "max_drawdown": -0.33065,
+        "win_rate": 0.4246,
+        "total_trades": 358,
+        "n_days": 1456,
+        "score": -0.374065
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.03}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.03,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.489586,
+        "excess_return": 0.137321,
+        "max_drawdown": -0.072528,
+        "win_rate": 0.6038,
+        "total_trades": 106,
+        "n_days": 323,
+        "score": 0.119189
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h8_p8_d365"
+    },
+    {
+      "config": {
+        "max_holdings": 8,
+        "max_position_pct": 0.15,
+        "max_holding_days": 180
+      },
+      "label": "h8_p15_d180",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.02}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.02,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": 0.039056,
+        "excess_return": -0.233259,
+        "max_drawdown": -0.489336,
+        "win_rate": 0.4171,
+        "total_trades": 374,
+        "n_days": 1456,
+        "score": -0.355593
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.03, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.02}",
+        "min_gap_pct": 0.03,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.02,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.67951,
+        "excess_return": 0.327245,
+        "max_drawdown": -0.120079,
+        "win_rate": 0.6489,
+        "total_trades": 94,
+        "n_days": 323,
+        "score": 0.297225
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h8_p15_d180"
+    },
+    {
+      "config": {
+        "max_holdings": 8,
+        "max_position_pct": 0.15,
+        "max_holding_days": 365
+      },
+      "label": "h8_p15_d365",
+      "status": "ok",
+      "best_train": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.0, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.02}",
+        "min_gap_pct": 0.0,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.02,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "total_return": 0.039056,
+        "excess_return": -0.233259,
+        "max_drawdown": -0.489336,
+        "win_rate": 0.4171,
+        "total_trades": 374,
+        "n_days": 1456,
+        "score": -0.355593
+      },
+      "best_test": {
+        "candidate": "{\"max_hold_days\": 180.0, \"min_gap_pct\": 0.03, \"sell_gap_pct\": 0.0, \"stop_gap_ratio_floor\": 0.0, \"switch_hurdle_pct\": 0.02}",
+        "min_gap_pct": 0.03,
+        "sell_gap_pct": 0.0,
+        "switch_hurdle_pct": 0.02,
+        "max_hold_days": 180.0,
+        "stop_gap_ratio_floor": 0.0,
+        "stop_signal_threshold": 999.0,
+        "total_return": 0.67951,
+        "excess_return": 0.327245,
+        "max_drawdown": -0.120079,
+        "win_rate": 0.6489,
+        "total_trades": 94,
+        "n_days": 323,
+        "score": 0.297225
+      },
+      "run_dir": "data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19/h8_p15_d365"
+    }
+  ]
+}

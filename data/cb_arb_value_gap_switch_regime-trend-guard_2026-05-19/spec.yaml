@@ -1,0 +1,137 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+date: '2026-05-19'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: Hermes quant cron tick 2026-05-19T19:50 — all 9 autonomous research families
+  exhausted; chose genuinely new mechanism (regime classifier variant) not related
+  to filtering/position sizing/portfolio mechanics
+hypothesis: 将当前 score_4state 市场状态分类器替换为 trend_guard，后者使用趋势动量+ 回撤+广度信号而非打分制来判断强/弱/中性市场。不同的市场分类会导致不同时段使用不同
+  recovery/hurdle/持仓参数组合，可能改善2020年错配和2024年过度保守的问题。这不是在现有 策略上加过滤或门槛，而是改变策略内部的市场状态感知逻辑。
+source_insight: 'research_insights id=all_autonomous_directions_exhausted: 9个家族全部拒绝，
+  但 regime classifier 变体未被测试过。research_insights id=option_source_value_gap_structural_tradeoff:
+  2020年弱市和2025年强市的结构性矛盾可能源自 score_4state 在不同市场状态下的参数切换逻辑。 trend_guard 的重心在趋势确认（ret_20d/ret_60d斜率+drawdown），可能对2020年急跌和2024年假恐慌
+  有不同反应。research_insights id=panic_detector_dead_end: trend_guard 不是恐慌检测器， 不涉及同日截面指标，而是使用先行趋势信息。这是一个全新的测试方向。'
+parameter_space:
+- name: rule
+  range:
+  - trend_guard
+  type: categorical
+  description: 市场状态分类规则（当前score_4state，测试trend_guard）
+new_data_sources:
+- path: data/cb_warehouse/cb_daily.parquet
+  description: 可转债日线数据
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  description: 前复权正股价格
+- path: data/cb_warehouse/cb_basic.parquet
+  description: 可转债基本信息
+grid:
+  dimensions:
+  - rule
+  candidates_count: 1
+  description: 单候选 — 仅测试 trend_guard 规则。candidate_grid 由 evaluate_cb_arb_value_gap_switch.py
+    内部的 _candidate_grid() 生成（~168参数组合），每个组合在train段评估后top-N进入test段。
+hard_floors:
+  train_excess_return: -0.15
+  test_excess_return: -0.05
+  max_drawdown: -0.35
+  cost_on_excess_compound: -0.1
+  yearly_dd_ceiling: 0.15
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-on baseline (score_4state,
+  excess=-0.1047, max_dd=-0.3516)
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+- total_trades
+- win_rate
+- 2020_excess_return
+- cost_drag_pp
+cv_design: single-window
+cv_holdout_years:
+- '2025'
+- '2026'
+cv_adoption_threshold: train段 cost-on excess > baseline (-0.1047) 且 max_dd > -0.35
+  且 2020单年excess不劣于baseline (-0.13)
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 120
+  local_minutes: 0
+  estimated_cost_yuan: 15.0
+spot_decision: 单规则候选，但内部 grid 包含~168组参数 × ~2分钟/组 ≈ 120分钟 VM spot。必须在VM/spot
+  host执行。
+stop_conditions:
+- 脚本退出非0
+- 缺少 summary.json 或 train_summary.csv
+- 所有候选 cost-on excess < baseline (-0.1047)
+- 2020单年 excess 全面恶化
+artifacts_required:
+- train_summary.csv
+- test_summary.csv
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: ARCHIVED
+automation:
+  output_dir: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+  gatekeeper_after_run: false
+  sync_paths:
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - data/research_framework/runtime_entrypoints.yaml
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - trend_guard
+  - --output-dir
+  - '{output_dir}'
+  - --cost-model-enabled
+verdict:
+  table_path: train_summary.csv
+  rank_by: excess_return
+  rank_desc: true
+  thresholds:
+    train_excess_return:
+      min: -0.1
+    max_drawdown:
+      min: -0.35
+    cost_on_excess_compound:
+      min: -0.1
+notes: Hermes选择的第10个研究方向，在所有9个家族耗尽之后。trend_guard使用趋势斜率+ 回撤+广度信号分类市场状态（strong/weak/neutral），不同于score_4state的打分制。使用
+  现有 evaluate_cb_arb_value_gap_switch.py 无需新执行器。不改current.yaml，不改baseline_registry。compute_estimate仅作记录，不作为预算审批。
+archive_reason: auto_research_pipeline produced summary outputs but did not produce
+  report.yaml, l4_ack.yaml, or diagnostic.yaml; research_queue marked the item failed
+  on 2026-05-19. Later recovered review artifacts are noncanonical, and the
+  result is rejected, so the run must remain an archived failed direction rather
+  than a complete reviewed experiment.
+escalation:
+- archived_incomplete_artifacts
+ideation:
+  source: hermes
+  proposal_id: regime_trend_guard
+  family: regime_classifier_variant
+  executor: evaluate_cb_arb_value_gap_switch
+  why_not_rejected_repeat: 不是option-source过滤、估值打折、仓位缩放、盈亏反馈、panic检测、 低频集中、universe
+    filter或stop source stress。是全新的regime classifier变体方向。 改变策略内部的市场状态感知逻辑，不影响交易执行层。trend_guard
+    vs score_4state 从未被 对比测试过。
+  risk: 核心风险：trend_guard 只有3个状态（strong/weak/neutral），可能不如 score_4state 的4状态精细；趋势确认机制可能在2020年急跌时反应滞后。但这是用已有评估器可以快速验证
+    的方向，不产生新的工程开销。
+updated_at: '2026-05-19T13:10:46Z'

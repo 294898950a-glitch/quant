@@ -1,0 +1,5 @@
+proposal_id: cb_arb_value_gap_switch_time_based_exit_2026-05-19
+missing_executor: 'missing: time_decay_exit_executor'
+mechanics:
+- new_exit_rule
+reason: no strict executor match

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate role boundaries between Hermes, scheduler, ideator, and runner."""
+"""Validate role boundaries between internal cron, scheduler, ideator, and runner."""
 
 from __future__ import annotations
 
@@ -21,11 +21,11 @@ def contains_any(text: str, tokens: list[str]) -> list[str]:
 def main() -> int:
     errors: list[str] = []
 
-    hermes = read("scripts/hermes_quant_tick.py")
-    scheduler = read("scripts/option_value_loop_daemon.py")
+    internal_tick = read("scripts/quant_internal_tick.py")
+    scheduler = read("scripts/research_queue_runner.py")
     ideator_entry = read("scripts/run_strategy_ideation_once.py")
 
-    hermes_forbidden = [
+    internal_tick_forbidden = [
         "run_strategy_ideation_once.py",
         "generate_option_value_next_spec.py",
         "IdeationCycle",
@@ -33,25 +33,39 @@ def main() -> int:
         "rsync",
         "ssh ",
     ]
-    for token in contains_any(hermes, hermes_forbidden):
-        errors.append(f"scripts/hermes_quant_tick.py crosses role boundary via {token!r}")
-    if "option_value_loop_daemon.py" not in hermes:
-        errors.append("scripts/hermes_quant_tick.py must delegate mechanical progress to option_value_loop_daemon.py")
+    for token in contains_any(internal_tick, internal_tick_forbidden):
+        errors.append(f"scripts/quant_internal_tick.py crosses role boundary via {token!r}")
+    if "research_queue_runner.py" not in internal_tick:
+        errors.append("scripts/quant_internal_tick.py must delegate mechanical progress to research_queue_runner.py")
 
     scheduler_forbidden = [
-        "run_strategy_ideation_once.py",
         "generate_option_value_next_spec.py",
         "IdeationCycle",
         "RegisteredProviderAdapter",
         "call_active_provider",
+        "--no-ideation",
+        "allow_ideation",
+        "daemon_loop",
+        "PID_PATH",
+        "RESTART_LOG_PATH",
+        "watch_quant_vm_task_completion.sh",
+        "subprocess.Popen",
+        "discover_ready_specs",
+        "auto_discover_ready_specs",
+        "spec_matches_discovery",
     ]
     for token in contains_any(scheduler, scheduler_forbidden):
-        errors.append(f"scripts/option_value_loop_daemon.py crosses role boundary via {token!r}")
+        errors.append(f"scripts/research_queue_runner.py crosses role boundary via {token!r}")
     if "decide_scheduler_action" not in scheduler:
-        errors.append("scripts/option_value_loop_daemon.py must use shared workflow-state decision helper")
+        errors.append("scripts/research_queue_runner.py must use shared workflow-state decision helper")
+    if "run_strategy_ideation_once.py" in scheduler and "strategy_ideation_once" not in scheduler:
+        errors.append(
+            "scripts/research_queue_runner.py may call run_strategy_ideation_once.py only through "
+            "the registered project ideation ticket"
+        )
 
     ideator_forbidden = [
-        "option_value_loop_daemon.py",
+        "research_queue_runner.py",
         "auto_research_pipeline.py",
         "watch_quant_vm_task_completion.sh",
         "rsync",

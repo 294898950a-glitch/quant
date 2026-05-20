@@ -1,0 +1,75 @@
+proposal_id: cb_arb_value_gap_switch_exit-dynamic-01
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule
+hypothesis: Adding a take-profit exit based on value gap contraction will reduce drawdowns
+  in 2020 while preserving test performance.
+source_insight: The baseline suffers large drawdowns in 2020 (max_drawdown -0.179)
+  and holds positions too long during crisis; a dynamic exit that closes when the
+  gap narrows from entry may prevent losses.
+expected_improvement: Improve 2020 excess return (currently -0.1948) by at least 0.05
+  with max drawdown reduction, while test excess return remains within 5% of baseline
+  (0.38).
+capability_ids:
+- C007
+required_executor: exit_rule_dynamic
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+test_design:
+  description: Run baseline vs variant using standard train (20190101-20241231) and
+    test (20250101-20260508) plus 2020 repair period; compare key metrics (excess
+    return, max_drawdown, win_rate).
+success_criteria:
+  improve_2020_excess_return: 2020 excess_return > baseline_2020 excess_return + 0.05
+  test_excess_return_min: test excess_return >= baseline_test excess_return * 0.95
+falsifiers:
+  train:
+    dimension: train
+    condition: Variant train excess_return < baseline_train excess_return * 0.90
+    description: Train performance degrades significantly (excess return drops more
+      than 10% vs baseline).
+  validate:
+    dimension: validate
+    condition: Variant 2020 repair period excess_return <= baseline_2020 excess_return
+    description: No improvement in 2020 repair period (validate dimension).
+  test:
+    dimension: test
+    condition: Variant test excess_return < baseline_test excess_return * 0.90
+    description: Test performance severely drops below 90% of baseline.
+risk: Overfitting to 2020 may harm performance in other stress periods or test set;
+  gap contraction threshold may be too tight, reducing win rates.
+why_not_repeated_failure: No exit rule variant has been tested; previous runs focused
+  on position sizing and regime filter, which are distinct directions and both rejected.
+  This explores a new dimension (exit timing) not covered by closed_tags.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: The exit rule evaluates daily whether the current value
+  gap percentage is within X% of the entry gap; if so, close position. Parameter X
+  will be optimized within [5%, 30%].
+missing_capability_request:
+  needed_capability: C007_new_exit_rule
+  description: Implement a dynamic take-profit exit executor that uses per-position
+    entry gap records to trigger close when gap narrows beyond a threshold.
+  required_executor: exit_rule_dynamic
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 01611fe11f7b66b6
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 01611fe11f7b66b6
+rewrite_provenance:
+- round: 1
+  provider_id: deepseek
+  response_hash: a3dc1d65beeacc4b
+- round: 2
+  provider_id: deepseek
+  response_hash: 7fb25c03bd3df9a0
+- round: 3
+  provider_id: deepseek
+  response_hash: 544f3a44b8ef8cf7
+rewrite_status: valid
+rewrite_rounds_used: 3
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_exit-dynamic-01/proposal.yaml

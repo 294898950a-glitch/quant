@@ -1,5 +1,5 @@
 schema_version: 2
-updated_at: "2026-05-19T11:35:00+08:00"
+updated_at: "2026-05-20T03:10:00+08:00"
 authority: machine
 purpose: "Machine-readable acceptance criteria for the pruned 5-node quant autonomous research framework."
 
@@ -8,13 +8,11 @@ active_components:
     owns:
       - current strategy state
       - protocol rules
-      - budgets
       - allowed AI providers
       - executor and evidence registries
     files:
       - data/research_framework/current.yaml
       - data/research_framework/protocol_rules.yaml
-      - data/research_framework/compute_budget_config.json
       - data/research_framework/ai_providers.yaml
       - data/research_framework/executor_registry.yaml
       - data/research_framework/evidence_tool_registry.yaml
@@ -30,22 +28,24 @@ active_components:
     owns:
       - reading current research context
       - asking a registered AI for one proposal
-      - rewrite attempts when a proposal is invalid
+      - asking the same registered AI for draft executor design when no executor matches
+      - asking the same registered AI for draft executor code only after design validation passes
       - provenance for all AI responses
     files:
       - framework/autonomous/ideation_cycle.py
       - framework/autonomous/strategy_ideator.py
       - framework/autonomous/ai_provider_adapter.py
-      - framework/autonomous/proposal_rewrite_loop.py
       - scripts/run_strategy_ideation_once.py
     must:
-      - "Produce a proposal only."
+      - "First AI call produces exactly one proposal."
+      - "If the proposal compiles READY, do not make tool-design or tool-code AI calls."
+      - "If the proposal compiles DRAFT because no executor/tool matches, make one tool-design AI call for registry metadata and implementation outline."
+      - "Only if tool design passes hard validation, make one tool-code AI call for file content."
       - "Use only registered AI providers."
-      - "Stop after 3 failed rewrites."
     must_not:
       - "Run VM jobs."
       - "Write current strategy truth."
-      - "Start the option-value scheduler."
+      - "Start the research queue runner."
 
   - id: proposal_gate
     owns:
@@ -58,9 +58,8 @@ active_components:
       - framework/autonomous/proposal_schema.py
       - framework/autonomous/executor_registry.py
       - framework/autonomous/spec_compiler.py
-      - scripts/generate_option_value_next_spec.py
     must:
-      - "READY only when proposal, executor, data, budget, and closed-direction checks pass."
+      - "READY only when proposal, executor, data, and closed-direction checks pass."
       - "DRAFT when executor or implementation is missing."
       - "REJECT when proposal repeats a closed direction."
     must_not:
@@ -70,16 +69,17 @@ active_components:
 
   - id: runner
     owns:
-      - Hermes wakeup
+      - project-owned wakeup
       - queue state
       - VM launch
       - remote status checks
       - result sync
     files:
-      - scripts/hermes_quant_tick.py
-      - scripts/option_value_loop_daemon.py
+      - scripts/quant_internal_tick.py
+      - scripts/run_quant_internal_tick.sh
+      - scripts/research_queue_runner.py
       - framework/autonomous/workflow_state.py
-      - scripts/hermes_access_guard.py
+      - scripts/quant_access_guard.py
       - scripts/auto_research_pipeline.py
     must:
       - "Advance only the one currently allowed mechanical step."
@@ -115,7 +115,6 @@ compatibility_modules_not_architecture_nodes:
   artifacts: framework/autonomous/artifacts.py
   paths: framework/autonomous/paths.py
   framework_change_recorder: framework/autonomous/framework_change_recorder.py
-  orchestrator_legacy_shell: framework/autonomous/orchestrator.py
 
 old_to_new_component_map:
   executor_registry: proposal_gate
@@ -123,11 +122,9 @@ old_to_new_component_map:
   spec_compiler: proposal_gate
   ai_provider_adapter: ideation
   strategy_ideator: ideation
-  proposal_rewrite_loop: ideation
   result_reviewer: review_memory
   recent_results_digest: review_memory
   verification_tool: review_memory
-  orchestrator: runner
 
 closed_directions_tags:
   panic_filter:
@@ -163,9 +160,10 @@ acceptance:
   ideation_cannot_run_jobs: true
   proposal_gate_cannot_run_jobs: true
   review_memory_cannot_start_next_proposal: true
+  compute_budget_is_not_active_gate: true
 
 test_files:
   - framework/tests/test_autonomous_research_executor_registry.py
   - framework/tests/test_autonomous_research_proposal_and_compiler.py
   - framework/tests/test_autonomous_research_reviewer_and_digest.py
-  - framework/tests/test_autonomous_research_orchestrator_and_adapters.py
+  - framework/tests/test_autonomous_research_runner_and_adapters.py

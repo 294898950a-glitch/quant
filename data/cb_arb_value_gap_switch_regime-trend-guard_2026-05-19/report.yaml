@@ -1,0 +1,57 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+strategy_id: cb_arb_value_gap_switch
+report_status: COMPLETE
+decision: reject
+summary: >
+  trend_guard 将市场状态分类从 score_4state 改为趋势动量+回撤+广度三维确认。
+  train 最佳候选（switch_hurdle=0.01, max_hold=90d）将 train 超额从 baseline +0.131
+  提升至 +0.271（+14pp），但 test 超额从 +0.380 降至 +0.293（-8.7pp）。
+  这是第10次确认同一结构性取舍：任何改善 train/2020 的机制，必然牺牲 2025-2026 test 收益。
+  train max_dd -0.352 仅略超 -0.35 硬底线 0.2pp。max_hold_days > 90 全面恶化。
+  switch_hurdle=0.01 是唯一可行参数；其他值均显著更差。
+
+baseline_comparison:
+  score_4state:
+    train_excess: 0.1314
+    train_max_dd: -0.3240
+    test_excess: 0.3798
+    test_max_dd: -0.0978
+  trend_guard_best:
+    train_excess: 0.2711
+    train_max_dd: -0.3522
+    test_excess: 0.2928
+    test_max_dd: -0.1125
+    best_config:
+      switch_hurdle_pct: 0.01
+      max_hold_days: 90
+      min_gap_pct: 0.01
+      sell_gap_pct: 0.0
+
+hard_floor_results:
+  train_excess_return: {threshold: -0.15, actual: 0.2711, pass: true}
+  test_excess_return: {threshold: -0.05, actual: 0.2928, pass: true}
+  max_drawdown: {threshold: -0.35, actual: -0.3522, pass: false, margin: -0.0022}
+  cost_on_excess_compound: {threshold: -0.1, actual: null, pass: unknown}
+
+grid_summary:
+  n_candidates: 96
+  parameter_dimensions: [switch_hurdle_pct, max_hold_days, min_gap_pct, sell_gap_pct]
+  top10_train_excess_range: [-0.073, 0.271]
+  viable_configs: 1
+  max_hold_90_excess_mean: 0.142
+  max_hold_180_excess_mean: -0.024
+  max_hold_360_excess_mean: -0.052
+
+structural_finding: >
+  Same tradeoff pattern as 9 previous families. trend_guard improves train-period
+  performance at the cost of sealed-test degradation. max_hold_days > 90 universally
+  destructive. regime_classifier_variant family is now exhausted.
+
+falsifier_status:
+  cumulative_excess_compound_cross_year_lt_0: pass
+  train_max_dd_exceeds_35pct: marginal_fail
+  overall: reject
+
+verdict: reject
+next_step: add_regime_classifier_variant_to_forbidden_families

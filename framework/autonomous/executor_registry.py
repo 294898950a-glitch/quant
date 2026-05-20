@@ -46,6 +46,22 @@ def _executors(registry: dict[str, Any]) -> list[dict[str, Any]]:
     return []
 
 
+def capability_catalog(registry: dict[str, Any]) -> dict[str, str]:
+    raw = registry.get("capabilities") or {}
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for cid, item in raw.items():
+        if isinstance(item, dict) and item.get("mechanic"):
+            out[str(cid)] = str(item["mechanic"])
+    return out
+
+
+def capability_ids_to_mechanics(capability_ids: set[str], registry: dict[str, Any]) -> set[str]:
+    catalog = capability_catalog(registry)
+    return {catalog[cid] for cid in capability_ids if cid in catalog}
+
+
 def load_registry(path: Path) -> dict[str, Any]:
     with Path(path).open("r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
@@ -68,10 +84,23 @@ def validate_registry_schema(registry: dict[str, Any]) -> list[str]:
         for list_field in ("can_test", "cannot_test", "required_data", "required_config_fields", "artifacts_produced", "command_template"):
             if list_field in executor and not isinstance(executor[list_field], list):
                 errors.append(f"executor {eid} field {list_field} must be a list")
+        for list_field in ("can_test_capability_ids", "cannot_test_capability_ids"):
+            if list_field in executor and not isinstance(executor[list_field], list):
+                errors.append(f"executor {eid} field {list_field} must be a list")
         if "budget_estimate" in executor and not isinstance(executor["budget_estimate"], dict):
             errors.append(f"executor {eid} field budget_estimate must be a mapping")
         if "vm_local_limits" in executor and not isinstance(executor["vm_local_limits"], dict):
             errors.append(f"executor {eid} field vm_local_limits must be a mapping")
+        catalog = capability_catalog(registry)
+        if catalog:
+            for list_field in ("can_test_capability_ids", "cannot_test_capability_ids"):
+                ids = executor.get(list_field)
+                if ids is None:
+                    errors.append(f"executor {eid} missing required field {list_field}")
+                    continue
+                for cid in ids:
+                    if str(cid) not in catalog:
+                        errors.append(f"executor {eid} unknown capability id {cid}")
     return errors
 
 
@@ -95,21 +124,35 @@ def _is_obsolete(executor: dict[str, Any]) -> bool:
         return False
 
 
-def match_executor(proposal_mechanics: set[str], proposal_data: set[str], registry: dict[str, Any]) -> ExecutorMatch | None:
+def match_executor(
+    proposal_mechanics: set[str],
+    proposal_data: set[str],
+    registry: dict[str, Any],
+    proposal_capability_ids: set[str] | None = None,
+) -> ExecutorMatch | None:
     """Return the first strict full match, never a nearest fallback."""
 
     mechanics = set(proposal_mechanics)
+    capability_ids = set(proposal_capability_ids or set())
     data_paths = set(proposal_data)
     for executor in _executors(registry):
         if _is_obsolete(executor):
             continue
         can_test = set(executor.get("can_test", []))
         cannot_test = set(executor.get("cannot_test", []))
+        can_capabilities = set(str(item) for item in executor.get("can_test_capability_ids", []))
+        cannot_capabilities = set(str(item) for item in executor.get("cannot_test_capability_ids", []))
         required_data = _required_data_paths(executor)
-        if not mechanics.issubset(can_test):
-            continue
-        if mechanics & cannot_test:
-            continue
+        if capability_ids:
+            if not capability_ids.issubset(can_capabilities):
+                continue
+            if capability_ids & cannot_capabilities:
+                continue
+        else:
+            if not mechanics.issubset(can_test):
+                continue
+            if mechanics & cannot_test:
+                continue
         if not required_data.issubset(data_paths):
             continue
         return ExecutorMatch(executor)

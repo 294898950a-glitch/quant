@@ -1,0 +1,143 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_stop-source-stress_2026-05-18
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: Hermes quant cron tick analysis of current.yaml, research_insights.yaml, experiments.yaml
+hypothesis: >-
+  期权来源的结构性取舍（修复 2020 = 伤害 2025-2026）至今所有入口侧方案均被拒绝。
+  但止损时的重新估值还没有做过来源区分——当前止损复查对所有持仓用同一套估值参数。
+  如果在止损触发时，对期权来源的持仓使用更保守的估值（对期权成分额外折价），
+  会让期权来源持仓在跌到止损线时剩余低估看起来更小，从而更可能被卖出，
+  实现"期权型持仓更快止损、债底型持仓不受影响"，
+  在不改变买入逻辑的前提下减少期权来源在 2020 年的持仓亏损。
+source_insight: >-
+  已有的 option_value_haircut / option_entry_gate / universe_filter / option_pnl_feedback
+  全部作用于买入端，都验证了"减少期权来源暴露可以改善 2020 但会牺牲 2025-2026 收益"的结构性取舍。
+  唯独止损估值这一步还没有做过来源区分：当前所有持仓在止损时用同一套估值复查是否仍低估，
+  如果能对期权来源持仓在止损时用更苛刻的估值，就可能在保留买入端收益的同时加速止损。
+new_data_sources:
+- path: data/cb_warehouse/cb_basic.parquet
+  description: 转股价和正股代码。
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  description: 前复权正股价格。
+hard_floors:
+  train_excess_return: 0.0
+  train_max_drawdown: -0.35
+  test_excess_return: 0.0
+  test_max_drawdown: -0.20
+  replay_2020_total_return: -0.15
+  baseline_source: current cb_arb_value_gap_switch cost-off baseline
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- yearly_2020_total_return
+- max_drawdown
+- total_trades
+- win_rate
+- exit_reason_breakdown_2020
+parameter_space:
+- name: stop_source_stress_variant
+  range:
+  - normal_revalue
+  - all_credit_200bp_proxy
+  - source_bond20_option10_mixed_light
+  - source_bond10_option10_mixed_light
+  - source_bond20_option15_mixed_mid
+  type: categorical
+  description: 止损复查估值时的来源区分折价参数组合。由 evaluate_cb_arb_stop_source_stress.py 内置。
+selected_variant_criteria: >-
+  必须同时在 train（2019-2024 全年）的 excess 和 max_dd 不低于 baseline，
+  且在 2020 年的 total_return 改善（不低于 -0.15），
+  且 test 段（2025-2026.5）的 excess 不明显退化（不低于 baseline 的 80%）。
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 6.25
+budget_cap_yuan: 100
+spot_decision: 必须在 VM/spot host 执行；使用已有数据仓库，通过 --reuse-ranks 跳过估值重算。
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_stop_source_stress.csv
+- 缺少 yearly_stop_source_stress.csv
+- 缺少 exit_2020_stop_source_stress.csv
+- 所有非 baseline 方案无法同时改善 2020 且不破坏 train/test
+artifacts_required:
+- summary_stop_source_stress.csv
+- yearly_stop_source_stress.csv
+- exit_2020_stop_source_stress.csv
+- summary.json
+automation:
+  output_dir: data/cb_arb_value_gap_switch_stop-source-stress_2026-05-18
+  gatekeeper_after_run: false
+  sync_paths:
+  - scripts/evaluate_cb_arb_stop_source_stress.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_stop_source_stress.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --reuse-ranks
+verdict:
+  table_path: summary_stop_source_stress.csv
+  rank_by: score
+  rank_desc: true
+  thresholds:
+    excess_return:
+      min: 0.0
+    max_drawdown:
+      min: -0.35
+  train_single_year_dd_ceiling: -0.15
+status: READY
+escalation:
+- 2020 总收益无改善
+- test 段明显退化（excess < baseline 的 60%）
+- 运行时间超过 90 分钟
+notes: >-
+  这是第一个在"卖出端"做来源区分的研究方向。与所有入口侧方案（entry gate / haircut / PnL feedback / position sizing / universe filter）
+  的根本区别在于：不改变买什么、买多少，只改变止损复查时的估值标准。
+  即使没有成本模型，这里也可以得到"按来源区分止损估值是否有用"的纯诊断结论，
+  如果有用，后续再加成本模型做第二层验证。
+  不修改 current.yaml，不修改 baseline_registry。
+ideation:
+  source: hermes
+  proposal_id: option_source_stop_stress
+  family: stop_source_stress
+  executor: evaluate_cb_arb_stop_source_stress
+  why_not_rejected_repeat: >-
+    不是入口过滤（option_entry_gate / regime_entry_gate），
+    不是整体估值打折（option_value_haircut），
+    不是仓位缩放（option_position_sizing），
+    不是盈亏反馈（option_pnl_feedback），
+    不是选股范围过滤（universe_filter），
+    不是恐慌探测器（panic family）。
+    这是首个在"止损复查估值"环节做来源区分的方向，属于未探索的空白区域。
+  risk: >-
+    内置只有 5 个 variant（含 baseline），参数空间极小，
+    可能无法找到合适的折价力度组合。
+    且没有成本模型，即使 train/test/2020 表现改善，也需要后续加成本验证。
+  fallback_reason: null
+updated_at: '2026-05-18T03:11:22Z'

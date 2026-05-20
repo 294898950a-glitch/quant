@@ -27,12 +27,11 @@ Severity:
 2. hard_floors: 数值在合理 scale
 3. data_sources / new_data_sources: 路径存在
 4. cv_holdout_years: 在 2018-2035 范围
-5. budget_cap_yuan ≥ compute_estimate.estimated_cost_yuan
-6. compute_estimate.sig_minutes, spot_minutes, local_minutes ≥ 0
-7. parameter_space 不为空 list
-8. grid.candidates_count > 0 (如有)
-9. stop_conditions 至少 1 个非空字符串
-10. cb_arb run/evaluate/search jobs 必须声明 spot_minutes > 0 且 local_minutes = 0
+5. compute_estimate.sig_minutes, spot_minutes, local_minutes ≥ 0
+6. parameter_space 不为空 list
+7. grid.candidates_count > 0 (如有)
+8. stop_conditions 至少 1 个非空字符串
+9. cb_arb run/evaluate/search jobs 必须声明 spot_minutes > 0 且 local_minutes = 0
 """
 
 from __future__ import annotations
@@ -163,21 +162,8 @@ def check_cv_holdout_years(spec: dict[str, Any]) -> list[Issue]:
 
 
 def check_budget_vs_compute_cost(spec: dict[str, Any]) -> list[Issue]:
-    """budget_cap_yuan ≥ compute_estimate.estimated_cost_yuan."""
-    issues = []
-    cap = spec.get("budget_cap_yuan")
-    compute = spec.get("compute_estimate") or {}
-    if not isinstance(compute, dict):
-        return issues
-    cost = compute.get("estimated_cost_yuan")
-    if isinstance(cap, (int, float)) and isinstance(cost, (int, float)):
-        if float(cost) > float(cap):
-            issues.append(Issue(
-                "fatal", "estimate_exceeds_budget",
-                f"compute_estimate.estimated_cost_yuan={cost} > budget_cap_yuan={cap}; "
-                f"必超预算, 调小 grid 或加 budget cap"
-            ))
-    return issues
+    """Legacy compatibility: compute budget is recorded but no longer gates runs."""
+    return []
 
 
 def check_compute_estimate_positive(spec: dict[str, Any]) -> list[Issue]:
@@ -296,7 +282,6 @@ def run_checks(spec: dict[str, Any], repo: Path) -> dict[str, Any]:
     issues.extend(check_hard_floors_scale(spec))
     issues.extend(check_data_sources_exist(spec, repo))
     issues.extend(check_cv_holdout_years(spec))
-    issues.extend(check_budget_vs_compute_cost(spec))
     issues.extend(check_compute_estimate_positive(spec))
     issues.extend(check_compute_placement_declared(spec))
     issues.extend(check_grid_candidates(spec))

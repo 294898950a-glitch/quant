@@ -1,0 +1,34 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+status: prepared
+spec_path: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/spec.yaml
+decision_path: /tmp/fixable_decision.yaml
+prepared_root: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data
+copied:
+- source: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  target: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/daily_value_gap_amounts.parquet
+  rows: 488639
+  added_aliases:
+    cb_code: ts_code
+    value_gap: value_gap_amount
+    gap: value_gap_pct_of_cash
+- source: data/cb_warehouse/cb_basic.parquet
+  target: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/data_root/data/cb_warehouse/cb_basic.parquet
+  rows: 1012
+  added_aliases:
+    cb_code: ts_code
+    stock_code: stk_code
+- source: data/cb_warehouse/stk_daily_qfq.parquet
+  target: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/data_root/data/cb_warehouse/stk_daily_qfq.parquet
+  rows: 2678144
+  added_aliases:
+    stock_code: stk_code
+    close_adj: close
+- source: data/cb_warehouse/cb_daily.parquet
+  target: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/data_root/data/cb_warehouse/cb_daily.parquet
+  copied: true
+- source: data/cb_warehouse/cb_call.parquet
+  target: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/data_root/data/cb_warehouse/cb_call.parquet
+  copied: true
+principle: original data was not overwritten; repaired inputs are run-local prepared
+  data

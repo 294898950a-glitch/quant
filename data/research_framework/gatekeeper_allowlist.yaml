@@ -42,10 +42,6 @@ allowlist:
     reason: data verification 工具, 不是策略 grid
     owner: codex
 
-  - script: scripts/recover_cb_arb_reflog.py
-    reason: git reflog 恢复工具, 不是研究
-    owner: codex
-
   - script: scripts/cb_pricer_sanity.py
     reason: 定价器 sanity 工具, 不是策略 grid
     owner: codex
@@ -199,21 +195,8 @@ allowlist:
     owner: claude
     archived_at: 2026-05-16
 
-  - script: scripts/monitor_cb_arb_concurrent.py
-    reason: 历史 monitor 工具 (concurrent batch)
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/monitor_cb_arb_holdout_progress.py
-    reason: 历史 monitor 工具 (holdout progress)
-    owner: claude
-    archived_at: 2026-05-16
-
   # 一次性专题脚本
   - script: scripts/train_cb_panic_detector.py
     reason: 历史 panic detector 训练, 已 archived
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_legacy.py
-    reason: 历史 legacy 评估 (兼容旧版本入口)
     owner: claude
     archived_at: 2026-05-16

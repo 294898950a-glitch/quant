@@ -1,0 +1,74 @@
+proposal_id: valuation_formula_improvement_v1
+strategy_id: cb_arb_value_gap_switch
+family: valuation_formula_revision
+hypothesis: Replacing the current option-implied theoretical value with a more robust
+  multi-factor model will produce value gaps that are more stable across market regimes,
+  improving risk-adjusted returns and lowering drawdowns.
+source_insight: Recent runs (option-position-sizing, regime-trend-guard) show that
+  the baseline value gap signal works well in recent favorable periods but fails in
+  2020 and underperforms in train, indicating potential misspecification of the underlying
+  valuation. Improving the theoretical value could address the root cause of the signal
+  instability.
+expected_improvement: Higher excess returns in train (above current 0.13) and 2020
+  repair period, while maintaining or improving test excess returns, and reduced maximum
+  drawdown across all periods.
+capability_ids:
+- C006
+required_executor: null
+missing_capability_request: Executor for new theoretical valuation formula for convertible
+  bonds, capable of integrating multiple valuation models (e.g., Black-Scholes with
+  credit adjustment, binomial tree with stochastic vol, or machine learning estimator)
+  to produce daily theoretical values and value gaps.
+required_data:
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- additional market data such as credit spreads, volatility indices, interest rates,
+  and possibly intraday option quotes
+test_design:
+  description: Use existing backtest harness for cb_arb_value_gap_switch. Replace
+    only the theoretical value calculation function with the new model, keeping entry/exit
+    rules and position sizing identical to baseline. Compare performance against baseline
+    on train (2019-2024), 2020 repair, and sealed test (2025-2026). Sweep model hyperparameters
+    if needed.
+success_criteria:
+  criteria:
+  - For the combined train+2020+test period, average excess return exceeds baseline
+    by at least 5 percentage points.
+  - Maximum drawdown in 2020 and overall is lower than baseline (baseline 2020 max_drawdown
+    -0.179, overall train max_drawdown -0.324).
+  - Test period excess return not worse than baseline by more than 2% (i.e., retains
+    at least 0.36 excess if baseline is 0.38).
+falsifiers:
+  train: &id001
+  - New valuation model fails to improve train excess return (still below 0.2).
+  - Test period excess return drops below 0.30 (more than 20% relative degradation).
+  - 2020 performance does not improve (excess return still deeply negative).
+  validate: *id001
+  test: *id001
+risk: Overfitting to the valuation formula on training data may cause poor out-of-sample
+  performance; careful cross-validation and out-of-sample testing required. Data requirements
+  for credit market data might introduce lookahead bias if not properly handled.
+why_not_repeated_failure: This proposal targets the valuation formula itself, which
+  has not been changed in any prior run. Previous runs focused on position scaling,
+  regime filtering, and exit parameter tuning, all of which preserved the same value
+  gap signal. This is a fundamental modification of the signal source, not a variation
+  on a closed family.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: The valuation model will be implemented in Python, using
+  existing data pipelines and the backtest framework. It may require fetching additional
+  data from providers (e.g., credit spreads, risk-free rates). The model will output
+  a daily theoretical value per bond, from which value gaps are computed as before.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 79cafc03251cfd4f
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 79cafc03251cfd4f
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/valuation_formula_improvement_v1/proposal.yaml

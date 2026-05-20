@@ -1,0 +1,10 @@
+proposal_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+missing_capability_request:
+  mechanic: new_exit_rule
+  description: 'Partial profit‑taking exit based on value gap contraction from entry.
+    The exit is triggered when the current gap falls to (1 - target_fraction) * entry_gap.
+    Target fractions to test: 0.25, 0.50, 0.75.
+
+    '
+  needed_executor: profit_take_exit
+reason: no registered capability id fits this idea

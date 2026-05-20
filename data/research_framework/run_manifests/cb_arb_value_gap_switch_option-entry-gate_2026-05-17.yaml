@@ -135,16 +135,6 @@ promotion_status: rejected
 reviewer: codex
 verdict_at: '2026-05-17T01:25:33Z'
 automation:
-  budget:
-    estimated_budget_yuan: 18.75
-    auto_limit_yuan: 100.0
-    decision: auto-approve
-    inputs:
-      sig_minutes: 0.0
-      spot_minutes: 180.0
-      local_minutes: 0.0
-      fixed_yuan: 0.0
-      safety_multiplier: 1.25
   verdict:
     decision: manual_reject_overrides_mechanical_pass
     pass_field: adoption_pass
@@ -153,4 +143,14 @@ automation:
     mechanical_selected_name: ratio_1p15
     mechanical_selected_train_excess: 0.666909
     mechanical_selected_test_excess: -0.230402
-    manual_reject_reason: "2020 repair and 2025-2026 upside conflict; no candidate passes train/test/2020 together."
+    manual_reject_reason: 2020 repair and 2025-2026 upside conflict; no candidate
+      passes train/test/2020 together.
+  compute:
+    decision: record-only
+    inputs:
+      sig_minutes: 0.0
+      spot_minutes: 180.0
+      local_minutes: 0.0
+      fixed_yuan: 0.0
+      safety_multiplier: 1.25
+    estimated_compute_cost_yuan: 18.75

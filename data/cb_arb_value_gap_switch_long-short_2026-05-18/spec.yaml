@@ -1,0 +1,100 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_long-short_2026-05-18
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user strategic fork B: 保留绝对价值差额排名信号，改打法。方向二：多空配对。'
+hypothesis: |
+  用价值差额排名同时做多和做空——买排名最高的 N 只可转债，卖排名最低的 N 只。
+  多空轧差后自动对冲市场 Beta，预期在系统性下跌年份（2020）表现远优于纯多头。
+
+  核心逻辑：价值差额信号不仅识别低估标的（做多），也识别高估标的（做空）。
+  如果信号在两个方向都有效，多空组合的净超额将接近两个方向的超额之和，
+  且市场 Beta 大幅降低。
+
+source_insight: |
+  research_insights.yaml id=option_source_value_gap_structural_tradeoff: 
+  纯多头下，修2020必杀2025-2026。多空组合的市场中性特性可以绕开这个矛盾：
+  2020年多头端亏钱但空头端赚钱，轧差可能为正。
+  research_insights.yaml id=single_filter_dead_end: 2020年亏损面宽（74%交易亏钱），
+  正说明单方向做多在系统性冲击中无效，需要双向风险对冲。
+
+parameter_space:
+  - name: long_count
+    range: [5, 8, 10, 15]
+    type: int
+    description: 做多标的数量
+  - name: short_count
+    range: [5, 8, 10, 15]
+    type: int
+    description: 做空标的数量
+  - name: rebalance_frequency
+    range: [daily, weekly, biweekly, monthly]
+    type: enum
+    description: 调仓频率
+  - name: neutral_mode
+    range: [dollar_neutral, beta_neutral]
+    type: enum
+    description: 多空中性方式（金额中性/风险中性）
+
+new_data_sources:
+  - path: data/cb_warehouse/cb_daily.parquet
+    description: 可转债日线数据
+
+grid:
+  dimensions: [long_count, short_count, rebalance_frequency, neutral_mode]
+  candidates_count: 128
+  description: 4 维 grid，枚举搜索最优多空配置
+
+hard_floors:
+  replay_2019: 0.161312
+  replay_2020: -0.130604
+  replay_2021: -0.050441
+  replay_2022: 0.014425
+  replay_2023: -0.031027
+  replay_2024: 0.030085
+hard_floors_baseline_source: spec v1.1 normal-state baseline (纯多头基线; 多空组合按 net exposure 折算)
+
+auxiliary_metrics:
+  - long_excess_return
+  - short_excess_return
+  - net_excess_return
+  - market_beta
+  - max_drawdown
+  - total_trades
+  - win_rate
+  - net_exposure
+
+cv_design: leave-one-year-out
+cv_holdout_years: [2019, 2020, 2021, 2022, 2023, 2024]
+cv_adoption_threshold: '≥ 5/6 holdout 改善或不退化 vs 当前纯多头 baseline，且 2020年 net_excess > 0'
+
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 180
+  estimated_cost_yuan: 25.0
+budget_cap_yuan: 80
+spot_decision: '新评估脚本，128 候选 × 6年 = 约 3 小时。需要新 evaluator。'
+
+stop_conditions:
+  - 0 候选 net_excess 全周期 > 0 → 停研究（做空端没有 alpha）
+  - 2020年所有候选 net_excess < 0 → 停研究（多空也没救2020）
+  - 总算力 > 80 → 暂停
+
+artifacts_required:
+  - summary_long_short.csv
+  - yearly_long_short.csv
+  - daily_equity_long_short.csv
+  - summary.json
+
+status: DRAFT
+
+notes: |
+  新方向，不做实盘做空假设（融券成本高），先验证多空信号逻辑是否成立。
+  逻辑成立后再考虑落地方案（ETF对冲、期货对冲、或纯选债不做空）。
+  
+  需要新评估脚本：evaluate_cb_arb_long_short.py
+  逻辑：每日对全池按价值差额排名 → 买 top N，卖 bottom N → 持仓到下次调仓日 →
+  计算多空两端各自的 PnL 和净 PnL。
+  
+  成本模型：做多端按现有 cost model，做空端额外加融券成本 3-5%/年。

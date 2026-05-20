@@ -102,7 +102,6 @@ automation:
   - scripts/evaluate_cb_arb_option_pnl_feedback.py
   - scripts/evaluate_cb_arb_option_position_sizing.py
   - scripts/evaluate_cb_arb_value_gap_switch.py
-  - scripts/generate_option_value_next_spec.py
   - data/research_framework/runtime_entrypoints.yaml
   - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
   - data/cb_warehouse/cb_basic.parquet
@@ -143,7 +142,7 @@ automation:
       max_drawdown:
         min: -0.3
     train_single_year_dd_ceiling: -0.15
-status: READY
+status: COMPLETE
 escalation:
 - 训练段过关但 2020 仍显著跑输
 - 2020 改善但 2025-2026 测试段被明显伤害
@@ -162,4 +161,4 @@ ideation:
     AND 逻辑正确，2020 年 option_source 累计亏损 -92K 仍可能同时满足两个条件， 导致 2020 保护年训练分仍拖累整体 score；
     此方向已接近可挖掘空间上限，若本轮仍被拒应视为 pnl_feedback 家族证伪，切换执行器。
   fallback_reason: null
-updated_at: '2026-05-18T09:47:00'
+updated_at: '2026-05-18T02:08:25Z'

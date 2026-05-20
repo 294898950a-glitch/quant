@@ -1,0 +1,33 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_stop-source-stress_2026-05-18
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+status: COMPLETE
+three_exits_section:
+  train_exit: Train winner selected normal_revalue (excess=0.1787). Best source-stress
+    variant (bond20_option15_mixed_mid) has train_excess=0.1197, -5.89pp vs baseline.
+  validation_exit: Test winner selected normal_revalue (excess=0.4657). All source-stress
+    variants underperform by ~3pp.
+  decision_exit: No source-differentiated stop revaluation variant beats normal_revalue
+    on train or test.
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- stop_source_stress
+learnings:
+- '2020: all_credit_200bp_proxy improves 2020 total_return from -0.0825 to -0.0296
+  (+5.3pp) but degrades train excess from 0.1787 to 0.1131 (-6.6pp) — same structural
+  tradeoff as entry-side families.'
+- Source-specific stop stress on bond/option/mixed types does not help — best variant
+  still loses to simple normal revaluation.
+- Exit-side source-differentiated stop revaluation is confirmed as dead-end family.
+follow_up_actions:
+- Record as evidence in research_insights.yaml under dead-end families.
+- Do not restart stop-source-stress direction.
+summary: No stop-source-stress variant beats normal revaluation baseline. Exit-side
+  source-differentiated stop revaluation is rejected.
+references:
+- summary_stop_source_stress.csv
+- yearly_stop_source_stress.csv
+- exit_2020_stop_source_stress.csv
+- summary.json

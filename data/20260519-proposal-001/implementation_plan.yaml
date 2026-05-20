@@ -1,0 +1,5 @@
+proposal_id: 20260519-proposal-001
+missing_executor: exit_rule_duration_adaptive
+mechanics:
+- new_exit_rule
+reason: no strict executor match

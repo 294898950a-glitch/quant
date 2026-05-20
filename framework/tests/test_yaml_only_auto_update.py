@@ -5,7 +5,6 @@ Verifies which yaml runtime files can / cannot be machine-auto-updated:
 - experiments.yaml: auto-updated by auto_research_pipeline.update_experiments
 - run_manifests/*.yaml: auto-written by auto_research_pipeline
 - l4_ack.yaml computed_data: auto-filled by auto_compute_l4_data.py
-- runs.jsonl: append-only via research_memory.append_run
 - current.yaml: NOT auto-updated (by design; AI/user editorial)
 - baseline_registry.yaml: NOT auto-updated (by design; user/AI promotion)
 - research_insights.yaml: NOT auto-updated (by design)
@@ -22,8 +21,6 @@ import importlib.util
 import subprocess
 import sys
 from pathlib import Path
-from types import SimpleNamespace
-from typing import Any
 
 import pytest
 import yaml
@@ -62,9 +59,9 @@ def test_update_experiments_appends_new_entry(tmp_path: Path, monkeypatch):
     manifest_path.parent.mkdir(parents=True)
     manifest_path.write_text("placeholder")
     verdict = {"status": "wip", "decision": "incomplete", "summary": {}}
-    budget = {"decision": "auto-approve", "cny": 5.0}
+    compute = {"decision": "record-only", "estimated_compute_cost_yuan": 5.0}
 
-    arp.update_experiments(spec, output_dir, manifest_path, verdict, budget, dry_run=False)
+    arp.update_experiments(spec, output_dir, manifest_path, verdict, compute, dry_run=False)
 
     data = yaml.safe_load(exp_path.read_text())
     assert len(data["experiments"]) == 1
@@ -90,13 +87,13 @@ def test_update_experiments_idempotent_on_same_run_id(tmp_path: Path, monkeypatc
     manifest_path = tmp_path / "m.yaml"
     manifest_path.write_text("x")
     verdict = {"status": "wip", "decision": "incomplete", "summary": {}}
-    budget = {"decision": "auto-approve"}
+    compute = {"decision": "record-only"}
 
-    arp.update_experiments(spec, output_dir, manifest_path, verdict, budget, dry_run=False)
+    arp.update_experiments(spec, output_dir, manifest_path, verdict, compute, dry_run=False)
     # Update with new verdict
     verdict2 = {"status": "rejected", "decision": "fail", "summary": {"task_count": 5}}
     spec2 = {**spec, "hypothesis": "second call"}
-    arp.update_experiments(spec2, output_dir, manifest_path, verdict2, budget, dry_run=False)
+    arp.update_experiments(spec2, output_dir, manifest_path, verdict2, compute, dry_run=False)
 
     data = yaml.safe_load(exp_path.read_text())
     assert len(data["experiments"]) == 1, "should update in-place, not duplicate"
@@ -115,12 +112,12 @@ def test_update_experiments_multiple_run_ids_coexist(tmp_path: Path, monkeypatch
         spec = {"run_id": f"cb_arb_multi_{i}_20260517", "strategy_id": "cb_arb",
                 "hypothesis_id": f"h{i}", "hypothesis": f"call {i}"}
         verdict = {"status": "wip", "decision": "ok", "summary": {}}
-        budget = {"decision": "auto-approve"}
+        compute = {"decision": "record-only"}
         out = tmp_path / f"out_{i}"
         out.mkdir()
         m = tmp_path / f"m_{i}.yaml"
         m.write_text("x")
-        arp.update_experiments(spec, out, m, verdict, budget, dry_run=False)
+        arp.update_experiments(spec, out, m, verdict, compute, dry_run=False)
 
     data = yaml.safe_load(exp_path.read_text())
     ids = [e["id"] for e in data["experiments"]]
@@ -139,7 +136,7 @@ def test_update_experiments_dry_run_does_not_write(tmp_path: Path, monkeypatch):
     spec = {"run_id": "dry", "strategy_id": "cb_arb", "hypothesis_id": "h", "hypothesis": "x"}
     arp.update_experiments(spec, tmp_path, tmp_path / "m.yaml",
                            {"status": "wip", "decision": "ok", "summary": {}},
-                           {"decision": "auto-approve"}, dry_run=True)
+                           {"decision": "record-only"}, dry_run=True)
 
     data = yaml.safe_load(exp_path.read_text())
     assert data == initial
@@ -230,23 +227,6 @@ def test_auto_compute_l4_preserves_existing_answer(tmp_path: Path, monkeypatch):
     assert "computed_data" in ack["q1_floor_binding"]
 
 
-# ==================== C. runs.jsonl auto-append ====================
-
-
-def test_research_memory_append_run(tmp_path: Path):
-    """research_memory.append_run appends one jsonl line."""
-    rm = _load_module("research_memory.py")
-    path = tmp_path / "runs.jsonl"
-    rm.append_run({"run_id": "r1", "iteration": 1, "params": {"x": 1}}, path=path)
-    rm.append_run({"run_id": "r2", "iteration": 2, "params": {"x": 2}}, path=path)
-
-    lines = path.read_text().strip().split("\n")
-    assert len(lines) == 2
-    import json
-    assert json.loads(lines[0])["iteration"] == 1
-    assert json.loads(lines[1])["iteration"] == 2
-
-
 # ==================== D. NEGATIVE: not-auto-updated paths ====================
 
 
@@ -310,7 +290,7 @@ def test_auto_update_experiments_then_dispatch_route(tmp_path: Path, monkeypatch
     spec = {"run_id": "rt", "strategy_id": "cb_arb", "hypothesis_id": "h", "hypothesis": "rt"}
     arp.update_experiments(spec, tmp_path, tmp_path / "m.yaml",
                            {"status": "wip", "decision": "ok", "summary": {}},
-                           {"decision": "auto-approve"}, dry_run=False)
+                           {"decision": "record-only"}, dry_run=False)
     # Dispatch the real-repo experiments.yaml path (dispatch is path-based,
     # not content-based; this verifies routing rule still holds)
     target = REPO_ROOT / "data" / "research_framework" / "experiments.yaml"
@@ -359,7 +339,7 @@ def test_update_experiments_rejects_non_list(tmp_path: Path, monkeypatch):
             {"run_id": "x", "strategy_id": "s", "hypothesis_id": "h", "hypothesis": "y"},
             tmp_path, tmp_path / "m.yaml",
             {"status": "wip", "decision": "ok", "summary": {}},
-            {"decision": "auto-approve"},
+            {"decision": "record-only"},
             dry_run=False,
         )
 
@@ -375,7 +355,7 @@ def test_update_experiments_creates_experiments_list_if_missing(tmp_path: Path, 
         {"run_id": "create", "strategy_id": "s", "hypothesis_id": "h", "hypothesis": "y"},
         tmp_path, tmp_path / "m.yaml",
         {"status": "wip", "decision": "ok", "summary": {}},
-        {"decision": "auto-approve"},
+        {"decision": "record-only"},
         dry_run=False,
     )
     data = yaml.safe_load(exp_path.read_text())

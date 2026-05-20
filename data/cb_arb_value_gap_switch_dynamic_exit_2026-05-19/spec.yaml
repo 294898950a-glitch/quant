@@ -1,0 +1,117 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+date: '2026-05-19'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: Introducing a drawdown-adjusted time-based exit will reduce extreme losses
+  in bearish regimes without significantly lowering returns in favorable periods,
+  because it cuts tail risk earlier.
+source_insight: Baseline train max drawdown was -0.324 vs test -0.098, indicating
+  that exits that worked in test may not suffice in stress; a dynamic exit that responds
+  to portfolio drawdown could improve stability.
+parameter_space:
+- name: mechanics
+  range:
+  - new_exit_rule
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C007
+mechanics:
+- new_exit_rule
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  criteria:
+  - Train max drawdown improves by at least 10% relative to baseline.
+  - Test excess return does not drop below 90% of baseline.
+  - 2020 repair score not worse than baseline.
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: no strict executor match
+proposal:
+  proposal_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  family: dynamic_drawdown_exit
+  hypothesis: Introducing a drawdown-adjusted time-based exit will reduce extreme
+    losses in bearish regimes without significantly lowering returns in favorable
+    periods, because it cuts tail risk earlier.
+  source_insight: Baseline train max drawdown was -0.324 vs test -0.098, indicating
+    that exits that worked in test may not suffice in stress; a dynamic exit that
+    responds to portfolio drawdown could improve stability.
+  expected_improvement: Reduce train max drawdown by at least 20% while keeping test
+    excess return within 10% of baseline.
+  capability_ids:
+  - C007
+  required_executor: missing
+  required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  test_design:
+    description: Grid search across drawdown thresholds and dynamic exit multipliers.
+      Compare on train, 2020 repair, and sealed test. Use baseline exit logic as control.
+  success_criteria:
+    criteria:
+    - Train max drawdown improves by at least 10% relative to baseline.
+    - Test excess return does not drop below 90% of baseline.
+    - 2020 repair score not worse than baseline.
+  falsifiers:
+    train:
+    - If test excess return drops below 90% of baseline, reject.
+    - If 2020 repair score worsens, reject.
+    validate:
+    - If test excess return drops below 90% of baseline, reject.
+    - If 2020 repair score worsens, reject.
+    test:
+    - If test excess return drops below 90% of baseline, reject.
+    - If 2020 repair score worsens, reject.
+  risk: Dynamic exit might whipsaw in volatile but ultimately profitable periods,
+    reducing overall returns.
+  why_not_repeated_failure: This is not a passive position scale (closed family 'option_position_sizing')
+    nor a regime classifier (closed family 'regime_classifier_variant'), nor a stop
+    based on external stress source (closed family 'stop_source_stress'). It is a
+    new exit rule driven by internal portfolio state, not previously tested.
+  related_prior_runs:
+  - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  - cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+  implementation_assumption: Requires new executor that implements drawdown-adjusted
+    exit; existing executors do not support exit rule modification. Executor must
+    track portfolio drawdown and conditionally shorten maximum holding period or tighten
+    exit thresholds accordingly.
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 7aff9da87d28902a
+  provenance:
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 7aff9da87d28902a
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_2026-05-19/proposal.yaml
+  mechanics:
+  - new_exit_rule

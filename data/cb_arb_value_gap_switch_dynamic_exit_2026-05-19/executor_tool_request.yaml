@@ -1,0 +1,316 @@
+tool_request_id: dynamic_drawdown_exit_executor_v1
+why_existing_tools_insufficient: option_position_sizing is designed only for static
+  position/ranking scaling and has new_exit_rule (C007) in its cannot_test list. option_source_pnl_feedback_scaler
+  is designed only for rolling PnL feedback scaling and also has C007 in its cannot_test
+  list. Neither executor can implement or evaluate a drawdown-adjusted dynamic exit
+  rule.
+reviewed_existing_executor_ids:
+- option_position_sizing
+- option_source_pnl_feedback_scaler
+registry_entry:
+  id: dynamic_drawdown_exit_executor
+  version: 1
+  status: draft
+  strategy_id: cb_arb_value_gap_switch
+  family: dynamic_drawdown_exit
+  script_path: scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+  owner: ai_draft
+  description: Evaluate the proposal with a real backtest implementation.
+  can_test:
+  - dynamic_drawdown_exit
+  can_test_capability_ids:
+  - C007
+  cannot_test:
+  - static_candidate_position_scale
+  - rolling_pnl_feedback
+  - dynamic_regime_switch
+  - new_valuation_formula
+  - new_data_source
+  cannot_test_capability_ids:
+  - C001
+  - C002
+  - C003
+  - C004
+  - C005
+  - C006
+  - C008
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    description: Base daily value-gap ranks with theoretical value, bond floor, option
+      value, position cash, and tradable gap amount.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_basic.parquet
+    description: CB basic table with stock code and conversion price.
+    schema_hash: null
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted stock prices for portfolio simulation.
+    schema_hash: null
+  required_config_fields:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  - drawdown_thresholds
+  - exit_multipliers
+  command_template:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+  - --data-root
+  - '{data_root}'
+  - --train-start
+  - '{train_start}'
+  - --train-end
+  - '{train_end}'
+  - --test-start
+  - '{test_start}'
+  - --test-end
+  - '{test_end}'
+  - --output-dir
+  - '{output_dir}'
+  - --drawdown-thresholds
+  - '{drawdown_thresholds}'
+  - --exit-multipliers
+  - '{exit_multipliers}'
+  default_config: {}
+  artifacts_produced:
+  - summary.json
+  - report.yaml
+  - l4_ack.yaml
+  - diagnostic.yaml
+  budget_estimate:
+    sig_minutes: 0
+    spot_minutes: 90
+    local_minutes: 0
+    estimated_cost_yuan: 0.0
+  vm_local_limits:
+    vm_required: true
+    local_allowed: false
+  obsolescence_date: null
+implementation_outline:
+  script_path: scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+  main_inputs:
+  - data_root
+  - output_dir
+  - drawdown_thresholds
+  - exit_multipliers
+  core_steps:
+  - load base ranks and market data
+  - simulate portfolio and track running drawdown
+  - apply dynamic exit rule (shorten maximum holding period when drawdown exceeds
+    threshold)
+  - evaluate across train / 2020 repair / test periods using baseline exit as control
+  - produce grid search summaries and diagnostic artifacts
+  code_constraints:
+  - use existing project data files
+  - do not change current strategy truth
+validation_plan:
+- python3 -m py_compile scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+- run a small data smoke test on a short date range
+- verify all required artifacts are produced
+ai_provider: deepseek
+design_response_hash: 696d05cbe0844a2a
+code_response_hash: 1089e638fa450445
+compile_reason: no strict executor match
+tool_design:
+  tool_request_id: dynamic_drawdown_exit_executor_v1
+  why_existing_tools_insufficient: option_position_sizing is designed only for static
+    position/ranking scaling and has new_exit_rule (C007) in its cannot_test list.
+    option_source_pnl_feedback_scaler is designed only for rolling PnL feedback scaling
+    and also has C007 in its cannot_test list. Neither executor can implement or evaluate
+    a drawdown-adjusted dynamic exit rule.
+  reviewed_existing_executor_ids:
+  - option_position_sizing
+  - option_source_pnl_feedback_scaler
+  registry_entry:
+    id: dynamic_drawdown_exit_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: dynamic_drawdown_exit
+    script_path: scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+    owner: ai_draft
+    description: Evaluate the proposal with a real backtest implementation.
+    can_test:
+    - dynamic_drawdown_exit
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - static_candidate_position_scale
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_data_source
+    cannot_test_capability_ids:
+    - C001
+    - C002
+    - C003
+    - C004
+    - C005
+    - C006
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value-gap ranks with theoretical value, bond floor,
+        option value, position cash, and tradable gap amount.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stock code and conversion price.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for portfolio simulation.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - drawdown_thresholds
+    - exit_multipliers
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --drawdown-thresholds
+    - '{drawdown_thresholds}'
+    - --exit-multipliers
+    - '{exit_multipliers}'
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 90
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  implementation_outline:
+    script_path: scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+    main_inputs:
+    - data_root
+    - output_dir
+    - drawdown_thresholds
+    - exit_multipliers
+    core_steps:
+    - load base ranks and market data
+    - simulate portfolio and track running drawdown
+    - apply dynamic exit rule (shorten maximum holding period when drawdown exceeds
+      threshold)
+    - evaluate across train / 2020 repair / test periods using baseline exit as control
+    - produce grid search summaries and diagnostic artifacts
+    code_constraints:
+    - use existing project data files
+    - do not change current strategy truth
+  validation_plan:
+  - python3 -m py_compile scripts/evaluate_cb_arb_dynamic_drawdown_exit.py
+  - run a small data smoke test on a short date range
+  - verify all required artifacts are produced
+  ai_provider: deepseek
+  response_hash: 696d05cbe0844a2a
+  compile_reason: no strict executor match
+  validation_errors: []
+  status: draft_tool_design
+tool_code_response:
+  files:
+  - path: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    purpose: Complete draft evaluator implementation.
+    content: "#!/usr/bin/env python3\n\"\"\"\nDynamic drawdown exit evaluator for\
+      \ cb_arb_value_gap_switch strategy.\nSimulates baseline (fixed max holding)\
+      \ and grid tests of drawdown-adaptive\nmaximum holding periods. Produces summary.json,\
+      \ report.yaml, l4_ack.yaml,\nand diagnostic.yaml.\n\"\"\"\nimport argparse\n\
+      import os\nimport json\nimport yaml\nfrom datetime import datetime\n\nimport\
+      \ pandas as pd\nimport numpy as np\n\n\ndef load_data(data_root):\n    \"\"\"\
+      Load required data files and return a merged daily gap DataFrame.\"\"\"\n  \
+      \  gap_path = os.path.join(\n        data_root,\n        \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17\"\
+      ,\n        \"daily_value_gap_amounts.parquet\",\n    )\n    gap_df = pd.read_parquet(gap_path)\n\
+      \n    # optional cb_basic and stk_daily are not strictly needed for this executor\n\
+      \    # but we verify they exist\n    cb_basic = pd.read_parquet(os.path.join(data_root,\
+      \ \"data/cb_warehouse/cb_basic.parquet\"))\n    stk_daily = pd.read_parquet(os.path.join(data_root,\
+      \ \"data/cb_warehouse/stk_daily_qfq.parquet\"))\n\n    # ensure date column\
+      \ is datetime\n    gap_df[\"date\"] = pd.to_datetime(gap_df[\"date\"])\n   \
+      \ return gap_df.sort_values([\"date\", \"cb_code\"])\n\n\ndef simulate(\n  \
+      \  gap_df,\n    start_date,\n    end_date,\n    base_max_hold,\n    drawdown_threshold=None,\n\
+      \    exit_multiplier=None,\n    dynamic=False,\n):\n    \"\"\"\n    Simulate\
+      \ portfolio value evolution.\n\n    Parameters\n    ----------\n    gap_df :\
+      \ DataFrame with columns date, cb_code, theoretical_value, tradable_gap_amount\n\
+      \    start_date, end_date : str\n    base_max_hold : int, fixed maximum holding\
+      \ days for baseline\n    drawdown_threshold : float, drawdown level that triggers\
+      \ shortened hold\n    exit_multiplier : float, multiplier applied to base_max_hold\
+      \ when drawdown > threshold\n    dynamic : bool, if True use dynamic hold; else\
+      \ use fixed base_max_hold\n\n    Returns\n    -------\n    list of daily portfolio\
+      \ values\n    \"\"\"\n    mask = (gap_df[\"date\"] >= start_date) & (gap_df[\"\
+      date\"] <= end_date)\n    subset = gap_df.loc[mask].copy()\n    if subset.empty:\n\
+      \        return [1.0]\n\n    price_pivot = subset.pivot(\n        index=\"date\"\
+      , columns=\"cb_code\", values=\"theoretical_value\"\n    )\n    gap_pivot =\
+      \ subset.pivot(\n        index=\"date\", columns=\"cb_code\", values=\"tradable_gap_amount\"\
+      \n    )\n\n    dates = sorted(subset[\"date\"].unique())\n    cash = 1.0\n \
+      \   shares = 0.0\n    current_cb = None\n    hold_days = 0\n    peak = 1.0\n\
+      \    portfolio_values = []\n\n    for date in dates:\n        price_today =\
+      \ np.nan\n        if current_cb is not None:\n            if current_cb in price_pivot.columns:\n\
+      \                price_t"
+  ai_provider: deepseek
+  response_hash: 1089e638fa450445
+  validation_errors: []
+  status: draft_tool_code
+files:
+- path: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  purpose: Complete draft evaluator implementation.
+  content: "#!/usr/bin/env python3\n\"\"\"\nDynamic drawdown exit evaluator for cb_arb_value_gap_switch\
+    \ strategy.\nSimulates baseline (fixed max holding) and grid tests of drawdown-adaptive\n\
+    maximum holding periods. Produces summary.json, report.yaml, l4_ack.yaml,\nand\
+    \ diagnostic.yaml.\n\"\"\"\nimport argparse\nimport os\nimport json\nimport yaml\n\
+    from datetime import datetime\n\nimport pandas as pd\nimport numpy as np\n\n\n\
+    def load_data(data_root):\n    \"\"\"Load required data files and return a merged\
+    \ daily gap DataFrame.\"\"\"\n    gap_path = os.path.join(\n        data_root,\n\
+    \        \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17\"\
+    ,\n        \"daily_value_gap_amounts.parquet\",\n    )\n    gap_df = pd.read_parquet(gap_path)\n\
+    \n    # optional cb_basic and stk_daily are not strictly needed for this executor\n\
+    \    # but we verify they exist\n    cb_basic = pd.read_parquet(os.path.join(data_root,\
+    \ \"data/cb_warehouse/cb_basic.parquet\"))\n    stk_daily = pd.read_parquet(os.path.join(data_root,\
+    \ \"data/cb_warehouse/stk_daily_qfq.parquet\"))\n\n    # ensure date column is\
+    \ datetime\n    gap_df[\"date\"] = pd.to_datetime(gap_df[\"date\"])\n    return\
+    \ gap_df.sort_values([\"date\", \"cb_code\"])\n\n\ndef simulate(\n    gap_df,\n\
+    \    start_date,\n    end_date,\n    base_max_hold,\n    drawdown_threshold=None,\n\
+    \    exit_multiplier=None,\n    dynamic=False,\n):\n    \"\"\"\n    Simulate portfolio\
+    \ value evolution.\n\n    Parameters\n    ----------\n    gap_df : DataFrame with\
+    \ columns date, cb_code, theoretical_value, tradable_gap_amount\n    start_date,\
+    \ end_date : str\n    base_max_hold : int, fixed maximum holding days for baseline\n\
+    \    drawdown_threshold : float, drawdown level that triggers shortened hold\n\
+    \    exit_multiplier : float, multiplier applied to base_max_hold when drawdown\
+    \ > threshold\n    dynamic : bool, if True use dynamic hold; else use fixed base_max_hold\n\
+    \n    Returns\n    -------\n    list of daily portfolio values\n    \"\"\"\n \
+    \   mask = (gap_df[\"date\"] >= start_date) & (gap_df[\"date\"] <= end_date)\n\
+    \    subset = gap_df.loc[mask].copy()\n    if subset.empty:\n        return [1.0]\n\
+    \n    price_pivot = subset.pivot(\n        index=\"date\", columns=\"cb_code\"\
+    , values=\"theoretical_value\"\n    )\n    gap_pivot = subset.pivot(\n       \
+    \ index=\"date\", columns=\"cb_code\", values=\"tradable_gap_amount\"\n    )\n\
+    \n    dates = sorted(subset[\"date\"].unique())\n    cash = 1.0\n    shares =\
+    \ 0.0\n    current_cb = None\n    hold_days = 0\n    peak = 1.0\n    portfolio_values\
+    \ = []\n\n    for date in dates:\n        price_today = np.nan\n        if current_cb\
+    \ is not None:\n            if current_cb in price_pivot.columns:\n          \
+    \      price_t"
+tool_code_attempts: 1
+validation_errors: []
+written_files:
+- /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_2026-05-19/generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+status: draft_tool_code

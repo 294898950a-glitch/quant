@@ -94,7 +94,7 @@ def main() -> int:
         issues.append("protocol_rules.yaml missing non-empty rules")
     else:
         rule_ids = {str(rule.get("id")) for rule in protocol_rules if isinstance(rule, dict)}
-        for required in {"R1", "R4", "R5", "R6", "R7", "R9"}:
+        for required in {"R1", "R5", "R6", "R7", "R9"}:
             if required not in rule_ids:
                 issues.append(f"protocol_rules.yaml missing {required}")
 

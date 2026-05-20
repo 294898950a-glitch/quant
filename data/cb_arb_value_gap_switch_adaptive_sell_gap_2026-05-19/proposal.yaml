@@ -1,0 +1,69 @@
+proposal_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+strategy_id: cb_arb_value_gap_switch
+family: new_exit_rule
+hypothesis: Adaptively scaling the sell gap based on recent CB price volatility improves
+  trade exit timing, capturing more gains in volatile regimes and holding longer in
+  calm periods. This should lift train and 2020 repair returns without hurting test
+  performance.
+source_insight: 'Baseline exits at a static sell gap, causing suboptimal PnL: too
+  early in calm markets, too late during sharp moves. The recent position-sizing and
+  regime-guard rejections show that altering candidate selection degrades test, but
+  the exit rule itself may be the correct lever because it directly controls realized
+  profit/loss per trade.'
+expected_improvement: Train excess return from 0.13 to above 0.20; 2020 repair excess
+  from -0.19 to above -0.15; sealed test excess stays above 0.30.
+capability_ids:
+- C007
+required_executor: null
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+test_design:
+  description: 'Grid search over lookback window (10, 20, 30 days), sell gap multiplier
+    range (0.5, 0.75, 1.0, 1.25, 1.5), and a floor/ceiling on the final sell gap.
+    Backtest using existing pipeline: daily value gap candidates with baseline entry
+    logic, then replace the fixed sell gap exit with the adaptive sell gap rule. Evaluate
+    train (2019-2024), 2020 repair, and sealed test (2025-202605).'
+success_criteria:
+  train_excess: '> 0.20'
+  2020_repair_excess: '> -0.15'
+  test_excess: '>= 0.30'
+falsifiers:
+  train: &id001
+  - test excess < 0.30
+  - train excess ≤ 0.20
+  - max drawdown worsens relative to baseline in any period without a commensurate
+    return improvement
+  validate: *id001
+  test: *id001
+risk: Parameter search may overfit to train period; additional turnover might increase
+  transaction costs not fully captured; no existing executor requires new implementation.
+why_not_repeated_failure: This is a new exit rule family, not position sizing, regime
+  classifier variant, entry gate, or value haircut. It directly modifies the sell
+  signal without altering entry eligibility or candidate ranking, addressing the exit
+  timing weakness visible in baseline’s poor 2020 train returns.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: Need to implement an exit rule module that computes rolling
+  standard deviation of CB price returns (20-business-day default) and adjusts the
+  baseline sell gap proportionally by a multiplier. The adaptive sell gap = base_sell_gap
+  * min(max(multiplier, floor_factor), ceiling_factor). Multiplier is derived from
+  normalized volatility (e.g., ratio of current vol to median vol).
+missing_capability_request:
+  description: No existing executor supports C007 (new_exit_rule). A new executor
+    that can replace the fixed sell gap with an adaptive rule based on CB price volatility
+    is required. It must consume daily value gap data and CB price series, apply the
+    new exit logic, and produce trade logs for backtesting.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: aca2aba8032fb3b1
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: aca2aba8032fb3b1
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/proposal.yaml

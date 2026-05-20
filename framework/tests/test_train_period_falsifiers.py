@@ -137,7 +137,7 @@ def test_update_experiments_carries_falsifier_flags_in_key_metrics(monkeypatch, 
         tmp_path / "out",
         tmp_path / "manifest.yaml",
         verdict,
-        {"decision": "auto-approve", "estimated_budget_yuan": 0},
+        {"decision": "record-only", "estimated_compute_cost_yuan": 0},
         dry_run=False,
     )
 

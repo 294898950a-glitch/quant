@@ -4,7 +4,7 @@
 This script automates the parts that should not require human or LLM judgment:
 
 1. load a filled spec.yaml
-2. make a mechanical budget decision
+2. record compute estimate metadata
 3. run GateKeeper preflight
 4. execute the spec-declared command
 5. verify required artifacts
@@ -40,13 +40,16 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
+from framework.autonomous import run_recorder
 from scripts.gatekeeper import GateKeeper, GateKeeperError
 
 
-BUDGET_CONFIG = REPO_ROOT / "data" / "research_framework" / "compute_budget_config.json"
 EXPERIMENTS = REPO_ROOT / "data" / "research_framework" / "experiments.yaml"
 MANIFEST_DIR = REPO_ROOT / "data" / "research_framework" / "run_manifests"
+PROTOCOL_RULES = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
 SPEC_STATUSES_RUNNABLE = {"READY", "RUNNING"}
+DEFAULT_ALLOWED_COMPUTE_HOSTNAMES = {"VM-0-9-opencloudos", "VM-0-4-ubuntu"}
+DATA_QUALITY_DECISION_FILE = "data_quality_decision.yaml"
 
 
 class PipelineError(RuntimeError):
@@ -92,20 +95,7 @@ def read_json(path: Path) -> dict[str, Any]:
     return data
 
 
-def load_budget_config() -> dict[str, Any]:
-    data = json.loads(BUDGET_CONFIG.read_text(encoding="utf-8"))
-    return {
-        "auto_approve_limit_yuan": float(data["auto_approve_limit_yuan"]),
-        "spot_yuan_per_hour": float(data["spot_yuan_per_hour"]),
-        "sig_yuan_per_hour": float(data["sig_yuan_per_hour"]),
-        "local_yuan_per_hour": float(data["local_yuan_per_hour"]),
-        "safety_multiplier": float(data["safety_multiplier"]),
-        "spot_allowed_hosts": list(data.get("spot_allowed_hosts") or []),
-    }
-
-
-def estimate_budget(spec: dict[str, Any]) -> dict[str, Any]:
-    cfg = load_budget_config()
+def estimate_compute_metadata(spec: dict[str, Any]) -> dict[str, Any]:
     estimate = spec.get("compute_estimate") or {}
     if not isinstance(estimate, dict):
         raise PipelineError("spec.compute_estimate must be mapping")
@@ -113,30 +103,38 @@ def estimate_budget(spec: dict[str, Any]) -> dict[str, Any]:
     spot_minutes = float(estimate.get("spot_minutes", 0) or 0)
     local_minutes = float(estimate.get("local_minutes", 0) or 0)
     fixed_yuan = float(estimate.get("estimated_cost_yuan", 0) or 0)
-    raw = (
-        sig_minutes / 60 * cfg["sig_yuan_per_hour"]
-        + spot_minutes / 60 * cfg["spot_yuan_per_hour"]
-        + local_minutes / 60 * cfg["local_yuan_per_hour"]
-        + fixed_yuan
-    )
-    budget_cap = float(spec.get("budget_cap_yuan", 0) or 0)
-    estimated = round(raw * cfg["safety_multiplier"], 2)
-    limit = min(cfg["auto_approve_limit_yuan"], budget_cap if budget_cap > 0 else cfg["auto_approve_limit_yuan"])
+    estimated = round(fixed_yuan, 2)
     return {
-        "estimated_budget_yuan": estimated,
-        "auto_limit_yuan": limit,
-        "decision": "auto-approve" if estimated <= limit else "wait-user",
+        "estimated_compute_cost_yuan": estimated,
+        "decision": "record-only",
         "inputs": {
             "sig_minutes": sig_minutes,
             "spot_minutes": spot_minutes,
             "local_minutes": local_minutes,
             "fixed_yuan": fixed_yuan,
-            "safety_multiplier": cfg["safety_multiplier"],
         },
     }
 
 
-def enforce_compute_placement(spec: dict[str, Any], budget: dict[str, Any], dry_run: bool, no_execute: bool) -> None:
+def allowed_compute_hostnames() -> set[str]:
+    if not PROTOCOL_RULES.exists():
+        return set(DEFAULT_ALLOWED_COMPUTE_HOSTNAMES)
+    data = read_yaml(PROTOCOL_RULES)
+    rules = data.get("rules") or []
+    if not isinstance(rules, list):
+        return set(DEFAULT_ALLOWED_COMPUTE_HOSTNAMES)
+    for rule in rules:
+        if not isinstance(rule, dict) or str(rule.get("id")) != "R10":
+            continue
+        values = rule.get("allowed_hostnames") or []
+        if isinstance(values, list):
+            hosts = {str(item).strip() for item in values if str(item).strip()}
+            if hosts:
+                return hosts
+    return set(DEFAULT_ALLOWED_COMPUTE_HOSTNAMES)
+
+
+def enforce_compute_placement(spec: dict[str, Any], dry_run: bool, no_execute: bool) -> None:
     if dry_run or no_execute:
         return
     estimate = spec.get("compute_estimate") or {}
@@ -145,8 +143,8 @@ def enforce_compute_placement(spec: dict[str, Any], budget: dict[str, Any], dry_
     spot_minutes = float(estimate.get("spot_minutes", 0) or 0)
     if spot_minutes <= 0 and not requires_spot_compute(spec):
         return
-    allowed = set(load_budget_config().get("spot_allowed_hosts") or [])
     host = socket.gethostname()
+    allowed = allowed_compute_hostnames()
     if host not in allowed:
         reason = f"spot_minutes={spot_minutes:g}" if spot_minutes > 0 else "cb_arb backtest command"
         raise PipelineError(
@@ -191,6 +189,30 @@ def ensure_runnable_status(spec: dict[str, Any], allow_archived: bool) -> None:
     if allow_archived and status in {"COMPLETE", "ARCHIVED"}:
         return
     raise PipelineError(f"spec.status={status!r} is not runnable; expected READY/RUNNING")
+
+
+def data_quality_decision_path(spec_path: Path) -> Path:
+    return spec_path.parent / DATA_QUALITY_DECISION_FILE
+
+
+def require_data_quality_decision(spec: dict[str, Any], spec_path: Path, dry_run: bool, no_execute: bool) -> dict[str, Any]:
+    if dry_run or no_execute:
+        return {"status": "skipped", "reason": "dry_run_or_no_execute"}
+    path = data_quality_decision_path(spec_path)
+    if not path.exists():
+        raise PipelineError(
+            f"data quality decision missing: {rel(path)}; executor must ask the data validator before running"
+        )
+    decision = read_yaml(path)
+    if str(decision.get("status") or "").lower() != "pass":
+        raise PipelineError(f"data quality decision is not pass: {decision.get('status')!r}")
+    expected_run_id = str(spec.get("run_id") or "")
+    decision_run_id = str(decision.get("run_id") or "")
+    if expected_run_id and decision_run_id and expected_run_id != decision_run_id:
+        raise PipelineError(
+            f"data quality decision run_id mismatch: expected {expected_run_id}, got {decision_run_id}"
+        )
+    return decision
 
 
 def command_from_spec(spec: dict[str, Any], spec_path: Path, output_dir: Path) -> list[str]:
@@ -624,7 +646,7 @@ def write_manifest(
     start_at: str | None,
     end_at: str,
     exit_code: int | None,
-    budget: dict[str, Any],
+    compute_metadata: dict[str, Any],
     verdict: dict[str, Any],
     dry_run: bool,
 ) -> Path:
@@ -651,7 +673,7 @@ def write_manifest(
         "dirty_policy": "allowed_with_list",
         "data_snapshot": {},
         "compute_host": socket.gethostname(),
-        "compute_cost_yuan": budget["estimated_budget_yuan"],
+        "compute_cost_yuan": compute_metadata["estimated_compute_cost_yuan"],
         "start_at": start_at,
         "end_at": end_at,
         "exit_code": exit_code,
@@ -663,7 +685,7 @@ def write_manifest(
         "reviewer": "auto",
         "verdict_at": end_at,
         "automation": {
-            "budget": budget,
+            "compute": compute_metadata,
             "verdict": {
                 "decision": verdict["decision"],
                 "pass_field": verdict["pass_field"],
@@ -683,7 +705,7 @@ def update_experiments(
     output_dir: Path,
     manifest_path: Path,
     verdict: dict[str, Any],
-    budget: dict[str, Any],
+    compute_metadata: dict[str, Any],
     dry_run: bool,
 ) -> None:
     if dry_run:
@@ -706,7 +728,7 @@ def update_experiments(
         "current_strategy_effect": "auto-run record only; does not promote current strategy",
         "automation": {
             "decision": verdict["decision"],
-            "budget": budget,
+            "compute": compute_metadata,
             "updated_at": now_iso(),
         },
     }
@@ -754,10 +776,9 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
     original_status = str(spec.get("status") or "")
     ensure_runnable_status(spec, args.allow_archived)
     output_dir = output_dir_from_spec(spec, spec_path)
-    budget = estimate_budget(spec)
-    enforce_compute_placement(spec, budget, args.dry_run, args.no_execute)
-    if budget["decision"] != "auto-approve" and not args.force_budget:
-        raise PipelineError(f"budget decision is {budget['decision']}; user approval required")
+    compute_metadata = estimate_compute_metadata(spec)
+    enforce_compute_placement(spec, args.dry_run, args.no_execute)
+    data_quality_decision = require_data_quality_decision(spec, spec_path, args.dry_run, args.no_execute)
 
     command: list[str] | None = None
     if not args.no_execute:
@@ -768,8 +789,9 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
             "dry_run": True,
             "spec": rel(spec_path),
             "output_dir": rel(output_dir),
-            "budget": budget,
+            "compute": compute_metadata,
             "command": command,
+            "data_quality": data_quality_decision,
         }
 
     if not args.no_execute:
@@ -784,22 +806,32 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         exit_code = 0
 
     end_at = now_iso()
-    missing = verify_artifacts(spec, output_dir)
-    verdict = derive_verdict(spec, output_dir, exit_code, missing)
-    verdict["missing_artifacts"] = missing
-    manifest_path = write_manifest(
-        spec=spec,
-        spec_path=spec_path,
-        output_dir=output_dir,
-        command=command,
-        start_at=start_at,
-        end_at=end_at,
-        exit_code=exit_code,
-        budget=budget,
-        verdict=verdict,
-        dry_run=False,
-    )
-    update_experiments(spec, output_dir, manifest_path, verdict, budget, dry_run=False)
+    if args.no_execute:
+        record = run_recorder.backfill_run_record(
+            spec=spec,
+            spec_path=spec_path,
+            output_dir=output_dir,
+            reason="classify existing artifacts without executing a new run",
+            actor="auto_research_pipeline",
+            evidence_paths=[rel(output_dir)],
+            compute_metadata=compute_metadata,
+            dry_run=False,
+        )
+    else:
+        record = run_recorder.record_executed_run(
+            spec=spec,
+            spec_path=spec_path,
+            output_dir=output_dir,
+            command=command,
+            start_at=start_at,
+            end_at=end_at,
+            exit_code=exit_code,
+            compute_metadata=compute_metadata,
+            data_quality_decision=data_quality_decision,
+            dry_run=False,
+        )
+    verdict = record["verdict"]
+    manifest_path = record["manifest_path"]
     if not args.no_execute or original_status in SPEC_STATUSES_RUNNABLE:
         set_spec_status(spec_path, "COMPLETE", dry_run=False)
 
@@ -814,9 +846,10 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         "dry_run": False,
         "spec": rel(spec_path),
         "output_dir": rel(output_dir),
-        "budget": budget,
+        "compute": compute_metadata,
         "exit_code": exit_code,
-        "missing_artifacts": missing,
+        "missing_artifacts": verdict.get("missing_artifacts", []),
+        "record_type": record["record_type"],
         "verdict": {k: v for k, v in verdict.items() if k != "summary"},
         "manifest": rel(manifest_path),
     }
@@ -828,7 +861,6 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="print plan only; no writes and no execution")
     parser.add_argument("--no-execute", action="store_true", help="classify existing artifacts without running command")
     parser.add_argument("--allow-archived", action="store_true", help="allow COMPLETE/ARCHIVED spec for artifact backfill")
-    parser.add_argument("--force-budget", action="store_true", help="requires explicit user approval outside this script")
     parser.add_argument("--quiet", action="store_true")
     return parser
 

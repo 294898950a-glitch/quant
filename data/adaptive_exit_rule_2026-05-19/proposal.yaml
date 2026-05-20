@@ -1,0 +1,68 @@
+proposal_id: adaptive_exit_rule_2026-05-19
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_optimization
+hypothesis: Adaptive take-profit and stop-loss rules based on value gap closing speed
+  and realized PnL will improve risk-adjusted returns across periods without the fragility
+  seen in fixed exit parameters.
+source_insight: Regime trend guard run showed exit parameter signal collapse with
+  max_hold >90 days. Baseline train excess only 0.13 vs test 0.38, and 2020 repair
+  negative, indicating fixed exits (min_gap, sell_gap, stop_gap) are suboptimal. Dynamic
+  exits may break the train/test trade-off.
+expected_improvement: Increase train excess return above 0.13, improve 2020 repair
+  excess above baseline -0.194, maintain test excess within 5% of baseline 0.38 (≥0.33).
+capability_ids:
+- C007
+required_executor: null
+missing_capability_request: No executor exists for C007 (new_exit_rule). A new backtest
+  executor is needed that can apply adaptive exit logic (gap closing speed, PnL feedback)
+  to the existing candidate generation pipeline.
+required_data:
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- historic trade-level PnL and gap data from baseline run
+test_design:
+  description: Sweep parameters for take-profit threshold (as fraction of initial
+    gap), stop-loss threshold, gap closing speed lookback window (days), PnL feedback
+    lookback. Run full backtest on train 2019-2024, evaluate on sealed test 2025-202605,
+    plus 2020 repair stress. Compare against baseline fixed exits.
+success_criteria:
+  description: 'On sealed test: excess return ≥0.33, max drawdown ≤-0.15, win rate
+    ≥0.55. On train: excess ≥0.15, 2020 repair excess ≥-0.15, and no parameter region
+    causing max_hold >90 days to dominate.'
+falsifiers:
+  train: No variant yields train excess return ≥0.15 or any variant leads to signal
+    collapse (max_hold >90 days dominance).
+  validate: No variant yields 2020 repair excess ≥-0.15 or any variant leads to signal
+    collapse.
+  test: All variants reduce test excess below 0.33 (i.e., >5% decline) or any variant
+    leads to signal collapse.
+risk: Low risk of overfitting due to extra parameters; controlled by 2020 repair test
+  and cross-validation.
+why_not_repeated_failure: This is not an entry gate, position sizing, or regime classifier
+  variant. It targets exit logic, which remains unchanged and has shown fragility
+  (signal collapse with max_hold>90d).
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: A new executor can be built on the existing backtest framework,
+  injecting adaptive exit thresholds based on gap closing speed and PnL feedback,
+  while keeping candidate generation and entry logic identical to baseline.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: ac08d359e19fa309
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: ac08d359e19fa309
+rewrite_provenance:
+- round: 1
+  provider_id: deepseek
+  response_hash: 677e5b01f12095e1
+- round: 2
+  provider_id: deepseek
+  response_hash: b167d28e3061a3ae
+rewrite_status: valid
+rewrite_rounds_used: 2
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19/proposal.yaml

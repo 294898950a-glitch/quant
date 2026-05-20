@@ -57,19 +57,14 @@ runtime_context:
       role: machine-readable framework stability backlog and acceptance checks
       required: false
       load_scope: maintenance_backlog
+    research_queue:
+      path: data/research_framework/research_queue.yaml
+      format: yaml
+      role: mechanical queue state for project-owned remote research runs
+      required: false
+      load_scope: mechanical_queue
     protocol_rules:
       path: data/research_framework/protocol_rules.yaml
       format: yaml
       role: machine-readable operating rules
       required: true
-
-deprecated_runtime_entries:
-  - path: docs/INDEX.md
-    replacement: data/research_framework/runtime_entrypoints.yaml
-    reason: "Markdown map is not a runtime entrypoint; AI context should be injected mechanically."
-  - path: docs/research_framework/protocol_redline.md
-    replacement: data/research_framework/protocol_rules.yaml
-    reason: "Machine rules live in YAML; Markdown is not authoritative for runtime behavior."
-  - path: docs/research_framework/CURRENT.md
-    replacement: data/research_framework/current.yaml
-    reason: "Current state is machine-owned YAML."

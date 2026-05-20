@@ -1,0 +1,131 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_dynamic_exit_gap_decay
+date: '2026-05-19'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: Exiting positions early when the value gap narrows below a threshold fraction
+  of initial gap can reduce drawdowns in stress periods, especially 2020, without
+  severely sacrificing returns in normal periods.
+source_insight: In 2020, baseline held through temporary gap closures, leading to
+  large drawdowns. Progressive stocklike scaling reduced damage but test returns dropped.
+  An exit rule conditioned on gap decay may capture profits sooner during volatile
+  reversals.
+parameter_space:
+- name: mechanics
+  range: []
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids: []
+mechanics: []
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  primary: 2020 excess_return > -0.10 and max_drawdown > baseline_2020 (-0.179).
+  secondary: Test period total_return >= 0.70 and win_rate >= 0.55.
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: missing registered capability
+proposal:
+  proposal_id: cb_arb_value_gap_switch_dynamic_exit_gap_decay
+  strategy_id: cb_arb_value_gap_switch
+  family: value_gap_dynamic_exit
+  hypothesis: Exiting positions early when the value gap narrows below a threshold
+    fraction of initial gap can reduce drawdowns in stress periods, especially 2020,
+    without severely sacrificing returns in normal periods.
+  source_insight: In 2020, baseline held through temporary gap closures, leading to
+    large drawdowns. Progressive stocklike scaling reduced damage but test returns
+    dropped. An exit rule conditioned on gap decay may capture profits sooner during
+    volatile reversals.
+  expected_improvement: Reduce 2020 max drawdown and improve excess return, while
+    preserving test period excess return near baseline levels.
+  capability_ids: []
+  missing_capability_request:
+    mechanic: dynamic_exit_gap_decay
+    label: Exit when value gap shrinks below a fraction of entry gap
+    description: 'Need new executor to implement a sell rule: if current value_gap_amount
+      < (entry_gap_amount * factor) then exit, with factor configurable. Requires
+      tracking entry gap for each position.'
+    required_data:
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+  required_executor: dynamic_exit_gap_decay_executor
+  required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  test_design:
+    type: grid_search
+    parameters:
+    - name: gap_decay_factor
+      values:
+      - 0.3
+      - 0.5
+      - 0.7
+      - 0.9
+    - name: min_hold_days
+      values:
+      - 1
+      - 5
+      - 10
+    evaluation: Compare against baseline with train/2020/test periods. Look for improved
+      2020 excess return and max drawdown, and test period not significantly worse
+      than baseline.
+  success_criteria:
+    primary: 2020 excess_return > -0.10 and max_drawdown > baseline_2020 (-0.179).
+    secondary: Test period total_return >= 0.70 and win_rate >= 0.55.
+  falsifiers:
+    train:
+    - Test period total_return drops below 0.50, or win_rate drops below 0.45.
+    - 2020 max_drawdown not improved (i.e., deeper than -0.179).
+    validate:
+    - Test period total_return drops below 0.50, or win_rate drops below 0.45.
+    - 2020 max_drawdown not improved (i.e., deeper than -0.179).
+    test:
+    - Test period total_return drops below 0.50, or win_rate drops below 0.45.
+    - 2020 max_drawdown not improved (i.e., deeper than -0.179).
+  risk: Exiting early may truncate gains in trending periods, but 2020 is a key stress
+    test. Overfitting to 2020 could hurt test if not robust.
+  why_not_repeated_failure: This is not a position sizing variant, nor a regime classifier.
+    It does not alter entry eligibility, value haircut, or global entry gate. It proposes
+    a new exit mechanic not previously tested, aiming to address 2020 drawdowns without
+    the structural tradeoff seen in regime classifiers.
+  related_prior_runs:
+  - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  - cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+  implementation_assumption: Will need to implement a new executor that tracks entry
+    gap per position and applies sell when current gap / entry gap < factor.
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 0dbdc2718c249198
+  provenance:
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 0dbdc2718c249198
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/proposal.yaml

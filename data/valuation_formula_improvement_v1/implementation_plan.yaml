@@ -1,0 +1,5 @@
+proposal_id: valuation_formula_improvement_v1
+missing_executor: null
+mechanics:
+- new_valuation_formula
+reason: no strict executor match

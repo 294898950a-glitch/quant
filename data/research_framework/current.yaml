@@ -102,12 +102,9 @@ no_reply_default:
   - choose_another_research_direction
   - do_not_archive
   - do_not_promote_to_live
-  - use_budget_calculator
-  budget_calculator: scripts/estimate_compute_budget.py
-  auto_continue_limit_cny: 100
 recent_results_digest:
   path: data/research_framework/recent_results_digest.yaml
-  updated_at: '2026-05-17T14:16:59+00:00'
+  updated_at: '2026-05-19T13:24:45+00:00'
   latest:
   - run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
     strategy_id: cb_arb_value_gap_switch
@@ -115,8 +112,9 @@ recent_results_digest:
     one_line_summary: 'cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411:
       review_status=complete; decision=reject; No position sizing variant beat baseline
       across train, 2020 repair, and sealed test together.'
-    closed_direction_tags:
-    - conditional_option_position_sizing
-    - static_candidate_position_scale
-    - close_to_bond_floor_threshold
-    - moneyness_stock_to_conv_threshold
+    closed_direction_tags: []
+  - run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+    strategy_id: cb_arb_value_gap_switch
+    verdict: null
+    one_line_summary: null
+    closed_direction_tags: []

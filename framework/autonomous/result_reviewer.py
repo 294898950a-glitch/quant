@@ -143,3 +143,9 @@ def review(run_dir: Path, verification_callback=None, ai_adapter=None) -> dict[s
         data["verification_rounds_used"] = max(verification_rounds, 1 if reviewer_evidence else 0)
         ArtifactStore().write_yaml(review_path, data)
     return data
+
+
+def write_review(run_dir: str | Path) -> Path:
+    run_path = Path(run_dir)
+    review(run_path)
+    return run_path / "review.yaml"

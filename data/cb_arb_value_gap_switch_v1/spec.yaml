@@ -1,0 +1,110 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_v1
+date: '2026-05-19'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: Switching behavior based on a dynamic market regime classification improves
+  risk-adjusted returns in CB arbitrage by adapting entry and position sizing to favorable
+  conditions.
+source_insight: Value gaps in CB arbitrage exhibit different mean-reversion dynamics
+  across volatility and credit regimes.
+parameter_space:
+- name: mechanics
+  range:
+  - dynamic_regime_switch
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C005
+mechanics:
+- dynamic_regime_switch
+new_data_sources: []
+hard_floors:
+  description: Out-of-sample Sharpe ratio improvement of at least 0.2 over a static
+    baseline, with no increase in max drawdown.
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: no strict executor match
+proposal:
+  strategy_id: cb_arb_value_gap_switch
+  family: cb_arb_switch
+  hypothesis: Switching behavior based on a dynamic market regime classification improves
+    risk-adjusted returns in CB arbitrage by adapting entry and position sizing to
+    favorable conditions.
+  success_criteria:
+    description: Out-of-sample Sharpe ratio improvement of at least 0.2 over a static
+      baseline, with no increase in max drawdown.
+  expected_improvement: Sharpe ratio improvement by 0.2-0.4, reduced downside volatility.
+  falsifiers:
+    train:
+      description: In‑sample regime classification lacks statistical significance
+        or fails to identify distinct value‑gap dynamics, leading to unstable model
+        fit.
+    validate:
+      description: Validation Sharpe ratio shows no improvement over baseline; regime
+        switch yields no risk‑adjusted benefit or increased tail risk during validation.
+    test:
+      description: Out‑of‑sample test fails to replicate improvement; Sharpe ratio
+        not significantly higher, and/or beta sensitivity or max drawdown worsens.
+  implementation_assumption: A reliable daily regime-classification model can be constructed
+    using historical data and applied without look-ahead bias.
+  risk: Regime overfitting; latency in regime detection causing adverse entry; model
+    complexity leading to brittle behavior.
+  source_insight: Value gaps in CB arbitrage exhibit different mean-reversion dynamics
+    across volatility and credit regimes.
+  related_prior_runs: []
+  why_not_repeated_failure: This strategy explores a new combination of regime-switching
+    and CB value-gap execution that has not been tested before.
+  test_design:
+    description: Walk-forward cross-validation over 2018-2025 using daily data; benchmark
+      against static value-gap entry with uniform position sizing. Use the dataset
+      from cb_arb_value_gap_switch_regime-option-entry-gate for daily value gaps.
+  required_data: []
+  required_executor: null
+  capability_ids:
+  - C005
+  proposal_id: cb_arb_value_gap_switch_v1
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 3a5dd2580468705e
+  provenance:
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 3a5dd2580468705e
+  rewrite_provenance:
+  - round: 1
+    provider_id: deepseek
+    response_hash: d0a24c0bdc4e8241
+  - round: 2
+    provider_id: deepseek
+    response_hash: be473bc596faae0e
+  - round: 3
+    provider_id: deepseek
+    response_hash: 7b39f014b32f0353
+  rewrite_status: valid
+  rewrite_rounds_used: 3
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_v1/proposal.yaml
+  mechanics:
+  - dynamic_regime_switch

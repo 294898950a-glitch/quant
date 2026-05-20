@@ -1,0 +1,169 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_low-freq-concentrated_2026-05-18
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: 'user strategic fork B: 保留绝对价值差额排名信号，改打法。方向三：降频+集中持仓。'
+hypothesis: '降低调仓频率（日频→周/月/季）并集中持仓（30只→5-8只），可以减少成本摩擦
+
+  和换手损耗，让价值差额排名的信号优势在更长时间尺度上发挥作用。
+
+  期权型标的同样适用：集中持仓减少小额亏损交易，不改变估值或准入规则。
+
+
+  当前基线的问题：3%单只上限 + 30只持仓 + 90天持有期 = 分散但高频。
+
+  最差的10笔交易贡献了23%的亏损。集中持仓后，前几名信号的超额收益
+
+  可能覆盖偶尔的失误。低频减少了约 7.47pp 成本侵蚀中的大部分换手成本。
+
+  '
+source_insight: 'research_insights.yaml id=cost_realism_wall: cost-on退化 -7.47pp，绝大部分来自换手。
+
+  research_insights.yaml id=single_filter_dead_end: 2020年74%交易亏损,但最差10笔只占23%亏损。
+
+  说明不是每笔都亏得一样惨——集中持仓到最强信号可以避免大量小额亏损交易。
+
+  当前 verifier 已有 max_holdings / max_position_pct / max_holding_days 参数，无需新评估脚本。
+
+  '
+parameter_space:
+- name: max_holdings
+  range:
+  - 3
+  - 5
+  - 8
+  - 10
+  - 15
+  type: int
+  description: 最大持仓数（当前30）
+- name: max_position_pct
+  range:
+  - 0.05
+  - 0.08
+  - 0.1
+  - 0.15
+  - 0.2
+  type: float
+  description: 单只仓位上限（当前3%）
+- name: max_holding_days
+  range:
+  - 120
+  - 180
+  - 250
+  - 365
+  type: int
+  description: 最长持有天数（当前90）
+- name: rebalance_interval
+  range:
+  - 5
+  - 10
+  - 20
+  - 40
+  - 60
+  type: int
+  description: 调仓间隔交易日数（当前~1天）
+new_data_sources:
+- path: data/cb_warehouse/cb_daily.parquet
+  description: 可转债日线数据
+grid:
+  dimensions:
+  - max_holdings
+  - max_position_pct
+  - max_holding_days
+  - rebalance_interval
+  candidates_count: 500
+  description: 4维grid，搜索最优低频集中配置。使用现有 evaluate_cb_arb_value_gap_switch.py 的可配置参数
+hard_floors:
+  replay_2019: 0.161312
+  replay_2020: -0.130604
+  replay_2021: -0.050441
+  replay_2022: 0.014425
+  replay_2023: -0.031027
+  replay_2024: 0.030085
+hard_floors_baseline_source: spec v1.1 normal-state baseline
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+- total_trades
+- win_rate
+- annual_turnover
+- cost_drag_pp
+cv_design: leave-one-year-out
+cv_holdout_years:
+- 2019
+- 2020
+- 2021
+- 2022
+- 2023
+- 2024
+cv_adoption_threshold: '≥ 5/6 holdout 不退化 vs baseline，且 cost-on cumulative excess
+  > -0.05（比当前 -0.1047 提升）
+
+  且 annual_turnover 显著下降（< 当前基线的 50%）
+
+  '
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 300
+  estimated_cost_yuan: 35.0
+budget_cap_yuan: 100
+spot_decision: 使用现有 evaluator 的 grid 模式，500候选 × 6年 = ~5小时。spot 必跑。
+stop_conditions:
+- 0 候选 cost-on excess > -0.10 → 停研究
+- annual_turnover 未显著下降 → 停研究
+- 总算力 > 100 → 暂停
+artifacts_required:
+- summary_concentrated.csv
+- yearly_concentrated.csv
+- daily_equity.csv
+- turnover_analysis.csv
+- summary.json
+status: ARCHIVED
+archived_at: '2026-05-19T08:52:00+08:00'
+archive_reason: 'remote process exited but required artifacts are missing; option loop queue marks this run failed, so COMPLETE was stale and blocked framework validation'
+automation:
+  output_dir: data/cb_arb_value_gap_switch_low-freq-concentrated_2026-05-18
+  sync_paths:
+  - scripts/grid_concentrated.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  command:
+  - .venv/bin/python
+  - scripts/grid_concentrated.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --output-dir
+  - '{output_dir}'
+  - --max-holdings-list
+  - 5,8
+  - --max-position-pct-list
+  - 0.08,0.15
+  - --max-holding-days-list
+  - 180,365
+verdict:
+  table_path: grid_summary.json
+  rank_by: test_best.excess_return
+  rank_desc: true
+  thresholds:
+    train_excess_return:
+      min: -0.15
+    test_excess_return:
+      min: -0.05
+notes: '三个方向中实现成本最低：现有 evaluate_cb_arb_value_gap_switch.py 已支持
+
+  top-n 参数，verifier 的 max_holdings/max_position_pct/max_holding_days
+
+  可通过 weights 配置控制。只需写一个 grid wrapper 遍历参数组合并汇总结果。
+
+
+  rebalance_interval 需要修改 evaluator 增加 --rebalance-interval 参数，
+
+  或通过调整 weights[7]（rebalance signal）间接实现。
+
+
+  cost_model_enabled=true 必开，因为核心假设是低频降低换手成本。
+
+  '
+updated_at: '2026-05-19T00:31:51Z'

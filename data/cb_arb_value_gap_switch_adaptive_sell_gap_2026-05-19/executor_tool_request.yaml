@@ -1,0 +1,600 @@
+tool_request_id: dynamic_exit_gap_decay_executor_v1
+why_existing_tools_insufficient: option_position_sizing can test only static candidate
+  position scaling (C001, C002, C003) and explicitly cannot test new_exit_rule (C007);
+  option_source_pnl_feedback_scaler can test rolling_pnl_feedback (C004) and static
+  scaling (C001) but also cannot test new_exit_rule (C007). Both lack the capability
+  to implement an adaptive sell gap based on volatility, which is the core of this
+  proposal. The proposal requires a new executor that replaces the fixed sell gap
+  with a volatility-adjusted rule, which neither existing executor can perform.
+reviewed_existing_executor_ids:
+- option_position_sizing
+- option_source_pnl_feedback_scaler
+registry_entry:
+  id: dynamic_exit_gap_decay_executor
+  version: 1
+  status: draft
+  strategy_id: cb_arb_value_gap_switch
+  family: dynamic_exit_gap_decay
+  script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  owner: ai_draft
+  description: Evaluate the proposal with a real backtest implementation.
+  can_test:
+  - dynamic_exit_gap_decay
+  can_test_capability_ids:
+  - C007
+  cannot_test:
+  - rolling_pnl_feedback
+  - new_valuation_formula
+  - new_data_source
+  cannot_test_capability_ids:
+  - C004
+  - C006
+  - C008
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    description: Base daily value-gap ranks.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_basic.parquet
+    description: CB basic table with stock code and conversion price for volatility
+      calculation.
+    schema_hash: null
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted stock prices for CB price returns volatility.
+    schema_hash: null
+  required_config_fields:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  - base_ranks_path
+  - lookback_days
+  - multiplier_min
+  - multiplier_max
+  - floor_factor
+  - ceiling_factor
+  - cost_model_enabled
+  command_template:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  - --data-root
+  - '{data_root}'
+  - --train-start
+  - '{train_start}'
+  - --train-end
+  - '{train_end}'
+  - --test-start
+  - '{test_start}'
+  - --test-end
+  - '{test_end}'
+  - --output-dir
+  - '{output_dir}'
+  - --base-ranks-path
+  - '{base_ranks_path}'
+  - --lookback-days
+  - '{lookback_days}'
+  - --multiplier-min
+  - '{multiplier_min}'
+  - --multiplier-max
+  - '{multiplier_max}'
+  - --floor-factor
+  - '{floor_factor}'
+  - --ceiling-factor
+  - '{ceiling_factor}'
+  - --cost-model-enabled
+  default_config: {}
+  artifacts_produced:
+  - summary.json
+  - report.yaml
+  - l4_ack.yaml
+  - diagnostic.yaml
+  budget_estimate:
+    sig_minutes: 0
+    spot_minutes: 90
+    local_minutes: 0
+    estimated_cost_yuan: 0.0
+  vm_local_limits:
+    vm_required: true
+    local_allowed: false
+  obsolescence_date: null
+implementation_outline:
+  script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  main_inputs:
+  - data_root
+  - output_dir
+  - base_ranks_path
+  - lookback_days
+  - multiplier_min
+  - multiplier_max
+  - floor_factor
+  - ceiling_factor
+  - cost_model_enabled
+  core_steps:
+  - load base value-gap ranks and CB price data
+  - compute rolling standard deviation of CB price returns (lookback_days)
+  - derive volatility ratio (current vol / median vol) for each day
+  - compute adaptive sell gap = base_sell_gap * clamp(volatility_ratio * chosen_multiplier,
+    floor_factor, ceiling_factor)
+  - apply dynamic exit rule, simulate trades, and run backtest on train (2019-2024),
+    2020 repair, sealed test (2025-202605)
+  - produce summary, report, l4_ack, and diagnostic artifacts
+  code_constraints:
+  - use existing project data files
+  - do not change current strategy truth
+  - modify only the exit rule; keep entry logic unchanged
+validation_plan:
+- python3 -m py_compile generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+- run a small data smoke test
+- verify all required artifacts are produced
+ai_provider: deepseek
+design_response_hash: 4db0a19471fb7bb1
+code_response_hash: f512a3b421c87f03
+compile_reason: no strict executor match
+tool_design:
+  tool_request_id: dynamic_exit_gap_decay_executor_v1
+  why_existing_tools_insufficient: option_position_sizing can test only static candidate
+    position scaling (C001, C002, C003) and explicitly cannot test new_exit_rule (C007);
+    option_source_pnl_feedback_scaler can test rolling_pnl_feedback (C004) and static
+    scaling (C001) but also cannot test new_exit_rule (C007). Both lack the capability
+    to implement an adaptive sell gap based on volatility, which is the core of this
+    proposal. The proposal requires a new executor that replaces the fixed sell gap
+    with a volatility-adjusted rule, which neither existing executor can perform.
+  reviewed_existing_executor_ids:
+  - option_position_sizing
+  - option_source_pnl_feedback_scaler
+  registry_entry:
+    id: dynamic_exit_gap_decay_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: dynamic_exit_gap_decay
+    script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    owner: ai_draft
+    description: Evaluate the proposal with a real backtest implementation.
+    can_test:
+    - dynamic_exit_gap_decay
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - rolling_pnl_feedback
+    - new_valuation_formula
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C006
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value-gap ranks.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stock code and conversion price for volatility
+        calculation.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for CB price returns volatility.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - base_ranks_path
+    - lookback_days
+    - multiplier_min
+    - multiplier_max
+    - floor_factor
+    - ceiling_factor
+    - cost_model_enabled
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --base-ranks-path
+    - '{base_ranks_path}'
+    - --lookback-days
+    - '{lookback_days}'
+    - --multiplier-min
+    - '{multiplier_min}'
+    - --multiplier-max
+    - '{multiplier_max}'
+    - --floor-factor
+    - '{floor_factor}'
+    - --ceiling-factor
+    - '{ceiling_factor}'
+    - --cost-model-enabled
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 90
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  implementation_outline:
+    script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    main_inputs:
+    - data_root
+    - output_dir
+    - base_ranks_path
+    - lookback_days
+    - multiplier_min
+    - multiplier_max
+    - floor_factor
+    - ceiling_factor
+    - cost_model_enabled
+    core_steps:
+    - load base value-gap ranks and CB price data
+    - compute rolling standard deviation of CB price returns (lookback_days)
+    - derive volatility ratio (current vol / median vol) for each day
+    - compute adaptive sell gap = base_sell_gap * clamp(volatility_ratio * chosen_multiplier,
+      floor_factor, ceiling_factor)
+    - apply dynamic exit rule, simulate trades, and run backtest on train (2019-2024),
+      2020 repair, sealed test (2025-202605)
+    - produce summary, report, l4_ack, and diagnostic artifacts
+    code_constraints:
+    - use existing project data files
+    - do not change current strategy truth
+    - modify only the exit rule; keep entry logic unchanged
+  validation_plan:
+  - python3 -m py_compile generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  - run a small data smoke test
+  - verify all required artifacts are produced
+  ai_provider: deepseek
+  response_hash: 4db0a19471fb7bb1
+  compile_reason: no strict executor match
+  validation_errors: []
+  status: draft_tool_design
+tool_code_response:
+  files:
+  - path: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    purpose: Complete draft evaluator implementation.
+    content: "#!/usr/bin/env python3\nimport argparse, json, yaml, os, sys, warnings\n\
+      import pandas as pd\nimport numpy as np\nfrom pathlib import Path\n\ndef parse_args():\n\
+      \    p = argparse.ArgumentParser(description=\"Evaluate dynamic exit gap decay\
+      \ proposal\")\n    p.add_argument(\"--data-root\", required=True)\n    p.add_argument(\"\
+      --train-start\", required=True)\n    p.add_argument(\"--train-end\", required=True)\n\
+      \    p.add_argument(\"--test-start\", required=True)\n    p.add_argument(\"\
+      --test-end\", required=True)\n    p.add_argument(\"--output-dir\", required=True)\n\
+      \    p.add_argument(\"--base-ranks-path\", required=True)\n    p.add_argument(\"\
+      --lookback-days\", type=int, required=True)\n    p.add_argument(\"--multiplier-min\"\
+      , type=float, required=True)\n    p.add_argument(\"--multiplier-max\", type=float,\
+      \ required=True)\n    p.add_argument(\"--floor-factor\", type=float, required=True)\n\
+      \    p.add_argument(\"--ceiling-factor\", type=float, required=True)\n    p.add_argument(\"\
+      --cost-model-enabled\", type=str, default=\"true\")\n    return p.parse_args()\n\
+      \ndef load_data(base_ranks_path, data_root):\n    ranks = pd.read_parquet(base_ranks_path)\n\
+      \    cb_basic = pd.read_parquet(os.path.join(data_root, \"data/cb_warehouse/cb_basic.parquet\"\
+      ))\n    stk = pd.read_parquet(os.path.join(data_root, \"data/cb_warehouse/stk_daily_qfq.parquet\"\
+      ))\n    # Ensure date columns are datetime\n    ranks[\"trade_date\"] = pd.to_datetime(ranks[\"\
+      trade_date\"])\n    cb_basic = cb_basic.rename(columns={\"trade_date\": \"date\"\
+      }).copy()\n    stk[\"trade_date\"] = pd.to_datetime(stk[\"trade_date\"])\n \
+      \   return ranks, cb_basic, stk\n\ndef prepare_prices(ranks, cb_basic, stk):\n\
+      \    # ranks expected columns: trade_date, cb_code, value_gap (or gap)\n   \
+      \ gap_col = [c for c in ranks.columns if c in (\"value_gap\", \"gap\")][0]\n\
+      \    ranks = ranks.rename(columns={gap_col: \"entry_value_gap\"})\n    # Get\
+      \ stock close prices (forward adjusted)\n    stk_close = stk[[\"trade_date\"\
+      , \"stock_code\", \"close_adj\"]].rename(columns={\"close_adj\": \"close\"})\n\
+      \    # Merge with cb_basic to map cb_code to stock_code\n    cb_map = cb_basic[[\"\
+      cb_code\", \"stock_code\"]].drop_duplicates()\n    # Ensure ranks has cb_code\n\
+      \    merged = ranks.merge(cb_map, on=\"cb_code\", how=\"left\")\n    merged\
+      \ = merged.merge(stk_close, left_on=[\"trade_date\", \"stock_code\"], right_on=[\"\
+      trade_date\", \"stock_code\"], how=\"left\")\n    # Drop any rows where close\
+      \ is missing\n    merged = merged.dropna(subset=[\"close\"])\n    return merged.sort_values(\"\
+      trade_date\")\n\ndef compute_volatility(merged, lookback_days):\n    # For each\
+      \ cb_code, compute daily returns and rolling std\n    merged = merged.copy()\n\
+      \    merged[\"daily_return\"] = merged.groupby(\"cb_code\")[\"close\"].pct_change()\n\
+      \    # rolling std over lookback business days (approx using min_periods=lookback_days)\n\
+      \    merged[\"rolling_vol\"] = merged.groupby(\"cb_code\")[\"daily_return\"\
+      ].transform(\n        lambda x: x.rolling(window=lookback_days, min_periods=lookback_days).std()\n\
+      \    )\n    return merged\n\ndef simulate_trades(merged, lookback_days, multiplier,\
+      \ floor_factor, ceiling_factor, cost_enabled):\n    # Filter to date range covering\
+      \ all needed for vol; but we'll process chronologically.\n    # We'll separate\
+      \ train and test periods later.\n    # For volatility normalization, we need\
+      \ median volatility per cb_code using train data (2019-2024)\n    # We can compute\
+      \ median from merged where date between train_start and train_end.\n    # This\
+      \ function will run on a subset of dates for the backtest period.\n    # We'll\
+      \ handle overall grid search.\n\n    # We'll pass full merged, but filter for\
+      \ simulation.\n    # Parameter 'merged' contains all data, we'll be called for\
+      \ each grid combination but with same merged.\n    # For efficiency, we might\
+      \ precompute median vol densities, but here we compute per call.\n    # We'll\
+      \ simulate on the whole dataset but record trades for appropriate period.\n\
+      \    # We'll use trade_date ordering.\n    trades = []\n    open_positions =\
+      \ {}  # key: cb_code, value: entry_price, entry_value_gap, trade_date\n\n  \
+      \  # Precompute median vol for each cb_code using train data (to be set before\
+      \ calling)\n    # We need train_start/end for train filtering. We'll pass as\
+      \ params.\n    # For now, we'll receive median_vol_map as a dict.\n    pass\n\
+      \ndef run_grid_search(merged, args):\n    # Prepare volatility: compute rolling\
+      \ vol on all data\n    merged = compute_volatility(merged, args.lookback_days)\n\
+      \    # Determine median volatility per cb_code using train period only\n   \
+      \ train_start = pd.Timestamp(args.train_start)\n    train_end = pd.Timestamp(args.train_end)\n\
+      \    train_mask = (merged[\"trade_date\"] >= train_start) & (merged[\"trade_date\"\
+      ] <= train_end)\n    train_data = merged[train_mask].dropna(subset=[\"rolling_vol\"\
+      ])\n    median_vol_map = train_data.groupby(\"cb_code\")[\"rolling_vol\"].median().to_dict()\n\
+      \n    # Define multiplier grid\n    if abs(args.multiplier_min - args.multiplier_max)\
+      \ < 1e-9:\n        multipliers = [args.multiplier_min]\n    else:\n        #\
+      \ Use fixed steps as per proposal: [0.5,0.75,1.0,1.25,1.5]\n        multipliers\
+      \ = [0.5, 0.75, 1.0, 1.25, 1.5]\n\n    best_train_excess = -np.inf\n    best_params\
+      \ = None\n    best_trades_all = None\n    results = []\n\n    for mult in multipliers:\n\
+      \        # Simulate trades on the whole dataset\n        # We'll simulate on\
+      \ all data, then evaluate periods separately.\n        trades = simulate_trades_full(merged,\
+      \ median_vol_map, mult, args.floor_factor, args.ceiling_factor, args.cost_model_enabled.lower()\
+      \ == \"true\")\n        if not trades:\n            continue\n        trades_df\
+      \ = pd.DataFrame(trades)\n        # Ensure dates\n        trades_df[\"exit_date\"\
+      ] = pd.to_datetime(trades_df[\"exit_date\"])\n        # Compute performance\
+      \ on train (2019-2024)\n        train_trades = trades_df[(trades_df[\"exit_date\"\
+      ] >= train_start) & (trades_df[\"exit_date\"] <= train_end)]\n        train_excess\
+      \ = compute_excess_return(train_trades)\n        # 2020 repair: year 2020\n\
+      \        repair_start = pd.Timestamp(\"2020-01-01\")\n        repair_end = pd.Timestamp(\"\
+      2020-12-31\")\n        repair_trades = trades_df[(trades_df[\"exit_date\"] >=\
+      \ repair_start) & (trades_df[\"exit_date\"] <= repair_end)]\n        repair_excess\
+      \ = compute_excess_return(repair_trades)\n        results.append({\"multiplier\"\
+      : mult, \"train_excess\": train_excess, \"repair_excess\": repair_excess})\n\
+      \        if train_excess > best_train_excess:\n            best_train_excess\
+      \ = train_excess\n            best_params = {\"multiplier\": mult}\n       \
+      \     best_trades_all = trades_df\n\n    # If no best, pick first\n    if best_params\
+      \ is None:\n        best_params = {\"multiplier\": multipliers[0]}\n       \
+      \ best_trades_all = trades_df\n\n    # Evaluate test period on best params\n\
+      \    test_start = pd.Timestamp(args.test_start)\n    test_end = pd.Timestamp(args.test_end)\n\
+      \    test_trades = best_trades_all[(best_trades_all[\"exit_date\"] >= test_start)\
+      \ & (best_trades_all[\"exit_date\"] <= test_end)]\n    test_excess = compute_excess_return(test_trades)\n\
+      \n    # Also compute train and repair for best\n    best_train_excess = compute_excess_return(best_trades_all[best_trades_all[\"\
+      exit_date\"].between(train_start, train_end)])\n    best_repair_excess = compute_excess_return(best_trades_all[\n\
+      \        best_trades_all[\"exit_date\"].between(pd.Timestamp(\"2020-01-01\"\
+      ), pd.Timestamp(\"2020-12-31\"))\n    ])\n\n    # Prepare artifacts\n    summary\
+      \ = {\n        \"best_params\": best_params,\n        \"train_excess\": best_train_excess,\n\
+      \        \"repair_excess\": best_repair_excess,\n        \"test_excess\": test_excess,\n\
+      \        \"lookback_days\": args.lookback_days,\n        \"floor_factor\": args.floor_factor,\n\
+      \        \"ceiling_factor\": args.ceiling_factor,\n    }\n    return summary,\
+      \ best_trades_all\n\ndef simulate_trades_full(merged, median_vol_map, multiplier,\
+      \ floor_factor, ceiling_factor, cost_enabled):\n    trades = []\n    open_positions\
+      \ = {}  # cb_code -> entry_row (dict)\n    # Sort merged by trade_date\n   \
+      \ merged = merged.sort_values(\"trade_date\")\n    # We'll track current date\n\
+      \    for _, row in merged.iterrows():\n        date = row[\"trade_date\"]\n\
+      \        cb_code = row[\"cb_code\"]\n        close = row[\"close\"]\n      \
+      \  # Check exit first\n        if cb_code in open_positions:\n            entry\
+      \ = open_positions[cb_code]\n            entry_price = entry[\"entry_price\"\
+      ]\n            entry_gap = entry[\"entry_value_gap\"]\n            # Compute\
+      \ volatility ratio\n            med_vol = median_vol_map.get(cb_code, None)\n\
+      \            if med_vol is None or pd.isna(row[\"rolling_vol\"]) or med_vol\
+      \ == 0:\n                vol_ratio = 1.0  # fallback\n            else:\n  \
+      \              vol_ratio = row[\"rolling_vol\"] / med_vol\n            adaptive_mult\
+      \ = vol_ratio * multiplier\n            adaptive_mult = max(min(adaptive_mult,\
+      \ ceiling_factor), floor_factor)\n            target_sell_gap = entry_gap *\
+      \ adaptive_mult\n            price_change_pct = (close - entry_price) / entry_price\n\
+      \            # If price increase meets target, exit\n            if price_change_pct\
+      \ >= target_sell_gap:\n                profit_pct = price_change_pct\n     \
+      \           if cost_enabled:\n                    # simplified cost: 0.1% entry\
+      \ and exit\n                    profit_pct -= 0.002  # 0.2% roundtrip\n    \
+      \            trades.append({\n                    \"cb_code\": cb_code,\n  \
+      \                  \"entry_date\": entry[\"trade_date\"],\n                \
+      \    \"entry_price\": entry_price,\n                    \"entry_value_gap\"\
+      : entry_gap,\n                    \"exit_date\": date,\n                   \
+      \ \"exit_price\": close,\n                    \"profit_pct\": profit_pct,\n\
+      \                    \"multiplier\": multiplier,\n                })\n     \
+      \           del open_positions[cb_code]\n        # Entry logic: if no open position\
+      \ for this cb_code?, and value_gap > 0, enter\n        # We allow only one open\
+      \ position per CB (no re-entry while still open)\n        # Also we could limit\
+      \ total positions, but not necessary.\n        if cb_code not in open_positions:\n\
+      \            entry_gap = row[\"entry_value_gap\"]\n            if entry_gap\
+      \ > 1e-6:  # positive gap\n                open_positions[cb_code] = {\n   \
+      \                 \"cb_code\": cb_code,\n                    \"trade_date\"\
+      : date,\n                    \"entry_price\": close,\n                    \"\
+      entry_value_gap\": entry_gap,\n                }\n    return trades\n\ndef compute_excess_return(trades_df):\n\
+      \    if trades_df.empty:\n        return 0.0\n    # Sum of profit percentages\
+      \ (assuming equal capital per trade)\n    total_profit = trades_df[\"profit_pct\"\
+      ].sum()\n    # Number of trades\n    # Annualized: assume each trade uses full\
+      \ capital, so total return is total_profit (if reinvest). \n    # Annualize\
+      \ using period length. Simple: total return over period.\n    return round(total_profit,\
+      \ 6)\n\ndef main():\n    args = parse_args()\n    # Load data\n    ranks, cb_basic,\
+      \ stk = load_data(args.base_ranks_path, args.data_root)\n    merged = prepare_prices(ranks,\
+      \ cb_basic, stk)\n    summary, trades_df = run_grid_search(merged, args)\n \
+      \   output_dir = Path(args.output_dir)\n    output_dir.mkdir(parents=True, exist_ok=True)\n\
+      \    # Write summary.json\n    with open(output_dir / \"summary.json\", \"w\"\
+      ) as f:\n        json.dump(summary, f, indent=2)\n    # Write report.yaml with\
+      \ more detailed metrics\n    report = {\n        \"train_excess\": summary[\"\
+      train_excess\"],\n        \"repair_excess\": summary.get(\"repair_excess\",\
+      \ 0.0),\n        \"test_excess\": summary[\"test_excess\"],\n        \"best_params\"\
+      : summary[\"best_params\"],\n        \"lookback_days\": args.lookback_days,\n\
+      \        \"floor_factor\": args.floor_factor,\n        \"ceiling_factor\": args.ceiling_factor,\n\
+      \    }\n    with open(output_dir / \"report.yaml\", \"w\") as f:\n        yaml.dump(report,\
+      \ f)\n    # Write l4_ack.yaml (simple acknowledgment)\n    ack = {\"status\"\
+      : \"completed\", \"artifacts\": [\"summary.json\", \"report.yaml\", \"l4_ack.yaml\"\
+      , \"diagnostic.yaml\"]}\n    with open(output_dir / \"l4_ack.yaml\", \"w\")\
+      \ as f:\n        yaml.dump(ack, f)\n    # diagnostic.yaml with trades stats\n\
+      \    diag = {\n        \"total_trades\": len(trades_df),\n        \"avg_profit_pct\"\
+      : float(trades_df[\"profit_pct\"].mean()) if not trades_df.empty else 0.0,\n\
+      \        \"params_used\": summary[\"best_params\"],\n    }\n    with open(output_dir\
+      \ / \"diagnostic.yaml\", \"w\") as f:\n        yaml.dump(diag, f)\n\nif __name__\
+      \ == \"__main__\":\n    main()"
+  ai_provider: deepseek
+  response_hash: f512a3b421c87f03
+  validation_errors: []
+  status: draft_tool_code
+files:
+- path: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  purpose: Complete draft evaluator implementation.
+  content: "#!/usr/bin/env python3\nimport argparse, json, yaml, os, sys, warnings\n\
+    import pandas as pd\nimport numpy as np\nfrom pathlib import Path\n\ndef parse_args():\n\
+    \    p = argparse.ArgumentParser(description=\"Evaluate dynamic exit gap decay\
+    \ proposal\")\n    p.add_argument(\"--data-root\", required=True)\n    p.add_argument(\"\
+    --train-start\", required=True)\n    p.add_argument(\"--train-end\", required=True)\n\
+    \    p.add_argument(\"--test-start\", required=True)\n    p.add_argument(\"--test-end\"\
+    , required=True)\n    p.add_argument(\"--output-dir\", required=True)\n    p.add_argument(\"\
+    --base-ranks-path\", required=True)\n    p.add_argument(\"--lookback-days\", type=int,\
+    \ required=True)\n    p.add_argument(\"--multiplier-min\", type=float, required=True)\n\
+    \    p.add_argument(\"--multiplier-max\", type=float, required=True)\n    p.add_argument(\"\
+    --floor-factor\", type=float, required=True)\n    p.add_argument(\"--ceiling-factor\"\
+    , type=float, required=True)\n    p.add_argument(\"--cost-model-enabled\", type=str,\
+    \ default=\"true\")\n    return p.parse_args()\n\ndef load_data(base_ranks_path,\
+    \ data_root):\n    ranks = pd.read_parquet(base_ranks_path)\n    cb_basic = pd.read_parquet(os.path.join(data_root,\
+    \ \"data/cb_warehouse/cb_basic.parquet\"))\n    stk = pd.read_parquet(os.path.join(data_root,\
+    \ \"data/cb_warehouse/stk_daily_qfq.parquet\"))\n    # Ensure date columns are\
+    \ datetime\n    ranks[\"trade_date\"] = pd.to_datetime(ranks[\"trade_date\"])\n\
+    \    cb_basic = cb_basic.rename(columns={\"trade_date\": \"date\"}).copy()\n \
+    \   stk[\"trade_date\"] = pd.to_datetime(stk[\"trade_date\"])\n    return ranks,\
+    \ cb_basic, stk\n\ndef prepare_prices(ranks, cb_basic, stk):\n    # ranks expected\
+    \ columns: trade_date, cb_code, value_gap (or gap)\n    gap_col = [c for c in\
+    \ ranks.columns if c in (\"value_gap\", \"gap\")][0]\n    ranks = ranks.rename(columns={gap_col:\
+    \ \"entry_value_gap\"})\n    # Get stock close prices (forward adjusted)\n   \
+    \ stk_close = stk[[\"trade_date\", \"stock_code\", \"close_adj\"]].rename(columns={\"\
+    close_adj\": \"close\"})\n    # Merge with cb_basic to map cb_code to stock_code\n\
+    \    cb_map = cb_basic[[\"cb_code\", \"stock_code\"]].drop_duplicates()\n    #\
+    \ Ensure ranks has cb_code\n    merged = ranks.merge(cb_map, on=\"cb_code\", how=\"\
+    left\")\n    merged = merged.merge(stk_close, left_on=[\"trade_date\", \"stock_code\"\
+    ], right_on=[\"trade_date\", \"stock_code\"], how=\"left\")\n    # Drop any rows\
+    \ where close is missing\n    merged = merged.dropna(subset=[\"close\"])\n   \
+    \ return merged.sort_values(\"trade_date\")\n\ndef compute_volatility(merged,\
+    \ lookback_days):\n    # For each cb_code, compute daily returns and rolling std\n\
+    \    merged = merged.copy()\n    merged[\"daily_return\"] = merged.groupby(\"\
+    cb_code\")[\"close\"].pct_change()\n    # rolling std over lookback business days\
+    \ (approx using min_periods=lookback_days)\n    merged[\"rolling_vol\"] = merged.groupby(\"\
+    cb_code\")[\"daily_return\"].transform(\n        lambda x: x.rolling(window=lookback_days,\
+    \ min_periods=lookback_days).std()\n    )\n    return merged\n\ndef simulate_trades(merged,\
+    \ lookback_days, multiplier, floor_factor, ceiling_factor, cost_enabled):\n  \
+    \  # Filter to date range covering all needed for vol; but we'll process chronologically.\n\
+    \    # We'll separate train and test periods later.\n    # For volatility normalization,\
+    \ we need median volatility per cb_code using train data (2019-2024)\n    # We\
+    \ can compute median from merged where date between train_start and train_end.\n\
+    \    # This function will run on a subset of dates for the backtest period.\n\
+    \    # We'll handle overall grid search.\n\n    # We'll pass full merged, but\
+    \ filter for simulation.\n    # Parameter 'merged' contains all data, we'll be\
+    \ called for each grid combination but with same merged.\n    # For efficiency,\
+    \ we might precompute median vol densities, but here we compute per call.\n  \
+    \  # We'll simulate on the whole dataset but record trades for appropriate period.\n\
+    \    # We'll use trade_date ordering.\n    trades = []\n    open_positions = {}\
+    \  # key: cb_code, value: entry_price, entry_value_gap, trade_date\n\n    # Precompute\
+    \ median vol for each cb_code using train data (to be set before calling)\n  \
+    \  # We need train_start/end for train filtering. We'll pass as params.\n    #\
+    \ For now, we'll receive median_vol_map as a dict.\n    pass\n\ndef run_grid_search(merged,\
+    \ args):\n    # Prepare volatility: compute rolling vol on all data\n    merged\
+    \ = compute_volatility(merged, args.lookback_days)\n    # Determine median volatility\
+    \ per cb_code using train period only\n    train_start = pd.Timestamp(args.train_start)\n\
+    \    train_end = pd.Timestamp(args.train_end)\n    train_mask = (merged[\"trade_date\"\
+    ] >= train_start) & (merged[\"trade_date\"] <= train_end)\n    train_data = merged[train_mask].dropna(subset=[\"\
+    rolling_vol\"])\n    median_vol_map = train_data.groupby(\"cb_code\")[\"rolling_vol\"\
+    ].median().to_dict()\n\n    # Define multiplier grid\n    if abs(args.multiplier_min\
+    \ - args.multiplier_max) < 1e-9:\n        multipliers = [args.multiplier_min]\n\
+    \    else:\n        # Use fixed steps as per proposal: [0.5,0.75,1.0,1.25,1.5]\n\
+    \        multipliers = [0.5, 0.75, 1.0, 1.25, 1.5]\n\n    best_train_excess =\
+    \ -np.inf\n    best_params = None\n    best_trades_all = None\n    results = []\n\
+    \n    for mult in multipliers:\n        # Simulate trades on the whole dataset\n\
+    \        # We'll simulate on all data, then evaluate periods separately.\n   \
+    \     trades = simulate_trades_full(merged, median_vol_map, mult, args.floor_factor,\
+    \ args.ceiling_factor, args.cost_model_enabled.lower() == \"true\")\n        if\
+    \ not trades:\n            continue\n        trades_df = pd.DataFrame(trades)\n\
+    \        # Ensure dates\n        trades_df[\"exit_date\"] = pd.to_datetime(trades_df[\"\
+    exit_date\"])\n        # Compute performance on train (2019-2024)\n        train_trades\
+    \ = trades_df[(trades_df[\"exit_date\"] >= train_start) & (trades_df[\"exit_date\"\
+    ] <= train_end)]\n        train_excess = compute_excess_return(train_trades)\n\
+    \        # 2020 repair: year 2020\n        repair_start = pd.Timestamp(\"2020-01-01\"\
+    )\n        repair_end = pd.Timestamp(\"2020-12-31\")\n        repair_trades =\
+    \ trades_df[(trades_df[\"exit_date\"] >= repair_start) & (trades_df[\"exit_date\"\
+    ] <= repair_end)]\n        repair_excess = compute_excess_return(repair_trades)\n\
+    \        results.append({\"multiplier\": mult, \"train_excess\": train_excess,\
+    \ \"repair_excess\": repair_excess})\n        if train_excess > best_train_excess:\n\
+    \            best_train_excess = train_excess\n            best_params = {\"multiplier\"\
+    : mult}\n            best_trades_all = trades_df\n\n    # If no best, pick first\n\
+    \    if best_params is None:\n        best_params = {\"multiplier\": multipliers[0]}\n\
+    \        best_trades_all = trades_df\n\n    # Evaluate test period on best params\n\
+    \    test_start = pd.Timestamp(args.test_start)\n    test_end = pd.Timestamp(args.test_end)\n\
+    \    test_trades = best_trades_all[(best_trades_all[\"exit_date\"] >= test_start)\
+    \ & (best_trades_all[\"exit_date\"] <= test_end)]\n    test_excess = compute_excess_return(test_trades)\n\
+    \n    # Also compute train and repair for best\n    best_train_excess = compute_excess_return(best_trades_all[best_trades_all[\"\
+    exit_date\"].between(train_start, train_end)])\n    best_repair_excess = compute_excess_return(best_trades_all[\n\
+    \        best_trades_all[\"exit_date\"].between(pd.Timestamp(\"2020-01-01\"),\
+    \ pd.Timestamp(\"2020-12-31\"))\n    ])\n\n    # Prepare artifacts\n    summary\
+    \ = {\n        \"best_params\": best_params,\n        \"train_excess\": best_train_excess,\n\
+    \        \"repair_excess\": best_repair_excess,\n        \"test_excess\": test_excess,\n\
+    \        \"lookback_days\": args.lookback_days,\n        \"floor_factor\": args.floor_factor,\n\
+    \        \"ceiling_factor\": args.ceiling_factor,\n    }\n    return summary,\
+    \ best_trades_all\n\ndef simulate_trades_full(merged, median_vol_map, multiplier,\
+    \ floor_factor, ceiling_factor, cost_enabled):\n    trades = []\n    open_positions\
+    \ = {}  # cb_code -> entry_row (dict)\n    # Sort merged by trade_date\n    merged\
+    \ = merged.sort_values(\"trade_date\")\n    # We'll track current date\n    for\
+    \ _, row in merged.iterrows():\n        date = row[\"trade_date\"]\n        cb_code\
+    \ = row[\"cb_code\"]\n        close = row[\"close\"]\n        # Check exit first\n\
+    \        if cb_code in open_positions:\n            entry = open_positions[cb_code]\n\
+    \            entry_price = entry[\"entry_price\"]\n            entry_gap = entry[\"\
+    entry_value_gap\"]\n            # Compute volatility ratio\n            med_vol\
+    \ = median_vol_map.get(cb_code, None)\n            if med_vol is None or pd.isna(row[\"\
+    rolling_vol\"]) or med_vol == 0:\n                vol_ratio = 1.0  # fallback\n\
+    \            else:\n                vol_ratio = row[\"rolling_vol\"] / med_vol\n\
+    \            adaptive_mult = vol_ratio * multiplier\n            adaptive_mult\
+    \ = max(min(adaptive_mult, ceiling_factor), floor_factor)\n            target_sell_gap\
+    \ = entry_gap * adaptive_mult\n            price_change_pct = (close - entry_price)\
+    \ / entry_price\n            # If price increase meets target, exit\n        \
+    \    if price_change_pct >= target_sell_gap:\n                profit_pct = price_change_pct\n\
+    \                if cost_enabled:\n                    # simplified cost: 0.1%\
+    \ entry and exit\n                    profit_pct -= 0.002  # 0.2% roundtrip\n\
+    \                trades.append({\n                    \"cb_code\": cb_code,\n\
+    \                    \"entry_date\": entry[\"trade_date\"],\n                \
+    \    \"entry_price\": entry_price,\n                    \"entry_value_gap\": entry_gap,\n\
+    \                    \"exit_date\": date,\n                    \"exit_price\"\
+    : close,\n                    \"profit_pct\": profit_pct,\n                  \
+    \  \"multiplier\": multiplier,\n                })\n                del open_positions[cb_code]\n\
+    \        # Entry logic: if no open position for this cb_code?, and value_gap >\
+    \ 0, enter\n        # We allow only one open position per CB (no re-entry while\
+    \ still open)\n        # Also we could limit total positions, but not necessary.\n\
+    \        if cb_code not in open_positions:\n            entry_gap = row[\"entry_value_gap\"\
+    ]\n            if entry_gap > 1e-6:  # positive gap\n                open_positions[cb_code]\
+    \ = {\n                    \"cb_code\": cb_code,\n                    \"trade_date\"\
+    : date,\n                    \"entry_price\": close,\n                    \"entry_value_gap\"\
+    : entry_gap,\n                }\n    return trades\n\ndef compute_excess_return(trades_df):\n\
+    \    if trades_df.empty:\n        return 0.0\n    # Sum of profit percentages\
+    \ (assuming equal capital per trade)\n    total_profit = trades_df[\"profit_pct\"\
+    ].sum()\n    # Number of trades\n    # Annualized: assume each trade uses full\
+    \ capital, so total return is total_profit (if reinvest). \n    # Annualize using\
+    \ period length. Simple: total return over period.\n    return round(total_profit,\
+    \ 6)\n\ndef main():\n    args = parse_args()\n    # Load data\n    ranks, cb_basic,\
+    \ stk = load_data(args.base_ranks_path, args.data_root)\n    merged = prepare_prices(ranks,\
+    \ cb_basic, stk)\n    summary, trades_df = run_grid_search(merged, args)\n   \
+    \ output_dir = Path(args.output_dir)\n    output_dir.mkdir(parents=True, exist_ok=True)\n\
+    \    # Write summary.json\n    with open(output_dir / \"summary.json\", \"w\"\
+    ) as f:\n        json.dump(summary, f, indent=2)\n    # Write report.yaml with\
+    \ more detailed metrics\n    report = {\n        \"train_excess\": summary[\"\
+    train_excess\"],\n        \"repair_excess\": summary.get(\"repair_excess\", 0.0),\n\
+    \        \"test_excess\": summary[\"test_excess\"],\n        \"best_params\":\
+    \ summary[\"best_params\"],\n        \"lookback_days\": args.lookback_days,\n\
+    \        \"floor_factor\": args.floor_factor,\n        \"ceiling_factor\": args.ceiling_factor,\n\
+    \    }\n    with open(output_dir / \"report.yaml\", \"w\") as f:\n        yaml.dump(report,\
+    \ f)\n    # Write l4_ack.yaml (simple acknowledgment)\n    ack = {\"status\":\
+    \ \"completed\", \"artifacts\": [\"summary.json\", \"report.yaml\", \"l4_ack.yaml\"\
+    , \"diagnostic.yaml\"]}\n    with open(output_dir / \"l4_ack.yaml\", \"w\") as\
+    \ f:\n        yaml.dump(ack, f)\n    # diagnostic.yaml with trades stats\n   \
+    \ diag = {\n        \"total_trades\": len(trades_df),\n        \"avg_profit_pct\"\
+    : float(trades_df[\"profit_pct\"].mean()) if not trades_df.empty else 0.0,\n \
+    \       \"params_used\": summary[\"best_params\"],\n    }\n    with open(output_dir\
+    \ / \"diagnostic.yaml\", \"w\") as f:\n        yaml.dump(diag, f)\n\nif __name__\
+    \ == \"__main__\":\n    main()"
+tool_code_attempts: 2
+validation_errors: []
+written_files:
+- /home/jay/projects/quant/data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+status: registered_tool_code
+registered_executor_id: dynamic_exit_gap_decay_executor
+registered_files:
+- /home/jay/projects/quant/scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+registered_registry_path: /home/jay/projects/quant/data/research_framework/executor_registry.yaml
+post_registration_compile_status: READY
+post_registration_compile_reason: all guarded checks passed

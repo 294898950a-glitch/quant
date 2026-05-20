@@ -1,12 +1,12 @@
 schema_version: 1
-version: "1.5-machine"
-updated_at: "2026-05-17T06:05:00+08:00"
+version: "1.6-machine"
+updated_at: "2026-05-19T11:58:00+08:00"
 authority: machine
 
 rules:
   - id: R1
     name: runtime_context
-    summary: "AI runtime context is loaded from data/research_framework/runtime_entrypoints.yaml, not from docs/INDEX.md."
+    summary: "AI runtime context is loaded from data/research_framework/runtime_entrypoints.yaml; Markdown maps are not runtime sources."
     required_files:
       - data/research_framework/runtime_entrypoints.yaml
       - data/research_framework/current.yaml
@@ -15,10 +15,7 @@ rules:
       - data/research_framework/experiments.yaml
       - data/research_framework/research_insights.yaml
       - data/research_framework/protocol_rules.yaml
-    forbidden_runtime_entrypoints:
-      - docs/INDEX.md
-      - docs/research_framework/CURRENT.md
-      - docs/research_framework/protocol_redline.md
+    forbid_markdown_runtime_sources: true
 
   - id: R2
     name: evidence
@@ -38,7 +35,9 @@ rules:
     automatic_pipeline: scripts/auto_research_pipeline.py
     automatic_steps:
       - load_spec
-      - estimate_budget
+      - require_data_quality_decision
+      - repair_candidate_data_quality
+      - revalidate_after_data_repair
       - gatekeeper_before_run
       - execute_spec_command
       - verify_artifacts
@@ -47,19 +46,10 @@ rules:
       - update_experiments_yaml
     pre_run_gates:
       - validate_spec.py
+      - validate_data_quality.py
       - validate_data_schema.py
-      - validate_compute_budget.py
       - research_sanity_checker.py
       - validate_gatekeeper_compliance.py
-
-  - id: R4
-    name: budget_autonomy
-    summary: "New data, research code, and research parameters may proceed when estimated budget is <= 100 CNY."
-    calculator: scripts/estimate_compute_budget.py
-    auto_continue_limit_cny: 100
-    wait_for_user_when:
-      - budget_gt_100
-      - budget_unknown
 
   - id: R5
     name: protected_decisions
@@ -89,11 +79,13 @@ rules:
     affects_current_strategy_default: false
 
   - id: R8
-    name: outbox_direction
-    summary: "Claude writes claude/outbox.md; Codex writes codex/outbox.md."
+    name: external_message_bridge
+    summary: "External outbox files are notification evidence only; they are not runtime entrypoints and cannot advance quant workflow state."
     root: /mnt/c/Users/陈教授/Desktop/ai/projects/quant
-    claude_to_codex: claude/outbox.md
-    codex_to_claude: codex/outbox.md
+    codex_status_outbox: codex/outbox.md
+    claude_status_outbox: claude/outbox.md
+    runtime_source: false
+    may_trigger_workflow_step: false
 
   - id: R9
     name: no_reply_default
@@ -104,7 +96,6 @@ rules:
       - choose_another_research_direction
       - do_not_archive
       - do_not_promote_to_live
-      - use_budget_calculator
 
   - id: R10
     name: compute_placement
@@ -112,11 +103,12 @@ rules:
     enforced_by:
       - scripts/auto_research_pipeline.py
       - scripts/research_sanity_checker.py
-    allowed_spot_hosts_config: data/research_framework/compute_budget_config.json:spot_allowed_hosts
+    allowed_hostnames:
+      - VM-0-9-opencloudos
+      - VM-0-4-ubuntu
     local_workstation_allowed_for:
       - dry_run
       - no_execute_classification
       - lightweight_validation
     wait_for_user_when:
       - required_spot_host_unavailable
-      - spot_budget_unknown

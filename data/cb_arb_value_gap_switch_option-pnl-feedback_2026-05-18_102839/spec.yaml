@@ -1,0 +1,166 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_102839
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: option_value_loop Claude prompt injection from current.yaml, research_insights.yaml,
+  experiments.yaml, baseline_registry.yaml, strategies.yaml, and protocol_rules.yaml
+hypothesis: '将回看窗口设为90天、最低笔数提高到4笔、单笔平均亏损率门槛设为-0.015、折扣因子提升到0.80， 四参数联合压低训练期误触发频次（单笔小额噪声亏损不足1.5%不触发、短期偶发亏损窗口过期后不累计），
+  同时保持测试期2025-2026结构性持续亏损时的信号灵敏度，有望让feedback变体在训练期不再被baseline拉开。
+
+  '
+source_insight: '五轮pnl_feedback均失败，原因各异： 60d/min2/scale0.5（基准方向）触发过频，训练期小额噪声亏损反复误射；
+  120-180d/min4-6/scale0.5减少了触发次数但scale仍重（每次触发砍掉50%暴露，训练期正收益段损失大）； scale0.70-0.90配60d/min2触发仍多（短窗口在训练期命中多段正常回撤）；
+  AND双条件（sum_pnl+avg_pnl_pct）因两条件同时达标概率极低而信号基本哑火。 当前提案的90d+min4+scale0.80+trigger-0.015四维组合在五轮测试中均未覆盖：
+  90d介于60d与120d之间；min4仅在scale0.5的长窗口版本出现过；scale0.80仅在60d/min2版本出现过； trigger=-0.015仅在60d/min2/scale0.5版本出现过。
+
+  '
+parameter_space:
+- name: option_source_pnl_feedback_lookback_days
+  range:
+  - 20
+  - 60
+  type: int
+  description: 只看最近已平仓期权来源交易的天数。
+- name: option_source_pnl_feedback_min_trades
+  range:
+  - 2
+  - 3
+  type: int
+  description: 触发反馈前至少需要看到的已平仓期权来源交易数。
+- name: option_source_pnl_feedback_scale
+  range:
+  - 0.25
+  - 0.75
+  type: float
+  description: 触发后期权来源候选排序金额和实际买入金额保留比例。
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  description: 已有 value-gap 估值与可交易金额，避免重复计算基础基准。
+- path: data/cb_warehouse/cb_basic.parquet
+  description: 转股价和正股代码，复用共享 rank loader。
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  description: 前复权正股价格，复用共享 rank loader。
+grid:
+  dimensions:
+  - option_source_pnl_feedback_lookback_days
+  - option_source_pnl_feedback_min_trades
+  - option_source_pnl_feedback_scale
+  candidates_count: 19
+  description: baseline + 18 组滚动期权来源盈亏反馈，全量跑 train/test/2019-2024 yearly，并输出 2020
+    和 test 的入口来源拆解。
+hard_floors:
+  train_excess_return: 0.0
+  train_max_drawdown: -0.3
+  test_excess_return: 0.0
+  test_max_drawdown: -0.3
+  replay_2020_total_return: -0.090593
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-aware branch and
+  option-source false-undervaluation evidence
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- yearly_2020_total_return
+- yearly_2020_excess_return
+- max_drawdown
+- total_trades
+- win_rate
+- entry_source_2020_option_loss
+- entry_source_test_option_profit
+- average_position_scale
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+cv_adoption_threshold: 必须同时优于 baseline 的训练段、2020 修复和 2025-2026 测试段；否则只作为诊断资产。
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 90
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+budget_cap_yuan: 100
+spot_decision: 本轮使用已有 daily_value_gap_amounts，不重复计算基础基准；必须在 VM/spot host 执行。
+stop_conditions:
+- 脚本退出非 0
+- 缺少 summary_option_pnl_feedback.csv
+- 缺少 yearly_option_pnl_feedback.csv
+- 缺少 entry_source_2020_option_pnl_feedback.csv
+- 所有非 baseline 方案无法同时优于 train、2020 和 test baseline
+artifacts_required:
+- summary_option_pnl_feedback.csv
+- yearly_option_pnl_feedback.csv
+- entry_source_2020_option_pnl_feedback.csv
+- entry_source_test_option_pnl_feedback.csv
+- feedback_option_pnl_feedback.csv
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+automation:
+  output_dir: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_102839
+  gatekeeper_after_run: false
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - '{output_dir}'
+  - --base-ranks-path
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - --reuse-ranks
+  - --cost-model-enabled
+  verdict:
+    table_path: summary_option_pnl_feedback.csv
+    yearly_table_path: yearly_option_pnl_feedback.csv
+    filters:
+      period: train
+    rank_by: score
+    rank_desc: true
+    thresholds:
+      excess_return:
+        min: 0.0
+      max_drawdown:
+        min: -0.3
+    train_single_year_dd_ceiling: -0.15
+status: COMPLETE
+escalation:
+- 训练段过关但 2020 仍显著跑输
+- 2020 改善但 2025-2026 测试段被明显伤害
+- 运行时间超过 90 分钟
+notes: 这是循环根据既有复盘自动注入上下文后生成的新方向，不改 current.yaml，不改 baseline_registry。关键区别：不禁止买入，不整体折价期权价值，只在已实现的期权来源交易近期亏钱后降低后续暴露。
+ideation:
+  source: claude
+  proposal_id: pnl_feedback_gentle_medium_window_v1
+  family: option_source_pnl_feedback
+  executor: option_source_pnl_feedback_scaler
+  why_not_rejected_repeat: '本提案不禁买、不整体折价、不设全局期权来源入场门槛； 机制为：仅当回看窗口内已有≥4笔已平仓期权来源交易且每笔平均亏损率绝对值≥1.5%时，
+    对后续期权来源候选的排序金额和买入金额乘以0.80（缩减20%）； 属于option_source_pnl_feedback executor现有参数空间内的新四维组合，
+    与已禁止的global_option_entry_gate、global_option_value_haircut机制路径完全不同。
+
+    '
+  risk: 最大风险：训练期2019-2024期权来源整体净正收益（净盈利约74858元，总收益超过总亏损）， 任何在训练期有效触发的反馈机制都会减少期权暴露，导致train
+    score低于baseline（baseline train score=0.050351极低，几乎不可能被反馈变体超越）； 若90d+min4+trigger-0.015+scale0.80组合在训练期仍触发导致score继续被压，
+    则option_source_pnl_feedback方向已基本穷尽当前executor参数空间， 需升级用户讨论是否引入新executor或放弃该方向。
+  fallback_reason: null
+updated_at: '2026-05-18T03:06:12Z'

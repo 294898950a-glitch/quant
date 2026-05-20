@@ -1,0 +1,68 @@
+{
+  "train_start": "20190101",
+  "train_end": "20241231",
+  "test_start": "20250101",
+  "test_end": "20260508",
+  "base_params": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 180.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0
+  },
+  "configs": [
+    {
+      "name": "normal_revalue",
+      "description": "止损复查用原估值",
+      "params": {}
+    },
+    {
+      "name": "all_credit_200bp_proxy",
+      "description": "全体信用折价 +200bp 的旧对照近似，保留作基准",
+      "params": {},
+      "config_overrides": {
+        "credit_spread_add_bp": 200.0
+      }
+    },
+    {
+      "name": "source_bond20_option10_mixed_light",
+      "description": "债底型债底打 8 折，期权型期权打 9 折，混合轻度压力",
+      "params": {
+        "source_stress_enabled": 1.0,
+        "stress_bond_cut_bond": 0.2,
+        "stress_option_cut_bond": 0.0,
+        "stress_bond_cut_option": 0.0,
+        "stress_option_cut_option": 0.1,
+        "stress_bond_cut_mixed": 0.1,
+        "stress_option_cut_mixed": 0.05
+      }
+    },
+    {
+      "name": "source_bond10_option10_mixed_light",
+      "description": "债底型债底打 9 折，期权型期权打 9 折，混合轻度压力",
+      "params": {
+        "source_stress_enabled": 1.0,
+        "stress_bond_cut_bond": 0.1,
+        "stress_option_cut_bond": 0.0,
+        "stress_bond_cut_option": 0.0,
+        "stress_option_cut_option": 0.1,
+        "stress_bond_cut_mixed": 0.05,
+        "stress_option_cut_mixed": 0.05
+      }
+    },
+    {
+      "name": "source_bond20_option15_mixed_mid",
+      "description": "债底型债底打 8 折，期权型期权打 85 折，混合中度压力",
+      "params": {
+        "source_stress_enabled": 1.0,
+        "stress_bond_cut_bond": 0.2,
+        "stress_option_cut_bond": 0.0,
+        "stress_bond_cut_option": 0.0,
+        "stress_option_cut_option": 0.15,
+        "stress_bond_cut_mixed": 0.1,
+        "stress_option_cut_mixed": 0.08
+      }
+    }
+  ]
+}

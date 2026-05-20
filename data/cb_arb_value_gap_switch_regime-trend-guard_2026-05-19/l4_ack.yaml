@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+reviewer: hermes_cron
+reviewed_at: '2026-05-19T22:05:00+08:00'
+ack_status: rejected
+ack_reason: >
+  trend_guard improves train excess by +14pp but degrades test excess by -8.7pp,
+  confirming the same structural tradeoff as all previous families. Train max_dd
+  marginally exceeds -0.35 floor. No adoption.
+artifacts_verified:
+  - train_summary.csv: present
+  - test_summary.csv: present
+  - summary.json: present
+  - report.yaml: generated_by_hermes
+  - diagnostic.yaml: generated_by_hermes
+  - l4_ack.yaml: this_file
+data_integrity: ok
+adoption_recommendation: do_not_adopt

@@ -1,0 +1,128 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19
+date: '2026-05-19'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: Hermes quant cron tick 2026-05-19 — all option-source families exhausted;
+  chose genuinely new mechanism (portfolio construction) not option-source filtering
+hypothesis: 降低持仓数量（30→5-8只）并延长持有期（90→180-365天），可以通过减少换手来压缩成本侵蚀（当前-7.47pp），让价值差额排名信号在更长时间尺度上发挥作用。集中持仓让前几名信号的超额收益覆盖偶尔的失误。这是打法层面的改变，不涉及期权来源过滤、估值打折或仓位缩放。
+source_insight: 'research_insights id=cost_realism_wall: cost-on 退化 -7.47pp，大部分来自换手成本。research_insights
+  id=single_filter_dead_end: 2020年74%交易亏损，但最差10笔仅占23%亏损 — 不是每笔都亏，集中持仓到最强信号可避免大量小额亏损。research_insights
+  id=option_source_value_gap_structural_tradeoff: 所有option-source修复家族已拒绝，需要从打法层面突破。上一轮
+  low-freq-concentrated (500候选) 因远程进程崩溃失败，本轮缩小grid到8候选重试核心假设。'
+parameter_space:
+- name: max_holdings
+  range:
+  - 5
+  - 8
+  type: int
+  description: 最大持仓数（当前30）
+- name: max_position_pct
+  range:
+  - 0.08
+  - 0.15
+  type: float
+  description: 单只仓位上限（当前3%）
+- name: max_holding_days
+  range:
+  - 180
+  - 365
+  type: int
+  description: 最长持有天数（当前90）
+new_data_sources:
+- path: data/cb_warehouse/cb_daily.parquet
+  description: 可转债日线数据
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  description: 前复权正股价格
+grid:
+  dimensions:
+  - max_holdings
+  - max_position_pct
+  - max_holding_days
+  candidates_count: 8
+  description: 2×2×2 grid，搜索最优低频集中配置。使用 grid_concentrated.py 遍历 evaluator。缩小grid避免上次500候选超时崩溃。
+hard_floors:
+  train_excess_return: -0.15
+  test_excess_return: -0.05
+  max_drawdown: -0.35
+  cost_on_excess_compound: -0.1
+hard_floors_baseline_source: current cb_arb_value_gap_switch cost-on baseline (excess=-0.1047,
+  max_dd=-0.3516)
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+- total_trades
+- win_rate
+- annual_turnover
+- cost_drag_pp
+cv_design: leave-one-year-out
+cv_holdout_years:
+- '2019'
+- '2020'
+- '2021'
+- '2022'
+- '2023'
+- '2024'
+cv_adoption_threshold: ≥ 4/6 holdout年不退化 vs baseline cost-on，且cost-on cumulative excess
+  > -0.08（比 -0.1047 提升2.7pp+），且annual_turnover显著下降（< 当前基线的60%）
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 120
+  local_minutes: 0
+  estimated_cost_yuan: 15.0
+budget_cap_yuan: 100
+spot_decision: 8候选 × ~15分钟/候选 = 120分钟spot。预算15元，低于100元自动执行。必须在VM/spot host执行。
+stop_conditions:
+- 脚本退出非0
+- 缺少 grid_summary.json
+- 所有非baseline候选 cost-on excess < -0.12
+- annual_turnover未显著下降
+artifacts_required:
+- grid_summary.json
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: ARCHIVED
+archived_at: '2026-05-19T11:36:00+08:00'
+archive_reason: Queue settled this run as failed because the remote process exited without required report.yaml, l4_ack.yaml, diagnostic.yaml, or summary.json artifacts; keep only as failed-run evidence.
+automation:
+  output_dir: data/cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19
+  gatekeeper_after_run: false
+  sync_paths:
+  - scripts/grid_concentrated.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/research_framework/runtime_entrypoints.yaml
+  command:
+  - .venv/bin/python
+  - scripts/grid_concentrated.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --output-dir
+  - '{output_dir}'
+  - --max-holdings-list
+  - 5,8
+  - --max-position-pct-list
+  - 0.08,0.15
+  - --max-holding-days-list
+  - 180,365
+verdict:
+  table_path: grid_summary.json
+  rank_by: test_best.excess_return
+  rank_desc: true
+  thresholds:
+    train_excess_return:
+      min: -0.15
+    test_excess_return:
+      min: -0.05
+notes: Hermes自己选择的新方向（非Claude ideation生成），因为option-source家族已全部耗尽。这是portfolio mechanics层面的实验，不同于所有已拒绝的option-source过滤/估值/仓位家族。缩小grid到8候选（上次500候选导致远程进程崩溃）。不改current.yaml，不改baseline_registry。
+ideation:
+  source: hermes
+  proposal_id: low_freq_concentrated_v2
+  family: low_freq_concentrated
+  executor: grid_concentrated
+  why_not_rejected_repeat: 不是option-source过滤、估值打折、仓位缩放、盈亏反馈。是全新的portfolio mechanics方向。上一轮low-freq-concentrated因500候选导致远程进程崩溃（非逻辑拒绝），本轮缩小到8候选重试。
+  risk: 核心风险：集中持仓增加单只标的波动风险；降频可能错过短期机会。但当前基线过度分散（30只+3%上限）是成本侵蚀的主要来源。上一轮失败原因是远程进程崩溃而非逻辑拒绝，缩小grid应可避免。
+updated_at: '2026-05-19T03:20:47Z'

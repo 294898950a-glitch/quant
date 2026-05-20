@@ -1,0 +1,77 @@
+proposal_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+strategy_id: cb_arb_value_gap_switch
+family: new_exit_rule
+hypothesis: Introduce a dynamic trailing exit rule based on the rolling maximum value
+  gap (VA_GAP) since entry, closing the position when VA_GAP retraces by a configurable
+  fraction (e.g., 50%) from its peak. This should avoid premature exits when the gap
+  continues to widen and limit downside when convergence reverses, potentially improving
+  total return and win rate over the baseline fixed-gap switch exit.
+source_insight: The baseline exit logic uses a fixed switch threshold, which may exit
+  too early during strong trends or too late during reversals. Recent rejects on position
+  sizing and regime guards show that improving entry or sizing does not reliably lift
+  the baseline. Attacking the exit timing directly could address a core source of
+  drawdown and lost upside apparent in the 2020 repair year (baseline excess return
+  -0.195, score -0.239).
+expected_improvement: Increase test excess return beyond baseline 0.380 and improve
+  2020 repair metrics (score > -0.15, excess > -0.15) without degrading train performance
+  significantly (excess > 0.08).
+capability_ids:
+- C007
+missing_capability_request: No executor currently implements C007 (new_exit_rule).
+  A new executor is needed that can receive the daily value gap time series, entry
+  dates, and current positions; compute the rolling peak gap since entry; and generate
+  exit signals when the retracement fraction threshold is crossed. It must integrate
+  with the existing cb_arb_value_gap_switch framework.
+required_executor: new_exit_rule_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+test_design:
+  description: 'Implement the dynamic trailing stop as a new exit rule module. Sweep
+    parameters: retracement fraction [0.3, 0.5, 0.7] and minimum holding days [1,
+    5, 10] to avoid noise. Compare against baseline (current fixed-switch exit) on
+    full period: train 2019-2024, 2020 repair year, sealed test 2025-2026. Measure
+    total return, excess return, max drawdown, win rate, score. Primary aggregate:
+    score in test and 2020.'
+success_criteria:
+  criteria:
+  - Best candidate test excess return >= baseline test excess_return (0.38)
+  - Best candidate 2020 score > -0.15 (better than baseline -0.239)
+  - Train excess return not worse than 0.08 (baseline 0.131)
+falsifiers:
+  train: &id001
+  - All candidate test excess returns are worse than baseline.
+  - All 2020 scores are worse than baseline.
+  - The trailing stop causes excessive whipsaw (win rate drops below 0.35 in train)
+    without compensating total return.
+  validate: *id001
+  test: *id001
+risk: If the value gap tends to expand monotonically after entry without meaningful
+  retracements, a trailing stop that triggers on small retracements could exit early
+  and miss further upside, turning a winning strategy into a chop-prone one. Also,
+  the executor does not exist; implementation risk is high (DRAFT).
+why_not_repeated_failure: The prior rejected runs addressed position sizing (static
+  scale, closed family) and regime-conditioned entry gate (trend guard, closed family).
+  Neither modified the core exit rule. This proposal attacks a different, untested
+  mechanichow positions are closed, not how they are entered or sized. No existing
+  closed tag 'new_exit_rule' exists, and the dynamic trailing stop logic is not a
+  renamed variant of previous families.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+implementation_assumption: The new executor will have access to the daily value gap
+  series (VA_GAP) for each candidate CB, can store the rolling maximum since entry
+  per position, and will override the existing exit sell signal when the retracement
+  threshold is breached. It does not alter entry eligibility or theoretical valuation.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 574b4454783067de
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 574b4454783067de
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_exit_dynamic_trail_20260519/proposal.yaml

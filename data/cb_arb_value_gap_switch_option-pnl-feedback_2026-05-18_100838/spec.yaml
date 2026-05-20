@@ -105,7 +105,6 @@ automation:
   - scripts/evaluate_cb_arb_option_pnl_feedback.py
   - scripts/evaluate_cb_arb_option_position_sizing.py
   - scripts/evaluate_cb_arb_value_gap_switch.py
-  - scripts/generate_option_value_next_spec.py
   - data/research_framework/runtime_entrypoints.yaml
   - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
   - data/cb_warehouse/cb_basic.parquet
@@ -146,7 +145,7 @@ automation:
       max_drawdown:
         min: -0.3
     train_single_year_dd_ceiling: -0.15
-status: READY
+status: COMPLETE
 escalation:
 - 训练段过关但 2020 仍显著跑输
 - 2020 改善但 2025-2026 测试段被明显伤害
@@ -167,4 +166,4 @@ ideation:
     sum_pnl 超过 40K 以上门槛，触发频次仍会压低训练分，方向将再次被拒绝。 此风险目前无法从现有数据预验证，需待 VM 回测后才可确认。 另一风险：executor
     对 trigger_avg_pnl_pct 极小值（-0.99）的解释行为未在历史 params_json 中出现， 若 executor 对超出正常范围的参数值有未知处理，候选结果可能与预期不符。
   fallback_reason: null
-updated_at: '2026-05-18T10:08:38'
+updated_at: '2026-05-18T02:29:57Z'

@@ -9,7 +9,6 @@ Required fields (缺 → exit 1):
 - hard_floors (≥1 floor)
 - cv_design (string), cv_holdout_years (list)
 - compute_estimate (sig_minutes + spot_minutes + estimated_cost_yuan)
-- budget_cap_yuan
 - stop_conditions (≥1)
 - artifacts_required (≥1)
 - status (DRAFT/READY/RUNNING/COMPLETE/ARCHIVED)
@@ -41,7 +40,7 @@ DATA_DIR = REPO_ROOT / "data"
 REQUIRED_FIELDS = {
     "schema_version", "run_id", "date", "strategy_id", "l0_entry_id",
     "hypothesis", "parameter_space", "hard_floors", "cv_design",
-    "cv_holdout_years", "compute_estimate", "budget_cap_yuan",
+    "cv_holdout_years", "compute_estimate",
     "stop_conditions", "artifacts_required", "status",
 }
 
@@ -128,12 +127,6 @@ def validate(path: Path) -> tuple[list[str], list[str]]:
         for f in ("sig_minutes", "spot_minutes", "estimated_cost_yuan"):
             if f not in cost:
                 errors.append(f"compute_estimate missing field: {f}")
-
-    if not isinstance(data.get("budget_cap_yuan"), (int, float)):
-        errors.append("budget_cap_yuan must be number")
-    else:
-        if data["budget_cap_yuan"] > 100 and data.get("status") in ("DRAFT", "READY", "RUNNING"):
-            warnings.append(f"budget_cap_yuan {data['budget_cap_yuan']} > 100, requires user approval per U17")
 
     stops = data.get("stop_conditions") or []
     if not isinstance(stops, list) or not stops:

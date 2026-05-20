@@ -1,6 +1,6 @@
 schema_version: 1
 updated_at: '2026-05-19T09:25:00+08:00'
-owner: hermes
+owner: quant_internal_framework
 purpose: Machine-readable backlog for framework stability fixes found during quant automation review.
 items:
 - id: framework_stability_02_no_background_llm
@@ -8,15 +8,15 @@ items:
   completed_at: '2026-05-19T09:28:00+08:00'
   priority: critical
   title: 禁止后台自己调用 LLM
-  requirement: 脚本只能检查状态、同步结果、启动已有任务；需要新方向时，只能由 Hermes 当轮读取记录后生成，不能让后台自己偷偷问 Claude。
+  requirement: 脚本只能检查状态、同步结果、启动已有任务；需要新方向时，只能由统一研究入口读取记录后生成，不能让后台自己偷偷调用 AI。
   acceptance:
   - 后台推进脚本没有任何 Claude/LLM 调用路径。
-  - 无 READY 任务时状态停在 needs_hermes_research_direction。
+  - 无 READY 任务时状态停在 discover_or_request_direction。
   - 生成新方向只能由统一研究入口完成；该入口只能使用 ai_providers.yaml 中已登记且启用的 provider。
   - 后台只接收已经存在的 READY spec。
   implementation:
-  - scripts/option_value_loop_daemon.py 不再调用生成器，空闲时只写 needs_hermes_research_direction。
-  - scripts/generate_option_value_next_spec.py 只接受统一研究入口或 Hermes 当轮提供的 --idea-yaml，不再自行调用 Claude。
+  - scripts/research_queue_runner.py 不再调用生成器，空闲时只写 discover_or_request_direction。
+  - scripts/generate_option_value_next_spec.py 已下线删除；新 spec 只能走统一研究入口和审题员。
   - data/research_framework/ai_providers.yaml 记录允许使用的 LLM provider；data/research_framework/strategy_ideator.yaml 指向同一个入口。
   - scripts/validate_no_background_llm.py 加入 framework_preflight，防止后台 LLM 调用路径回归。
 - id: framework_stability_03_remote_truth
@@ -47,7 +47,7 @@ items:
 - id: framework_stability_08_wakeup_health_gate
   status: todo
   priority: critical
-  title: Hermes 每轮先做健康检查
+  title: 内部唤醒每轮先做健康检查
   requirement: 每 10 分钟第一步先检查多个入口、旧 cron、后台 LLM、假 running、失败未归档任务、框架检查；不通过就修系统，不跑任务。
 - id: framework_stability_09_role_separation
   status: in_progress
@@ -55,9 +55,9 @@ items:
   title: 推进和研究分开
   requirement: 推进器只做机械动作，研究员只负责出方向，执行器只负责跑测试，记录员只负责写结果。
   implementation:
-  - Hermes 入口不再自行判断是否需要新方向，只唤醒推进器并展示推进器返回的状态。
+  - 外部监控入口不再自行判断是否需要新方向，只展示推进器返回的状态。
   - 新增共享状态判断模块，推进器统一决定当前只能监控、启动已排队任务，还是请求新方向。
-  - 新增模块解耦检查，防止 Hermes、推进器、研究入口互相越界调用。
+  - 新增模块解耦检查，防止外部监控、推进器、研究入口互相越界调用。
 - id: framework_stability_11_runtime_node_pruning
   status: in_progress
   priority: high
@@ -77,6 +77,18 @@ items:
   - autonomous_research_acceptance_criteria.yaml 从旧 10 组件表改为 5 个 active_components。
   - 旧组件映射到新节点，不再作为独立架构节点。
   - 新增 validate_architecture_pruned.py，强制 active_components 不能超过 5 个。
+- id: framework_stability_13_remove_compute_budget_gate
+  status: done
+  completed_at: '2026-05-19T11:58:00+08:00'
+  priority: high
+  title: 砍掉预算模块
+  requirement: 预算不再决定实验能否继续；保留历史记录字段，但不能作为准入、运行前检查、调度上限或用户确认条件。
+  implementation:
+  - AGENTS.md 和 protocol_rules.yaml 删除预算自动批准边界。
+  - framework_preflight、GateKeeper、调度器不再调用预算校验。
+  - proposal_gate 不再因为预算上限生成 DRAFT。
+  - auto_research_pipeline 只记录消耗估计，不因预算等待用户。
+  - validate_architecture_pruned.py 防止预算重新变成主动架构内容。
 - id: framework_stability_10_stop_on_system_error
   status: todo
   priority: critical
