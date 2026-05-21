@@ -75,6 +75,19 @@ def _proposal_data(proposal: dict[str, Any]) -> set[str]:
     return {str(item["path"] if isinstance(item, dict) else item) for item in proposal.get("required_data", [])}
 
 
+def _missing_proposal_data(proposal: dict[str, Any], repo_root: Path | None = None) -> list[str]:
+    root = repo_root or REPO_ROOT
+    missing: list[str] = []
+    for raw_path in _proposal_data(proposal):
+        if not raw_path:
+            continue
+        path = Path(raw_path)
+        resolved = path if path.is_absolute() else root / path
+        if not resolved.exists():
+            missing.append(raw_path)
+    return sorted(missing)
+
+
 def _normalized_proposal(proposal: dict[str, Any], mechanics: set[str], capability_ids: set[str]) -> dict[str, Any]:
     normalized = dict(proposal)
     normalized["mechanics"] = sorted(mechanics)
@@ -145,6 +158,7 @@ def _executor_sync_paths(executor: Any) -> list[str]:
     script = _executor_value(executor, "script_path")
     if script:
         paths.append(str(script))
+    paths.extend(str(path) for path in _executor_value(executor, "extra_sync_paths", []) or [])
     for item in _executor_value(executor, "required_data", []) or []:
         path = item.get("path") if isinstance(item, dict) else item
         if path:
@@ -278,6 +292,7 @@ def compile(
         _proposal_data(proposal),
         registry,
         proposal_capability_ids=capability_ids,
+        required_executor=str(proposal.get("required_executor") or ""),
     )
     if match is None:
         plan_path = None
@@ -305,6 +320,27 @@ def compile(
 
     matching_rules = registry.get("matching_rules") or {}
     if isinstance(matching_rules, dict) and matching_rules.get("require_required_data_exists") is True:
+        missing_proposal_data = _missing_proposal_data(proposal)
+        if missing_proposal_data:
+            spec_path = None
+            plan_path = None
+            if output_dir is not None:
+                out = Path(output_dir)
+                plan_path = _write_yaml(out / "implementation_plan.yaml", {
+                    "proposal_id": proposal.get("proposal_id"),
+                    "missing_data": missing_proposal_data,
+                    "reason": "proposal required data missing on disk",
+                })
+                spec_path = _write_yaml(
+                    out / "spec.yaml",
+                    _base_spec(proposal, "DRAFT", "proposal required data missing", mechanics=mechanics),
+                )
+            return CompileResult(
+                "DRAFT",
+                "proposal required data missing",
+                spec_path=spec_path,
+                implementation_plan_path=plan_path or "implementation_plan.yaml",
+            )
         missing_data = _missing_executor_data(match)
         if missing_data:
             spec_path = None

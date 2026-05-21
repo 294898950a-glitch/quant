@@ -71,7 +71,7 @@ artifacts_required:
 - report.yaml
 - l4_ack.yaml
 - diagnostic.yaml
-status: ARCHIVED
+status: COMPLETE
 automation:
   output_dir: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
   gatekeeper_after_run: false
@@ -135,17 +135,23 @@ ideation:
     vs score_4state 从未被 对比测试过。
   risk: 核心风险：trend_guard 只有3个状态（strong/weak/neutral），可能不如 score_4state 的4状态精细；趋势确认机制可能在2020年急跌时反应滞后。但这是用已有评估器可以快速验证
     的方向，不产生新的工程开销。
-updated_at: '2026-05-19T13:10:46Z'
+updated_at: '2026-05-20T06:30:13Z'
 data_quality_repair:
   status: prepared
   mode: deterministic_warehouse_column_derivation
-  old_data_root: .
+  old_data_root: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root
   new_data_root: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root
   source_decision: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/data_quality_decision.yaml
   data_fix_report: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_fix_report.yaml
-  derived_columns:
-    cb_daily:
-    - pct_chg
-    - cb_over_rate
-    cb_call:
-    - call_type
+  derived_columns: {}
+  copied_pool_sources:
+  - pool: pool_0
+    source: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root/pool_0
+  - pool: pool_2
+    source: data/cb_arb_concurrent_supervised_20260511_094500/pool_2
+  - pool: pool_4
+    source: data/cb_arb_concurrent_supervised_20260511_094500/pool_4
+  - pool: pool_6
+    source: data/cb_arb_concurrent_supervised_20260511_094500/pool_6
+  requeue_status: queued_after_data_repair
+  requeued_at: '2026-05-20T14:05:33'

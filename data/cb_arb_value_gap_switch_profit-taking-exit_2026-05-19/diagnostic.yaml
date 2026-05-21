@@ -1,0 +1,50 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+diagnostic_date: '2026-05-21'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: >
+  The simple value-gap-contraction profit-taking rule should be rejected. It produces
+  a small sealed-test improvement at target_fraction=0.50, but train and 2020 results
+  remain materially worse than baseline.
+verdict_rationale: >
+  The rule exits after partial repair of the value gap, which reduces some later
+  reversal risk but also increases turnover and does not preserve enough upside or
+  stress-period resilience. The best candidate has test excess of 8,805,558.08, but
+  train excess is -99,401,696.9 and 2020 validation excess is -83,720,136.9 versus
+  baseline.
+diagnostic_verdict: reject
+diagnostic_summary: >
+  Profit-taking by fixed gap contraction is not a sufficient solution for the current
+  strategy. It changes exit timing but does not distinguish whether the repaired gap
+  is a genuine value recovery, a temporary move, or a better opportunity-cost switch.
+key_findings:
+- id: stress_period_not_fixed
+  severity: high
+  detail: >
+    The best 0.50 target-fraction candidate loses -396,338,797.51 in 2020 validation
+    versus baseline -312,618,660.61, so the proposed exit does not fix the stress-period
+    failure mode.
+- id: train_worse_than_baseline
+  severity: high
+  detail: >
+    Best-candidate train total PnL is -971,541,385.54 versus baseline -872,139,688.64.
+    Train max drawdown is also worse than baseline.
+- id: small_test_gain_not_enough
+  severity: medium
+  detail: >
+    Test total PnL improves from -259,842,942.30 to -251,037,384.22, but this small
+    improvement does not offset weaker train and 2020 outcomes.
+- id: turnover_cost
+  severity: medium
+  detail: >
+    The best candidate increases train trade count from 3,893 to 6,295 and test trade
+    count from 772 to 1,272, indicating extra churn without enough compensation.
+root_cause: >
+  The rule treats partial value-gap repair as a generic sell signal. That is too blunt:
+  selling is only justified when the recovered position has worse remaining value than
+  the replacement opportunity after switching cost and stress-period risk are considered.
+recommendation: >
+  Do not promote profit_take_exit_gap_contraction. Future exit research should compare
+  remaining value against replacement opportunity and include stress-period behavior
+  directly, instead of selling solely because the original value gap has partially closed.

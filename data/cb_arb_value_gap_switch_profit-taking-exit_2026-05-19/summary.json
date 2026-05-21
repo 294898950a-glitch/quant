@@ -1,0 +1,153 @@
+{
+  "adoption_pass": false,
+  "best_candidate": {
+    "target_fraction": 0.5,
+    "train": {
+      "total_pnl": -971541385.54,
+      "trade_count": 6295,
+      "win_rate": 0.0199,
+      "avg_win": 782742.13,
+      "avg_loss": -173319.96,
+      "max_drawdown": -1061618844.5699964,
+      "excess_return": -99401696.9
+    },
+    "test": {
+      "total_pnl": -251037384.22,
+      "trade_count": 1272,
+      "win_rate": 0.011,
+      "avg_win": 482472.94,
+      "avg_loss": -204922.1,
+      "max_drawdown": -257377496.0099998,
+      "excess_return": 8805558.08
+    },
+    "validate_2020": {
+      "total_pnl": -396338797.51,
+      "trade_count": 1036,
+      "win_rate": 0.0618,
+      "avg_win": 193203.63,
+      "avg_loss": -420477.19,
+      "excess_return": -83720136.9
+    }
+  },
+  "all_candidates": [
+    {
+      "target_fraction": 0.25,
+      "train": {
+        "total_pnl": -1070833037.52,
+        "trade_count": 8376,
+        "win_rate": 0.015,
+        "avg_win": 807960.92,
+        "avg_loss": -142137.71,
+        "max_drawdown": -1167990664.639999,
+        "excess_return": -198693348.88
+      },
+      "test": {
+        "total_pnl": -266958167.18,
+        "trade_count": 1601,
+        "win_rate": 0.0087,
+        "avg_win": 497871.94,
+        "avg_loss": -172607.67,
+        "max_drawdown": -273523351.5199999,
+        "excess_return": -7115224.88
+      },
+      "validate_2020": {
+        "total_pnl": -445452265.5,
+        "trade_count": 1360,
+        "win_rate": 0.0574,
+        "avg_win": 184987.15,
+        "avg_loss": -358721.73,
+        "excess_return": -132833604.89
+      }
+    },
+    {
+      "target_fraction": 0.5,
+      "train": {
+        "total_pnl": -971541385.54,
+        "trade_count": 6295,
+        "win_rate": 0.0199,
+        "avg_win": 782742.13,
+        "avg_loss": -173319.96,
+        "max_drawdown": -1061618844.5699964,
+        "excess_return": -99401696.9
+      },
+      "test": {
+        "total_pnl": -251037384.22,
+        "trade_count": 1272,
+        "win_rate": 0.011,
+        "avg_win": 482472.94,
+        "avg_loss": -204922.1,
+        "max_drawdown": -257377496.0099998,
+        "excess_return": 8805558.08
+      },
+      "validate_2020": {
+        "total_pnl": -396338797.51,
+        "trade_count": 1036,
+        "win_rate": 0.0618,
+        "avg_win": 193203.63,
+        "avg_loss": -420477.19,
+        "excess_return": -83720136.9
+      }
+    },
+    {
+      "target_fraction": 0.75,
+      "train": {
+        "total_pnl": -905786615.73,
+        "trade_count": 5046,
+        "win_rate": 0.024,
+        "avg_win": 758537.29,
+        "avg_loss": -202552.21,
+        "max_drawdown": -987503303.0099983,
+        "excess_return": -33646927.09
+      },
+      "test": {
+        "total_pnl": -259399292.46,
+        "trade_count": 1055,
+        "win_rate": 0.0142,
+        "avg_win": 442041.36,
+        "avg_loss": -255797.99,
+        "max_drawdown": -265486698.52999976,
+        "excess_return": 443649.84
+      },
+      "validate_2020": {
+        "total_pnl": -333910253.83,
+        "trade_count": 809,
+        "win_rate": 0.0667,
+        "avg_win": 171942.59,
+        "avg_loss": -454563.12,
+        "excess_return": -21291593.22
+      }
+    }
+  ],
+  "baseline": {
+    "train": {
+      "total_pnl": -872139688.64,
+      "trade_count": 3893,
+      "win_rate": 0.0285,
+      "max_drawdown": -913542945.8299972
+    },
+    "test": {
+      "total_pnl": -259842942.3,
+      "trade_count": 772,
+      "win_rate": 0.0181,
+      "max_drawdown": -261221511.15000013
+    },
+    "validate_2020": {
+      "total_pnl": -312618660.61,
+      "trade_count": 633,
+      "win_rate": 0.0616
+    }
+  },
+  "train_period": {
+    "start": "20190101",
+    "end": "20241231"
+  },
+  "test_period": {
+    "start": "20250101",
+    "end": "20260508"
+  },
+  "swept_fractions": [
+    0.25,
+    0.5,
+    0.75
+  ]
+}

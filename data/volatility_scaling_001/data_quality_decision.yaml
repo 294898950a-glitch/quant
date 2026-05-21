@@ -1,0 +1,23 @@
+schema_version: 1
+run_id: volatility_scaling_001
+spec_path: data/volatility_scaling_001/spec.yaml
+validated_at: '2026-05-22T02:30:18'
+summary_sha256: 626231c0454e8797076946ef028f7c8441494302d244986b10f438cb3abcafbf
+status_code: 1
+confidence_code: 3
+blocking_issues: []
+warnings:
+- No null ratio, duplicate key, OHLC relationship, or price > 0 checks available in
+  the data summary; these quality aspects remain unverified and could affect results.
+- daily_value_gap_amounts.parquet starts at 2019-01-02, one day after train_start
+  (2019-01-01); that date is a public holiday, so the gap is harmless but no explicit
+  validation is provided.
+fix_plan: []
+decision_reason: All required files are present and readable, all required columns
+  exist, date ranges cover training and testing windows, no hard blocking anomalies
+  detected.
+status: pass
+confidence: low
+decision_source: ai_data_quality_judge
+ai_provider: deepseek
+response_hash: 1721a8eb0f4c4751

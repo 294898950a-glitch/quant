@@ -12,6 +12,8 @@ DEFAULT_CHANGE_LOG_PATH = Path("data/research_framework/framework_change_log.jso
 AUTO_RECORDED_PATH_PREFIXES = (
     "framework/autonomous/",
     "scripts/run_strategy_ideation_once.py",
+    "scripts/hermes_executor_handoff_tick.py",
+    "scripts/hermes_executor_handoff_wakeup.sh",
     "scripts/register_evidence_tool.py",
     "scripts/framework_preflight.py",
     "scripts/install_pre_commit_hook.sh",

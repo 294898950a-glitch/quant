@@ -138,6 +138,15 @@ allowlist:
     reason: cb_arb value-gap switch 评估分支主入口, 历史
     owner: claude
     archived_at: 2026-05-16
+  - script: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    reason: autonomous generated evaluator, gated by spec compiler, data quality, and queue runner
+    owner: codex
+  - script: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+    reason: autonomous generated evaluator, gated by spec compiler, data quality, and queue runner
+    owner: codex
+  - script: scripts/evaluate_cb_arb_volatility_position_scaling.py
+    reason: autonomous generated evaluator, gated by spec compiler, data quality, and queue runner
+    owner: codex
 
   # 网格搜索 (search_cb_arb_*) - 5 个历史
   - script: scripts/search_cb_arb_behavior_grid.py

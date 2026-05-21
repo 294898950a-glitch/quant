@@ -1,0 +1,37 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+diagnostic_date: '2026-05-21'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: >
+  The dynamic exit gap decay run completed and generated a selected candidate,
+  but the evaluator is not baseline-aligned. The result should not be used to
+  promote the strategy.
+verdict_rationale: >
+  The run reports very large raw generated returns and a selected parameter set,
+  but it does not compare against the current cb_arb_value_gap_switch baseline
+  under the same accounting contract. This makes the result useful for framework
+  validation, not strategy adoption.
+diagnostic_verdict: reject
+diagnostic_summary: >
+  Reject as adoption evidence; keep as evidence that the automated path can
+  generate, run, sync, and review executor results while still requiring stronger
+  baseline-contract enforcement for generated evaluators.
+key_findings:
+- id: completed_remote_run
+  severity: medium
+  detail: The Guangzhou VM run produced summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+- id: evaluator_contract_gap
+  severity: high
+  detail: The generated evaluator did not use the main strategy baseline comparison contract.
+- id: schema_repair_needed
+  severity: high
+  detail: Generated artifacts needed schema repair before framework preflight could pass.
+trade_stats:
+  best_params:
+    retrace_fraction: 0.3
+    min_hold_days: 1
+  train_win_rate: 0.26216201971222264
+  test_win_rate: 0.2584419926446005
+  yr2020_win_rate: 0.2516778523489933
+recommendation: Require generated evaluators to reuse the main baseline accounting contract before any adoption-grade run.

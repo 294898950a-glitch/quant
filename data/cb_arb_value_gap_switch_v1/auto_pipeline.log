@@ -1,0 +1,21 @@
+$ /usr/bin/python3 scripts/evaluate_cb_arb_dynamic_regime_switch.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --output-dir data/cb_arb_value_gap_switch_v1
+
+Traceback (most recent call last):
+  File "/home/ubuntu/projects/quant/scripts/evaluate_cb_arb_dynamic_regime_switch.py", line 247, in <module>
+    main()
+  File "/home/ubuntu/projects/quant/scripts/evaluate_cb_arb_dynamic_regime_switch.py", line 138, in main
+    df_all = pd.read_parquet(gap_path)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/io/parquet.py", line 671, in read_parquet
+    return impl.read(
+           ^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/io/parquet.py", line 253, in read
+    path_or_handle, handles, filesystem = _get_path_or_handle(
+                                          ^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/io/parquet.py", line 141, in _get_path_or_handle
+    handles = get_handle(
+              ^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/io/common.py", line 939, in get_handle
+    handle = open(handle, ioargs.mode)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: 'data/cb_arb_concurrent_supervised_20260511_094500/data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet'

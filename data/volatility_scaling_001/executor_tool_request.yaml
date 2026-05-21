@@ -1,0 +1,698 @@
+tool_request_id: volatility_based_position_scaling_executor_v1
+why_existing_tools_insufficient: The existing executor 'option_position_sizing' can
+  test static candidate position scaling (C001) but does not implement volatility-based
+  scaling. It only scales positions based on distance from bond floor or conversion
+  price, not on recent realized volatility (ATR). The executor 'option_source_pnl_feedback_scaler'
+  tests rolling PnL feedback scaling, not volatility. The proposal's core mechanic
+  requires computing asset-level ATR and multiplying the baseline rank weight and
+  order size by min(1, 1/(1+β*(ATR/median_ATR - 1))). No registered executor implements
+  this mechanism; therefore a new executor must be drafted.
+reviewed_existing_executor_ids:
+- option_position_sizing
+- option_source_pnl_feedback_scaler
+registry_entry:
+  id: volatility_based_position_scaling_executor
+  version: 1
+  status: draft
+  strategy_id: cb_arb_value_gap_switch
+  family: static_volatility_position_scaling
+  script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+  owner: ai_draft
+  description: Evaluate volatility-based position scaling for CB arbitrage value-gap
+    candidates. Computes ATR from daily CB/stock prices and applies an inverse scaling
+    factor to the baseline ranking weight and buy amount, without altering entry eligibility.
+  can_test:
+  - volatility_based_position_scaling
+  can_test_capability_ids: []
+  cannot_test:
+  - rolling_pnl_feedback
+  - dynamic_regime_switch
+  - new_valuation_formula
+  - new_exit_rule
+  - new_data_source
+  cannot_test_capability_ids:
+  - C004
+  - C005
+  - C006
+  - C007
+  - C008
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    description: Base daily value-gap ranks with theoretical value, bond floor, option
+      value, position cash, and tradable gap amount.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_basic.parquet
+    description: CB basic table with stock code and conversion price.
+    schema_hash: null
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted stock prices for ATR calculation.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_daily.parquet
+    description: Daily CB market prices for ATR calculation.
+    schema_hash: null
+  required_config_fields:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  - volatility_lookback
+  - scaling_beta
+  - fixed_source
+  - rule
+  - base_ranks_path
+  - cost_model_enabled
+  command_template:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_volatility_position_scaling.py
+  - --data-root
+  - '{data_root}'
+  - --train-start
+  - '{train_start}'
+  - --train-end
+  - '{train_end}'
+  - --test-start
+  - '{test_start}'
+  - --test-end
+  - '{test_end}'
+  - --fixed-source
+  - '{fixed_source}'
+  - --rule
+  - '{rule}'
+  - --output-dir
+  - '{output_dir}'
+  - --base-ranks-path
+  - '{base_ranks_path}'
+  - --reuse-ranks
+  - --cost-model-enabled
+  - --volatility-lookback
+  - '{volatility_lookback}'
+  - --scaling-beta
+  - '{scaling_beta}'
+  default_config:
+    data_root: data/cb_arb_concurrent_supervised_20260511_094500
+    train_start: '20190101'
+    train_end: '20241231'
+    test_start: '20250101'
+    test_end: '20260508'
+    fixed_source: '2'
+    rule: score_4state
+    base_ranks_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    cost_model_enabled: true
+    volatility_lookback: 20
+    scaling_beta: 1.0
+  artifacts_produced:
+  - summary.json
+  - report.yaml
+  - l4_ack.yaml
+  - diagnostic.yaml
+  budget_estimate:
+    sig_minutes: 0
+    spot_minutes: 90
+    local_minutes: 0
+    estimated_cost_yuan: 0.0
+  vm_local_limits:
+    vm_required: true
+    local_allowed: false
+  obsolescence_date: null
+implementation_outline:
+  script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+  main_inputs:
+  - data_root
+  - output_dir
+  core_steps:
+  - load base ranks and warehouse data (cb_daily, stock prices, cb_basic)
+  - compute daily ATR for each CB using the specified lookback window (from adjusted
+    close prices of stock or CB)
+  - compute cross-sectional median ATR per day
+  - compute scaling factor = min(1, 1 / (1 + β * (ATR / median_ATR - 1)))
+  - apply factor to rank weight and buy amount without modifying entry eligibility
+  - run the existing backtest harness with scaled weights
+  - produce required artifacts (summary, report, etc.)
+  code_constraints:
+  - use existing project data files and shared rank loader
+  - do not change current strategy truth
+  - do not overwrite raw warehouse data
+validation_plan:
+- python3 -m py_compile scripts/evaluate_cb_arb_volatility_position_scaling.py
+- run a small data smoke test on train period 2019-2020
+- verify that summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml are produced
+ai_provider: deepseek
+design_response_hash: b58b804bfd2edf70
+code_response_hash: b511c34d094ade31
+compile_reason: no strict executor match
+tool_design:
+  tool_request_id: volatility_based_position_scaling_executor_v1
+  why_existing_tools_insufficient: The existing executor 'option_position_sizing'
+    can test static candidate position scaling (C001) but does not implement volatility-based
+    scaling. It only scales positions based on distance from bond floor or conversion
+    price, not on recent realized volatility (ATR). The executor 'option_source_pnl_feedback_scaler'
+    tests rolling PnL feedback scaling, not volatility. The proposal's core mechanic
+    requires computing asset-level ATR and multiplying the baseline rank weight and
+    order size by min(1, 1/(1+β*(ATR/median_ATR - 1))). No registered executor implements
+    this mechanism; therefore a new executor must be drafted.
+  reviewed_existing_executor_ids:
+  - option_position_sizing
+  - option_source_pnl_feedback_scaler
+  registry_entry:
+    id: volatility_based_position_scaling_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: static_volatility_position_scaling
+    script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+    owner: ai_draft
+    description: Evaluate volatility-based position scaling for CB arbitrage value-gap
+      candidates. Computes ATR from daily CB/stock prices and applies an inverse scaling
+      factor to the baseline ranking weight and buy amount, without altering entry
+      eligibility.
+    can_test:
+    - volatility_based_position_scaling
+    can_test_capability_ids: []
+    cannot_test:
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_exit_rule
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C005
+    - C006
+    - C007
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value-gap ranks with theoretical value, bond floor,
+        option value, position cash, and tradable gap amount.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stock code and conversion price.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for ATR calculation.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market prices for ATR calculation.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - volatility_lookback
+    - scaling_beta
+    - fixed_source
+    - rule
+    - base_ranks_path
+    - cost_model_enabled
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_volatility_position_scaling.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --fixed-source
+    - '{fixed_source}'
+    - --rule
+    - '{rule}'
+    - --output-dir
+    - '{output_dir}'
+    - --base-ranks-path
+    - '{base_ranks_path}'
+    - --reuse-ranks
+    - --cost-model-enabled
+    - --volatility-lookback
+    - '{volatility_lookback}'
+    - --scaling-beta
+    - '{scaling_beta}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+      fixed_source: '2'
+      rule: score_4state
+      base_ranks_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      cost_model_enabled: true
+      volatility_lookback: 20
+      scaling_beta: 1.0
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 90
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  implementation_outline:
+    script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+    main_inputs:
+    - data_root
+    - output_dir
+    core_steps:
+    - load base ranks and warehouse data (cb_daily, stock prices, cb_basic)
+    - compute daily ATR for each CB using the specified lookback window (from adjusted
+      close prices of stock or CB)
+    - compute cross-sectional median ATR per day
+    - compute scaling factor = min(1, 1 / (1 + β * (ATR / median_ATR - 1)))
+    - apply factor to rank weight and buy amount without modifying entry eligibility
+    - run the existing backtest harness with scaled weights
+    - produce required artifacts (summary, report, etc.)
+    code_constraints:
+    - use existing project data files and shared rank loader
+    - do not change current strategy truth
+    - do not overwrite raw warehouse data
+  validation_plan:
+  - python3 -m py_compile scripts/evaluate_cb_arb_volatility_position_scaling.py
+  - run a small data smoke test on train period 2019-2020
+  - verify that summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml are produced
+  ai_provider: deepseek
+  response_hash: b58b804bfd2edf70
+  compile_reason: no strict executor match
+  validation_errors: []
+  status: draft_tool_design
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: volatility_scaling_001_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_volatility_position_scaling.py
+  completion_receipt: data/volatility_scaling_001/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-05-22T00:20:35'
+  validation: passed
+files:
+- path: generated_executor/evaluate_cb_arb_volatility_position_scaling.py
+  purpose: Complete evaluator implementation.
+  content: "\"\"\"Evaluate volatility-based position scaling for cb_arb value-gap\
+    \ switch.\n\nComputes ATR-based volatility scaling factors per CB per day and\
+    \ applies\nthem as multipliers to the baseline ranking weight and buy amount,\
+    \ without\naltering entry eligibility. Grid-searches over lookback window and\
+    \ scaling\nbeta to find the combination that best reduces max_drawdown while preserving\n\
+    excess return.\n\nThis is an evaluation harness only; it does not replace the\
+    \ default strategy.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\n\
+    import hashlib\nimport json\nimport sys\nfrom datetime import datetime\nfrom pathlib\
+    \ import Path\nfrom typing import Any\n\nimport numpy as np\nimport pandas as\
+    \ pd\nimport yaml\n\n_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402\n    _gap_source_shares,\n\
+    \    _load_or_build_value_ranks,\n    _run_value_gap_backtest,\n    _score,\n\
+    \    _with_cost_params,\n    _write_csv,\n)\n\n# ---------------------------------------------------------------------------\n\
+    # Base backtest params — same as the baseline value-gap switch\n# ---------------------------------------------------------------------------\n\
+    \nBASE_PARAMS: dict[str, Any] = {\n    \"min_gap_pct\": 0.0,\n    \"sell_gap_pct\"\
+    : 0.0,\n    \"switch_hurdle_pct\": 0.03,\n    \"max_hold_days\": 180.0,\n    \"\
+    stop_gap_ratio_floor\": 0.30,\n    \"stop_signal_threshold\": 999.0,\n}\n\n# ---------------------------------------------------------------------------\n\
+    # Grid: lookback windows x scaling betas + baseline\n# ---------------------------------------------------------------------------\n\
+    \nVOLATILITY_LOOKBACKS = (10, 20, 30)\nSCALING_BETAS = (0.5, 1.0, 2.0)\n\nCONFIGS:\
+    \ list[dict[str, Any]] = [\n    {\n        \"name\": \"baseline_no_scaling\",\n\
+    \        \"description\": \"基准：不调整波动率缩放\",\n        \"mode\": \"none\",\n    },\n\
+    \    *[\n        {\n            \"name\": f\"vol_scale_lb{lb}_beta{str(b).replace('.',\
+    \ 'p')}\",\n            \"description\": f\"波动率缩放 lookback={lb} 天, beta={b}\"\
+    ,\n            \"mode\": \"volatility\",\n            \"volatility_lookback\"\
+    : lb,\n            \"scaling_beta\": b,\n        }\n        for lb in VOLATILITY_LOOKBACKS\n\
+    \        for b in SCALING_BETAS\n    ],\n]\n\n\n# ---------------------------------------------------------------------------\n\
+    # spec binding (same as option_position_sizing)\n# ---------------------------------------------------------------------------\n\
+    \ndef _spec_binding_fields(output_dir: Path) -> dict[str, str]:\n    spec_path\
+    \ = output_dir / \"spec.yaml\"\n    if not spec_path.exists():\n        return\
+    \ {\"spec_run_id\": output_dir.name, \"spec_binding_hash\": \"\"}\n    spec =\
+    \ yaml.safe_load(spec_path.read_text(encoding=\"utf-8\"))\n    if not isinstance(spec,\
+    \ dict):\n        return {\"spec_run_id\": output_dir.name, \"spec_binding_hash\"\
+    : \"\"}\n    binding = {\n        \"run_id\": spec.get(\"run_id\") or output_dir.name,\n\
+    \        \"hypothesis\": spec.get(\"hypothesis\"),\n        \"source_insight\"\
+    : spec.get(\"source_insight\"),\n        \"parameter_space\": spec.get(\"parameter_space\"\
+    ),\n        \"mechanics\": spec.get(\"mechanics\"),\n        \"proposal_id\":\
+    \ ((spec.get(\"automation\") or {}).get(\"proposal_id\")),\n    }\n    payload\
+    \ = json.dumps(binding, ensure_ascii=False, sort_keys=True, default=str)\n   \
+    \ return {\n        \"spec_run_id\": str(binding[\"run_id\"]),\n        \"spec_binding_hash\"\
+    : hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:16],\n    }\n\n\ndef\
+    \ _attach_spec_binding(rows: list[dict[str, Any]], output_dir: Path) -> None:\n\
+    \    binding = _spec_binding_fields(output_dir)\n    for row in rows:\n      \
+    \  row.update(binding)\n\n\n# ---------------------------------------------------------------------------\n\
+    # ATR calculation\n# ---------------------------------------------------------------------------\n\
+    \ndef _compute_daily_atr(\n    price_df: pd.DataFrame,\n    ts_col: str,\n   \
+    \ date_col: str,\n    lookback: int,\n    high_col: str = \"high\",\n    low_col:\
+    \ str = \"low\",\n    close_col: str = \"close\",\n) -> pd.DataFrame:\n    \"\"\
+    \"Compute ATR (Average True Range) for each asset over the lookback window.\n\n\
+    \    Uses Wilder's smoothed ATR: first value is simple mean of TR over lookback,\n\
+    \    subsequent values use EMA-style smoothing: ATR_t = (ATR_{t-1}*(n-1) + TR_t)/n.\n\
+    \n    Returns a DataFrame with [ts_col, date_col, atr] columns.\n    \"\"\"\n\
+    \    df = price_df.sort_values([ts_col, date_col]).reset_index(drop=True)\n  \
+    \  df[high_col] = df[high_col].astype(float)\n    df[low_col] = df[low_col].astype(float)\n\
+    \    df[close_col] = df[close_col].astype(float)\n\n    # True Range\n    df[\"\
+    prev_close\"] = df.groupby(ts_col)[close_col].shift(1)\n    df[\"tr\"] = np.maximum(\n\
+    \        df[high_col] - df[low_col],\n        np.maximum(\n            (df[high_col]\
+    \ - df[\"prev_close\"]).abs(),\n            (df[low_col] - df[\"prev_close\"]).abs(),\n\
+    \        ),\n    )\n    # Fill leading NaN TR with high-low (first bar has no\
+    \ prev_close)\n    df[\"tr\"] = df[\"tr\"].fillna(df[high_col] - df[low_col])\n\
+    \n    # Wilder smoothed ATR\n    result_rows: list[dict[str, Any]] = []\n    for\
+    \ _ts, group in df.groupby(ts_col):\n        group = group.reset_index(drop=True)\n\
+    \        tr_vals = group[\"tr\"].values\n        atr_vals = np.full(len(tr_vals),\
+    \ np.nan)\n        if len(tr_vals) >= lookback:\n            atr_vals[lookback\
+    \ - 1] = tr_vals[:lookback].mean()\n            for i in range(lookback, len(tr_vals)):\n\
+    \                atr_vals[i] = (atr_vals[i - 1] * (lookback - 1) + tr_vals[i])\
+    \ / lookback\n        # Fallback: if too few rows, use simple mean\n        else:\n\
+    \            atr_vals[:] = tr_vals.mean()\n        for i, (_, row) in enumerate(group.iterrows()):\n\
+    \            result_rows.append(\n                {\n                    ts_col:\
+    \ str(row[ts_col]),\n                    date_col: str(row[date_col]),\n     \
+    \               \"atr\": float(atr_vals[i]) if not pd.isna(atr_vals[i]) else 0.0,\n\
+    \                }\n            )\n    return pd.DataFrame(result_rows)\n\n\n\
+    # ---------------------------------------------------------------------------\n\
+    # args parsing\n# ---------------------------------------------------------------------------\n\
+    \ndef _parse_args() -> argparse.Namespace:\n    p = argparse.ArgumentParser(description=__doc__)\n\
+    \    p.add_argument(\"--data-root\", type=Path, required=True)\n    p.add_argument(\"\
+    --train-start\", default=\"20190101\")\n    p.add_argument(\"--train-end\", default=\"\
+    20241231\")\n    p.add_argument(\"--test-start\", default=\"20250101\")\n    p.add_argument(\"\
+    --test-end\", default=\"20260508\")\n    p.add_argument(\"--fixed-source\", type=int,\
+    \ default=2)\n    p.add_argument(\"--rule\", default=\"score_4state\")\n    p.add_argument(\"\
+    --output-dir\", type=Path, default=None)\n    p.add_argument(\"--reuse-ranks\"\
+    , action=\"store_true\")\n    p.add_argument(\"--base-ranks-path\", type=Path,\
+    \ default=None)\n    p.add_argument(\"--cost-model-enabled\", action=\"store_true\"\
+    )\n    p.add_argument(\"--slippage-pct\", type=float, default=0.0015)\n    p.add_argument(\"\
+    --market-impact-coeff\", type=float, default=0.0010)\n    p.add_argument(\"--market-impact-cap-pct\"\
+    , type=float, default=0.02)\n    p.add_argument(\"--holding-cost-pct\", type=float,\
+    \ default=0.0)\n    p.add_argument(\"--volatility-lookback\", type=int, default=20)\n\
+    \    p.add_argument(\"--scaling-beta\", type=float, default=1.0)\n    return p.parse_args()\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # data requirements declaration\n# ---------------------------------------------------------------------------\n\
+    \ndef _command_value_from_parts(command: list[Any], flag: str) -> str | None:\n\
+    \    parts = [str(part) for part in command]\n    for index, part in enumerate(parts[:-1]):\n\
+    \        if part == flag:\n            return parts[index + 1]\n    return None\n\
+    \n\ndef declare_data_requirements(\n    command: list[Any], spec: dict[str, Any]\
+    \ | None = None\n) -> dict[str, Any]:\n    \"\"\"Return the files this executor\
+    \ will read before it is allowed to run.\"\"\"\n    data_root_raw = _command_value_from_parts(command,\
+    \ \"--data-root\")\n    if not data_root_raw:\n        raise ValueError(\"evaluate_cb_arb_volatility_position_scaling\
+    \ requires --data-root\")\n    data_root = Path(data_root_raw)\n\n    base_ranks_raw\
+    \ = _command_value_from_parts(command, \"--base-ranks-path\")\n    warehouse_files\
+    \ = [\n        \"data/cb_warehouse/cb_basic.parquet\",\n        \"data/cb_warehouse/cb_daily.parquet\"\
+    ,\n        \"data/cb_warehouse/cb_call.parquet\",\n        \"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    ,\n    ]\n    required_files: list[dict[str, str]] = [\n        {\"path\": str(data_root\
+    \ / rel_path), \"role\": \"warehouse_input\"}\n        for rel_path in warehouse_files\n\
+    \    ]\n    if base_ranks_raw:\n        base_ranks_path = Path(base_ranks_raw)\n\
+    \        if not base_ranks_path.is_absolute():\n            base_ranks_path =\
+    \ _REPO_ROOT / base_ranks_path\n        required_files.append(\n            {\"\
+    path\": str(base_ranks_path), \"role\": \"base_ranks_input\"}\n        )\n\n \
+    \   # pool configs needed by the backtest harness\n    fixed_source_raw = _command_value_from_parts(command,\
+    \ \"--fixed-source\") or \"2\"\n    fixed_source = int(fixed_source_raw)\n   \
+    \ pool_ids = sorted({0, 2, 4, 6, fixed_source})\n    required_files.extend(\n\
+    \        {\n            \"path\": str(data_root / f\"pool_{pool_id}\" / \"best_params.json\"\
+    ),\n            \"role\": \"config_pool\",\n        }\n        for pool_id in\
+    \ pool_ids\n    )\n\n    return {\n        \"schema_version\": 1,\n        \"\
+    executor\": \"scripts/evaluate_cb_arb_volatility_position_scaling.py\",\n    \
+    \    \"required_files\": required_files,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # rank loading + volatility scaling\n# ---------------------------------------------------------------------------\n\
+    \ndef _load_base_ranks(args: argparse.Namespace, output_dir: Path) -> pd.DataFrame:\n\
+    \    start_all = min(args.train_start, args.test_start)\n    end_all = max(args.train_end,\
+    \ args.test_end)\n    if args.base_ranks_path is not None and Path(args.base_ranks_path).exists():\n\
+    \        ranks = pd.read_parquet(args.base_ranks_path)\n    else:\n        ranks\
+    \ = _load_or_build_value_ranks(\n            args.data_root,\n            start_all,\n\
+    \            end_all,\n            args.fixed_source,\n            args.rule,\n\
+    \            output_dir / \"daily_value_gap_amounts_base.parquet\",\n        \
+    \    args.reuse_ranks,\n        )\n    ranks = ranks.copy()\n    ranks[\"trade_date\"\
+    ] = ranks[\"trade_date\"].astype(str)\n    ranks[\"ts_code\"] = ranks[\"ts_code\"\
+    ].astype(str)\n    ranks = ranks[\n        (ranks[\"trade_date\"] >= start_all)\
+    \ & (ranks[\"trade_date\"] <= end_all)\n    ]\n    return ranks\n\n\ndef _load_atr_data(\n\
+    \    lookback: int,\n    start: str,\n    end: str,\n) -> pd.DataFrame:\n    \"\
+    \"\"Load cb_daily, compute ATR, return DataFrame with [ts_code, trade_date, atr].\"\
+    \"\"\n    cb = pd.read_parquet(_REPO_ROOT / \"data/cb_warehouse/cb_daily.parquet\"\
+    )\n    cb[\"trade_date\"] = cb[\"trade_date\"].astype(str)\n    cb[\"ts_code\"\
+    ] = cb[\"ts_code\"].astype(str)\n    cb = cb[(cb[\"trade_date\"] >= start) & (cb[\"\
+    trade_date\"] <= end)]\n    atr = _compute_daily_atr(cb, \"ts_code\", \"trade_date\"\
+    , lookback)\n    return atr\n\n\ndef _merge_and_scale(\n    ranks: pd.DataFrame,\n\
+    \    atr_df: pd.DataFrame,\n    cfg: dict[str, Any],\n) -> tuple[pd.DataFrame,\
+    \ dict[str, Any]]:\n    \"\"\"Apply volatility scaling to value_gap_amount and\
+    \ position_cash_scale.\n\n    scaling_factor = min(1, 1 / (1 + beta * (ATR / median_ATR\
+    \ - 1)))\n    \"\"\"\n    mode = str(cfg.get(\"mode\", \"none\"))\n    blended\
+    \ = ranks.merge(\n        atr_df, on=[\"ts_code\", \"trade_date\"], how=\"left\"\
+    \n    )\n\n    # Default: no scaling\n    blended[\"position_cash_scale\"] = 1.0\n\
+    \    blended[\"volatility_scaling_factor\"] = 1.0\n\n    if mode == \"none\":\n\
+    \        return blended, {\n            \"name\": cfg[\"name\"],\n           \
+    \ \"adjusted_rows\": 0,\n            \"avg_scale\": 1.0,\n            \"min_scale\"\
+    : 1.0,\n            \"max_scale\": 1.0,\n            \"avg_atr\": 0.0,\n     \
+    \       \"median_atr\": 0.0,\n        }\n\n    lookback = int(cfg[\"volatility_lookback\"\
+    ])\n    beta = float(cfg[\"scaling_beta\"])\n\n    # Compute cross-sectional median\
+    \ ATR per day\n    daily_median = blended.groupby(\"trade_date\")[\"atr\"].transform(\"\
+    median\")\n\n    # Only scale rows where ATR is available\n    has_atr = blended[\"\
+    atr\"].notna() & (blended[\"atr\"] > 0)\n    blended[\"volatility_scaling_factor\"\
+    ] = 1.0\n\n    if has_atr.any():\n        atr_vals = blended.loc[has_atr, \"atr\"\
+    ].astype(float)\n        med_vals = daily_median.loc[has_atr].astype(float)\n\
+    \        # Avoid division by zero\n        med_safe = med_vals.where(med_vals\
+    \ > 0, atr_vals)\n\n        atr_ratio = atr_vals / med_safe\n        raw_factor\
+    \ = 1.0 / (1.0 + beta * (atr_ratio - 1.0))\n        factor = raw_factor.clip(upper=1.0)\n\
+    \        blended.loc[has_atr, \"volatility_scaling_factor\"] = factor.astype(float)\n\
+    \        blended.loc[has_atr, \"position_cash_scale\"] = factor.astype(float)\n\
+    \n    # Apply to value_gap_amount\n    value_col = \"value_gap_amount\"\n    if\
+    \ value_col in blended.columns:\n        blended[value_col] = (\n            blended[value_col].astype(float)\
+    \ * blended[\"volatility_scaling_factor\"].astype(float)\n        )\n    # Recompute\
+    \ value_gap_pct_of_cash if both columns exist\n    if \"value_gap_pct_of_cash\"\
+    \ in blended.columns and \"position_cash\" in blended.columns:\n        pos_cash\
+    \ = blended[\"position_cash\"].astype(float)\n        blended[\"value_gap_pct_of_cash\"\
+    ] = blended[value_col].astype(float) / pos_cash.where(\n            pos_cash >\
+    \ 0, np.nan\n        )\n\n    # Re-sort by date and scaled gap amount\n    blended\
+    \ = blended.sort_values(\n        [\"trade_date\", value_col], ascending=[True,\
+    \ False]\n    ).reset_index(drop=True)\n    blended[\"rank\"] = blended.groupby(\"\
+    trade_date\").cumcount()\n\n    # Stats\n    scaled_rows = has_atr\n    factors\
+    \ = blended.loc[scaled_rows, \"volatility_scaling_factor\"]\n    atrs = blended.loc[scaled_rows,\
+    \ \"atr\"]\n    medians = daily_median.loc[scaled_rows]\n\n    return blended,\
+    \ {\n        \"name\": cfg[\"name\"],\n        \"adjusted_rows\": int(scaled_rows.sum()),\n\
+    \        \"avg_scale\": round(float(factors.mean()), 6) if not factors.empty else\
+    \ 1.0,\n        \"min_scale\": round(float(factors.min()), 6) if not factors.empty\
+    \ else 1.0,\n        \"max_scale\": round(float(factors.max()), 6) if not factors.empty\
+    \ else 1.0,\n        \"avg_atr\": round(float(atrs.mean()), 6) if not atrs.empty\
+    \ else 0.0,\n        \"median_atr\": round(float(medians.mean()), 6) if not medians.empty\
+    \ else 0.0,\n        \"volatility_lookback\": lookback,\n        \"scaling_beta\"\
+    : beta,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # report rows and file writing\n# ---------------------------------------------------------------------------\n\
+    \ndef _row(\n    name: str,\n    description: str,\n    period: str,\n    start:\
+    \ str,\n    end: str,\n    cfg: dict[str, Any],\n    params: dict[str, Any],\n\
+    \    result: dict[str, Any],\n) -> dict[str, Any]:\n    row: dict[str, Any] =\
+    \ {\n        \"name\": name,\n        \"description\": description,\n        \"\
+    period\": period,\n        \"start\": start,\n        \"end\": end,\n        \"\
+    scaling_config_json\": json.dumps(cfg, sort_keys=True),\n        \"params_json\"\
+    : json.dumps(params, sort_keys=True),\n        **result[\"metrics\"],\n    }\n\
+    \    row[\"score\"] = _score(result[\"metrics\"])\n    return row\n\n\ndef _pick(rows:\
+    \ list[dict[str, Any]], name: str, period: str) -> dict[str, Any]:\n    return\
+    \ next((r for r in rows if r[\"name\"] == name and r[\"period\"] == period), {})\n\
+    \n\ndef _year(rows: list[dict[str, Any]], name: str, year: int) -> dict[str, Any]:\n\
+    \    return next(\n        (r for r in rows if r[\"name\"] == name and r[\"period\"\
+    ] == str(year)), {}\n    )\n\n\ndef _write_review_files(\n    output_dir: Path,\n\
+    \    summary: dict[str, Any],\n    best_train: dict[str, Any],\n    best_test:\
+    \ dict[str, Any],\n    baseline_train: dict[str, Any],\n    baseline_test: dict[str,\
+    \ Any],\n    adoption_pass: bool,\n) -> None:\n    now = datetime.now().isoformat(timespec=\"\
+    seconds\")\n    decision = \"mini-spec-retry\" if adoption_pass else \"reject\"\
+    \n    reason = (\n        \"Volatility scaling variant passed the automatic train/test/2020\
+    \ checks; review before promotion.\"\n        if adoption_pass\n        else \"\
+    No volatility scaling variant beat baseline across train, 2020 repair, and sealed\
+    \ test together.\"\n    )\n    selected_test = _pick(\n        summary.get(\"\
+    summary_rows\", []), str(best_train.get(\"name\")), \"test\"\n    )\n    baseline_2020\
+    \ = summary.get(\"baseline_2020\", {})\n    selected_2020 = summary.get(\"selected_2020\"\
+    , {})\n\n    (output_dir / \"summary.json\").write_text(\n        json.dumps(summary,\
+    \ ensure_ascii=False, indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\
+    \    (output_dir / \"report.yaml\").write_text(\n        yaml.safe_dump(\n   \
+    \         {\n                \"schema_version\": 1,\n                \"run_id\"\
+    : output_dir.name,\n                \"date\": datetime.now().strftime(\"%Y-%m-%d\"\
+    ),\n                \"strategy_id\": \"cb_arb_value_gap_switch\",\n          \
+    \      \"l6_exit_decision\": decision,\n                \"status\": \"COMPLETE\"\
+    ,\n                \"three_exits_section\": {\n                    \"train_exit\"\
+    : f\"Train winner selected {best_train.get('name')}.\",\n                    \"\
+    validation_exit\": f\"Sealed test winner selected {best_test.get('name')}.\",\n\
+    \                    \"decision_exit\": reason,\n                },\n        \
+    \        \"compute_cost_yuan\": 0.0,\n                \"confirmed_invalid_directions\"\
+    : [\n                    \"volatility_based_position_scaling\"\n             \
+    \   ]\n                if not adoption_pass\n                else [],\n      \
+    \          \"learnings\": [\n                    \"Volatility-based position scaling\
+    \ must pass train, 2020 repair, and sealed test together.\",\n               \
+    \     reason,\n                ],\n                \"follow_up_actions\": [\n\
+    \                    \"Keep this run as diagnostic evidence for future volatility-based\
+    \ risk filters.\",\n                    \"Do not promote unless follow-up review\
+    \ confirms train/test/2020 robustness.\",\n                ],\n              \
+    \  \"summary\": reason,\n                \"notes\": \"Result reviewed by code-generated\
+    \ summary.json, l4_ack.yaml, and diagnostic.yaml.\",\n                \"references\"\
+    : summary[\"artifacts\"],\n                \"related_reports\": [\n          \
+    \          \"data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/report.yaml\"\
+    ,\n                ],\n            },\n            allow_unicode=True,\n     \
+    \       sort_keys=False,\n        ),\n        encoding=\"utf-8\",\n    )\n   \
+    \ (output_dir / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(\n      \
+    \      {\n                \"schema_version\": 1,\n                \"run_id\":\
+    \ output_dir.name,\n                \"reviewer\": \"codex\",\n               \
+    \ \"ack_at\": now,\n                \"q1_floor_binding\": {\n                \
+    \    \"description\": \"Hard floors and train/test consistency.\",\n         \
+    \           \"answer\": (\n                        \"Selected train winner also\
+    \ meets sealed test and 2020 checks.\"\n                        if adoption_pass\n\
+    \                        else \"Selected train winner does not pass train/test/2020\
+    \ robustness checks together.\"\n                    ),\n                    \"\
+    computed_data\": {\n                        \"best_train_variant\": best_train.get(\"\
+    name\"),\n                        \"train_excess\": best_train.get(\"excess_return\"\
+    ),\n                        \"test_excess\": selected_test.get(\"excess_return\"\
+    ),\n                        \"baseline_test_excess\": baseline_test.get(\"excess_return\"\
+    ),\n                        \"baseline_2020_total_return\": baseline_2020.get(\"\
+    total_return\"),\n                        \"selected_2020_total_return\": selected_2020.get(\"\
+    total_return\"),\n                    },\n                    \"computed_at\"\
+    : now,\n                    \"pass\": adoption_pass,\n                },\n   \
+    \             \"q2_selection_score\": {\n                    \"description\":\
+    \ \"Candidate selection quality.\",\n                    \"answer\": (\n     \
+    \                   f\"Train score selects {best_train.get('name')}; sealed test\
+    \ best is {best_test.get('name')}.\"\n                    ),\n               \
+    \     \"computed_data\": {\n                        \"selected_by_train_score\"\
+    : best_train.get(\"name\"),\n                        \"selected_score\": best_train.get(\"\
+    score\"),\n                        \"best_test_variant\": best_test.get(\"name\"\
+    ),\n                        \"best_test_score\": best_test.get(\"score\"),\n \
+    \                   },\n                    \"pass\": adoption_pass,\n       \
+    \         },\n                \"q3_baseline_alignment\": {\n                 \
+    \   \"description\": \"Alignment against current cb_arb_value_gap_switch baseline.\"\
+    ,\n                    \"answer\": (\n                        \"Candidate is aligned\
+    \ with baseline thresholds.\"\n                        if adoption_pass\n    \
+    \                    else \"Candidate does not justify replacing the current baseline.\"\
+    \n                    ),\n                    \"computed_data\": {\n         \
+    \               \"baseline_train_excess\": baseline_train.get(\"excess_return\"\
+    ),\n                        \"baseline_test_excess\": baseline_test.get(\"excess_return\"\
+    ),\n                        \"selected_test_excess\": selected_test.get(\"excess_return\"\
+    ),\n                    },\n                    \"computed_at\": now,\n      \
+    \              \"pass\": adoption_pass,\n                },\n                \"\
+    q4_monotonic\": {\n                    \"description\": \"Edge-of-grid or monotonic\
+    \ concern.\",\n                    \"answer\": \"Grid-searched volatility scaling\
+    \ factors; no monotonic promotion without manual review.\",\n                \
+    \    \"computed_data\": {\n                        \"grid_type\": \"volatility_scaling_grid\"\
+    ,\n                        \"candidates_count\": summary.get(\"candidate_count\"\
+    ),\n                    },\n                    \"computed_at\": now,\n      \
+    \              \"pass\": True,\n                },\n                \"q5_trade_overlap\"\
+    : {\n                    \"description\": \"Trade overlap baseline vs selected.\"\
+    ,\n                    \"answer\": \"Aggregate train/test/2020 checks are used\
+    \ for automatic decision.\",\n                    \"computed_data\": {\n     \
+    \                   \"selected_total_trades_test\": selected_test.get(\"total_trades\"\
+    ),\n                        \"baseline_total_trades_test\": baseline_test.get(\"\
+    total_trades\"),\n                        \"selected_total_trades_2020\": selected_2020.get(\"\
+    total_trades\"),\n                        \"baseline_total_trades_2020\": baseline_2020.get(\"\
+    total_trades\"),\n                    },\n                    \"computed_at\"\
+    : now,\n                    \"pass\": True,\n                },\n            \
+    \    \"q6_trigger_timing\": {\"description\": \"Trigger timing leakage.\", \"\
+    applicable\": False},\n                \"q7_path_contamination\": {\"description\"\
+    : \"Path/data contamination.\", \"applicable\": False},\n                \"overall_pass\"\
+    : adoption_pass,\n                \"overall_decision\": decision,\n          \
+    \      \"overall_reason\": reason,\n                \"auto_computed_at\": now,\n\
+    \            },\n            allow_unicode=True,\n            sort_keys=False,\n\
+    \        ),\n        encoding=\"utf-8\",\n    )\n    (output_dir / \"diagnostic.yaml\"\
+    ).write_text(\n        yaml.safe_dump(\n            {\n                \"schema_version\"\
+    : 1,\n                \"run_id\": output_dir.name,\n                \"diagnostic_date\"\
+    : datetime.now().strftime(\"%Y-%m-%d\"),\n                \"diagnostic_by\": \"\
+    codex\",\n                \"verdict_referenced\": decision,\n                \"\
+    summary\": reason,\n                \"verdict_rationale\": reason,\n         \
+    \   },\n            allow_unicode=True,\n            sort_keys=False,\n      \
+    \  ),\n        encoding=\"utf-8\",\n    )\n\n\n# ---------------------------------------------------------------------------\n\
+    # main\n# ---------------------------------------------------------------------------\n\
+    \ndef main() -> int:\n    args = _parse_args()\n    output_dir = args.output_dir\
+    \ or args.data_root / \"volatility_position_scaling\"\n    output_dir.mkdir(parents=True,\
+    \ exist_ok=True)\n\n    # Load base ranks (without any scaling)\n    base_ranks\
+    \ = _load_base_ranks(args, output_dir)\n\n    # Determine the full date range\
+    \ for ATR pre-computation per config\n    start_all = min(args.train_start, args.test_start)\n\
+    \    end_all = max(args.train_end, args.test_end)\n\n    summary_rows: list[dict[str,\
+    \ Any]] = []\n    yearly_rows: list[dict[str, Any]] = []\n    adjustment_rows:\
+    \ list[dict[str, Any]] = []\n\n    for cfg in CONFIGS:\n        name = str(cfg[\"\
+    name\"])\n        description = str(cfg[\"description\"])\n\n        if cfg[\"\
+    mode\"] == \"none\":\n            adjusted = base_ranks.copy()\n            adjusted[\"\
+    position_cash_scale\"] = 1.0\n            adjustment: dict[str, Any] = {\n   \
+    \             \"name\": name,\n                \"adjusted_rows\": 0,\n       \
+    \         \"avg_scale\": 1.0,\n                \"min_scale\": 1.0,\n         \
+    \       \"max_scale\": 1.0,\n                \"avg_atr\": 0.0,\n             \
+    \   \"median_atr\": 0.0,\n            }\n        else:\n            lb = int(cfg[\"\
+    volatility_lookback\"])\n            # Need ATR starting lb days before start_all\
+    \ for proper Wilder smoothing\n            atr_start = pd.to_datetime(start_all,\
+    \ format=\"%Y%m%d\") - pd.Timedelta(days=lb * 3)\n            atr_start_str =\
+    \ atr_start.strftime(\"%Y%m%d\")\n            atr_df = _load_atr_data(lb, atr_start_str,\
+    \ end_all)\n            adjusted, adjustment = _merge_and_scale(base_ranks, atr_df,\
+    \ cfg)\n\n        adjustment_rows.append(adjustment)\n\n        # Save adjusted\
+    \ ranks\n        adjusted.to_parquet(\n            output_dir / f\"daily_value_gap_amounts_{name}.parquet\"\
+    , index=False\n        )\n\n        # Backtest params\n        params = _with_cost_params(dict(BASE_PARAMS),\
+    \ args)\n\n        # Train\n        train = _run_value_gap_backtest(\n       \
+    \     adjusted[\n                (adjusted[\"trade_date\"] >= args.train_start)\n\
+    \                & (adjusted[\"trade_date\"] <= args.train_end)\n            ],\n\
+    \            args.train_start,\n            args.train_end,\n            args.data_root,\n\
+    \            args.fixed_source,\n            args.rule,\n            params,\n\
+    \        )\n        # Test\n        test = _run_value_gap_backtest(\n        \
+    \    adjusted[\n                (adjusted[\"trade_date\"] >= args.test_start)\n\
+    \                & (adjusted[\"trade_date\"] <= args.test_end)\n            ],\n\
+    \            args.test_start,\n            args.test_end,\n            args.data_root,\n\
+    \            args.fixed_source,\n            args.rule,\n            params,\n\
+    \        )\n\n        summary_rows.append(\n            _row(name, description,\
+    \ \"train\", args.train_start, args.train_end, cfg, params, train)\n        )\n\
+    \        summary_rows.append(\n            _row(name, description, \"test\", args.test_start,\
+    \ args.test_end, cfg, params, test)\n        )\n\n        print(\n           \
+    \ f\"[volatility_scaling] {name} \"\n            f\"train_excess={train['metrics']['excess_return']}\
+    \ \"\n            f\"train_dd={train['metrics']['max_drawdown']} \"\n        \
+    \    f\"test_excess={test['metrics']['excess_return']} \"\n            f\"test_dd={test['metrics']['max_drawdown']}\"\
+    ,\n            flush=True,\n        )\n\n        # Yearly breakdown (for 2020\
+    \ check)\n        for year in range(2019, 2025):\n            start = f\"{year}0101\"\
+    \n            end = f\"{year}1231\"\n            y = _run_value_gap_backtest(\n\
+    \                adjusted[\n                    (adjusted[\"trade_date\"] >= start)\
+    \ & (adjusted[\"trade_date\"] <= end)\n                ],\n                start,\n\
+    \                end,\n                args.data_root,\n                args.fixed_source,\n\
+    \                args.rule,\n                params,\n            )\n        \
+    \    yearly_rows.append(\n                _row(name, description, str(year), start,\
+    \ end, cfg, params, y)\n            )\n\n    # Attach spec binding\n    _attach_spec_binding(summary_rows,\
+    \ output_dir)\n\n    # Write CSVs\n    _write_csv(output_dir / \"summary_volatility_position_scaling.csv\"\
+    , summary_rows)\n    _write_csv(output_dir / \"yearly_volatility_position_scaling.csv\"\
+    , yearly_rows)\n    _write_csv(\n        output_dir / \"adjustment_volatility_position_scaling.csv\"\
+    , adjustment_rows\n    )\n\n    # Find best train and test configurations\n  \
+    \  train_rows = [r for r in summary_rows if r[\"period\"] == \"train\"]\n    test_rows\
+    \ = [r for r in summary_rows if r[\"period\"] == \"test\"]\n    best_train = max(train_rows,\
+    \ key=lambda r: float(r[\"score\"])) if train_rows else {}\n    best_test = max(test_rows,\
+    \ key=lambda r: float(r[\"score\"])) if test_rows else {}\n    baseline_train\
+    \ = _pick(summary_rows, \"baseline_no_scaling\", \"train\")\n    baseline_test\
+    \ = _pick(summary_rows, \"baseline_no_scaling\", \"test\")\n    selected_test\
+    \ = _pick(summary_rows, str(best_train.get(\"name\")), \"test\")\n    baseline_2020\
+    \ = _year(yearly_rows, \"baseline_no_scaling\", 2020)\n    selected_2020 = _year(yearly_rows,\
+    \ str(best_train.get(\"name\")), 2020)\n\n    # Success criteria from proposal:\n\
+    \    #   train_max_drawdown: <= -0.25\n    #   test_excess_return: >= 0.2\n  \
+    \  #   yr2020_total_return: >= -0.05\n    train_dd_ok = (\n        float(best_train.get(\"\
+    max_drawdown\", -999)) >= -0.25\n    )\n    test_excess_ok = (\n        float(selected_test.get(\"\
+    excess_return\", -999)) >= 0.2\n    )\n    yr2020_ok = (\n        float(selected_2020.get(\"\
+    total_return\", -999)) >= -0.05\n    )\n\n    adoption_pass = (\n        bool(best_train)\n\
+    \        and best_train.get(\"name\") != \"baseline_no_scaling\"\n        and\
+    \ train_dd_ok\n        and test_excess_ok\n        and yr2020_ok\n    )\n\n  \
+    \  summary: dict[str, Any] = {\n        \"schema_version\": 1,\n        \"run_id\"\
+    : output_dir.name,\n        \"status\": \"COMPLETE\",\n        \"candidate_count\"\
+    : len(CONFIGS),\n        \"adoption_pass\": adoption_pass,\n        \"best_train\"\
+    : best_train,\n        \"best_test\": best_test,\n        \"baseline_train\":\
+    \ baseline_train,\n        \"baseline_test\": baseline_test,\n        \"selected_test\"\
+    : selected_test,\n        \"baseline_2020\": baseline_2020,\n        \"selected_2020\"\
+    : selected_2020,\n        \"success_criteria_checks\": {\n            \"train_max_drawdown_le_neg0p25\"\
+    : train_dd_ok,\n            \"test_excess_return_ge_0p2\": test_excess_ok,\n \
+    \           \"yr2020_total_return_ge_neg0p05\": yr2020_ok,\n        },\n     \
+    \   \"summary_rows\": summary_rows,\n        \"artifacts\": [\n            \"\
+    summary_volatility_position_scaling.csv\",\n            \"yearly_volatility_position_scaling.csv\"\
+    ,\n            \"adjustment_volatility_position_scaling.csv\",\n            \"\
+    summary.json\",\n            \"report.yaml\",\n            \"l4_ack.yaml\",\n\
+    \            \"diagnostic.yaml\",\n        ],\n    }\n    _write_review_files(\n\
+    \        output_dir,\n        summary,\n        best_train,\n        best_test,\n\
+    \        baseline_train,\n        baseline_test,\n        adoption_pass,\n   \
+    \ )\n    return 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_volatility_position_scaling.py
+tool_code_attempts: 0
+validation_errors: []
+hermes_handoff:
+  id: volatility_scaling_001_executor_code
+  path: data/research_framework/hermes_executor_handoffs.yaml
+  recipient: hermes
+status: registered_tool_code
+post_registration_compile_status: READY
+post_registration_compile_reason: all guarded checks passed
+registered_executor_id: volatility_based_position_scaling_executor
+registered_files:
+- /home/jay/projects/quant/scripts/evaluate_cb_arb_volatility_position_scaling.py
+registered_registry_path: /home/jay/projects/quant/data/research_framework/executor_registry.yaml

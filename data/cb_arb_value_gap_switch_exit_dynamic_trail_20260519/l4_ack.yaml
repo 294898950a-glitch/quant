@@ -1,0 +1,50 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+reviewer: codex
+ack_at: '2026-05-21T06:10:00+08:00'
+q1_floor_binding:
+  description: Whether hard floors bind the selected result.
+  answer: The generated evaluator did not expose a baseline-aligned hard-floor table.
+  pass: false
+  computed_data:
+    result_decision: no_adoption_decision_unusable
+    evidence_usable: false
+  computed_at: '2026-05-21T06:10:00+08:00'
+q2_selection_score:
+  description: Whether the selected candidate improves the objective without hidden cost.
+  answer: The selected candidate has raw totals, but no adoption_pass decision was emitted.
+  pass: false
+q3_baseline_alignment:
+  description: Whether the result aligns with the current baseline comparison.
+  answer: Baseline alignment is not proven by this evaluator.
+  pass: false
+  computed_data:
+    baseline_aligned: false
+    adoption_pass_present: false
+  computed_at: '2026-05-21T06:10:00+08:00'
+q4_monotonic:
+  description: Whether the tested parameter direction behaves consistently.
+  answer: Candidate scores vary, but monotonic validity is not adoption-grade without baseline-aligned scoring.
+  pass: false
+  computed_data:
+    candidate_count: 9
+    selected_params:
+      retrace_fraction: 0.3
+      min_hold_days: 1
+  computed_at: '2026-05-21T06:10:00+08:00'
+q5_trade_overlap:
+  description: Whether changed trades justify adoption versus the baseline.
+  answer: Trade overlap versus the current baseline was not measured.
+  pass: false
+  computed_data:
+    baseline_trade_overlap_present: false
+  computed_at: '2026-05-21T06:10:00+08:00'
+q6_trigger_timing:
+  applicable: false
+q7_path_contamination:
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: >
+  Reject as adoption evidence because the generated evaluator did not emit
+  adoption_pass and did not prove baseline alignment.

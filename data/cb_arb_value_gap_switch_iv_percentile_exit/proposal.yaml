@@ -1,0 +1,72 @@
+proposal_id: cb_arb_value_gap_switch_iv_percentile_exit
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_improvement
+hypothesis: 'Adding an IV percentile exit filter to cb_arb_value_gap_switch will protect
+  against high-volatility regimes, reducing drawdowns and improving risk-adjusted
+  returns.
+
+  '
+source_insight: 'Overvaluation of CB option component often coincides with elevated
+  implied volatility, and systematic exit at extreme IV levels can avoid subsequent
+  price reversals.
+
+  '
+expected_improvement: 'Reduced maximum drawdown, improved Sharpe ratio, and similar
+  or slightly better cumulative excess return relative to baseline.
+
+  '
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  description: 'Perform grid search over IV percentile threshold (0.80, 0.85, 0.90,
+    0.95) and minimum hold days (1, 3, 5). Evaluate on train (2019-2024), 2020 repair,
+    and sealed test (2025 onward). Compare cumulative excess return, maximum drawdown,
+    and Sharpe ratio against the current baseline.
+
+    '
+success_criteria:
+  criteria:
+  - At least one variant achieves lower max drawdown and higher Sharpe than baseline.
+  - Cumulative excess return in train and 2020 repair is non-negative vs baseline.
+  - Cumulative excess return in test is positive.
+falsifiers:
+  train: &id001
+  - No variant improves both max drawdown and Sharpe without worsening excess returns.
+  - All variants cause excessive reduction in trade counts leading to negative excess.
+  validate: *id001
+  test: *id001
+risk: 'Historical IV computation may be noisy for illiquid CBs; model assumption may
+  not hold in all regimes; execution at market open after IV spike may face slippage.
+
+  '
+why_not_repeated_failure: 'Previous exit experiments (dynamic trail, profit-taking,
+  adaptive gap) did not use an IV regime signal. This is a new mechanism and not a
+  repetition of those failed directions.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+- cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+implementation_assumption: The executor will compute daily implied volatility for
+  each held CB (or proxy via stock ATM IV percentile) and exit at open when current
+  IV exceeds the given rolling 252-day percentile threshold, subject to min_hold_days.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: ace80906efbede30
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: ace80906efbede30
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit/proposal.yaml

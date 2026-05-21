@@ -1,0 +1,14 @@
+schema_version: 1
+handoff_id: adaptive_exit_rule_2026-05-19_executor_code
+generated_executor: generated_executor/evaluate_cb_arb_pnl_adaptive_exit.py
+completed_by: hermes
+checks:
+  compile_passed: true
+  has_main: true
+  has_declare_data_requirements: true
+  writes_summary_json: true
+  summary_has_adoption_pass: true
+  writes_report_yaml: true
+  writes_l4_ack_yaml: true
+  writes_diagnostic_yaml: true
+  no_forbidden_markers: true

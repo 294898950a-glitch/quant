@@ -1,0 +1,83 @@
+proposal_id: iv_regime_exit_2026-05-21
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule
+hypothesis: 'Exiting positions when the convertible bond''s implied volatility exceeds
+  a high historical percentile reduces the strategy''s drawdowns and improves risk-adjusted
+  returns, because extreme IV often indicates temporary overvaluation or market stress,
+  and subsequent mean reversion erodes profits.
+
+  '
+source_insight: 'Baseline cost-on max drawdown exceeded -0.35 and previous dynamic
+  exit attempts were either rejected or suffered from numerical bugs. Implied volatility
+  is a well-known mean-reverting signal; exiting during IV spikes may protect capital
+  without changing the entry logic.
+
+  '
+expected_improvement: 'Lower maximum drawdown and higher Sharpe ratio, particularly
+  during stress periods like 2020, while keeping cumulative excess return close to
+  or better than the baseline.
+
+  '
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  description: 'Using the existing backtest runner, grid search over IV percentile
+    threshold (e.g., 70th to 99th in increments of 5) and minimum hold days (1, 3,
+    5, 10). For each held position, compute daily IV (if unavailable, use stock volatility
+    as a proxy). Exit when rolling 252-day IV percentile exceeds the threshold and
+    min_hold_days have passed. Compare against baseline on train (2019-2024), 2020
+    repair year, and sealed test (2025+).
+
+    '
+success_criteria:
+  criteria:
+  - test excess return vs benchmark > -0.05 (cumulative)
+  - test max drawdown improvement vs baseline (lower by at least 0.02)
+  - 2020 return better than baseline by at least 0.05
+  - no single-year drawdown vs benchmark worse than -0.18
+falsifiers:
+  train: &id001
+  - test excess return <= baseline excess return minus 0.10
+  - test max drawdown > baseline max drawdown
+  - any tested year Sharpe < 0.3
+  - buggy metrics similar to previous dynamic exit runs (e.g., astronomically large
+    returns)
+  validate: *id001
+  test: *id001
+risk: 'High IV can also indicate strong momentum; exiting too early may miss further
+  gains. The grid search must balance threshold sensitivity. If the IV proxy is noisy,
+  the exit may trigger prematurely.
+
+  '
+why_not_repeated_failure: 'This direction is not a renamed repeat of closed families.
+  No prior run has tested an IV-percentile-based exit. Previous exit attempts focused
+  on gap decay, retracement, or profit-taking based on gap contraction, not on implied
+  volatility regimes. The only regime-related runs were a rejected trend guard and
+  a regime-conditioned entry gate, both of which are closed families. IV-regime exit
+  is a novel mechanism using a fresh executor.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519 (unusable metrics)
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19 (unusable metrics)
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19 (adoption_pass=False)
+implementation_assumption: The cb_arb_iv_percentile_exit_executor can compute implied
+  volatility from cb_daily.parquet and integrate with the existing backtest loop.
+  If direct IV is missing, it will use stock volatility as a proxy.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 925f5e3e2fbff912
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 925f5e3e2fbff912
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/iv_regime_exit_2026-05-21/proposal.yaml

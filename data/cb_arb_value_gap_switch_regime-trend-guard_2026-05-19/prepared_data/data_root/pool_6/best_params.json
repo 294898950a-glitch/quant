@@ -1,0 +1,36 @@
+{
+  "iteration": 18,
+  "timestamp_iso": "2026-05-11T03:08:50Z",
+  "pool_id": 6,
+  "params": {
+    "weights": [
+      60.0,
+      1.0,
+      0.25,
+      0.5,
+      0.06,
+      30.0,
+      90.0,
+      -0.1,
+      72900000.0,
+      1000000.0,
+      50.0,
+      150.0
+    ],
+    "thresholds": {},
+    "rules": {
+      "rating_floor_int": 2,
+      "fee_pct": 0.0003,
+      "initial_capital": 1000000
+    }
+  },
+  "metrics": {
+    "sharpe": 2.7726,
+    "win_rate": 0.7857,
+    "total_trades": 98,
+    "total_return": 0.601214,
+    "max_drawdown": -0.108453,
+    "excess_return": 0.346535,
+    "n_days": 251
+  }
+}

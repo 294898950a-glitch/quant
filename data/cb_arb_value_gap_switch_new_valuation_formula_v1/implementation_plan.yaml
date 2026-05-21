@@ -1,0 +1,17 @@
+proposal_id: cb_arb_value_gap_switch_new_valuation_formula_v1
+missing_executor:
+  missing_capability_request:
+    new_executor_id: new_valuation_executor
+    description: Executor to compute refined CB theoretical values using a convertible
+      bond pricing model that incorporates dynamic credit spread estimation, option‑adjusted
+      spread calibration, and stock–credit correlation adjustments. Must produce daily
+      theoretical values for all CBs in the universe and recalculate the value gap
+      (market_price - theoretical_value).
+    required_inputs:
+    - data/cb_warehouse/cb_daily.parquet
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+    - data/cb_warehouse/credit_spreads.parquet
+mechanics:
+- new_valuation_formula
+reason: no strict executor match

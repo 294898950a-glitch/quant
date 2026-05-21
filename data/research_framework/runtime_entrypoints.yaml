@@ -43,13 +43,31 @@ runtime_context:
     ai_provider_registry:
       path: data/research_framework/ai_providers.yaml
       format: yaml
-      role: registered AI providers; strategy ideation can use only providers declared here
+      role: registered AI providers; strategy ideation, review_result, and data-quality AI calls can use only providers declared here
       required: false
       load_scope: code_owned_registry
     strategy_ideator_config:
       path: data/research_framework/strategy_ideator.yaml
       format: yaml
       role: common strategy ideation entry configuration
+      required: false
+      load_scope: code_owned_registry
+    ai_prompt_contracts:
+      path: data/research_framework/ai_prompt_contracts.yaml
+      format: yaml
+      role: forced prompt contract and required reading cards injected into autonomous AI calls
+      required: false
+      load_scope: code_owned_registry
+    status_code_maps:
+      path: data/research_framework/status_code_maps.yaml
+      format: yaml
+      role: numeric code maps for LLM-facing status-like values
+      required: false
+      load_scope: code_owned_registry
+    hermes_executor_handoffs:
+      path: data/research_framework/hermes_executor_handoffs.yaml
+      format: yaml
+      role: open executor-code implementation handoffs for Hermes or engineering agents
       required: false
       load_scope: code_owned_registry
     framework_stability_todos:

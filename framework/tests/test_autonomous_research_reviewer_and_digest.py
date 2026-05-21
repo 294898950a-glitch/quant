@@ -151,7 +151,20 @@ def test_reviewer_records_provenance_when_ai_used(tmp_path: Path):
     class FakeAdapter:
         def call_active_provider(self, prompt: str, schema: dict):
             return type("R", (), {
-                "content": "Mock interpretation",
+                "content": yaml.safe_dump({
+                    "review_status_code": 2,
+                    "result_summary": "The run failed the recorded adoption decision.",
+                    "main_reason": "The locked facts show no acceptable adoption result.",
+                    "failure_causes": ["adoption decision is not positive"],
+                    "next_research_directions": [
+                        {
+                            "direction": "inspect failure source",
+                            "why": "the current result does not pass",
+                            "priority_code": 1,
+                        }
+                    ],
+                    "evidence_gaps": [],
+                }),
                 "provider_id": "fake_provider",
                 "response_hash": "fakeresphash",
                 "retries_used": 0,
@@ -162,6 +175,25 @@ def test_reviewer_records_provenance_when_ai_used(tmp_path: Path):
     data = yaml.safe_load(review_path.read_text())
     assert data.get("ai_provider_used") == "fake_provider"
     assert data.get("response_hash") == "fakeresphash"
+    assert data["interpretation"]["review_status"] == "reject"
+
+
+def test_reviewer_rejects_non_yaml_ai_response(tmp_path: Path):
+    """AI reviewer must return fixed raw YAML, not prose or fenced Markdown."""
+    m = _load(REVIEWER_MODULE, "result_reviewer")
+    run_dir = _make_run_dir(tmp_path)
+
+    class BadAdapter:
+        def call_active_provider(self, prompt: str, schema: dict):
+            return type("R", (), {
+                "content": "```yaml\nreview_status: reject\n```",
+                "provider_id": "fake_provider",
+                "response_hash": "bad",
+                "retries_used": 0,
+            })()
+
+    with pytest.raises(ValueError):
+        m.review(run_dir, ai_adapter=BadAdapter())
 
 
 def test_reviewer_inconclusive_after_2_verification_rounds(tmp_path: Path):

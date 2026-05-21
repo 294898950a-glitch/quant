@@ -1,0 +1,2530 @@
+schema_version: 1
+updated_at: '2026-05-22T00:20:35'
+tasks:
+- id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19_executor_code
+  status: completed
+  created_at: '2026-05-21T12:56:54'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  run_dir: /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  descriptor_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_profit_take_exit.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: draft_tool_code
+    files:
+    - path: generated_executor/<implemented_evaluator>.py
+      purpose: Complete evaluator implementation.
+      content: Full Python source; no placeholders.
+    written_files:
+    - generated executor path under run_dir
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  proposal:
+    proposal_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+    strategy_id: cb_arb_value_gap_switch
+    family: exit_rule_enhancement
+    hypothesis: 'Adding a partial profit-taking rule that exits a position when the
+      value gap contracts by X% from the entry gap will improve trade‑level risk‑reward
+      by reducing drawdowns from gap re‑expansion, leading to higher risk‑adjusted
+      returns without materially degrading test‑period performance.
+
+      '
+    source_insight: 'Baseline train max drawdown is -0.32 despite a positive test
+      environment. Many winning trades likely see the gap narrow partially before
+      reversing; capturing those partial moves could lower drawdowns and improve Sharpe.
+
+      '
+    expected_improvement: 'Test excess return within 0.05 of baseline (≥0.33 vs 0.38),
+      with max drawdown no worse than baseline on test and at least 10% lower max
+      drawdown on train.
+
+      '
+    capability_ids: []
+    missing_capability_request:
+      mechanic: new_exit_rule
+      description: 'Partial profit‑taking exit based on value gap contraction from
+        entry. The exit is triggered when the current gap falls to (1 - target_fraction)
+        * entry_gap. Target fractions to test: 0.25, 0.50, 0.75.
+
+        '
+      needed_executor: profit_take_exit
+    required_executor: profit_take_exit
+    required_data:
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    test_design:
+      description: 'Sweep three target‑fraction thresholds (0.25, 0.50, 0.75) on train
+        (2019‑2024), validate on the 2020 repair period, and test on the sealed 2025‑forward
+        period. Compare against the current baseline with no profit‑taking exit.
+
+        '
+    success_criteria:
+      criteria:
+      - test excess_return >= (baseline_test_excess_return - 0.05)
+      - test max_drawdown <= baseline_test_max_drawdown
+      - train max_drawdown reduced by at least 10% relative to baseline train drawdown
+        (-0.32)
+    falsifiers:
+      train:
+      - test excess_return < (baseline_test_excess_return - 0.05)
+      - test max_drawdown worse than baseline_test_max_drawdown
+      validate:
+      - test excess_return < (baseline_test_excess_return - 0.05)
+      - test max_drawdown worse than baseline_test_max_drawdown
+      test:
+      - test excess_return < (baseline_test_excess_return - 0.05)
+      - test max_drawdown worse than baseline_test_max_drawdown
+    risk: 'Profit‑taking may exit too early, capping upside on trades that would have
+      fully closed the gap. Implementation complexity is moderate; requires tracking
+      entry gap per position.
+
+      '
+    why_not_repeated_failure: 'This is not a position‑sizing variant, regime classifier,
+      option entry gate, or stop‑loss rule. It addresses exits – a dimension untouched
+      by the two recent rejected experiments and not listed in the closed families.
+
+      '
+    related_prior_runs:
+    - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    - cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+    implementation_assumption: A new executor (profit_take_exit) will be built that
+      records the entry gap for each active position and triggers a full exit when
+      the daily gap shrinks below the target fraction of that entry gap. All other
+      strategy logic remains unchanged.
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 512418fa325654c1
+    provenance:
+      ai_provider: deepseek
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: 512418fa325654c1
+    rewrite_status: disabled_two_step_flow
+    rewrite_rounds_used: 0
+    rewrite_last_errors: []
+    proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19/proposal.yaml
+  approved_tool_design:
+    tool_request_id: profit_take_exit_executor_v1
+    why_existing_tools_insufficient: option_position_sizing and option_source_pnl_feedback_scaler
+      are both position‑sizing / feedback‑scaling executors that explicitly cannot
+      test new_exit_rule (C007). dynamic_exit_gap_decay_executor is a draft for a
+      trailing gap‑decay exit, not the partial profit‑taking rule from entry gap described
+      in this proposal. dynamic_regime_switch_executor concerns regime switching,
+      not exit rules. None of the existing or drafted executors implement tracking
+      entry‑gap per position and triggering an exit when the current gap falls to
+      a fraction of that entry gap. A dedicated executor is needed.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    - dynamic_exit_gap_decay_executor
+    - dynamic_regime_switch_executor
+    registry_entry:
+      id: profit_take_exit_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: profit_take_exit
+      script_path: scripts/evaluate_cb_arb_profit_take_exit.py
+      owner: ai_draft
+      description: Evaluate partial profit-taking exit based on gap contraction from
+        entry. Exits when current gap <= (1 - target_fraction) * entry_gap.
+      can_test:
+      - new_exit_rule
+      can_test_capability_ids:
+      - C007
+      cannot_test:
+      - rolling_pnl_feedback
+      - dynamic_regime_switch
+      - new_valuation_formula
+      - new_data_source
+      cannot_test_capability_ids:
+      - C004
+      - C005
+      - C006
+      - C008
+      required_data:
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        description: Base value-gap ranks with theoretical value, bond floor, option
+          value, position cash, tradable gap amount.
+        schema_hash: null
+      - path: data/cb_warehouse/cb_basic.parquet
+        description: CB basic table with stock code and conversion price.
+        schema_hash: null
+      - path: data/cb_warehouse/stk_daily_qfq.parquet
+        description: Forward-adjusted stock prices for compatibility with shared rank
+          loader.
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - target_fraction
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_profit_take_exit.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      - --target-fraction
+      - '{target_fraction}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        target_fraction: '0.50'
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 90
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_profit_take_exit.py
+      main_inputs:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - target_fraction
+      core_steps:
+      - load base ranks and auxiliary CB/stock data
+      - simulate portfolio, per position record entry_gap = max(gap_on_entry_day)
+      - on each subsequent day, if position is active and any source's gap <= (1 -
+        target_fraction) * entry_gap, liquidate the position entirely
+      - apply shared backtest harness that writes required artifacts
+      code_constraints:
+      - use existing project data files
+      - do not change current strategy truth
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_profit_take_exit.py
+    - run a small data smoke test (e.g., first 200 dates of train)
+    - verify that summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml are
+      present and valid
+    ai_provider: deepseek
+    response_hash: a747f974917cee11
+    compile_reason: missing registered capability
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors:
+  - Hermes first attempt wrote only a partial 55-line file and did not update descriptor.
+  - Hermes claimed the handoff but did not complete it before the stale-claim timeout.
+  last_wakeup_at: '2026-05-21T13:38:01'
+  wakeup_count: 4
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+    allowed_writes:
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_profit_take_exit.py
+    required_descriptor_status_after_work: draft_tool_code
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code is written, stop. The quant internal cron
+      will validate and run the next step.
+  claimed_at: '2026-05-21T13:28:00'
+  claimed_by: hermes
+  reopened_at: '2026-05-21T13:23:47'
+  retry_count: 2
+  stale_claim_reopened_at: '2026-05-21T13:38:01'
+  completed_at: '2026-05-21T14:14:54'
+  completed_by: codex_recovery
+  generated_executor: data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19/generated_executor/evaluate_cb_arb_profit_take_exit.py
+- id: cb_arb_value_gap_switch_dynamic_exit_gap_decay_executor_code
+  status: completed
+  created_at: '2026-05-21T14:03:40'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: cb_arb_value_gap_switch_dynamic_exit_gap_decay
+  run_dir: /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay
+  descriptor_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: draft_tool_code
+    files:
+    - path: generated_executor/<implemented_evaluator>.py
+      purpose: Complete evaluator implementation.
+      content: Full Python source; no placeholders.
+    written_files:
+    - generated executor path under run_dir
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  proposal:
+    proposal_id: cb_arb_value_gap_switch_dynamic_exit_gap_decay
+    strategy_id: cb_arb_value_gap_switch
+    family: value_gap_dynamic_exit
+    hypothesis: Exiting positions early when the value gap narrows below a threshold
+      fraction of initial gap can reduce drawdowns in stress periods, especially 2020,
+      without severely sacrificing returns in normal periods.
+    source_insight: In 2020, baseline held through temporary gap closures, leading
+      to large drawdowns. Progressive stocklike scaling reduced damage but test returns
+      dropped. An exit rule conditioned on gap decay may capture profits sooner during
+      volatile reversals.
+    expected_improvement: Reduce 2020 max drawdown and improve excess return, while
+      preserving test period excess return near baseline levels.
+    capability_ids: []
+    missing_capability_request:
+      mechanic: dynamic_exit_gap_decay
+      label: Exit when value gap shrinks below a fraction of entry gap
+      description: 'Need new executor to implement a sell rule: if current value_gap_amount
+        < (entry_gap_amount * factor) then exit, with factor configurable. Requires
+        tracking entry gap for each position.'
+      required_data:
+      - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      - data/cb_warehouse/cb_basic.parquet
+      - data/cb_warehouse/stk_daily_qfq.parquet
+    required_executor: dynamic_exit_gap_decay_executor
+    required_data:
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+    test_design:
+      type: grid_search
+      parameters:
+      - name: gap_decay_factor
+        values:
+        - 0.3
+        - 0.5
+        - 0.7
+        - 0.9
+      - name: min_hold_days
+        values:
+        - 1
+        - 5
+        - 10
+      evaluation: Compare against baseline with train/2020/test periods. Look for
+        improved 2020 excess return and max drawdown, and test period not significantly
+        worse than baseline.
+    success_criteria:
+      primary: 2020 excess_return > -0.10 and max_drawdown > baseline_2020 (-0.179).
+      secondary: Test period total_return >= 0.70 and win_rate >= 0.55.
+    falsifiers:
+      train:
+      - Test period total_return drops below 0.50, or win_rate drops below 0.45.
+      - 2020 max_drawdown not improved (i.e., deeper than -0.179).
+      validate:
+      - Test period total_return drops below 0.50, or win_rate drops below 0.45.
+      - 2020 max_drawdown not improved (i.e., deeper than -0.179).
+      test:
+      - Test period total_return drops below 0.50, or win_rate drops below 0.45.
+      - 2020 max_drawdown not improved (i.e., deeper than -0.179).
+    risk: Exiting early may truncate gains in trending periods, but 2020 is a key
+      stress test. Overfitting to 2020 could hurt test if not robust.
+    why_not_repeated_failure: This is not a position sizing variant, nor a regime
+      classifier. It does not alter entry eligibility, value haircut, or global entry
+      gate. It proposes a new exit mechanic not previously tested, aiming to address
+      2020 drawdowns without the structural tradeoff seen in regime classifiers.
+    related_prior_runs:
+    - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    - cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+    implementation_assumption: Will need to implement a new executor that tracks entry
+      gap per position and applies sell when current gap / entry gap < factor.
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 0dbdc2718c249198
+    provenance:
+      ai_provider: deepseek
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: 0dbdc2718c249198
+    rewrite_status: disabled_two_step_flow
+    rewrite_rounds_used: 0
+    rewrite_last_errors: []
+    proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/proposal.yaml
+  approved_tool_design:
+    tool_request_id: dynamic_exit_gap_decay_executor_v1
+    why_existing_tools_insufficient: option_position_sizing cannot test exit rules
+      (cannot_test includes new_exit_rule, capability C007 missing). It is limited
+      to static position sizing and scaling. option_source_pnl_feedback_scaler also
+      cannot test exit rules (cannot_test includes new_exit_rule, capability C007
+      missing). It focuses on rolling PnL feedback. Both executors lack the ability
+      to track per-position entry gaps and apply a decay-factor-based exit condition
+      required by the proposal.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    registry_entry:
+      id: dynamic_exit_gap_decay_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: dynamic_exit_gap_decay
+      script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+      owner: ai_draft
+      description: 'Evaluate dynamic trailing exit gap decay: exit if current_gap
+        < entry_gap * gap_decay_factor, subject to min_hold_days. Performs grid search
+        across gap_decay_factor and min_hold_days.'
+      can_test:
+      - new_exit_rule
+      can_test_capability_ids:
+      - C007
+      cannot_test:
+      - rolling_pnl_feedback
+      - new_valuation_formula
+      - new_data_source
+      cannot_test_capability_ids:
+      - C004
+      - C006
+      - C008
+      required_data:
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        description: Base daily value-gap ranks with theoretical value, bond floor,
+          option value, position cash, and tradable gap amount.
+        schema_hash: null
+      - path: data/cb_warehouse/cb_basic.parquet
+        description: CB basic table with stock code and conversion price.
+        schema_hash: null
+      - path: data/cb_warehouse/stk_daily_qfq.parquet
+        description: Forward-adjusted stock prices for compatibility with shared rank
+          loader.
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - gap_decay_factor
+      - min_hold_days
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      - --gap-decay-factor
+      - '{gap_decay_factor}'
+      - --min-hold-days
+      - '{min_hold_days}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        gap_decay_factor: '0.5'
+        min_hold_days: '5'
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 90
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+      main_inputs:
+      - data_root
+      - output_dir
+      - gap_decay_factor
+      - min_hold_days
+      core_steps:
+      - load base value-gap ranks from daily_value_gap_amounts.parquet
+      - merge with cb_basic and stk_daily_qfq for position tracking
+      - determine entry gaps for each position (first occurrence of non-zero weight)
+      - apply exit rule: if current_gap < entry_gap * gap_decay_factor and days held
+          >= min_hold_days, close position
+      - compute portfolio returns, drawdowns, win rates per period (train/2020/test)
+      - write summary.json (including adoption_pass), report.yaml, l4_ack.yaml, diagnostic.yaml
+      code_constraints:
+      - use existing project data files only; do not overwrite raw warehouse data
+      - do not change current strategy truth
+      - declare_data_requirements(command, spec) must be called
+      - main() must be defined and produce all required artifacts
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    - run a small data smoke test (e.g., a single parameter set over a short interval)
+    - verify that summary.json contains adoption_pass, and that all four required
+      artifacts exist
+    ai_provider: deepseek
+    response_hash: f5909fff5d5117e4
+    compile_reason: missing registered capability
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors: []
+  last_wakeup_at: '2026-05-21T14:16:45'
+  wakeup_count: 4
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay
+    allowed_writes:
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+    required_descriptor_status_after_work: draft_tool_code
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code is written, stop. The quant internal cron
+      will validate and run the next step.
+  claimed_at: '2026-05-21T14:17:11'
+  claimed_by: hermes
+  completed_at: '2026-05-21T14:34:04'
+  completed_by: codex_recovery
+  generated_executor: data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
+- id: 20260519-proposal-001_executor_code
+  status: completed
+  created_at: '2026-05-21T14:52:00'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: 20260519-proposal-001
+  run_dir: /home/jay/projects/quant/data/20260519-proposal-001
+  descriptor_path: /home/jay/projects/quant/data/20260519-proposal-001/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: code will be registered by hermes_executor_handoff_tick.py after receipt
+      validation
+    files:
+    - generated_executor/<implemented_evaluator>.py
+    completion_receipt: generated_executor/executor_completion.yaml
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  - Write generated_executor/executor_completion.yaml with all required checks set
+    to true.
+  proposal:
+    proposal_id: 20260519-proposal-001
+    strategy_id: cb_arb_value_gap_switch
+    family: exit_rule_adaptive_hold
+    hypothesis: Replacing the fixed max-hold and gap exit with a time-decaying expected
+      gap closure rule that shortens allowed hold days when the gap fails to close
+      proportionally will improve train/test alignment, reduce catastrophic 2020-like
+      drawdowns, and preserve the recent strong test performance.
+    source_insight: Baseline train excess 0.131 vs test 0.380 signals overfitting
+      to recent regime; 2020 excess -0.195 shows fixed hold + gap rules allow large
+      losses in adverse markets. Recent regime trend guard run showed that max_hold
+      >90 d universally destroyed performance, confirming that prolonged holds without
+      gap closure are toxic. A rule that tracks (remaining gap / initial gap) and
+      exits after a minimum hold if this ratio exceeds a declining threshold may cut
+      losing positions earlier while still rewarding gap convergence.
+    expected_improvement: Train excess raised from ~0.13 to >0.20, 2020 excess improved
+      from -0.195 to less negative or positive, test 2025-2026 excess maintained at
+      ≥0.35, and max drawdown in stress periods reduced.
+    capability_ids:
+    - C007
+    required_executor: exit_rule_duration_adaptive
+    required_data:
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    - data/cb_warehouse/cb_basic.parquet
+    test_design:
+      description: Grid search over min_hold_days (5,10,15), initial_threshold_fraction
+        (0.5,0.7,1.0), and decay_period_factor (0.5,1.0,1.5). Train on 2019-2024,
+        early stop on 2020 out‑sample to avoid overfit, sealed test on 2025-2026.
+        Compare against fixed hold baseline with identical entry logic.
+    success_criteria:
+      test_excess_gte: 0.35
+      train_excess_gte: 0.2
+      y2020_excess_gte: -0.15
+      max_drawdown_test_lte: -0.1
+    falsifiers:
+      train:
+      - If train excess does not exceed 0.20
+      - If the rule increases turnover by >20% without a net improvement in train
+        PnL
+      validate:
+      - If y2020 excess does not improve over baseline
+      test:
+      - If sealed test excess drops below 0.35
+      - If the rule increases turnover by >20% without a net improvement in test PnL
+    risk: Parameter overfitting on a short test window; may introduce a new cliff
+      when the decay is too aggressive, causing premature exits in slow-convergence
+      but ultimately profitable trades.
+    why_not_repeated_failure: Previous failed directions were position sizing, regime
+      classifiers, and entry gates; none altered the core exit mechanism with a dynamic
+      time-decaying gap threshold. This targets the structural weakness (prolonged,
+      unclosed gaps) that the trend guard run explicitly identified, using a mechanic
+      (new exit rule) not yet attempted.
+    related_prior_runs:
+    - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    - cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+    implementation_assumption: 'The executor will maintain for each open position
+      the entry‑gap value and, on each day, compute the ratio current_gap / entry_gap.
+      After min_hold_days, if this ratio exceeds a threshold that declines linearly
+      over time from initial_threshold_fraction to 0 over max_hold_days, the position
+      is closed. Needed data fields: date, security_id, theoretical_value, current_price,
+      gap (provided in required data).'
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 1d0d81c62fc684f1
+    provenance:
+      ai_provider: deepseek
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: 1d0d81c62fc684f1
+    rewrite_provenance:
+    - round: 1
+      provider_id: deepseek
+      response_hash: d8fcfa6e22f9d4ce
+    - round: 2
+      provider_id: deepseek
+      response_hash: 48a4d5907d7375f6
+    rewrite_status: valid
+    rewrite_rounds_used: 2
+    rewrite_last_errors: []
+    proposal_path: /home/jay/projects/quant/data/20260519-proposal-001/proposal.yaml
+    mechanics:
+    - new_exit_rule
+  approved_tool_design:
+    tool_request_id: exit_rule_duration_adaptive_executor_v1
+    why_existing_tools_insufficient: The proposal requires a new exit rule that exits
+      when the ratio (current_gap / entry_gap) exceeds a time‑decaying threshold after
+      min_hold_days. Reviewed executors that test 'new_exit_rule' (C007) are dynamic_exit_gap_decay_executor
+      and profit_take_exit_executor. dynamic_exit_gap_decay_executor uses a static
+      gap decay factor (current_gap < entry_gap * factor), profit_take_exit_executor
+      uses a static target fraction (current_gap <= (1 - fraction) * entry_gap). Both
+      apply fixed conditions without the required time‑dependent threshold schedule,
+      so they cannot evaluate the proposed decay rule.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    registry_entry:
+      id: exit_rule_duration_adaptive_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: exit_rule_duration_adaptive
+      script_path: scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+      owner: ai_draft
+      description: Evaluate the time‑decaying gap exit proposal. For each open position,
+        track entry gap. After min_hold_days, compute ratio current_gap / entry_gap.
+        Exit if ratio exceeds a threshold that linearly decays from initial_threshold_fraction
+        to 0 over max_hold_days.
+      can_test:
+      - dynamic_exit_gap_time_decay
+      can_test_capability_ids:
+      - C007
+      cannot_test:
+      - rolling_pnl_feedback
+      - dynamic_regime_switch
+      - new_valuation_formula
+      - new_data_source
+      cannot_test_capability_ids:
+      - C004
+      - C005
+      - C006
+      - C008
+      required_data:
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        description: Base daily value-gap ranks with theoretical_value, current_price,
+          gap.
+        schema_hash: null
+      - path: data/cb_warehouse/cb_basic.parquet
+        description: CB basic table with stock code and conversion price.
+        schema_hash: null
+      - path: data/cb_warehouse/stk_daily_qfq.parquet
+        description: Forward-adjusted stock prices for compatibility with rank loader.
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - min_hold_days
+      - initial_threshold_fraction
+      - max_hold_days
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      - --min-hold-days
+      - '{min_hold_days}'
+      - --initial-threshold-fraction
+      - '{initial_threshold_fraction}'
+      - --max-hold-days
+      - '{max_hold_days}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        min_hold_days: '5'
+        initial_threshold_fraction: '0.7'
+        max_hold_days: '90'
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 90
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+      main_inputs:
+      - data_root
+      - train_start, train_end, test_start, test_end
+      - min_hold_days, initial_threshold_fraction, max_hold_days
+      - output_dir
+      core_steps:
+      - Load daily value-gap ranks and compute entry signals from the existing rank
+        dataframe.
+      - Simulate portfolio: for each open position, record entry date and entry gap.
+      - On each day after min_hold_days, compute hold_days and current threshold =
+        initial_threshold_fraction * (1 - hold_days / max_hold_days) clamped to 0.
+      - If current_gap / entry_gap > current_threshold, close position.
+      - Generate summary statistics and required artifacts.
+      code_constraints:
+      - Use existing shared rank loader from project.
+      - Do not overwrite raw warehouse data.
+      - Must produce artifact_contract files.
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+    - Run a small grid of min_hold_days=5,10, initial_threshold_fraction=0.5,0.7 on
+      train 2019-2024 and check against baseline.
+    - Verify all required artifacts (summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml)
+      are written and valid.
+    ai_provider: deepseek
+    response_hash: ca06375b255bf2c6
+    compile_reason: no strict executor match
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors: []
+  last_wakeup_at: '2026-05-21T14:52:01'
+  wakeup_count: 1
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/20260519-proposal-001/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/20260519-proposal-001
+    allowed_writes:
+    - /home/jay/projects/quant/data/20260519-proposal-001/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/20260519-proposal-001/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+    required_completion_receipt: /home/jay/projects/quant/data/20260519-proposal-001/generated_executor/executor_completion.yaml
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code and completion receipt are written, stop.
+      The quant internal cron will validate and run the next step.
+  claimed_at: '2026-05-21T14:52:36'
+  claimed_by: hermes
+  completed_at: '2026-05-21T15:04:16'
+  completed_by: hermes_complete
+  generated_executor: data/20260519-proposal-001/generated_executor/evaluate_cb_arb_exit_rule_duration_adaptive.py
+- id: adaptive_exit_rule_2026-05-19_executor_code
+  status: completed
+  created_at: '2026-05-21T15:42:50'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: adaptive_exit_rule_2026-05-19
+  run_dir: /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19
+  descriptor_path: /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: code will be registered by hermes_executor_handoff_tick.py after receipt
+      validation
+    files:
+    - generated_executor/<implemented_evaluator>.py
+    completion_receipt: generated_executor/executor_completion.yaml
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  - Write generated_executor/executor_completion.yaml with all required checks set
+    to true.
+  proposal:
+    proposal_id: adaptive_exit_rule_2026-05-19
+    strategy_id: cb_arb_value_gap_switch
+    family: exit_rule_optimization
+    hypothesis: Adaptive take-profit and stop-loss rules based on value gap closing
+      speed and realized PnL will improve risk-adjusted returns across periods without
+      the fragility seen in fixed exit parameters.
+    source_insight: Regime trend guard run showed exit parameter signal collapse with
+      max_hold >90 days. Baseline train excess only 0.13 vs test 0.38, and 2020 repair
+      negative, indicating fixed exits (min_gap, sell_gap, stop_gap) are suboptimal.
+      Dynamic exits may break the train/test trade-off.
+    expected_improvement: Increase train excess return above 0.13, improve 2020 repair
+      excess above baseline -0.194, maintain test excess within 5% of baseline 0.38
+      (≥0.33).
+    capability_ids:
+    - C007
+    required_executor: null
+    missing_capability_request: No executor exists for C007 (new_exit_rule). A new
+      backtest executor is needed that can apply adaptive exit logic (gap closing
+      speed, PnL feedback) to the existing candidate generation pipeline.
+    required_data:
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    - historic trade-level PnL and gap data from baseline run
+    test_design:
+      description: Sweep parameters for take-profit threshold (as fraction of initial
+        gap), stop-loss threshold, gap closing speed lookback window (days), PnL feedback
+        lookback. Run full backtest on train 2019-2024, evaluate on sealed test 2025-202605,
+        plus 2020 repair stress. Compare against baseline fixed exits.
+    success_criteria:
+      description: 'On sealed test: excess return ≥0.33, max drawdown ≤-0.15, win
+        rate ≥0.55. On train: excess ≥0.15, 2020 repair excess ≥-0.15, and no parameter
+        region causing max_hold >90 days to dominate.'
+    falsifiers:
+      train: No variant yields train excess return ≥0.15 or any variant leads to signal
+        collapse (max_hold >90 days dominance).
+      validate: No variant yields 2020 repair excess ≥-0.15 or any variant leads to
+        signal collapse.
+      test: All variants reduce test excess below 0.33 (i.e., >5% decline) or any
+        variant leads to signal collapse.
+    risk: Low risk of overfitting due to extra parameters; controlled by 2020 repair
+      test and cross-validation.
+    why_not_repeated_failure: This is not an entry gate, position sizing, or regime
+      classifier variant. It targets exit logic, which remains unchanged and has shown
+      fragility (signal collapse with max_hold>90d).
+    related_prior_runs:
+    - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    - cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+    implementation_assumption: A new executor can be built on the existing backtest
+      framework, injecting adaptive exit thresholds based on gap closing speed and
+      PnL feedback, while keeping candidate generation and entry logic identical to
+      baseline.
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: ac08d359e19fa309
+    provenance:
+      ai_provider: deepseek
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: ac08d359e19fa309
+    rewrite_provenance:
+    - round: 1
+      provider_id: deepseek
+      response_hash: 677e5b01f12095e1
+    - round: 2
+      provider_id: deepseek
+      response_hash: b167d28e3061a3ae
+    rewrite_status: valid
+    rewrite_rounds_used: 2
+    rewrite_last_errors: []
+    proposal_path: /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19/proposal.yaml
+    mechanics:
+    - new_exit_rule
+  approved_tool_design:
+    tool_request_id: pnl_adaptive_exit_executor_v1
+    why_existing_tools_insufficient: The proposal requires an executor that tests
+      exit rules (C007) driven by both gap closing speed and rolling realized PnL
+      feedback.  Existing C007‑capable executors (dynamic_exit_gap_decay_executor,
+      profit_take_exit_executor, exit_rule_duration_adaptive_executor)  only apply
+      static gap‑ratio thresholds and do not incorporate PnL feedback to dynamically
+      adjust exit conditions.  The option_source_pnl_feedback_scaler handles PnL feedback
+      but is limited to position sizing (C004) and explicitly cannot test new exit
+      rules (C007).  No existing tool combines new exit logic with rolling PnL feedback
+      as required by this adaptive exit proposal.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    - dynamic_exit_gap_decay_executor
+    - dynamic_regime_switch_executor
+    - profit_take_exit_executor
+    - exit_rule_duration_adaptive_executor
+    registry_entry:
+      id: pnl_adaptive_exit_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: pnl_adaptive_exit
+      script_path: scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+      owner: ai_draft
+      description: Evaluate adaptive take‑profit and stop‑loss rules that use gap
+        closing speed and rolling realized PnL feedback to dynamically set exit thresholds.
+      can_test:
+      - adaptive_pnl_exit_rule
+      can_test_capability_ids:
+      - C007
+      cannot_test:
+      - rolling_pnl_feedback
+      - dynamic_regime_switch
+      - new_valuation_formula
+      - new_data_source
+      cannot_test_capability_ids:
+      - C004
+      - C005
+      - C006
+      - C008
+      required_data:
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        description: Base daily value‑gap ranks with theoretical value, bond floor,
+          option value, position cash, and tradable gap amount.
+        schema_hash: null
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+        description: Historic trade‑level realised PnL and entry/exit gap data from
+          the baseline run, used to compute rolling PnL feedback. If missing, the
+          executor may compute it on the fly.
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - gap_speed_lookback
+      - pnl_lookback
+      - tp_gap_fraction
+      - sl_gap_fraction
+      - min_hold_days
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      - --gap-speed-lookback
+      - '{gap_speed_lookback}'
+      - --pnl-lookback
+      - '{pnl_lookback}'
+      - --tp-gap-fraction
+      - '{tp_gap_fraction}'
+      - --sl-gap-fraction
+      - '{sl_gap_fraction}'
+      - --min-hold-days
+      - '{min_hold_days}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        gap_speed_lookback: '20'
+        pnl_lookback: '60'
+        tp_gap_fraction: '0.3'
+        sl_gap_fraction: '0.8'
+        min_hold_days: '5'
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 120
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+      main_inputs:
+      - data_root
+      - output_dir
+      - gap_speed_lookback
+      - pnl_lookback
+      - tp_gap_fraction
+      - sl_gap_fraction
+      - min_hold_days
+      core_steps:
+      - Load daily value‑gap ranks and (optionally) baseline trade PnL data; if absent,
+        compute rolling PnL from simulated positions using entry‑gap tracking.
+      - For each calendar day, compute gap closing speed over the lookback window
+        and rolling average realised PnL over the pnl_lookback window.
+      - Dynamically adjust take‑profit threshold (tp_gap_fraction scaled by closing
+        speed) and stop‑loss threshold (sl_gap_fraction adjusted by recent PnL).
+      - Apply adaptive exit logic: exit a position if current gap fraction falls below
+          the dynamic TP threshold or exceeds the dynamic SL threshold, respecting
+          min_hold_days.
+      - Run full backtest on train (2019‑2024), sealed test (2025‑202605), and 2020
+        repair stress; aggregate trades and compute performance metrics.
+      - Produce summary.json (with adoption_pass), report.yaml, l4_ack.yaml, and diagnostic.yaml.
+      code_constraints:
+      - Use only data files from the existing project; do not overwrite raw warehouse
+        data.
+      - Keep entry logic and candidate generation identical to baseline; only replace
+        exit rule.
+      - Never alter current strategy truth or mark improvements as live.
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+    - Run a small data smoke test (first 200 days) to verify exit logic and absence
+      of crashes.
+    - Verify that all required artifacts (summary.json, report.yaml, l4_ack.yaml,
+      diagnostic.yaml) are produced and contain valid adoption_pass flag.
+    ai_provider: deepseek
+    response_hash: 2222780ae637896a
+    compile_reason: no strict executor match
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors: []
+  last_wakeup_at: '2026-05-21T15:43:01'
+  wakeup_count: 1
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19
+    allowed_writes:
+    - /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+    required_completion_receipt: /home/jay/projects/quant/data/adaptive_exit_rule_2026-05-19/generated_executor/executor_completion.yaml
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code and completion receipt are written, stop.
+      The quant internal cron will validate and run the next step.
+  claimed_at: '2026-05-21T15:43:37'
+  claimed_by: hermes
+  completed_at: '2026-05-21T15:50:42'
+  completed_by: hermes_complete
+  generated_executor: data/adaptive_exit_rule_2026-05-19/generated_executor/evaluate_cb_arb_pnl_adaptive_exit.py
+- id: cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517_executor_code
+  status: completed
+  created_at: '2026-05-21T17:30:03'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517
+  run_dir: /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517
+  descriptor_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: code will be registered by hermes_executor_handoff_tick.py after receipt
+      validation
+    files:
+    - generated_executor/<implemented_evaluator>.py
+    completion_receipt: generated_executor/executor_completion.yaml
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  - Write generated_executor/executor_completion.yaml with all required checks set
+    to true.
+  proposal:
+    proposal_id: cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517
+    strategy_id: cb_arb_value_gap_switch
+    family: entry_gate
+    hypothesis: 'The strategy''s 2020 stress failure (excess_return -0.195, win_rate
+      0.293, score -0.240) is driven by continuing to enter value-gap trades during
+      a sustained market drawdown, when the arbitrage mechanism breaks down because
+      forced selling compresses both the bond and equity components simultaneously.
+      A market-level entry gate that suspends new entries when the CSI 300 rolling
+      N-day return falls below a threshold should cut bad-entry frequency during crash
+      regimes, repairing 2020 and train drawdown without materially reducing trade
+      count during normal periods.
+
+      '
+    source_insight: 'Baseline 2020: total_return=-0.091, excess_return=-0.195, win_rate=0.293,
+      max_drawdown=-0.179, score=-0.240. Baseline train max_drawdown -0.324 vs test
+      -0.098. All 11 position-sizing variants also failed 2020 (best: score -0.185);
+      the progressive stocklike variant that won on train still scored -0.185 in 2020.
+      This confirms the problem is not HOW MUCH to buy but WHEN to stop entering.
+      A market-regime gate is orthogonal to every closed direction, all of which were
+      bond-level or option-level position-size signals.
+
+      '
+    expected_improvement: '2020 score from -0.240 to >= -0.10; train score from 0.050
+      to >= 0.15; train max_drawdown from -0.324 to <= -0.22; test score maintained
+      >= 0.28 (baseline 0.355, allow 0.075 regression for added safety).
+
+      '
+    mechanics:
+    - global_entry_filter
+    - regime_conditioning
+    required_executor: evaluate_cb_arb_value_gap_switch
+    required_data:
+    - CSI 300 daily close (already loaded by backtester for benchmark; no new source)
+    - existing bond candidate pipeline unchanged
+    test_design:
+      variants:
+      - name: gate_n20_t12_buf0
+        N: 20
+        threshold: 0.12
+        buffer_days: 0
+      - name: gate_n20_t12_buf5
+        N: 20
+        threshold: 0.12
+        buffer_days: 5
+      - name: gate_n15_t10_buf3
+        N: 15
+        threshold: 0.1
+        buffer_days: 3
+      - name: gate_n30_t15_buf5
+        N: 30
+        threshold: 0.15
+        buffer_days: 5
+      - name: gate_n10_t08_buf0
+        N: 10
+        threshold: 0.08
+        buffer_days: 0
+      periods:
+      - label: train
+        start: '20190101'
+        end: '20241231'
+      - label: stress_2020
+        start: '20200101'
+        end: '20201231'
+      - label: validate
+        start: '20250101'
+        end: '20260508'
+      baseline: baseline_no_position_scale
+    success_criteria:
+      stress_2020: stress_2020 score > -0.10 for selected variant (vs baseline -0.240)
+      train: train score > 0.10 for selected variant (vs baseline 0.050)
+      validate: validate score >= 0.28 for selected variant (vs baseline 0.355)
+      joint: at least one variant passes all three periods simultaneously
+    falsifiers:
+      train: if train score does not improve above 0.10 after gate application and
+        train max_drawdown remains worse than -0.30, the gate is not filtering bad
+        entries but suppressing broad trade flow across all regimes, indicating the
+        CSI 300 rolling-return signal is spuriously correlated with normal entry periods
+        and the mechanism does not hold on in-sample data
+      test: if validate (out-of-sample 2025-2026) score drops below 0.20 for all variants,
+        the gate is over-triggering on post-2024 normal corrections that are structurally
+        dissimilar to 2020, invalidating the generalization assumption and indicating
+        the threshold was fit to crash depth rather than crash structure; the mechanism
+        does not transfer out-of-sample
+      validate: if validate score drops below 0.20 for all variants, the gate is over-triggering
+        on 2025-2026 normal corrections that are structurally dissimilar to 2020,
+        invalidating the generalization assumption and indicating the threshold was
+        fit to crash depth rather than crash structure
+      over_suppression: if gate suppresses >30% of train trades with no 2020 improvement,
+        threshold is too conservative and signal is noise
+      no_2020_fix: if no variant achieves 2020 score > -0.10, the loss driver is bond-selection
+        quality inside the crash, not entry frequency, and a different hypothesis
+        is needed
+    risk: 'Short corrections in validate period (2025-2026) may briefly trigger gate
+      and suppress valid entries. Mitigation: sweep multiple thresholds; prioritize
+      variants where validate trade count drops <15% from baseline 191. Risk of 2020-only
+      overfit: mitigated by requiring simultaneous train improvement, not just 2020
+      repair.
+
+      '
+    why_not_repeated_failure: 'All four closed directions (conditional_option_position_sizing,
+      static_candidate_position_scale, close_to_bond_floor_threshold, moneyness_stock_to_conv_threshold)
+      operated on bond-level or option-level features to modulate position size. They
+      could not differentiate good from bad entries during the 2020 crash because
+      the crash was market-wide. This proposal operates on a market-level rolling-return
+      signal to gate entry frequency entirely — a different axis. The failure mode
+      being targeted (sustained 60-day drawdown with universal compression) is structurally
+      visible only at the index level.
+
+      '
+    related_prior_runs:
+    - run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+      relationship: 'Position sizing failed 2020 even in its best variant (score -0.185
+        vs baseline -0.240; marginal improvement, still deeply negative). This confirms
+        sizing is not the lever. Market drawdown gate targets entry timing, not size.
+
+        '
+    implementation_assumption: 'CSI 300 daily close is already available in backtester
+      context for benchmark calculation. Rolling return is 1-2 lines of pandas on
+      an existing series. Gate is a boolean mask on the daily entry decision; no structural
+      changes to candidate scoring, sizing, or exit logic required.
+
+      '
+    budget_estimate_cny: 14.0
+    ai_provider: claude
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 37e7f68284ddf94e
+    provenance:
+      ai_provider: claude
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: 37e7f68284ddf94e
+    rewrite_provenance:
+    - round: 1
+      provider_id: claude
+      response_hash: d255fa8f67a99216
+    - round: 2
+      provider_id: claude
+      response_hash: 4745167c281f434f
+    - round: 3
+      provider_id: claude
+      response_hash: 31191c75c15e9eea
+    rewrite_status: valid
+    rewrite_rounds_used: 3
+    rewrite_last_errors: []
+    proposal_path: data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/proposal.yaml
+  approved_tool_design:
+    tool_request_id: market_drawdown_entry_gate_executor_v1
+    why_existing_tools_insufficient: option_position_sizing tests only candidate/position
+      scaling and cannot test a market-level entry gate. option_source_pnl_feedback_scaler
+      tests rolling PnL feedback and static scaling, not entry gating. dynamic_exit_gap_decay_executor,
+      profit_take_exit_executor, exit_rule_duration_adaptive_executor, pnl_adaptive_exit_executor
+      all test exit rules, not entry logic. dynamic_regime_switch_executor tests adaptive
+      regime classification and sizing, not the simple binary drawdown gate proposed;
+      it cannot test global_entry_filter exactly.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    - dynamic_exit_gap_decay_executor
+    - profit_take_exit_executor
+    - exit_rule_duration_adaptive_executor
+    - pnl_adaptive_exit_executor
+    - dynamic_regime_switch_executor
+    registry_entry:
+      id: market_drawdown_entry_gate_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: entry_gate
+      script_path: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+      owner: ai_draft
+      description: 'Evaluate the market drawdown entry gate proposal: compute CSI
+        300 rolling N-day return, apply a boolean mask to suppress entries when the
+        return falls below a threshold (with optional buffer days), and run the existing
+        backtester without modifying scoring, sizing, or exit logic.'
+      can_test:
+      - global_entry_filter
+      - regime_conditioning
+      can_test_capability_ids: []
+      cannot_test:
+      - rolling_pnl_feedback
+      - new_valuation_formula
+      - new_data_source
+      - new_exit_rule
+      - dynamic_regime_switch
+      cannot_test_capability_ids:
+      - C004
+      - C005
+      - C006
+      - C007
+      - C008
+      required_data:
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        description: Base daily value-gap ranks with theoretical value, bond floor,
+          option value, position cash, and tradable gap amount.
+        schema_hash: null
+      - path: data/cb_warehouse/csi300_daily.parquet
+        description: CSI 300 daily close prices for rolling return calculation.
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - N
+      - threshold
+      - buffer_days
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      - --N
+      - '{N}'
+      - --threshold
+      - '{threshold}'
+      - --buffer-days
+      - '{buffer_days}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        N: '20'
+        threshold: '0.12'
+        buffer_days: '0'
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 60
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+      main_inputs:
+      - data_root
+      - output_dir
+      - N
+      - threshold
+      - buffer_days
+      core_steps:
+      - load base daily value gap ranks and CSI 300 daily close from warehouse
+      - compute rolling N-day return series from CSI 300 closes
+      - build entry gate mask: True if the most recent rolling return is below threshold;
+          optionally extend the mask forward by buffer_days
+      - align mask with base ranks by date and suppress entries on masked days
+      - run the existing backtester on the filtered entry schedule without changing
+        scoring, sizing, or exit logic
+      - compute performance statistics for train, stress_2020, and validate periods
+      - produce summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml
+      code_constraints:
+      - use only existing project data files; never overwrite raw warehouse data
+      - do not modify current strategy truth or alter core backtester components
+      - define main() and declare all data requirements as required by the artifact
+        contract
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+    - run a small smoke test with a single period and default parameters to ensure
+      artifact generation
+    - verify that summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml are
+      produced and contain valid content
+    ai_provider: deepseek
+    response_hash: 796c8500044c271a
+    compile_reason: no strict executor match
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors:
+  - files[1].content contains placeholder marker '...'
+  last_wakeup_at: '2026-05-21T17:31:02'
+  wakeup_count: 1
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517
+    allowed_writes:
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+    required_completion_receipt: /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/generated_executor/executor_completion.yaml
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code and completion receipt are written, stop.
+      The quant internal cron will validate and run the next step.
+  claimed_at: '2026-05-21T17:31:26'
+  claimed_by: hermes
+  completed_at: '2026-05-21T17:35:08'
+  completed_by: hermes_complete
+  generated_executor: data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/generated_executor/evaluate_cb_arb_market_drawdown_entry_gate.py
+- id: auto_option_source_pnl_feedback_draft_20260517_executor_code
+  status: completed
+  created_at: '2026-05-21T18:40:03'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: auto_option_source_pnl_feedback_draft_20260517
+  run_dir: /home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517
+  descriptor_path: /home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_option_pnl_feedback_v2.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: code will be registered by hermes_executor_handoff_tick.py after receipt
+      validation
+    files:
+    - generated_executor/<implemented_evaluator>.py
+    completion_receipt: generated_executor/executor_completion.yaml
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  - Write generated_executor/executor_completion.yaml with all required checks set
+    to true.
+  proposal:
+    expected_improvement: Improve 2020 drawdown without reducing 2025-2026 option-source
+      winners as much as static position sizing did.
+    falsifiers:
+      test_excess_lt_baseline: true
+      train_excess_lt_zero: true
+      validate_2020_total_return_lt_baseline: true
+    family: option_source_realized_pnl_feedback
+    hypothesis: Use realized option-source trade outcome feedback to reduce future
+      option-source exposure only after that source is recently losing, avoiding static
+      CB feature cuts that damaged the sealed test.
+    implementation_assumption: Requires a new executor that can compute option-source
+      rolling realized PnL from prior trades before scaling future option-source candidates.
+    mechanics:
+    - rolling_pnl_feedback
+    proposal_id: auto_option_source_pnl_feedback_draft_20260517
+    related_prior_runs:
+    - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    required_data:
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    - data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_2020_option_position_sizing.csv
+    - data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_test_option_position_sizing.csv
+    required_executor: option_source_pnl_feedback_scaler
+    risk: Feedback can be late and may become equivalent to a previously rejected
+      broad trailing PnL regime if it is not limited to option-source trades.
+    source_insight: Last review rejected static option-position sizing because it
+      improved 2020 but cut 2025-2026 winners; the next test should change when exposure
+      is reduced, not which static CB feature triggers the cut.
+    strategy_id: cb_arb_value_gap_switch
+    success_criteria:
+      test_dd_max_abs: 0.15
+      test_excess_min: 0.37976
+      train_excess_min: 0.0
+      validate_2020_total_return_min: -0.090593
+    test_design:
+      test_period: 2025-2026 sealed
+      train_period: 2019-2024
+      validate_period: 2020 stress slice inside train
+    why_not_repeated_failure: It does not reuse closed static candidate position scale,
+      bond-floor threshold, or moneyness threshold mechanics; it asks for a new executor
+      because current executor cannot test rolling feedback.
+    ai_provider: local_smoke_adapter
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 3d008438763f67e8
+    provenance:
+      ai_provider: local_smoke_adapter
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: 3d008438763f67e8
+    proposal_path: data/auto_option_source_pnl_feedback_draft_20260517/proposal.yaml
+  approved_tool_design:
+    tool_request_id: option_source_pnl_feedback_scaler_v2
+    why_existing_tools_insufficient: option_position_sizing only supports static candidate
+      position scaling and cannot test rolling_pnl_feedback (C004). The existing option_source_pnl_feedback_scaler
+      executor can test rolling_pnl_feedback but it computes rolling realized PnL
+      internally from its own trade simulation; it does not consume the two entry-source
+      CSV files from the prior option-position-sizing run that the proposal explicitly
+      depends on to compute realized option-source PnL before scaling. That strict
+      data dependency creates a mismatch, so a new executor is required that ingests
+      the pre-computed trade history and applies the proposal’s feedback scaling logic.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    registry_entry:
+      id: option_source_pnl_feedback_scaler
+      version: 2
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: option_source_pnl_feedback
+      script_path: scripts/evaluate_cb_arb_option_pnl_feedback_v2.py
+      owner: ai_draft
+      description: Evaluate rolling option‑source realized PnL feedback using the
+        actual trade outcomes from a prior option‑position‑sizing run. Ingest entry‑source
+        CSVs, compute source‑level cumulative/rolling PnL, then scale future option‑source
+        candidate exposure downward only when the source is recently losing.
+      can_test:
+      - rolling_pnl_feedback
+      can_test_capability_ids:
+      - C004
+      cannot_test:
+      - dynamic_regime_switch
+      - new_valuation_formula
+      - new_exit_rule
+      - new_data_source
+      cannot_test_capability_ids:
+      - C005
+      - C006
+      - C007
+      - C008
+      required_data:
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        description: Base daily value‑gap ranks with theoretical value, bond floor,
+          option value, position cash, and tradable gap amount.
+        schema_hash: null
+      - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_2020_option_position_sizing.csv
+        description: Historical 2020 option‑source trade outcomes from the static
+          position‑sizing run.
+        schema_hash: null
+      - path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_test_option_position_sizing.csv
+        description: Historical test‑period (2025-2026) option‑source trade outcomes
+          from the static position‑sizing run.
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - base_ranks_path
+      - option_position_sizing_csv_2020
+      - option_position_sizing_csv_test
+      - cost_model_enabled
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_option_pnl_feedback_v2.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      - --base-ranks-path
+      - '{base_ranks_path}'
+      - --option-2020-csv
+      - '{option_position_sizing_csv_2020}'
+      - --option-test-csv
+      - '{option_position_sizing_csv_test}'
+      - --cost-model-enabled
+      - --reuse-ranks
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        base_ranks_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        option_position_sizing_csv_2020: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_2020_option_position_sizing.csv
+        option_position_sizing_csv_test: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/entry_source_test_option_position_sizing.csv
+        cost_model_enabled: true
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      - summary_option_pnl_feedback_v2.csv
+      - yearly_option_pnl_feedback_v2.csv
+      - entry_source_2020_option_pnl_feedback_v2.csv
+      - entry_source_test_option_pnl_feedback_v2.csv
+      - feedback_option_pnl_feedback_v2.csv
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 90
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_option_pnl_feedback_v2.py
+      main_inputs:
+      - data_root
+      - output_dir
+      - base_ranks_path
+      - option_position_sizing_csv_2020
+      - option_position_sizing_csv_test
+      core_steps:
+      - load base daily value‑gap ranks
+      - load entry‑source CSVs and build per‑source trade‑level PnL history
+      - compute rolling realized PnL (configurable window) for each option source
+      - during backtest, when an option‑source candidate is selected, look up the
+        recent PnL of that source; scale exposure downward if PnL is negative beyond
+        a threshold
+      - simulate the modified portfolio over train/test periods
+      - produce all required artifacts
+      code_constraints:
+      - use existing project data files; do not overwrite raw warehouse data
+      - do not change current strategy truth
+      - define main() and declare_data_requirements(command, spec)
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_option_pnl_feedback_v2.py
+    - run a small‑data smoke test with a minimal slice (e.g., one month) to verify
+      the feedback loop runs without error
+    - confirm all required artifacts (summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml,
+      and CSV outputs) are produced
+    - check that the 2020 validate slice performance is computed correctly
+    ai_provider: deepseek
+    response_hash: 08ee855adc7ff49c
+    compile_reason: no strict executor match
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors:
+  - files[1].content contains placeholder marker '...'
+  last_wakeup_at: '2026-05-21T18:41:01'
+  wakeup_count: 1
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517
+    allowed_writes:
+    - /home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_option_pnl_feedback_v2.py
+    required_completion_receipt: /home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517/generated_executor/executor_completion.yaml
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code and completion receipt are written, stop.
+      The quant internal cron will validate and run the next step.
+  claimed_at: '2026-05-21T18:41:16'
+  claimed_by: hermes
+  completed_at: '2026-05-21T18:43:47'
+  completed_by: hermes_complete
+  generated_executor: data/auto_option_source_pnl_feedback_draft_20260517/generated_executor/evaluate_cb_arb_option_pnl_feedback_v2.py
+- id: cb_arb_value_gap_switch_iv-regime-exit_2026-05-21_executor_code
+  status: completed
+  created_at: '2026-05-21T19:24:59'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: cb_arb_value_gap_switch_iv-regime-exit_2026-05-21
+  run_dir: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21
+  descriptor_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_iv_percentile_exit.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: code will be registered by hermes_executor_handoff_tick.py after receipt
+      validation
+    files:
+    - generated_executor/<implemented_evaluator>.py
+    completion_receipt: generated_executor/executor_completion.yaml
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  - Write generated_executor/executor_completion.yaml with all required checks set
+    to true.
+  proposal:
+    proposal_id: cb_arb_value_gap_switch_iv-regime-exit_2026-05-21
+    strategy_id: cb_arb_value_gap_switch
+    family: exit_rule
+    hypothesis: Exiting positions when CB implied volatility exceeds a high historical
+      percentile reduces losses during market stress and improves overall risk-adjusted
+      returns.
+    source_insight: Baseline exits fail in volatile markets like 2020, where win rate
+      is only 29.3%; implied volatility spikes may signal dislocation not genuine
+      arbitrage closure.
+    expected_improvement: Improved Sharpe and lower max drawdown, especially in 2020
+      stress period, with more robust exit timing.
+    capability_ids: []
+    missing_capability_request: 'A new executor that: 1) calculates daily implied
+      volatility for each held CB (from option model or market data), 2) computes
+      a rolling 1-year (252d) percentile rank of current IV relative to its own history,
+      3) exits the position if current IV > 90th percentile, overriding the existing
+      gap-based exit. Needs data on option prices or approximation.'
+    required_executor: null
+    required_data:
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+    - CB daily prices and underlying option implied vol (or Black-Scholes approximation
+      using stock vol)
+    test_design:
+      description: Train on 2019-2024, validated on 2020 repair period, test on 2025
+        onwards; grid-search IV percentiles (80,85,90,95) and min hold days (0,1);
+        compare to baseline gap-based exit.
+    success_criteria:
+      criteria:
+      - Test period Sharpe > baseline Sharpe
+      - 2020 max drawdown reduced vs baseline
+      - 2020 overall return improved (less negative)
+    falsifiers:
+      train:
+      - No tested IV threshold significantly improves 2020 excess return or reduces
+        drawdown
+      - Test period excess return lower than baseline
+      validate:
+      - No tested IV threshold significantly improves 2020 excess return or reduces
+        drawdown
+      - Test period excess return lower than baseline
+      test:
+      - No tested IV threshold significantly improves 2020 excess return or reduces
+        drawdown
+      - Test period excess return lower than baseline
+    risk: May exit prematurely in temporary vol spikes, missing subsequent gap closure;
+      could underperform in low-vol environments.
+    why_not_repeated_failure: Previous exit rule attempts (profit-taking, dynamic
+      trail, duration-adaptive, PnL-adaptive) focused on entry gap contraction dynamics;
+      none used market-wide implied volatility as a regime filter independent of gap
+      size. This introduces a new conditioning variable, not a rephrasing of gap-based
+      exit thresholds.
+    related_prior_runs:
+    - cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+    - cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+    - cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+    - cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+    implementation_assumption: Daily CB implied volatility can be estimated from the
+      CB price using a convertible bond valuation model (e.g., Tsiveriotis-Fernandes)
+      or proxied by the underlying stock’s at-the-money implied volatility.
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: be6cbc6bb20d8ddc
+    provenance:
+      ai_provider: deepseek
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: be6cbc6bb20d8ddc
+    rewrite_status: disabled_two_step_flow
+    rewrite_rounds_used: 0
+    rewrite_last_errors: []
+    proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21/proposal.yaml
+  approved_tool_design:
+    tool_request_id: cb_arb_iv_percentile_exit_executor_v1
+    why_existing_tools_insufficient: Option_position_sizing and option_source_pnl_feedback_scaler
+      cannot test new_exit_rule (C007). Dynamic_exit_gap_decay_executor, profit_take_exit_executor,
+      exit_rule_duration_adaptive_executor, and pnl_adaptive_exit_executor can test
+      new_exit_rule but their implementations are strictly gap-based; none compute
+      implied volatility or historical percentile ranks. The proposal requires a new
+      data source (CB implied volatility) and a new calculation (IV percentile) that
+      none of the existing executors support. A fresh executor is needed to calculate
+      daily IV from CB prices (or an approximation), build rolling 252-day distributions,
+      and trigger exits when IV exceeds a configurable threshold.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    - dynamic_exit_gap_decay_executor
+    - dynamic_regime_switch_executor
+    - profit_take_exit_executor
+    - exit_rule_duration_adaptive_executor
+    - pnl_adaptive_exit_executor
+    registry_entry:
+      id: cb_arb_iv_percentile_exit_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: iv_regime_exit
+      script_path: scripts/evaluate_cb_arb_iv_percentile_exit.py
+      owner: ai_draft
+      description: Evaluate the IV‑regime exit proposal. Compute daily implied volatility
+        for each held CB (via inverted convertible bond pricing model or stock‑vol
+        proxy), calculate a rolling 252‑day percentile rank, and exit positions when
+        IV exceeds a given threshold (e.g., 90th percentile). Grid‑search over IV
+        thresholds and min‑hold days.
+      can_test:
+      - new_exit_rule
+      can_test_capability_ids:
+      - C007
+      cannot_test:
+      - rolling_pnl_feedback
+      - dynamic_regime_switch
+      - new_valuation_formula
+      - new_data_source
+      cannot_test_capability_ids:
+      - C004
+      - C005
+      - C006
+      - C008
+      required_data:
+      - path: data/cb_warehouse/cb_basic.parquet
+        description: CB basic table (stock code, conversion price, bond terms, etc.).
+        schema_hash: null
+      - path: data/cb_warehouse/stk_daily_qfq.parquet
+        description: Forward‑adjusted daily stock prices.
+        schema_hash: null
+      - path: data/cb_warehouse/cb_daily.parquet
+        description: Daily CB market prices (close needed to compute IV).
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - iv_percentile_threshold
+      - min_hold_days
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_iv_percentile_exit.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      - --iv-percentile-threshold
+      - '{iv_percentile_threshold}'
+      - --min-hold-days
+      - '{min_hold_days}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        output_dir: output/iv_exit_test
+        iv_percentile_threshold: '90'
+        min_hold_days: '0'
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 150
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_iv_percentile_exit.py
+      main_inputs:
+      - data_root
+      - output_dir
+      - iv_percentile_threshold
+      - min_hold_days
+      core_steps:
+      - load daily CB prices (cb_daily.parquet), stock prices (stk_daily_qfq.parquet),
+        and CB static data (cb_basic.parquet)
+      - for each CB and date, compute implied volatility using a simplified convertible
+        bond pricing model; invert for IV given market price, conversion terms, and
+        a stock volatility proxy (e.g., historical stock vol)
+      - build a rolling 252‑day expanding window of IVs for each CB and compute current
+        IV’s percentile rank
+      - reconstruct daily positions from the base value‑gap ranks (required additional data: daily_value_gap_amounts.parquet)
+      - apply exit rule: if current IV > iv_percentile_threshold percentile (after
+          min_hold_days), exit the position
+      - perform grid search over iv_percentile_threshold values (80,85,90,95) and
+        min_hold_days (0,1) across train / validation / test splits
+      - produce summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml
+      code_constraints:
+      - do not overwrite raw warehouse data
+      - do not modify current strategy truth
+      - use only project‑provided data files; if cb_daily.parquet is missing, abort
+        with a clear error
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_iv_percentile_exit.py
+    - run a small‑data smoke test (e.g., 2019 only) to verify IV computation and exit
+      logic
+    - verify that all required artifacts (summary.json, report.yaml, l4_ack.yaml,
+      diagnostic.yaml) are produced and contain valid content
+    ai_provider: deepseek
+    response_hash: d37961f8ed5a4d7b
+    compile_reason: missing registered capability
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors: []
+  last_wakeup_at: '2026-05-21T19:25:00'
+  wakeup_count: 1
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21
+    allowed_writes:
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_iv_percentile_exit.py
+    required_completion_receipt: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21/generated_executor/executor_completion.yaml
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code and completion receipt are written, stop.
+      The quant internal cron will validate and run the next step.
+  claimed_at: '2026-05-21T19:25:16'
+  claimed_by: hermes
+  completed_at: '2026-05-21T19:32:41'
+  completed_by: hermes_complete
+  generated_executor: data/cb_arb_value_gap_switch_iv-regime-exit_2026-05-21/generated_executor/evaluate_cb_arb_iv_percentile_exit.py
+- id: cb_arb_value_gap_switch_new_valuation_formula_v1_executor_code
+  status: completed
+  created_at: '2026-05-21T20:50:02'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: cb_arb_value_gap_switch_new_valuation_formula_v1
+  run_dir: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1
+  descriptor_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_new_valuation.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: code will be registered by hermes_executor_handoff_tick.py after receipt
+      validation
+    files:
+    - generated_executor/<implemented_evaluator>.py
+    completion_receipt: generated_executor/executor_completion.yaml
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  - Write generated_executor/executor_completion.yaml with all required checks set
+    to true.
+  proposal:
+    proposal_id: cb_arb_value_gap_switch_new_valuation_formula_v1
+    strategy_id: cb_arb_value_gap_switch
+    family: valuation_refinement
+    hypothesis: Refining the theoretical value model for convertible bonds to incorporate
+      dynamic credit spread and option‑adjusted spread (OAS) will produce more accurate
+      value gaps, improving signal quality and leading to higher risk‑adjusted excess
+      returns.
+    source_insight: The current absolute value‑gap switch relies on a simple theoretical
+      value (likely B‑S with constant credit spread). In reality, CB pricing errors
+      are often driven by mis‑estimated credit risk and volatility surfaces. A more
+      sophisticated model could reduce noise, especially during stress periods when
+      credit and equity diverge, thereby enhancing the signal‑to‑noise ratio of the
+      gap metric.
+    expected_improvement: Cumulative excess return (cost‑on) increase by ≥3 percentage
+      points over baseline, and max drawdown reduction by ≥5 percentage points, driven
+      by fewer false signals and improved entry timing.
+    capability_ids:
+    - C006
+    required_executor:
+      missing_capability_request:
+        new_executor_id: new_valuation_executor
+        description: Executor to compute refined CB theoretical values using a convertible
+          bond pricing model that incorporates dynamic credit spread estimation, option‑adjusted
+          spread calibration, and stock–credit correlation adjustments. Must produce
+          daily theoretical values for all CBs in the universe and recalculate the
+          value gap (market_price - theoretical_value).
+        required_inputs:
+        - data/cb_warehouse/cb_daily.parquet
+        - data/cb_warehouse/cb_basic.parquet
+        - data/cb_warehouse/stk_daily_qfq.parquet
+        - data/cb_warehouse/credit_spreads.parquet
+    required_data:
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+    - data/cb_warehouse/cb_daily.parquet
+    - data/cb_warehouse/credit_spreads.parquet
+    test_design:
+      description: 1. Implement the refined theoretical value model (e.g., Tsiveriotis-Fernandes
+        with time‑varying credit spread derived from CDS curves or bond yields, and
+        volatility surface interpolation). 2. Compute new value gaps = market price
+        – refined theoretical value. 3. Re‑run the existing value‑gap switch strategy
+        (entry when gap > threshold, exit when gap shrinks) using the new gaps, keeping
+        all other parameters (position sizing, exit rules) identical to baseline.
+        4. Compare cost‑on and cost‑off cumulative excess returns, max drawdown, and
+        Sharpe ratio on the same train (2019–2024), 2020 repair, and sealed test (2025–2026)
+        periods used in prior evaluations.
+    success_criteria:
+      criteria:
+      - cost_on cumulative excess compound > -0.07 (improvement from -0.1047)
+      - cost_on max drawdown > -0.30 (improvement from -0.3516)
+      - test period (2025–2026) total return exceeds baseline (0.732) by at least
+        0.05
+    falsifiers:
+      train:
+      - cost_on excess return does not improve by at least 0.02 over baseline
+      - max drawdown in any single year (cost‑on) worsens relative to baseline
+      - out‑of‑sample (2025–) ranking Sharpe ratio < 0.5
+      validate:
+      - cost_on excess return does not improve by at least 0.02 over baseline
+      - max drawdown in any single year (cost‑on) worsens relative to baseline
+      - out‑of‑sample (2025–) ranking Sharpe ratio < 0.5
+      test:
+      - cost_on excess return does not improve by at least 0.02 over baseline
+      - max drawdown in any single year (cost‑on) worsens relative to baseline
+      - out‑of‑sample (2025–) ranking Sharpe ratio < 0.5
+    risk: Medium. Data mining risk due to additional parameters in credit spread modeling;
+      the new model may overfit in‑sample. Requires careful walk‑forward validation
+      and out‑of‑sample test. Also risk that credit spread data is unavailable or
+      noisy.
+    why_not_repeated_failure: This direction has not been tested in any prior run.
+      Recent rejections focused on position sizing (option_position_sizing family),
+      regime‑based entry guards, and various exit rules. None attempted to improve
+      the core valuation signal. The current valuation remains simplistic and may
+      be a key source of the strategy's underperformance, especially in stress periods
+      like 2020. This proposal is a new family, not a re‑phrasing of closed or exhausted
+      directions.
+    related_prior_runs: []
+    implementation_assumption: Assume that a convertible bond pricing library (e.g.,
+      QuantLib with Python bindings) can be used, and that credit spread data (e.g.,
+      synthetic spreads from CB yields) can be constructed from existing cb_daily
+      and bond data. If external CDS or OAS data is unavailable, a rolling credit
+      spread proxy will be derived from the difference between CB yield and risk‑free
+      rate.
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: d4289d438ec48b6d
+    provenance:
+      ai_provider: deepseek
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: d4289d438ec48b6d
+    rewrite_status: disabled_two_step_flow
+    rewrite_rounds_used: 0
+    rewrite_last_errors: []
+    proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1/proposal.yaml
+    mechanics:
+    - new_valuation_formula
+  approved_tool_design:
+    tool_request_id: new_valuation_executor_v1
+    why_existing_tools_insufficient: Every reviewed existing executor explicitly lists
+      new_valuation_formula in its cannot_test set and C006 in cannot_test_capability_ids.
+      They all consume the precomputed daily_value_gap_amounts.parquet and do not
+      recompute the core theoretical value or the resulting gap. The proposal requires
+      a full recalculation of the CB theoretical value using a refined pricing model
+      and a fresh gap series to drive the baseline strategy – a capability no current
+      executor provides.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    - dynamic_exit_gap_decay_executor
+    - dynamic_regime_switch_executor
+    - profit_take_exit_executor
+    - exit_rule_duration_adaptive_executor
+    - pnl_adaptive_exit_executor
+    - cb_arb_iv_percentile_exit_executor
+    registry_entry:
+      id: new_valuation_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: new_valuation_formula
+      script_path: scripts/evaluate_cb_arb_new_valuation.py
+      owner: ai_draft
+      description: Compute refined CB theoretical values using a convertible bond
+        pricing model incorporating dynamic credit spread estimation, option-adjusted
+        spread calibration, and stock‑credit correlation adjustments. Recompute value
+        gaps and evaluate the baseline value‑gap switch strategy using the new gaps,
+        comparing performance to the baseline.
+      can_test:
+      - new_valuation_formula
+      can_test_capability_ids:
+      - C006
+      cannot_test:
+      - rolling_pnl_feedback
+      - dynamic_regime_switch
+      - new_exit_rule
+      - new_data_source
+      cannot_test_capability_ids:
+      - C004
+      - C005
+      - C007
+      - C008
+      required_data:
+      - path: data/cb_warehouse/cb_daily.parquet
+        description: Daily CB market prices and yields.
+        schema_hash: null
+      - path: data/cb_warehouse/cb_basic.parquet
+        description: CB basic terms and conversion price.
+        schema_hash: null
+      - path: data/cb_warehouse/stk_daily_qfq.parquet
+        description: Forward-adjusted stock prices.
+        schema_hash: null
+      - path: data/cb_warehouse/credit_spreads.parquet
+        description: Credit spread data (CDS or synthetic spreads).
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_new_valuation.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --output-dir
+      - '{output_dir}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        output_dir: output/new_valuation_test
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 120
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_new_valuation.py
+      main_inputs:
+      - data_root
+      - output_dir
+      core_steps:
+      - 'Load required data: cb_daily, cb_basic, stk_daily_qfq, credit_spreads.'
+      - Compute refined theoretical values for each CB on each day using a convertible
+        bond pricing model (e.g., Tsiveriotis‑Fernandes) with dynamic credit spread
+        derived from available spreads, and volatility surfaces.
+      - Compute new value_gap = market_price - theoretical_value.
+      - Feed the new gap series into the existing baseline entry/exit logic (entry
+        when gap > threshold, exit when gap shrinks) to simulate the strategy with
+        identical parameters.
+      - 'Calculate performance metrics: cumulative excess returns, max drawdown, Sharpe
+        ratio for train and test periods.'
+      - 'Write required artifacts: summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml.'
+      code_constraints:
+      - Use existing project data files; do not overwrite raw warehouse data.
+      - Do not change current strategy truth; store results in output_dir.
+      - Vectorise computations where possible to meet budget.
+      - Define main() and declare_data_requirements(command, spec).
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_new_valuation.py
+    - Run a smoke test on a small date range (e.g., one month) to verify theoretical
+      values and gap series are computed without errors.
+    - Confirm that summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml are
+      produced in the output directory.
+    - Check that summary.json contains a valid adoption_pass boolean and that report.yaml
+      contains metrics consistent with the test period.
+    ai_provider: deepseek
+    response_hash: d761b82fe695c603
+    compile_reason: no strict executor match
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors:
+  - files[1].content contains placeholder marker '...'
+  last_wakeup_at: '2026-05-21T20:51:01'
+  wakeup_count: 1
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1
+    allowed_writes:
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_new_valuation.py
+    required_completion_receipt: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1/generated_executor/executor_completion.yaml
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code and completion receipt are written, stop.
+      The quant internal cron will validate and run the next step.
+  claimed_at: '2026-05-21T20:51:17'
+  claimed_by: hermes
+  completed_at: '2026-05-21T21:06:02'
+  completed_by: hermes_wakeup
+  generated_executor: data/cb_arb_value_gap_switch_new_valuation_formula_v1/generated_executor/evaluate_cb_arb_new_valuation.py
+- id: volatility_scaling_001_executor_code
+  status: completed
+  created_at: '2026-05-22T00:11:37'
+  recipient: hermes
+  task: Implement the registered draft evaluator code; do not use background LLM code
+    generation.
+  proposal_id: volatility_scaling_001
+  run_dir: /home/jay/projects/quant/data/volatility_scaling_001
+  descriptor_path: /home/jay/projects/quant/data/volatility_scaling_001/executor_tool_request.yaml
+  target_script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+  required_output_status_after_implementation: draft_tool_code
+  required_descriptor_update:
+    status: code will be registered by hermes_executor_handoff_tick.py after receipt
+      validation
+    files:
+    - generated_executor/<implemented_evaluator>.py
+    completion_receipt: generated_executor/executor_completion.yaml
+  validation_requirements:
+  - Generated Python defines main().
+  - Generated Python defines declare_data_requirements(command, spec).
+  - Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+  - summary.json contains adoption_pass.
+  - No placeholder, TODO, pseudocode, or demo-only code.
+  - Do not overwrite raw warehouse data.
+  - Write generated_executor/executor_completion.yaml with all required checks set
+    to true.
+  proposal:
+    proposal_id: volatility_scaling_001
+    strategy_id: cb_arb_value_gap_switch
+    family: static_volatility_position_scaling
+    hypothesis: 'Scaling position size inversely with recent realized volatility (e.g.,
+      20-day ATR) reduces drawdowns by avoiding large bets during high-uncertainty
+      periods, while preserving upside during calm markets.
+
+      '
+    source_insight: 'Baseline train max_drawdown of -0.324 and win rate 0.453 suggest
+      that some trades are too large during volatile periods. Volatility tends to
+      be high when signal quality is low; reducing position size then can cut tail
+      risk.
+
+      '
+    expected_improvement: 'Reduce train max_drawdown by at least 10% vs. baseline,
+      keep test excess return within 2% of baseline, and improve 2020 total return
+      above -0.05.
+
+      '
+    capability_ids:
+    - C001
+    required_executor: volatility_based_position_scaling_executor
+    required_data:
+    - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+    - data/cb_warehouse/cb_daily.parquet
+    test_design:
+      description: 'Use baseline value-gap switch signals to generate candidate lists.
+        For each candidate, compute a volatility scaling factor based on 20-day ATR
+        of the underlying stock (or CB price), scaled relative to cross-sectional
+        median ATR on that day. Multiply the baseline ranking weight and order size
+        by min(1, 1 / (1 + β * (ATR/median_ATR - 1))). Grid-search over β (0.5, 1.0,
+        2.0) and lookback window (10, 20, 30 days). Evaluate on train (2019-2024),
+        2020 repair, and sealed test (2025-2026) using the same metric suite as baseline
+        (total return, excess return, max drawdown, win rate).
+
+        '
+    success_criteria:
+      train_max_drawdown: <= -0.25
+      test_excess_return: '>= 0.2'
+      yr2020_total_return: '>= -0.05'
+    falsifiers:
+      train:
+      - No parameter set achieves all three success criteria simultaneously.
+      - Test excess return < 0.2 even if train drawdown improves.
+      - Train win rate remains below 0.45.
+      validate:
+      - No parameter set achieves all three success criteria simultaneously.
+      - Test excess return < 0.2 even if train drawdown improves.
+      - Train win rate remains below 0.45.
+      test:
+      - No parameter set achieves all three success criteria simultaneously.
+      - Test excess return < 0.2 even if train drawdown improves.
+      - Train win rate remains below 0.45.
+    risk: 'Volatility scaling may reduce exposure during high-volatility periods that
+      later produce strong gap closures, hurting test returns. The success criteria
+      guard this.
+
+      '
+    why_not_repeated_failure: 'The previous position sizing run (option-position-sizing_2026-05-17)
+      tested scaling based on distance from bond floor and conversion price. Volatility-based
+      scaling is a new, untested factor and does not reuse the rejected variants.
+
+      '
+    related_prior_runs:
+    - cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+    implementation_assumption: The new executor will compute daily ATR from cb_daily.parquet
+      (or stock daily) and produce a scaling factor per CB. It will apply the factor
+      as a multiplier to the existing ranking weight and buy amount, without changing
+      entry eligibility. The evaluation will use the same backtest harness as the
+      baseline.
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 8f131002aa8b85af
+    provenance:
+      ai_provider: deepseek
+      prompt_path: framework/autonomous/strategy_ideator.py
+      response_hash: 8f131002aa8b85af
+    rewrite_status: disabled_two_step_flow
+    rewrite_rounds_used: 0
+    rewrite_last_errors: []
+    proposal_path: /home/jay/projects/quant/data/volatility_scaling_001/proposal.yaml
+    mechanics:
+    - static_candidate_position_scale
+  approved_tool_design:
+    tool_request_id: volatility_based_position_scaling_executor_v1
+    why_existing_tools_insufficient: The existing executor 'option_position_sizing'
+      can test static candidate position scaling (C001) but does not implement volatility-based
+      scaling. It only scales positions based on distance from bond floor or conversion
+      price, not on recent realized volatility (ATR). The executor 'option_source_pnl_feedback_scaler'
+      tests rolling PnL feedback scaling, not volatility. The proposal's core mechanic
+      requires computing asset-level ATR and multiplying the baseline rank weight
+      and order size by min(1, 1/(1+β*(ATR/median_ATR - 1))). No registered executor
+      implements this mechanism; therefore a new executor must be drafted.
+    reviewed_existing_executor_ids:
+    - option_position_sizing
+    - option_source_pnl_feedback_scaler
+    registry_entry:
+      id: volatility_based_position_scaling_executor
+      version: 1
+      status: draft
+      strategy_id: cb_arb_value_gap_switch
+      family: static_volatility_position_scaling
+      script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+      owner: ai_draft
+      description: Evaluate volatility-based position scaling for CB arbitrage value-gap
+        candidates. Computes ATR from daily CB/stock prices and applies an inverse
+        scaling factor to the baseline ranking weight and buy amount, without altering
+        entry eligibility.
+      can_test:
+      - volatility_based_position_scaling
+      can_test_capability_ids: []
+      cannot_test:
+      - rolling_pnl_feedback
+      - dynamic_regime_switch
+      - new_valuation_formula
+      - new_exit_rule
+      - new_data_source
+      cannot_test_capability_ids:
+      - C004
+      - C005
+      - C006
+      - C007
+      - C008
+      required_data:
+      - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        description: Base daily value-gap ranks with theoretical value, bond floor,
+          option value, position cash, and tradable gap amount.
+        schema_hash: null
+      - path: data/cb_warehouse/cb_basic.parquet
+        description: CB basic table with stock code and conversion price.
+        schema_hash: null
+      - path: data/cb_warehouse/stk_daily_qfq.parquet
+        description: Forward-adjusted stock prices for ATR calculation.
+        schema_hash: null
+      - path: data/cb_warehouse/cb_daily.parquet
+        description: Daily CB market prices for ATR calculation.
+        schema_hash: null
+      required_config_fields:
+      - data_root
+      - train_start
+      - train_end
+      - test_start
+      - test_end
+      - output_dir
+      - volatility_lookback
+      - scaling_beta
+      - fixed_source
+      - rule
+      - base_ranks_path
+      - cost_model_enabled
+      command_template:
+      - .venv/bin/python
+      - scripts/evaluate_cb_arb_volatility_position_scaling.py
+      - --data-root
+      - '{data_root}'
+      - --train-start
+      - '{train_start}'
+      - --train-end
+      - '{train_end}'
+      - --test-start
+      - '{test_start}'
+      - --test-end
+      - '{test_end}'
+      - --fixed-source
+      - '{fixed_source}'
+      - --rule
+      - '{rule}'
+      - --output-dir
+      - '{output_dir}'
+      - --base-ranks-path
+      - '{base_ranks_path}'
+      - --reuse-ranks
+      - --cost-model-enabled
+      - --volatility-lookback
+      - '{volatility_lookback}'
+      - --scaling-beta
+      - '{scaling_beta}'
+      default_config:
+        data_root: data/cb_arb_concurrent_supervised_20260511_094500
+        train_start: '20190101'
+        train_end: '20241231'
+        test_start: '20250101'
+        test_end: '20260508'
+        fixed_source: '2'
+        rule: score_4state
+        base_ranks_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+        cost_model_enabled: true
+        volatility_lookback: 20
+        scaling_beta: 1.0
+      artifacts_produced:
+      - summary.json
+      - report.yaml
+      - l4_ack.yaml
+      - diagnostic.yaml
+      budget_estimate:
+        sig_minutes: 0
+        spot_minutes: 90
+        local_minutes: 0
+        estimated_cost_yuan: 0.0
+      vm_local_limits:
+        vm_required: true
+        local_allowed: false
+      obsolescence_date: null
+    implementation_outline:
+      script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+      main_inputs:
+      - data_root
+      - output_dir
+      core_steps:
+      - load base ranks and warehouse data (cb_daily, stock prices, cb_basic)
+      - compute daily ATR for each CB using the specified lookback window (from adjusted
+        close prices of stock or CB)
+      - compute cross-sectional median ATR per day
+      - compute scaling factor = min(1, 1 / (1 + β * (ATR / median_ATR - 1)))
+      - apply factor to rank weight and buy amount without modifying entry eligibility
+      - run the existing backtest harness with scaled weights
+      - produce required artifacts (summary, report, etc.)
+      code_constraints:
+      - use existing project data files and shared rank loader
+      - do not change current strategy truth
+      - do not overwrite raw warehouse data
+    validation_plan:
+    - python3 -m py_compile scripts/evaluate_cb_arb_volatility_position_scaling.py
+    - run a small data smoke test on train period 2019-2020
+    - verify that summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml are produced
+    ai_provider: deepseek
+    response_hash: b58b804bfd2edf70
+    compile_reason: no strict executor match
+    validation_errors: []
+    status: draft_tool_design
+  previous_errors: []
+  last_wakeup_at: '2026-05-22T00:12:01'
+  wakeup_count: 1
+  boundary:
+    actor: hermes_executor_code_worker
+    allowed_reads:
+    - data/research_framework/hermes_executor_handoffs.yaml
+    - /home/jay/projects/quant/data/volatility_scaling_001/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/volatility_scaling_001
+    allowed_writes:
+    - /home/jay/projects/quant/data/volatility_scaling_001/executor_tool_request.yaml
+    - /home/jay/projects/quant/data/volatility_scaling_001/generated_executor/
+    target_script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+    required_completion_receipt: /home/jay/projects/quant/data/volatility_scaling_001/generated_executor/executor_completion.yaml
+    forbidden_actions:
+    - Do not run scripts/quant_internal_tick.py.
+    - Do not run scripts/research_queue_runner.py.
+    - Do not launch VM or spot work.
+    - Do not modify data/research_framework/research_queue.yaml.
+    - Do not modify data/research_framework/current.yaml.
+    - Do not modify data/research_framework/baseline_registry.yaml.
+    - Do not promote, archive, or mark any strategy live.
+    completion_is_not_execution: After code and completion receipt are written, stop.
+      The quant internal cron will validate and run the next step.
+  claimed_at: '2026-05-22T00:12:24'
+  claimed_by: hermes
+  completed_at: '2026-05-22T00:20:35'
+  completed_by: hermes_complete
+  generated_executor: data/volatility_scaling_001/generated_executor/evaluate_cb_arb_volatility_position_scaling.py

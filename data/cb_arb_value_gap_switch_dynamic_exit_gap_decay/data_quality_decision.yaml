@@ -1,0 +1,12 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_dynamic_exit_gap_decay
+spec_path: data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/spec.yaml
+validated_at: '2026-05-21T14:40:29'
+summary_sha256: c81700721b393e31b7c817445aba8038be1188392b013aecf42bce25f4100245
+status: pass
+confidence: high
+decision_source: deterministic_data_gate
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: deterministic data gate passed

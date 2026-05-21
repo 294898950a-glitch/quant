@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-17T22:00:00+08:00'
+updated_at: '2026-05-22T03:08:48'
 purpose: Machine-readable registry of implemented research executors. Spec Compiler
   must use this file for hard executor matching; AI proposals cannot self-certify
   executability.
@@ -22,6 +22,8 @@ mechanic_tags:
   new_valuation_formula: Change the theoretical valuation formula.
   new_exit_rule: Change sell/exit logic.
   new_data_source: Require a data source not already registered for the executor.
+  global_entry_filter: Suspend or allow new entries using a market-level condition.
+  regime_conditioning: Condition behavior on an externally measured market regime.
 capabilities:
   C001:
     mechanic: static_candidate_position_scale
@@ -47,6 +49,12 @@ capabilities:
   C008:
     mechanic: new_data_source
     label: Require a new data source
+  C009:
+    mechanic: global_entry_filter
+    label: Global market-level entry filter
+  C010:
+    mechanic: regime_conditioning
+    label: Condition on market regime
 executors:
   option_position_sizing:
     id: option_position_sizing
@@ -261,8 +269,9 @@ executors:
     family: dynamic_exit_gap_decay
     script_path: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
     owner: ai_draft
-    description: Evaluate the dynamic trailing exit gap decay proposal by applying
-      a retracement-based exit rule to the daily value gap series.
+    description: 'Evaluate dynamic trailing exit gap decay: exit if current_gap <
+      entry_gap * gap_decay_factor, subject to min_hold_days. Performs grid search
+      across gap_decay_factor and min_hold_days.'
     can_test:
     - new_exit_rule
     can_test_capability_ids:
@@ -277,8 +286,8 @@ executors:
     - C008
     required_data:
     - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
-      description: Base value-gap ranks with theoretical value, bond floor, option
-        value, position cash, and tradable gap amount.
+      description: Base daily value-gap ranks with theoretical value, bond floor,
+        option value, position cash, and tradable gap amount.
       schema_hash: null
     - path: data/cb_warehouse/cb_basic.parquet
       description: CB basic table with stock code and conversion price.
@@ -294,6 +303,8 @@ executors:
     - test_start
     - test_end
     - output_dir
+    - gap_decay_factor
+    - min_hold_days
     command_template:
     - .venv/bin/python
     - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
@@ -309,12 +320,18 @@ executors:
     - '{test_end}'
     - --output-dir
     - '{output_dir}'
+    - --gap-decay-factor
+    - '{gap_decay_factor}'
+    - --min-hold-days
+    - '{min_hold_days}'
     default_config:
       data_root: data/cb_arb_concurrent_supervised_20260511_094500
       train_start: '20190101'
       train_end: '20241231'
       test_start: '20250101'
       test_end: '20260508'
+      gap_decay_factor: '0.5'
+      min_hold_days: '5'
     artifacts_produced:
     - summary.json
     - report.yaml
@@ -400,3 +417,562 @@ executors:
       vm_required: true
       local_allowed: false
     obsolescence_date: null
+  profit_take_exit_executor:
+    id: profit_take_exit_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: profit_take_exit
+    script_path: scripts/evaluate_cb_arb_profit_take_exit.py
+    owner: ai_draft
+    description: Evaluate partial profit-taking exit based on gap contraction from
+      entry. Exits when current gap <= (1 - target_fraction) * entry_gap.
+    can_test:
+    - new_exit_rule
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C005
+    - C006
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base value-gap ranks with theoretical value, bond floor, option
+        value, position cash, tradable gap amount.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stock code and conversion price.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for compatibility with shared rank
+        loader.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - target_fraction
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_profit_take_exit.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --target-fraction
+    - '{target_fraction}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+      target_fraction: '0.50'
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 90
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  exit_rule_duration_adaptive_executor:
+    id: exit_rule_duration_adaptive_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: exit_rule_duration_adaptive
+    script_path: scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+    owner: ai_draft
+    description: Evaluate the time‑decaying gap exit proposal. For each open position,
+      track entry gap. After min_hold_days, compute ratio current_gap / entry_gap.
+      Exit if ratio exceeds a threshold that linearly decays from initial_threshold_fraction
+      to 0 over max_hold_days.
+    can_test:
+    - dynamic_exit_gap_time_decay
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C005
+    - C006
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value-gap ranks with theoretical_value, current_price,
+        gap.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stock code and conversion price.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for compatibility with rank loader.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - min_hold_days
+    - initial_threshold_fraction
+    - max_hold_days
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --min-hold-days
+    - '{min_hold_days}'
+    - --initial-threshold-fraction
+    - '{initial_threshold_fraction}'
+    - --max-hold-days
+    - '{max_hold_days}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+      min_hold_days: '5'
+      initial_threshold_fraction: '0.7'
+      max_hold_days: '90'
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 90
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  pnl_adaptive_exit_executor:
+    id: pnl_adaptive_exit_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: pnl_adaptive_exit
+    script_path: scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+    owner: ai_draft
+    description: Evaluate adaptive take‑profit and stop‑loss rules that use gap closing
+      speed and rolling realized PnL feedback to dynamically set exit thresholds.
+    can_test:
+    - adaptive_pnl_exit_rule
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C005
+    - C006
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value‑gap ranks with theoretical value, bond floor,
+        option value, position cash, and tradable gap amount.
+      schema_hash: null
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+      description: Historic trade‑level realised PnL and entry/exit gap data from
+        the baseline run, used to compute rolling PnL feedback. If missing, the executor
+        may compute it on the fly.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - gap_speed_lookback
+    - pnl_lookback
+    - tp_gap_fraction
+    - sl_gap_fraction
+    - min_hold_days
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_pnl_adaptive_exit.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --gap-speed-lookback
+    - '{gap_speed_lookback}'
+    - --pnl-lookback
+    - '{pnl_lookback}'
+    - --tp-gap-fraction
+    - '{tp_gap_fraction}'
+    - --sl-gap-fraction
+    - '{sl_gap_fraction}'
+    - --min-hold-days
+    - '{min_hold_days}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+      gap_speed_lookback: '20'
+      pnl_lookback: '60'
+      tp_gap_fraction: '0.3'
+      sl_gap_fraction: '0.8'
+      min_hold_days: '5'
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 120
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  cb_arb_iv_percentile_exit_executor:
+    id: cb_arb_iv_percentile_exit_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: iv_regime_exit
+    script_path: scripts/evaluate_cb_arb_iv_percentile_exit.py
+    owner: ai_draft
+    description: Evaluate the IV‑regime exit proposal. Compute daily implied volatility
+      for each held CB (via inverted convertible bond pricing model or stock‑vol proxy),
+      calculate a rolling 252‑day percentile rank, and exit positions when IV exceeds
+      a given threshold (e.g., 90th percentile). Grid‑search over IV thresholds and
+      min‑hold days.
+    can_test:
+    - new_exit_rule
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C005
+    - C006
+    - C008
+    required_data:
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table (stock code, conversion price, bond terms, etc.).
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward‑adjusted daily stock prices.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market prices (close needed to compute IV).
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - iv_percentile_threshold
+    - min_hold_days
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_iv_percentile_exit.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --iv-percentile-threshold
+    - '{iv_percentile_threshold}'
+    - --min-hold-days
+    - '{min_hold_days}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+      output_dir: output/iv_exit_test
+      iv_percentile_threshold: '90'
+      min_hold_days: '0'
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 150
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  volatility_based_position_scaling_executor:
+    id: volatility_based_position_scaling_executor
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: static_volatility_position_scaling
+    script_path: scripts/evaluate_cb_arb_volatility_position_scaling.py
+    owner: ai_draft
+    description: Evaluate volatility-based position scaling for CB arbitrage value-gap
+      candidates. Computes ATR from daily CB/stock prices and applies an inverse scaling
+      factor to the baseline ranking weight and buy amount, without altering entry
+      eligibility.
+    can_test:
+    - volatility_based_position_scaling
+    can_test_capability_ids:
+    - C001
+    cannot_test:
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_exit_rule
+    - new_data_source
+    cannot_test_capability_ids:
+    - C004
+    - C005
+    - C006
+    - C007
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value-gap ranks with theoretical value, bond floor,
+        option value, position cash, and tradable gap amount.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stock code and conversion price.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for ATR calculation.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market prices for ATR calculation.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - volatility_lookback
+    - scaling_beta
+    - fixed_source
+    - rule
+    - base_ranks_path
+    - cost_model_enabled
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_volatility_position_scaling.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --fixed-source
+    - '{fixed_source}'
+    - --rule
+    - '{rule}'
+    - --output-dir
+    - '{output_dir}'
+    - --base-ranks-path
+    - '{base_ranks_path}'
+    - --reuse-ranks
+    - --cost-model-enabled
+    - --volatility-lookback
+    - '{volatility_lookback}'
+    - --scaling-beta
+    - '{scaling_beta}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+      fixed_source: '2'
+      rule: score_4state
+      base_ranks_path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      cost_model_enabled: true
+      volatility_lookback: 20
+      scaling_beta: 1.0
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 90
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  market_drawdown_entry_gate_executor:
+    id: market_drawdown_entry_gate_executor
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: entry_gate
+    script_path: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+    owner: hermes
+    description: 'Evaluate the market drawdown entry gate proposal: compute CSI 300
+      rolling N-day return, apply a boolean mask to suppress entries when the return
+      falls below a threshold (with optional buffer days), and run the existing backtester
+      without modifying scoring, sizing, or exit logic.'
+    can_test:
+    - global_entry_filter
+    - regime_conditioning
+    can_test_capability_ids:
+    - C009
+    - C010
+    cannot_test:
+    - rolling_pnl_feedback
+    - new_valuation_formula
+    - new_data_source
+    - new_exit_rule
+    - dynamic_regime_switch
+    cannot_test_capability_ids:
+    - C001
+    - C002
+    - C003
+    - C004
+    - C005
+    - C006
+    - C007
+    - C008
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value-gap ranks.
+    - path: data/cb_warehouse/csi300_daily.parquet
+      description: CSI 300 daily close prices.
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - N
+    - threshold
+    - buffer_days
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --N
+    - '{N}'
+    - --threshold
+    - '{threshold}'
+    - --buffer-days
+    - '{buffer_days}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+      N: '20'
+      threshold: '0.12'
+      buffer_days: '0'
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 60
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+    extra_sync_paths:
+    - scripts/evaluate_cb_arb_value_gap_switch.py

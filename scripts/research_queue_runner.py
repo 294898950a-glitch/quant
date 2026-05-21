@@ -145,6 +145,18 @@ def _ideation_env() -> dict[str, str]:
     return env
 
 
+def _ideation_timeout_seconds() -> int:
+    config_path = REPO_ROOT / "data" / "research_framework" / "strategy_ideator.yaml"
+    try:
+        config = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
+    except Exception:
+        return 300
+    if not isinstance(config, dict):
+        return 300
+    provider_timeout = int(config.get("timeout_seconds") or 240)
+    return max(provider_timeout + 30, 300)
+
+
 def ideation_service() -> QueueIdeationService:
     return QueueIdeationService(
         repo_root=REPO_ROOT,
@@ -157,6 +169,7 @@ def ideation_service() -> QueueIdeationService:
         rel=rel,
         now_iso=now_iso,
         ideation_env=_ideation_env,
+        timeout_seconds=_ideation_timeout_seconds(),
     )
 
 

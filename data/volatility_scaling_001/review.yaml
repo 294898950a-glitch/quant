@@ -1,0 +1,58 @@
+schema_version: 1
+run_id: volatility_scaling_001
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: volatility_scaling_001
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 10
+  artifacts_hash: 9e8694aa996f1c2c
+interpretation:
+  review_status_code: 2
+  result_summary: Volatility scaling position sizing failed to improve on baseline
+    across train, 2020 repair, and sealed test.
+  main_reason: No volatility scaling variant outperformed the baseline, violating
+    hard floor and adoption criteria.
+  failure_causes:
+  - Volatility scaling did not reduce drawdowns better than static sizing.
+  - Hypothesized inverse relationship between signal quality and volatility did not
+    materialize in performance.
+  next_research_directions:
+  - direction: Explore alternative position sizing methods
+    why: Volatility-based scaling failed; other approaches like Kelly or regime-based
+      might work.
+    priority_code: 2
+    priority: medium
+  - direction: Investigate signal quality in volatile regimes
+    why: The assumption that signal quality drops in high vol was not validated.
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No direct measurement of signal quality vs volatility correlation was provided.
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: deepseek
+prompt_path: null
+response_hash: d63c12db8ec61858
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 10

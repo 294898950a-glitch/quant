@@ -1,0 +1,46 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+reviewer: codex
+ack_at: '2026-05-21T00:21:00+08:00'
+q1_floor_binding:
+  description: Whether hard floors bind the selected result.
+  answer: The generated evaluator does not expose the framework hard-floor comparison table.
+  pass: false
+  computed_data:
+    note: no baseline-aligned hard-floor table
+  computed_at: '2026-05-21T00:21:00+08:00'
+q2_selection_score:
+  description: Whether the selected candidate improves the objective without hidden cost.
+  answer: Selection quality is not adoption-grade because the return calculation is simplified.
+  pass: false
+q3_baseline_alignment:
+  description: Whether the result aligns with the current baseline comparison.
+  answer: No direct baseline comparison is present.
+  pass: false
+  computed_data:
+    note: baseline metrics missing
+  computed_at: '2026-05-21T00:21:00+08:00'
+q4_monotonic:
+  description: Whether the tested parameter direction behaves consistently.
+  answer: Only the selected multiplier is reported; monotonic behavior is not proven.
+  pass: false
+  computed_data:
+    best_params:
+      multiplier: 0.5
+  computed_at: '2026-05-21T00:21:00+08:00'
+q5_trade_overlap:
+  description: Whether changed trades justify adoption versus the baseline.
+  answer: Trade overlap versus baseline is not measured.
+  pass: false
+  computed_data:
+    note: baseline trade overlap missing
+  computed_at: '2026-05-21T00:21:00+08:00'
+q6_trigger_timing:
+  applicable: false
+q7_path_contamination:
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: >
+  Reject as adoption evidence because the run completed under a simplified
+  generated evaluator rather than the main strategy evaluation contract.

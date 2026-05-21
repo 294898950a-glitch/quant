@@ -67,14 +67,23 @@ def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = 
     fixed_source = int(fixed_source_raw)
     pool_ids = sorted({0, 2, 4, 6, fixed_source})
     warehouse_files = [
-        "data/cb_warehouse/cb_basic.parquet",
-        "data/cb_warehouse/cb_daily.parquet",
-        "data/cb_warehouse/cb_call.parquet",
-        "data/cb_warehouse/stk_daily_qfq.parquet",
+        ("data/cb_warehouse/cb_basic.parquet", ["ts_code", "stk_code", "issue_size", "rating", "conv_price"]),
+        ("data/cb_warehouse/cb_daily.parquet", ["ts_code", "trade_date", "open", "high", "low", "close", "vol"]),
+        ("data/cb_warehouse/cb_call.parquet", ["ts_code", "ann_date", "call_date", "expire_date"]),
+        ("data/cb_warehouse/stk_daily_qfq.parquet", ["stk_code", "trade_date", "close"]),
     ]
-    required_files: list[dict[str, str]] = [
-        {"path": str(data_root / rel_path), "role": "warehouse_input"}
-        for rel_path in warehouse_files
+    required_files: list[dict[str, Any]] = [
+        {
+            "path": rel_path,
+            "role": "warehouse_input",
+            "required_columns": columns,
+            "nonnull_columns": [
+                col
+                for col in columns
+                if col not in {"conv_price", "ann_date", "call_date", "expire_date"}
+            ],
+        }
+        for rel_path, columns in warehouse_files
     ]
     required_files.extend(
         {
@@ -108,8 +117,15 @@ def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
     if not rows:
         path.write_text("", encoding="utf-8")
         return
+    fieldnames = list(rows[0].keys())
+    seen = set(fieldnames)
+    for row in rows[1:]:
+        for key in row.keys():
+            if key not in seen:
+                fieldnames.append(key)
+                seen.add(key)
     with path.open("w", encoding="utf-8", newline="") as f:
-        writer = csv.DictWriter(f, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
 

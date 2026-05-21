@@ -29,19 +29,22 @@ active_components:
       - reading current research context
       - asking a registered AI for one proposal
       - asking the same registered AI for draft executor design when no executor matches
-      - asking the same registered AI for draft executor code only after design validation passes
+      - writing executor-code handoffs for Hermes after design validation passes
       - provenance for all AI responses
     files:
       - framework/autonomous/ideation_cycle.py
       - framework/autonomous/queue_ideation.py
       - framework/autonomous/strategy_ideator.py
       - framework/autonomous/ai_provider_adapter.py
+      - framework/autonomous/hermes_executor_handoff.py
       - scripts/run_strategy_ideation_once.py
+      - scripts/hermes_executor_handoff_tick.py
     must:
       - "First AI call produces exactly one proposal."
       - "If the proposal compiles READY, do not make tool-design or tool-code AI calls."
       - "If the proposal compiles DRAFT because no executor/tool matches, make one tool-design AI call for registry metadata and implementation outline."
-      - "Only if tool design passes hard validation, make one tool-code AI call for file content."
+      - "If tool design passes hard validation, create a Hermes executor-code handoff instead of asking a background AI for code."
+      - "Hermes may only write the generated executor package and descriptor for the handoff it claimed."
       - "Use only registered AI providers."
     must_not:
       - "Run VM jobs."

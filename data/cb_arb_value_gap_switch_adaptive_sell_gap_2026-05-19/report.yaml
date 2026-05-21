@@ -1,0 +1,45 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+date: '2026-05-21'
+strategy_id: cb_arb_value_gap_switch
+status: COMPLETE
+l6_exit_decision: reject
+compute_cost_yuan: 0.0
+summary: >
+  adaptive_sell_gap completed on Guangzhou VM and produced metrics, but the
+  generated evaluator uses a simplified trade-return calculation and lacks a
+  direct baseline comparison. The result is valid as framework evidence, not as
+  adoption evidence.
+three_exits_section:
+  adopt: false
+  mini_spec_retry: false
+  archive_direction: false
+  reject: true
+  reason: not comparable to the current baseline evaluation contract.
+metrics:
+  train_excess: 122.593546
+  repair_excess: 27.392908
+  test_excess: 31.682023
+  best_params:
+    multiplier: 0.5
+  lookback_days: 20
+  floor_factor: 0.5
+  ceiling_factor: 1.5
+confirmed_invalid_directions:
+- new_exit_rule.adaptive_sell_gap_generated_evaluator
+learnings:
+- Executor-owned data declarations correctly exposed the real prepared-data requirements.
+- The generated evaluator must share the main strategy baseline and accounting contract before adoption can be considered.
+- Raw high returns from a simplified evaluator are not comparable to current strategy results.
+follow_up_actions:
+- Keep this run as framework debugging evidence.
+- Do not promote adaptive_sell_gap without a baseline-aligned evaluator.
+- Require generated evaluators to emit full report, l4_ack, and diagnostic schemas.
+notes:
+- summary.json contains the generated-evaluator metrics.
+- The remote run itself completed; the initial failure was artifact schema incompatibility.
+references:
+- data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/summary.json
+- data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/auto_pipeline.log
+related_reports:
+- data/research_framework/recent_results_digest.yaml

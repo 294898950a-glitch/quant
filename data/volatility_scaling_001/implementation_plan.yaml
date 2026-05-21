@@ -1,0 +1,5 @@
+proposal_id: volatility_scaling_001
+missing_executor: volatility_based_position_scaling_executor
+mechanics:
+- static_candidate_position_scale
+reason: no strict executor match

@@ -1,0 +1,33 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+diagnostic_date: '2026-05-21'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: >
+  The run completed and generated result files, but the evaluator is not
+  baseline-aligned. The output should not be used to promote the strategy.
+verdict_rationale: >
+  The evaluator reports simplified aggregate trade profits and does not compare
+  the candidate against the current cb_arb baseline under the same accounting
+  contract. This makes the very high train/test numbers non-actionable.
+diagnostic_verdict: reject
+diagnostic_summary: >
+  Reject as adoption evidence; keep as framework evidence that executor-owned
+  data declarations and VM execution now work, while generated evaluators still
+  need schema and baseline-contract enforcement.
+key_findings:
+- id: completed_remote_run
+  severity: medium
+  detail: The Guangzhou VM run produced summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.
+- id: evaluator_contract_gap
+  severity: high
+  detail: The generated evaluator did not use the main strategy baseline comparison contract.
+- id: artifact_schema_gap
+  severity: high
+  detail: The first generated artifacts were parseable only after schema repair; future executors must emit full framework schemas directly.
+trade_stats:
+  total_trades: 2654
+  avg_profit_pct: 0.05812945328301076
+  params_used:
+    multiplier: 0.5
+recommendation: Require generated evaluators to reuse the main baseline accounting contract before any adoption-grade run.

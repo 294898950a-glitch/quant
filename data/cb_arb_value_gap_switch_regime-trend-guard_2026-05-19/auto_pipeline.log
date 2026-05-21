@@ -1,4 +1,4 @@
-$ .venv/bin/python scripts/evaluate_cb_arb_value_gap_switch.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule trend_guard --output-dir data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19 --cost-model-enabled
+$ /usr/bin/python3 scripts/evaluate_cb_arb_value_gap_switch.py --data-root data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule trend_guard --output-dir data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19 --cost-model-enabled
 
 [repair] ranked 100/1779 20190603
 [repair] ranked 200/1779 20191030

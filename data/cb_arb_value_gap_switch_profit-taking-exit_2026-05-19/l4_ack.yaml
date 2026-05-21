@@ -1,0 +1,77 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+reviewer: codex
+ack_at: '2026-05-21T14:30:00+08:00'
+q1_floor_binding:
+  description: Whether hard floors bind the selected result.
+  answer: Profit-taking fails adoption because train drawdown and 2020 validation remain worse than baseline even though the best test excess is positive.
+  pass: false
+  computed_data:
+    adoption_pass: false
+    best_target_fraction: 0.5
+    best_train_excess_return: -99401696.9
+    best_test_excess_return: 8805558.08
+    best_2020_excess_return: -83720136.9
+    best_train_max_drawdown: -1061618844.5699964
+    baseline_train_max_drawdown: -913542945.8299972
+  computed_at: '2026-05-21T14:30:00Z'
+q2_selection_score:
+  description: Whether the selected candidate improves the objective without hidden cost.
+  answer: The selected 0.50 target fraction is not acceptable because it improves sealed-test total PnL by only a small amount while worsening train and 2020 outcomes.
+  pass: false
+q3_baseline_alignment:
+  description: Whether the result aligns with the current baseline comparison.
+  answer: Test total PnL is slightly better than baseline, but train and 2020 total PnL are materially worse, so the result is not aligned with the baseline objective.
+  pass: false
+  computed_data:
+    baseline_train_total_pnl: -872139688.64
+    selected_train_total_pnl: -971541385.54
+    baseline_test_total_pnl: -259842942.3
+    selected_test_total_pnl: -251037384.22
+    baseline_2020_total_pnl: -312618660.61
+    selected_2020_total_pnl: -396338797.51
+  computed_at: '2026-05-21T14:30:00Z'
+q4_monotonic:
+  description: Whether the tested parameter direction behaves consistently.
+  answer: Higher target fractions reduce the 2020 loss, but sealed-test excess weakens and train remains worse than baseline, so the parameter direction is not adoption-grade.
+  pass: false
+  computed_data:
+    swept_fractions:
+    - 0.25
+    - 0.5
+    - 0.75
+    train_excess_by_fraction:
+      '0.25': -198693348.88
+      '0.5': -99401696.9
+      '0.75': -33646927.09
+    test_excess_by_fraction:
+      '0.25': -7115224.88
+      '0.5': 8805558.08
+      '0.75': 443649.84
+    validate_2020_excess_by_fraction:
+      '0.25': -132833604.89
+      '0.5': -83720136.9
+      '0.75': -21291593.22
+  computed_at: '2026-05-21T14:30:00Z'
+q5_trade_overlap:
+  description: Whether changed trades justify adoption versus the baseline.
+  answer: The candidate increases trade count versus baseline and still worsens train and 2020 total PnL, so the extra turnover is not justified.
+  pass: false
+  computed_data:
+    baseline_train_trade_count: 3893
+    selected_train_trade_count: 6295
+    baseline_test_trade_count: 772
+    selected_test_trade_count: 1272
+    baseline_2020_trade_count: 633
+    selected_2020_trade_count: 1036
+  computed_at: '2026-05-21T14:30:00Z'
+q6_trigger_timing:
+  applicable: false
+q7_path_contamination:
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: >
+  Reject simple profit-taking exit because it caps or churns positions without fixing
+  the core train and 2020 downside problem; the small sealed-test improvement does
+  not compensate for materially worse stress-period performance.

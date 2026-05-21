@@ -1,7 +1,7 @@
 schema_version: 1
 source: review_yaml_only
-updated_at: '2026-05-19T13:24:45+00:00'
-source_reviews_count: 2
+updated_at: '2026-05-21T18:40:24+00:00'
+source_reviews_count: 7
 runs: &id001
 - run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
   strategy_id: cb_arb_value_gap_switch
@@ -118,33 +118,87 @@ runs: &id001
   review_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/review.yaml
 - run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
   strategy_id: cb_arb_value_gap_switch
-  review_status: complete
-  decision:
-    l6_exit_decision: reject
-    report_status: COMPLETE
-    report_summary: 'trend_guard 替换score_4state为趋势动量+回撤+广度三维确认。96候选。train最佳excess=+0.271 vs baseline +0.131(+14pp), test最佳excess=+0.293 vs baseline +0.380(-8.7pp)。第10次确认结构性取舍。'
-    diagnostic_verdict: reject
-    diagnostic_summary: 'train改善14pp换取test退化8.7pp；min_gap/sell_gap/stop_gap参数信号坍塌；max_hold>90d全面破坏。regime_classifier_variant家族耗尽。'
-    adoption_pass: false
+  review_status: null
+  decision: reject
   verdict: reject
-  one_line_summary: 'cb_arb_value_gap_switch_regime-trend-guard_2026-05-19: review_status=complete; decision=reject; train excess +0.271 vs baseline +0.131 (+14pp), test +0.293 vs baseline +0.380 (-8.7pp). 10th family confirms structural tradeoff. regime_classifier_variant exhausted.'
-  key_metrics:
-    best_train:
-      name: switch_hurdle_0p01_max_hold_90d
-      description: trend_guard三维确认, switch_hurdle=0.01
-      period: train
-      excess_return: 0.271
-      score: 0.23
-    best_test:
-      name: baseline_no_trend_guard
-      description: 当前主策略无trend_guard
-      period: test
-      excess_return: 0.380
-      score: 0.36
-    candidate_count: 96
-    adoption_pass: false
-    status: COMPLETE
-  facts_hash: 6acfcf005c55f4d7
+  one_line_summary: null
+  key_metrics: {}
+  facts_hash: 99c63147e140a6d3
   review_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/review.yaml
+- run_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  review_status: null
+  decision: null
+  verdict: null
+  one_line_summary: null
+  key_metrics: {}
+  facts_hash: 29bf763222ed5c0d
+  review_path: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/review.yaml
+- run_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+  strategy_id: cb_arb_value_gap_switch
+  review_status: null
+  decision: no_adoption_decision_unusable
+  verdict: no_adoption_decision_unusable
+  one_line_summary: null
+  key_metrics:
+    selected_name: best_candidate
+    selected_params:
+      retrace_fraction: 0.3
+      min_hold_days: 1
+    train_total_return: 53836983.240635
+    test_total_return: 6759814.455295
+    yr2020_total_return: 13465228.530098999
+    train_win_rate: 0.26216201971222264
+    test_win_rate: 0.2584419926446005
+    yr2020_win_rate: 0.2516778523489933
+    train_score: 53836983.240635
+    test_score: 6759814.455295
+    yr2020_score: 13465228.530098999
+  facts_hash: adab7f14e9c1a597
+  review_path: data/cb_arb_value_gap_switch_exit_dynamic_trail_20260519/review.yaml
+- run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  review_status: null
+  decision: no_adoption_decision_unusable
+  verdict: no_adoption_decision_unusable
+  one_line_summary: null
+  key_metrics:
+    selected_name: best_candidate
+    selected_params:
+      retrace_fraction: 0.3
+      min_hold_days: 1
+    train_total_return: 53836983.240635
+    test_total_return: 6759814.455295
+    yr2020_total_return: 13465228.530098999
+    train_win_rate: 0.26216201971222264
+    test_win_rate: 0.2584419926446005
+    yr2020_win_rate: 0.2516778523489933
+    train_score: 53836983.240635
+    test_score: 6759814.455295
+    yr2020_score: 13465228.530098999
+  facts_hash: e1f79d2494545d4f
+  review_path: data/cb_arb_value_gap_switch_dynamic_exit_2026-05-19/review.yaml
+- run_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  review_status: null
+  decision: null
+  verdict: null
+  one_line_summary: null
+  key_metrics:
+    adoption_pass: false
+    selected_name: best_candidate
+  facts_hash: b14751caff2c36da
+  review_path: data/cb_arb_value_gap_switch_profit-taking-exit_2026-05-19/review.yaml
+- run_id: volatility_scaling_001
+  strategy_id: cb_arb_value_gap_switch
+  review_status: null
+  decision: null
+  verdict: null
+  one_line_summary: null
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 10
+  facts_hash: 9e8694aa996f1c2c
+  review_path: data/volatility_scaling_001/review.yaml
 recent_runs: *id001
 suggested_closed_families: []

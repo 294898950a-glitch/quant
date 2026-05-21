@@ -1,0 +1,35 @@
+schema_version: 1
+run_id: volatility_scaling_001
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+status: COMPLETE
+three_exits_section:
+  train_exit: Train winner selected baseline_no_scaling.
+  validation_exit: Sealed test winner selected baseline_no_scaling.
+  decision_exit: No volatility scaling variant beat baseline across train, 2020 repair,
+    and sealed test together.
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- volatility_based_position_scaling
+learnings:
+- Volatility-based position scaling must pass train, 2020 repair, and sealed test
+  together.
+- No volatility scaling variant beat baseline across train, 2020 repair, and sealed
+  test together.
+follow_up_actions:
+- Keep this run as diagnostic evidence for future volatility-based risk filters.
+- Do not promote unless follow-up review confirms train/test/2020 robustness.
+summary: No volatility scaling variant beat baseline across train, 2020 repair, and
+  sealed test together.
+notes: Result reviewed by code-generated summary.json, l4_ack.yaml, and diagnostic.yaml.
+references:
+- summary_volatility_position_scaling.csv
+- yearly_volatility_position_scaling.csv
+- adjustment_volatility_position_scaling.csv
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+related_reports:
+- data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/report.yaml

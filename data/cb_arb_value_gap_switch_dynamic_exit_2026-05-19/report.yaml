@@ -1,0 +1,49 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+date: '2026-05-21'
+strategy_id: cb_arb_value_gap_switch
+status: COMPLETE
+l6_exit_decision: reject
+compute_cost_yuan: 0.0
+summary: >
+  Dynamic exit gap decay completed on the Guangzhou VM and produced a full grid
+  result. The numbers are not adoption-grade because the generated evaluator
+  does not share the current main strategy baseline and accounting contract.
+three_exits_section:
+  adopt: false
+  mini_spec_retry: false
+  archive_direction: false
+  reject: true
+  reason: generated evaluator is not baseline-aligned.
+metrics:
+  best_params:
+    retrace_fraction: 0.3
+    min_hold_days: 1
+  train_total_return: 53836983.240635
+  test_total_return: 6759814.455295
+  yr2020_total_return: 13465228.530099
+  train_win_rate: 0.26216201971222264
+  test_win_rate: 0.2584419926446005
+  yr2020_win_rate: 0.2516778523489933
+confirmed_invalid_directions:
+- new_exit_rule.dynamic_exit_gap_decay_generated_evaluator
+learnings:
+- The VM execution path can run generated executors and return result artifacts.
+- Generated evaluator outputs can be mechanically large but still not comparable
+  to the current strategy baseline.
+- Adoption decisions require the same accounting and baseline comparison contract,
+  not only internally high candidate scores.
+follow_up_actions:
+- Keep the result as framework evidence only.
+- Do not promote dynamic_exit_gap_decay without a baseline-aligned evaluator.
+- Require generated executors to emit valid report, l4_ack, and diagnostic schemas
+  directly.
+notes:
+- summary.json contains the candidate grid and selected parameters.
+- The raw return magnitudes are treated as non-comparable generated-evaluator
+  outputs.
+references:
+- data/cb_arb_value_gap_switch_dynamic_exit_2026-05-19/summary.json
+- data/cb_arb_value_gap_switch_dynamic_exit_2026-05-19/review.yaml
+related_reports:
+- data/research_framework/recent_results_digest.yaml

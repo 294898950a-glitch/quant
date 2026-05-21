@@ -423,6 +423,46 @@ def test_strategy_ideator_bad_response_becomes_rewriteable_stub():
     assert parsed["proposal_id"] == "unparseable"
 
 
+def test_strategy_ideator_prompt_injects_forced_contract():
+    m = _load(STRATEGY_IDEATOR_MODULE, "strategy_ideator")
+    proposal = {
+        "proposal_id": "p1",
+        "capability_ids": ["C001"],
+    }
+
+    class FakeResponse:
+        content = json.dumps(proposal)
+        provider_id = "fake_ai"
+        response_hash = "hash1"
+
+    class FakeAdapter:
+        prompt = ""
+
+        def call_active_provider(self, prompt, schema):
+            self.prompt = prompt
+            return FakeResponse()
+
+    adapter = FakeAdapter()
+    m.propose(
+        closed_tags={},
+        recent_digest={},
+        insights={
+            "required_fields": ["proposal_id"],
+            "forced_prompt_contract": {
+                "strong_prompt": ["STRICT_TEST_PROMPT"],
+                "required_reading_cards": {
+                    "card_a": {"purpose": "test card", "facts": ["must be read"]},
+                },
+            },
+        },
+        ai_adapter=adapter,
+    )
+
+    assert "Forced prompt contract" in adapter.prompt
+    assert "STRICT_TEST_PROMPT" in adapter.prompt
+    assert "card_a" in adapter.prompt
+
+
 def test_recent_proposals_from_digest_feeds_repeat_detection():
     m = _load(IDEATION_CYCLE_MODULE, "ideation_cycle")
     digest = {
@@ -575,9 +615,11 @@ def test_ideation_cycle_offline_end_to_end_generates_ready_spec(tmp_path, monkey
 
 
 def test_ideation_cycle_missing_executor_requests_tool_code(tmp_path, monkeypatch):
-    """If no executor can run the idea, ask AI once more for draft tool code."""
+    """If no executor can run the idea, AI designs it and Hermes receives the code handoff."""
     m = _load(IDEATION_CYCLE_MODULE, "ideation_cycle")
     monkeypatch.setattr(m, "record_framework_change", lambda **_: "eventhash")
+    monkeypatch.setattr(m, "HERMES_HANDOFFS_PATH", tmp_path / "data" / "research_framework" / "hermes_executor_handoffs.yaml")
+    monkeypatch.setattr(m, "BRIDGE_CODEX_OUTBOX", tmp_path / "bridge" / "codex" / "outbox.md")
 
     rf = tmp_path / "data" / "research_framework"
     rf.mkdir(parents=True)
@@ -649,29 +691,6 @@ def test_ideation_cycle_missing_executor_requests_tool_code(tmp_path, monkeypatc
         },
         "validation_plan": ["python3 -m py_compile generated_executor/adaptive_exit_evaluator.py"],
     }
-    tool_code = {
-        "files": [
-            {
-                "path": "generated_executor/adaptive_exit_evaluator.py",
-                    "content": (
-                        "from pathlib import Path\n"
-                        "import json\n"
-                        "def declare_data_requirements(command, spec):\n"
-                        "    return {'required_files': [{'path': 'data/source.parquet'}]}\n"
-                        "def main():\n"
-                        "    out = Path('out')\n"
-                        "    out.mkdir(exist_ok=True)\n"
-                    "    (out / 'summary.json').write_text(json.dumps({'adoption_pass': False}))\n"
-                    "    for name in ['report.yaml', 'l4_ack.yaml', 'diagnostic.yaml']:\n"
-                    "        (out / name).write_text('{}')\n"
-                    "if __name__ == '__main__':\n"
-                    "    main()\n"
-                ),
-                "purpose": "draft evaluator",
-            }
-        ],
-    }
-
     class FakeResponse:
         def __init__(self, payload, response_hash):
             self.content = json.dumps(payload)
@@ -687,9 +706,7 @@ def test_ideation_cycle_missing_executor_requests_tool_code(tmp_path, monkeypatc
             self.calls += 1
             if self.calls == 1:
                 return FakeResponse(proposal, "proposalhash")
-            if self.calls == 2:
-                return FakeResponse(tool_design, "designhash")
-            return FakeResponse(tool_code, "codehash")
+            return FakeResponse(tool_design, "designhash")
 
     adapter = FakeAdapter()
     paths = m.ResearchPaths.from_repo_root(tmp_path)
@@ -697,15 +714,234 @@ def test_ideation_cycle_missing_executor_requests_tool_code(tmp_path, monkeypatc
         output_root=tmp_path / "data",
     )
 
-    assert adapter.calls == 3
+    assert adapter.calls == 2
     assert payload["status"] == "DRAFT"
     package = payload["executor_tool_package"]
     assert package["tool_request_id"] == "adaptive_exit_evaluator"
-    assert package["status"] == "draft_tool_code"
+    assert package["status"] == "awaiting_hermes_executor_code"
     assert package["design_response_hash"] == "designhash"
-    assert package["code_response_hash"] == "codehash"
+    assert package["code_response_hash"] is None
     assert Path(package["descriptor_path"]).exists()
-    assert Path(package["written_files"][0]).exists()
+    assert package["written_files"] == []
+    assert "hermes_handoff" in package
+    assert (tmp_path / "data" / "research_framework" / "hermes_executor_handoffs.yaml").exists()
+
+
+def test_executor_tool_prompts_inject_required_cards(tmp_path, monkeypatch):
+    m = _load(IDEATION_CYCLE_MODULE, "ideation_cycle")
+    monkeypatch.setattr(m, "record_framework_change", lambda **_: "eventhash")
+    monkeypatch.setattr(m, "HERMES_HANDOFFS_PATH", tmp_path / "handoffs.yaml")
+    monkeypatch.setattr(m, "BRIDGE_CODEX_OUTBOX", tmp_path / "bridge" / "outbox.md")
+    run_dir = tmp_path / "run"
+    captured: list[str] = []
+    design = {
+        "tool_request_id": "new_executor",
+        "why_existing_tools_insufficient": "No current executor covers this idea.",
+        "reviewed_existing_executor_ids": [],
+        "registry_entry": {
+            "id": "new_executor",
+            "script_path": "scripts/evaluate_new_executor.py",
+            "strategy_id": "cb_arb_value_gap_switch",
+            "family": "new_exit_rule",
+            "command_template": ["python3", "scripts/evaluate_new_executor.py"],
+            "artifacts_produced": ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
+        },
+        "implementation_outline": {"steps": ["load data", "write artifacts"]},
+        "validation_plan": ["python syntax check"],
+    }
+    class FakeResponse:
+        def __init__(self, payload):
+            self.content = json.dumps(payload)
+            self.provider_id = "fake_ai"
+            self.response_hash = "hash"
+
+    class FakeAdapter:
+        calls = 0
+
+        def call_active_provider(self, prompt, schema):
+            self.calls += 1
+            captured.append(prompt)
+            if self.calls != 1:
+                raise AssertionError("executor code must not be requested from provider")
+            return FakeResponse(design)
+
+    result = m.request_executor_tool_code(
+        proposal={"proposal_id": "p1"},
+        compile_reason="no strict executor match",
+        compile_errors=[],
+        registry={"executors": []},
+        ai_adapter=FakeAdapter(),
+        run_dir=run_dir,
+        store=m.ArtifactStore(),
+    )
+
+    assert result["status"] == "awaiting_hermes_executor_code"
+    assert len(captured) == 1
+    assert "forced_prompt_contract" in captured[0]
+    assert "capability_executor_policy" in captured[0]
+    assert "hermes_handoff" in result
+
+
+def test_registered_tool_fills_missing_capability_before_recompile(tmp_path, monkeypatch):
+    m = _load(IDEATION_CYCLE_MODULE, "ideation_cycle")
+    monkeypatch.setattr(m, "record_framework_change", lambda **_: "eventhash")
+    data_path = tmp_path / "data" / "seed.parquet"
+    data_path.parent.mkdir(parents=True)
+    data_path.write_text("seed", encoding="utf-8")
+    run_dir = tmp_path / "data" / "run"
+    generated = run_dir / "generated_executor" / "evaluate_new_exit.py"
+    generated.parent.mkdir(parents=True)
+    code = "\n".join(
+        [
+            "def declare_data_requirements(command, spec=None):",
+            "    return {'required_files': [{'path': 'data/seed.parquet'}]}",
+            "",
+            "def main():",
+            "    adoption_pass = False",
+            "    names = ['summary.json', 'report.yaml', 'l4_ack.yaml', 'diagnostic.yaml']",
+            "    return len(names) + int(adoption_pass)",
+            "",
+            "if __name__ == '__main__':",
+            "    raise SystemExit(main())",
+            "",
+        ]
+    )
+    generated.write_text(code, encoding="utf-8")
+    package_path = run_dir / "executor_tool_request.yaml"
+    package = {
+        "status": "draft_tool_code",
+        "tool_request_id": "new_exit_tool",
+        "why_existing_tools_insufficient": "No existing executor can test this exit rule.",
+        "reviewed_existing_executor_ids": [],
+            "registry_entry": {
+                "id": "new_exit_tool",
+                "version": 1,
+                "script_path": "scripts/evaluate_new_exit.py",
+            "strategy_id": "cb_arb_value_gap_switch",
+            "family": "new_exit_rule",
+            "can_test": ["new_exit_rule"],
+            "can_test_capability_ids": ["C007"],
+            "cannot_test": [],
+            "cannot_test_capability_ids": [],
+            "required_data": [{"path": "data/seed.parquet", "description": "seed"}],
+            "required_config_fields": ["output_dir"],
+            "command_template": ["python3", "scripts/evaluate_new_exit.py", "--output-dir", "{output_dir}"],
+            "default_config": {"output_dir": "data/out"},
+            "artifacts_produced": ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
+            "budget_estimate": {"sig_minutes": 0, "spot_minutes": 60, "local_minutes": 0, "estimated_cost_yuan": 0.0},
+            "vm_local_limits": {"vm_required": True, "local_allowed": False},
+        },
+        "files": [{"path": "generated_executor/evaluate_new_exit.py", "content": code}],
+        "written_files": ["generated_executor/evaluate_new_exit.py"],
+        "validation_plan": ["python syntax check"],
+    }
+    package_path.write_text(yaml.safe_dump(package, sort_keys=False), encoding="utf-8")
+    registry = {
+        "capabilities": {"C007": {"mechanic": "new_exit_rule"}},
+        "executors": {},
+        "matching_rules": {"require_required_data_exists": False},
+    }
+    proposal = {
+        "proposal_id": "run",
+        "strategy_id": "cb_arb_value_gap_switch",
+        "family": "new_exit_rule",
+        "hypothesis": "test new exit",
+        "source_insight": "prior result",
+        "expected_improvement": "better drawdown",
+        "capability_ids": [],
+        "missing_capability_request": {"mechanic": "new_exit_rule"},
+        "required_executor": "new_exit_tool",
+        "required_data": [],
+        "test_design": {"description": "test"},
+        "success_criteria": {"criteria": ["pass"]},
+        "falsifiers": {"train": ["fail"], "validate": ["fail"], "test": ["fail"]},
+        "risk": "risk",
+        "why_not_repeated_failure": "new mechanic",
+        "related_prior_runs": [],
+        "implementation_assumption": "tool exists after registration",
+    }
+
+    result = m.register_executor_tool_and_recompile(
+        proposal=proposal,
+        registry=registry,
+        registry_path=tmp_path / "data" / "research_framework" / "executor_registry.yaml",
+        closed_tags={},
+        recent_proposals=[],
+        run_dir=run_dir,
+        package_path=package_path,
+        config_defaults={},
+        store=m.ArtifactStore(),
+    )
+
+    assert result["compile_status"] == "READY"
+    spec = yaml.safe_load((run_dir / "spec.yaml").read_text(encoding="utf-8"))
+    assert spec["status"] == "READY"
+    assert spec["capability_ids"] == ["C007"]
+
+
+def test_invalid_tool_design_is_not_reused_on_retry(tmp_path, monkeypatch):
+    m = _load(IDEATION_CYCLE_MODULE, "ideation_cycle")
+    monkeypatch.setattr(m, "record_framework_change", lambda **_: "eventhash")
+    monkeypatch.setattr(m, "HERMES_HANDOFFS_PATH", tmp_path / "handoffs.yaml")
+    monkeypatch.setattr(m, "BRIDGE_CODEX_OUTBOX", tmp_path / "bridge" / "outbox.md")
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    descriptor = {
+        "status": "invalid_tool_code_response",
+        "tool_code_attempts": 1,
+        "tool_design": {
+            "status": "invalid_tool_design_response",
+            "validation_errors": ["missing required tool design field registry_entry"],
+        },
+        "validation_errors": ["design: missing required tool design field registry_entry"],
+    }
+    (run_dir / "executor_tool_request.yaml").write_text(yaml.safe_dump(descriptor), encoding="utf-8")
+    captured: list[str] = []
+    design = {
+        "tool_request_id": "new_executor",
+        "why_existing_tools_insufficient": "No current executor covers this idea.",
+        "reviewed_existing_executor_ids": [],
+        "registry_entry": {
+            "id": "new_executor",
+            "script_path": "scripts/evaluate_new_executor.py",
+            "strategy_id": "cb_arb_value_gap_switch",
+            "family": "new_exit_rule",
+            "command_template": ["python3", "scripts/evaluate_new_executor.py"],
+            "artifacts_produced": ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
+        },
+        "implementation_outline": {"steps": ["load data", "write artifacts"]},
+        "validation_plan": ["python syntax check"],
+    }
+    class FakeResponse:
+        def __init__(self, payload):
+            self.content = json.dumps(payload)
+            self.provider_id = "fake_ai"
+            self.response_hash = "hash"
+
+    class FakeAdapter:
+        calls = 0
+
+        def call_active_provider(self, prompt, schema):
+            self.calls += 1
+            captured.append(prompt)
+            if self.calls != 1:
+                raise AssertionError("executor code must not be requested from provider")
+            return FakeResponse(design)
+
+    result = m.request_executor_tool_code(
+        proposal={"proposal_id": "p1"},
+        compile_reason="no strict executor match",
+        compile_errors=[],
+        registry={"executors": []},
+        ai_adapter=FakeAdapter(),
+        run_dir=run_dir,
+        store=m.ArtifactStore(),
+    )
+
+    assert result["status"] == "awaiting_hermes_executor_code"
+    assert len(captured) == 1
+    assert "previous_design_response_errors" in captured[0]
+    assert "missing required tool design field registry_entry" in captured[0]
 
 
 def test_executor_tool_package_validation_blocks_bad_ai_tool_response(tmp_path, monkeypatch):
@@ -739,9 +975,11 @@ def test_executor_tool_package_validation_blocks_bad_ai_tool_response(tmp_path, 
     assert result["validation_errors"]
 
 
-def test_executor_tool_code_provider_failure_is_recorded_on_draft(tmp_path, monkeypatch):
+def test_executor_tool_code_handoff_does_not_call_provider_after_design(tmp_path, monkeypatch):
     m = _load(IDEATION_CYCLE_MODULE, "ideation_cycle")
     monkeypatch.setattr(m, "record_framework_change", lambda **_: "eventhash")
+    monkeypatch.setattr(m, "HERMES_HANDOFFS_PATH", tmp_path / "handoffs.yaml")
+    monkeypatch.setattr(m, "BRIDGE_CODEX_OUTBOX", tmp_path / "bridge" / "outbox.md")
 
     run_dir = tmp_path / "run"
     design = {
@@ -773,23 +1011,24 @@ def test_executor_tool_code_provider_failure_is_recorded_on_draft(tmp_path, monk
             self.calls += 1
             if self.calls == 1:
                 return FakeResponse()
-            raise RuntimeError("provider returned empty content")
+            raise AssertionError("executor code must not be requested from provider")
 
     result = m.request_executor_tool_code(
         proposal={"proposal_id": "p1"},
         compile_reason="no strict executor match",
         compile_errors=[],
         registry={"executors": []},
-        ai_adapter=FakeAdapter(),
+        ai_adapter=(adapter := FakeAdapter()),
         run_dir=run_dir,
         store=m.ArtifactStore(),
     )
-    assert result["status"] == "invalid_tool_code_response"
+    assert result["status"] == "awaiting_hermes_executor_code"
     assert result["written_files"] == []
-    assert result["validation_errors"] == ["provider_error: provider returned empty content"]
+    assert result["validation_errors"] == []
+    assert adapter.calls == 1
     descriptor = yaml.safe_load((run_dir / "executor_tool_request.yaml").read_text())
-    assert descriptor["tool_code_attempts"] == 1
-    assert descriptor["status"] == "invalid_tool_code_response"
+    assert descriptor["tool_code_attempts"] == 0
+    assert descriptor["status"] == "awaiting_hermes_executor_code"
 
 
 def test_executor_tool_package_validation_blocks_placeholder_code():

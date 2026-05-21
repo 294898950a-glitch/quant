@@ -1,0 +1,73 @@
+proposal_id: cb_arb_value_gap_switch_iv_exit
+strategy_id: cb_arb_value_gap_switch
+family: iv_regime_exit
+hypothesis: Exiting open CB arbitrage positions when implied volatility for the CB
+  (or its stock) spikes above a historical percentile reduces drawdowns during stress
+  regimes like 2020 without sacrificing upside in calm markets, because high IV episodes
+  tend to precede further mispricing widening and are costly to hold through.
+source_insight: The baseline strategy suffers a -9.06% total return in 2020 (excess
+  -19.48%) with max drawdown -17.9%. Prior gap-based exit or trailing stop attempts
+  failed to rescue that period. Implied volatility spikes often coincide with market
+  panics and CB sell-offs; exiting positions when such stress is detected may avoid
+  large losses.
+expected_improvement: Improve 2020 total return from -9.06% to better than -5% and
+  reduce max drawdown below -15%, while preserving test-period (2025-2026) total return
+  above 0.7.
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  description: Grid-search over IV percentile threshold (80th to 99th in steps of
+    2) and min-hold-days (1 to 10). For each open position, compute the daily IV percentile
+    over a 252-day rolling window; if any day’s IV exceeds the threshold, exit the
+    position on the next available day. Run cost-on evaluation on train (2019-2024),
+    repair year 2020, and sealed test (2025-2026). Compare to baseline cb_arb_value_gap_switch
+    with cost-on.
+success_criteria:
+  criteria:
+  - Train-period 2020 total_return > -0.05 (i.e., less loss than -5%)
+  - Train-period 2020 max_drawdown > -0.15 (i.e., better than -15%)
+  - Sealed test total_return >= 0.7
+falsifiers:
+  train: &id001
+  - No candidate meets the 2020 total_return > -0.05 criterion
+  - No candidate produces test total_return >= 0.7
+  - The best 2020 candidate severely degrades test sharpe (<0.5) or exhibits data-mining
+    pattern
+  validate: *id001
+  test: *id001
+risk: Implied volatility may not be reliably computable for all CBs; proxy using stock
+  volatility could introduce error. Premature exit during temporary volatility spikes
+  could cap upside in volatile rallies.
+why_not_repeated_failure: All prior exit variants were gap-based (contraction, trailing,
+  profit-taking) or time-based. None used an IV-regime signal. The IV-percentile exit
+  is a fundamentally different guard that targets stress episodes directly, unlike
+  trend or gap-reduction methods that failed.
+related_prior_runs:
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411 (position-sizing,
+  reject)
+- cb_arb_value_gap_switch_regime-trend-guard_2026-05-19 (reject)
+- cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519 (unusable)
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19 (unusable)
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19 (adoption_pass=False)
+implementation_assumption: The executor can compute IV from available data using either
+  an inverted CB model or stock volatility as a proxy, and will handle missing data
+  gracefully.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 6eb745c598a3984b
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 6eb745c598a3984b
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_exit/proposal.yaml

@@ -1,0 +1,71 @@
+proposal_id: cb_arb_value_gap_switch_exit_duration_adaptive_2026-05-21
+strategy_id: cb_arb_value_gap_switch
+family: duration_adaptive_exit
+hypothesis: A time-decaying gap threshold that tightens exit criteria linearly as
+  holding time increases will improve risk-adjusted returns by liquidating stale positions
+  while preserving early wins, without the numerical instability seen in previous
+  exit experiments.
+source_insight: Recent exit‑rule tests (dynamic retrace, profit‑taking) either failed,
+  produced unusable results due to scaling bugs, or did not beat baseline. None explored
+  a purely time‑weighted gap‑ratio threshold that decays from an initial fraction
+  to zero over a configurable holding window.
+expected_improvement: Improved Sharpe ratio and reduced max drawdown relative to baseline,
+  with cumulative excess return not significantly degraded, by systematically capping
+  holding periods for non‑converging gap positions.
+capability_ids:
+- C007
+required_executor: exit_rule_duration_adaptive_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+test_design:
+  description: Grid‑search over initial_threshold_fraction (0.2 to 0.8), min_hold_days
+    (1 to 10), and max_hold_days (15 to 60). For each set, run full train/test/2020
+    evaluation using the existing cb_arb_value_gap_switch pipeline. Select candidate
+    with highest train Sharpe.
+success_criteria:
+  criteria:
+  - Best candidate train Sharpe > baseline train Sharpe (0.05 or better improvement).
+  - Best candidate 2020 excess return ≥ -0.15 (i.e., does not materially worsen the
+    2020 stress period).
+  - Best candidate test cumulative excess return not below baseline test excess return
+    by more than 2 percentage points.
+falsifiers:
+  train: &id001
+  - No parameter set achieves train Sharpe improvement over baseline.
+  - Best candidate fails 2020 repair (excess return < -0.15).
+  - Best candidate test excess return lags baseline by > 2pp.
+  validate: *id001
+  test: *id001
+risk: Time‑decaying threshold may force exit too early when gap closes slowly after
+  the max_hold window, capping potential upside. Overly aggressive decay could reduce
+  win rate.
+why_not_repeated_failure: This proposal implements a duration‑adaptive mechanism,
+  which is a distinct sub‑family that has never been executed. Previous exit experiments
+  used profit‑taking based on gap contraction fraction (profit‑take exit), dynamic
+  retrace from a trailing peak (exit_dynamic_trail), or a static gap‑decay factor,
+  none of which incorporate a linearly decaying threshold driven purely by holding
+  time.
+related_prior_runs:
+- cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+implementation_assumption: The exit_rule_duration_adaptive_executor will compute current_gap/entry_gap
+  for each open position after min_hold_days, then exit when that ratio exceeds a
+  threshold that linearly falls from initial_threshold_fraction to 0 over max_hold_days.
+  No look‑ahead bias in threshold calculation; thresholds are set before each trade
+  day based on holding days already elapsed.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 2b2544ef58f8a7e0
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 2b2544ef58f8a7e0
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_exit_duration_adaptive_2026-05-21/proposal.yaml

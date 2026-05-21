@@ -1,0 +1,83 @@
+proposal_id: cb_arb_value_gap_switch_new_valuation_formula_v1
+strategy_id: cb_arb_value_gap_switch
+family: valuation_refinement
+hypothesis: Refining the theoretical value model for convertible bonds to incorporate
+  dynamic credit spread and option‑adjusted spread (OAS) will produce more accurate
+  value gaps, improving signal quality and leading to higher risk‑adjusted excess
+  returns.
+source_insight: The current absolute value‑gap switch relies on a simple theoretical
+  value (likely B‑S with constant credit spread). In reality, CB pricing errors are
+  often driven by mis‑estimated credit risk and volatility surfaces. A more sophisticated
+  model could reduce noise, especially during stress periods when credit and equity
+  diverge, thereby enhancing the signal‑to‑noise ratio of the gap metric.
+expected_improvement: Cumulative excess return (cost‑on) increase by ≥3 percentage
+  points over baseline, and max drawdown reduction by ≥5 percentage points, driven
+  by fewer false signals and improved entry timing.
+capability_ids:
+- C006
+required_executor:
+  missing_capability_request:
+    new_executor_id: new_valuation_executor
+    description: Executor to compute refined CB theoretical values using a convertible
+      bond pricing model that incorporates dynamic credit spread estimation, option‑adjusted
+      spread calibration, and stock–credit correlation adjustments. Must produce daily
+      theoretical values for all CBs in the universe and recalculate the value gap
+      (market_price - theoretical_value).
+    required_inputs:
+    - data/cb_warehouse/cb_daily.parquet
+    - data/cb_warehouse/cb_basic.parquet
+    - data/cb_warehouse/stk_daily_qfq.parquet
+    - data/cb_warehouse/credit_spreads.parquet
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/credit_spreads.parquet
+test_design:
+  description: 1. Implement the refined theoretical value model (e.g., Tsiveriotis-Fernandes
+    with time‑varying credit spread derived from CDS curves or bond yields, and volatility
+    surface interpolation). 2. Compute new value gaps = market price – refined theoretical
+    value. 3. Re‑run the existing value‑gap switch strategy (entry when gap > threshold,
+    exit when gap shrinks) using the new gaps, keeping all other parameters (position
+    sizing, exit rules) identical to baseline. 4. Compare cost‑on and cost‑off cumulative
+    excess returns, max drawdown, and Sharpe ratio on the same train (2019–2024),
+    2020 repair, and sealed test (2025–2026) periods used in prior evaluations.
+success_criteria:
+  criteria:
+  - cost_on cumulative excess compound > -0.07 (improvement from -0.1047)
+  - cost_on max drawdown > -0.30 (improvement from -0.3516)
+  - test period (2025–2026) total return exceeds baseline (0.732) by at least 0.05
+falsifiers:
+  train: &id001
+  - cost_on excess return does not improve by at least 0.02 over baseline
+  - max drawdown in any single year (cost‑on) worsens relative to baseline
+  - out‑of‑sample (2025–) ranking Sharpe ratio < 0.5
+  validate: *id001
+  test: *id001
+risk: Medium. Data mining risk due to additional parameters in credit spread modeling;
+  the new model may overfit in‑sample. Requires careful walk‑forward validation and
+  out‑of‑sample test. Also risk that credit spread data is unavailable or noisy.
+why_not_repeated_failure: This direction has not been tested in any prior run. Recent
+  rejections focused on position sizing (option_position_sizing family), regime‑based
+  entry guards, and various exit rules. None attempted to improve the core valuation
+  signal. The current valuation remains simplistic and may be a key source of the
+  strategy's underperformance, especially in stress periods like 2020. This proposal
+  is a new family, not a re‑phrasing of closed or exhausted directions.
+related_prior_runs: []
+implementation_assumption: Assume that a convertible bond pricing library (e.g., QuantLib
+  with Python bindings) can be used, and that credit spread data (e.g., synthetic
+  spreads from CB yields) can be constructed from existing cb_daily and bond data.
+  If external CDS or OAS data is unavailable, a rolling credit spread proxy will be
+  derived from the difference between CB yield and risk‑free rate.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: d4289d438ec48b6d
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: d4289d438ec48b6d
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_formula_v1/proposal.yaml

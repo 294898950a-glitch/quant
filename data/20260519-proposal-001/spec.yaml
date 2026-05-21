@@ -1,6 +1,6 @@
 schema_version: 1
 run_id: 20260519-proposal-001
-date: '2026-05-19'
+date: '2026-05-21'
 strategy_id: cb_arb_value_gap_switch
 l0_entry_id: 1
 l0_source: autonomous strategy ideator from recent_results_digest
@@ -28,6 +28,7 @@ mechanics:
 new_data_sources:
 - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
 - path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
 hard_floors:
   test_excess_gte: 0.35
   train_excess_gte: 0.2
@@ -39,23 +40,25 @@ cv_holdout_years:
 - 2026
 compute_estimate:
   sig_minutes: 0
-  spot_minutes: 0
+  spot_minutes: 60
   local_minutes: 0
   estimated_cost_yuan: 0.0
 stop_conditions:
 - executor match fails
 - required artifacts are missing
 artifacts_required:
-- implementation_plan.yaml
-- spec.yaml
-status: DRAFT
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: ARCHIVED
 auxiliary_metrics:
 - train_excess_return
 - test_excess_return
 - max_drawdown
 escalation:
 - DRAFT requires executor implementation before run
-notes: no strict executor match
+notes: all guarded checks passed
 proposal:
   proposal_id: 20260519-proposal-001
   strategy_id: cb_arb_value_gap_switch
@@ -80,6 +83,9 @@ proposal:
   required_data:
   - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
   - data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted stock prices for compatibility with rank loader.
+    schema_hash: null
   test_design:
     description: Grid search over min_hold_days (5,10,15), initial_threshold_fraction
       (0.5,0.7,1.0), and decay_period_factor (0.5,1.0,1.5). Train on 2019-2024, early
@@ -136,3 +142,76 @@ proposal:
   proposal_path: /home/jay/projects/quant/data/20260519-proposal-001/proposal.yaml
   mechanics:
   - new_exit_rule
+executor_id: exit_rule_duration_adaptive_executor
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+- --min-hold-days
+- '{min_hold_days}'
+- --initial-threshold-fraction
+- '{initial_threshold_fraction}'
+- --max-hold-days
+- '{max_hold_days}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 90
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/20260519-proposal-001
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/20260519-proposal-001
+  - --min-hold-days
+  - '5'
+  - --initial-threshold-fraction
+  - '0.7'
+  - --max-hold-days
+  - '90'
+  sync_paths:
+  - scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/20260519-proposal-001/proposal.yaml
+  response_hash: 1d0d81c62fc684f1
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+updated_at: '2026-05-21T07:37:01Z'

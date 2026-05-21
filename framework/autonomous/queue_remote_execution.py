@@ -16,6 +16,8 @@ from typing import Any, Callable
 
 import yaml
 
+from framework.autonomous.executor_requirements import declared_requirements_for_spec
+
 
 STALE_VM_AVOID_AFTER = timedelta(minutes=30)
 SYNC_COMMAND_TIMEOUT_SECONDS = 180
@@ -41,11 +43,36 @@ def _rel(repo_root: Path, path: Path) -> str:
         return str(path)
 
 
-def should_sync_path_for_run(path: Path, rel_path: str, spec_path: Path, repo_root: Path | None = None) -> bool:
+def _declared_path_to_repo_path(repo_root: Path, raw: str) -> Path:
+    path = Path(raw)
+    if not path.is_absolute():
+        return repo_root / path
+    try:
+        path.resolve().relative_to(repo_root)
+        return path
+    except ValueError:
+        parts = path.parts
+        if "data" in parts:
+            data_index = parts.index("data")
+            repo_candidate = repo_root.joinpath(*parts[data_index:])
+            if repo_candidate.exists():
+                return repo_candidate
+        return path
+
+
+def should_sync_path_for_run(
+    path: Path,
+    rel_path: str,
+    spec_path: Path,
+    repo_root: Path | None = None,
+    required_data_paths: set[str] | None = None,
+) -> bool:
     root = repo_root or Path.cwd()
     run_rel = _rel(root, spec_path.parent).rstrip("/")
     prepared_rel = f"{run_rel}/prepared_data"
     if rel_path == prepared_rel or rel_path.startswith(f"{prepared_rel}/"):
+        return True
+    if rel_path in (required_data_paths or set()):
         return True
     if rel_path.startswith("data/") and path.suffix.lower() in LARGE_DATA_SUFFIXES:
         return False
@@ -94,7 +121,6 @@ class QueueRemoteExecutionService:
         rel: Callable[[Path], str],
         now_iso: Callable[[], str],
         issue_ticket: Callable[[str], dict[str, str]],
-        data_quality_gate_passes_locally: Callable[[Path], bool] | None = None,
         data_quality_repair_signature: Callable[[Path, dict[str, Any]], str] | None = None,
         pipeline_execution_failed: Callable[[Path], str | None] | None = None,
         remote_running_on_vm: Callable[[dict[str, Any], str | None], bool] | None = None,
@@ -110,7 +136,6 @@ class QueueRemoteExecutionService:
         self.rel = rel
         self.now_iso = now_iso
         self.issue_ticket = issue_ticket
-        self._data_quality_gate_passes_locally_cb = data_quality_gate_passes_locally
         self._data_quality_repair_signature_cb = data_quality_repair_signature
         self._pipeline_execution_failed_cb = pipeline_execution_failed
         self._remote_running_on_vm_cb = remote_running_on_vm
@@ -324,6 +349,41 @@ class QueueRemoteExecutionService:
             self.save_state(state)
         return changed
 
+    def clear_recovered_vm_avoidances(self, state: dict[str, Any], queue: list[Any], available_vms: list[dict[str, Any]]) -> int:
+        available_ids = {str(vm.get("id")) for vm in available_vms if vm.get("id")}
+        if not available_ids:
+            return 0
+        changed = 0
+        for item in queue:
+            if not isinstance(item, dict) or item.get("status") != "queued" or not item.get("avoid_vm_ids"):
+                continue
+            old_avoid = [str(value) for value in item.get("avoid_vm_ids") or []]
+            recovered = [vm_id for vm_id in old_avoid if vm_id in available_ids]
+            if not recovered:
+                continue
+            remaining = [vm_id for vm_id in old_avoid if vm_id not in available_ids]
+            if remaining:
+                item["avoid_vm_ids"] = remaining
+            else:
+                item.pop("avoid_vm_ids", None)
+            item["workflow_stage"] = "queued_after_recovered_vm_probe"
+            item["recovered_vm_retry_at"] = self.now_iso()
+            self.mark_history(state, item, "queued", f"cleared recovered VM avoid list: {recovered}")
+            self.audit(
+                "recovered_vm_avoidance_reset",
+                {
+                    "item_id": item.get("id"),
+                    "recovered_vm_ids": recovered,
+                    "remaining_avoid_vm_ids": remaining,
+                    "last_start_error_at": item.get("last_start_error_at"),
+                },
+            )
+            changed += 1
+        if changed:
+            state["queue"] = queue
+            self.save_state(state)
+        return changed
+
     def sync_one_path(self, state: dict[str, Any], path: Path, rel_path: str, vm: dict[str, Any]) -> None:
         vm_host = str(vm["host"])
         remote_repo = str(vm["remote_repo"])
@@ -388,8 +448,28 @@ class QueueRemoteExecutionService:
                 timeout=SYNC_COMMAND_TIMEOUT_SECONDS,
             )
 
-    def should_sync_path_for_run(self, path: Path, rel_path: str, spec_path: Path) -> bool:
-        return should_sync_path_for_run(path, rel_path, spec_path, self.repo_root)
+    def should_sync_path_for_run(self, path: Path, rel_path: str, spec_path: Path, required_data_paths: set[str] | None = None) -> bool:
+        return should_sync_path_for_run(path, rel_path, spec_path, self.repo_root, required_data_paths)
+
+    def declared_required_data_paths(self, spec_path: Path, spec: dict[str, Any]) -> set[str]:
+        paths: set[str] = set()
+        for item in spec.get("new_data_sources") or []:
+            raw = item.get("path") if isinstance(item, dict) else item
+            if raw:
+                paths.add(self.rel(_declared_path_to_repo_path(self.repo_root, str(raw))))
+        try:
+            requirements = declared_requirements_for_spec(spec_path)
+        except Exception as exc:
+            self.audit(
+                "declared_required_data_paths_unavailable",
+                {"spec_path": self.rel(spec_path), "error": f"{type(exc).__name__}: {exc}"},
+            )
+            return paths
+        for item in requirements.get("required_files") or []:
+            raw = item.get("path") if isinstance(item, dict) else None
+            if raw:
+                paths.add(self.rel(_declared_path_to_repo_path(self.repo_root, str(raw))))
+        return paths
 
     def sync_paths(self, state: dict[str, Any], item: dict[str, Any], spec_path: Path, vm: dict[str, Any]) -> None:
         paths = [
@@ -404,9 +484,11 @@ class QueueRemoteExecutionService:
             automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
             automation_sync_paths = automation.get("sync_paths") if isinstance(automation.get("sync_paths"), list) else []
             paths.extend(automation_sync_paths)
+            paths.extend(sorted(self.declared_required_data_paths(spec_path, spec)))
         prepared_data = spec_path.parent / "prepared_data"
         if prepared_data.exists():
             paths.append(self.rel(prepared_data))
+        required_data_paths = self.declared_required_data_paths(spec_path, spec if isinstance(spec, dict) else {})
         seen: set[str] = set()
         for path_raw in paths:
             path = Path(path_raw)
@@ -418,10 +500,12 @@ class QueueRemoteExecutionService:
             if rel_path in seen:
                 continue
             seen.add(rel_path)
-            if not self.should_sync_path_for_run(path, rel_path, spec_path):
+            if not self.should_sync_path_for_run(path, rel_path, spec_path, required_data_paths):
                 self.log(f"skipped large or historical data sync path: {rel_path}")
                 self.audit("sync_path_skipped", {"item_id": item.get("id"), "path": rel_path, "reason": "large_or_historical_data"})
                 continue
+            if rel_path in required_data_paths:
+                self.audit("required_data_sync", {"item_id": item.get("id"), "path": rel_path, "vm_id": vm.get("id")})
             self.sync_one_path(state, path, rel_path, vm)
 
     def remote_data_quality_summary(self, spec_path: Path, vm: dict[str, Any]) -> str:
@@ -551,14 +635,6 @@ class QueueRemoteExecutionService:
         self.log(f"started remote pipeline pid={pid} task={item.get('id') or spec_path.parent.name} vm={vm_host}")
         return pid
 
-    def data_quality_gate_passes_locally(self, spec_path: Path) -> bool:
-        if self._data_quality_gate_passes_locally_cb is not None:
-            return self._data_quality_gate_passes_locally_cb(spec_path)
-        from scripts.validate_data_quality import deterministic_decision, summarize_data_quality
-
-        decision = deterministic_decision(summarize_data_quality(spec_path))
-        return str(decision.get("status") or "").lower() == "pass"
-
     def data_quality_repair_signature(self, spec_path: Path, repair: dict[str, Any]) -> str:
         if self._data_quality_repair_signature_cb is not None:
             return self._data_quality_repair_signature_cb(spec_path, repair)
@@ -607,9 +683,6 @@ class QueueRemoteExecutionService:
             )
             if spec_status == "DRAFT" or (spec_status == "COMPLETE" and not retrying_same_repaired_item):
                 continue
-            if not self.data_quality_gate_passes_locally(spec_path):
-                continue
-
             original_status = spec_status
             spec["status"] = "READY"
             repair["requeue_status"] = "queued_after_data_repair"
@@ -620,7 +693,7 @@ class QueueRemoteExecutionService:
             previous_status = str(item.get("status") or "")
             item["status"] = "queued"
             item["requeued_at"] = self.now_iso()
-            item["requeue_reason"] = "data quality repair prepared run-local data and deterministic recheck passed"
+            item["requeue_reason"] = "data quality repair prepared run-local data; AI data judge will recheck before execution"
             item["data_quality_repair_rerun"] = True
             item["data_quality_repair_requeue_attempts"] = prior_requeues + 1
             item["data_quality_repair_signature"] = repair_sig
@@ -794,6 +867,7 @@ class QueueRemoteExecutionService:
                 },
             )
             return status
+        recovered_vm_avoidance_reset_count = self.clear_recovered_vm_avoidances(state, queue, available_vms)
 
         started: list[dict[str, str]] = []
         skipped_unavoided: list[dict[str, Any]] = []
@@ -947,7 +1021,7 @@ class QueueRemoteExecutionService:
                 self.mark_history(state, item, "failed", item["failure_reason"])
                 self.save_state(state)
                 self.write_status("failed", {"item_id": item.get("id"), "error": item["failure_reason"]})
-                raise
+                return "failed"
 
             item["status"] = "running"
             item["workflow_stage"] = "running_remote"
@@ -975,6 +1049,9 @@ class QueueRemoteExecutionService:
         if stale_vm_avoidance_reset_count:
             self.write_status("stale_vm_avoidance_reset", {"stale_vm_avoidance_reset_count": stale_vm_avoidance_reset_count})
             return "stale_vm_avoidance_reset"
+        if recovered_vm_avoidance_reset_count:
+            self.write_status("recovered_vm_avoidance_reset", {"recovered_vm_avoidance_reset_count": recovered_vm_avoidance_reset_count})
+            return "recovered_vm_avoidance_reset"
         if skipped_unavoided:
             self.write_status("waiting_unavoided_vm", {"skipped": skipped_unavoided})
             return "waiting_unavoided_vm"

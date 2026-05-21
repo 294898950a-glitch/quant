@@ -1,0 +1,20 @@
+$ /usr/bin/python3 scripts/evaluate_cb_arb_iv_percentile_exit.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --output-dir output/iv_exit_test --iv-percentile-threshold 90 --min-hold-days 0
+
+Traceback (most recent call last):
+  File "/home/ubuntu/projects/quant/scripts/evaluate_cb_arb_iv_percentile_exit.py", line 736, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/home/ubuntu/projects/quant/scripts/evaluate_cb_arb_iv_percentile_exit.py", line 498, in main
+    df_merged = df_enriched.merge(
+                ^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/core/frame.py", line 12900, in merge
+    return merge(
+           ^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/core/reshape/merge.py", line 385, in merge
+    op = _MergeOperation(
+         ^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/core/reshape/merge.py", line 1031, in __init__
+    self._maybe_coerce_merge_keys()
+  File "/home/ubuntu/.local/lib/python3.12/site-packages/pandas/core/reshape/merge.py", line 1835, in _maybe_coerce_merge_keys
+    raise ValueError(msg)
+ValueError: You are trying to merge on float64 and str columns for key 'stk_code'. If you wish to proceed you should use pd.concat

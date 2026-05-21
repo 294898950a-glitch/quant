@@ -27,10 +27,10 @@ expected_improvement: '2020 score from -0.240 to >= -0.10; train score from 0.05
 mechanics:
 - global_entry_filter
 - regime_conditioning
-required_executor: evaluate_cb_arb_value_gap_switch
+required_executor: market_drawdown_entry_gate_executor
 required_data:
-- CSI 300 daily close (already loaded by backtester for benchmark; no new source)
-- existing bond candidate pipeline unchanged
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
 test_design:
   variants:
   - name: gate_n20_t12_buf0
@@ -139,3 +139,7 @@ rewrite_status: valid
 rewrite_rounds_used: 3
 rewrite_last_errors: []
 proposal_path: data/cb_arb_value_gap_switch_market_drawdown_entry_gate_20260517/proposal.yaml
+capability_ids:
+- C009
+- C010
+required_executor_registered_at: '2026-05-22T03:08:48'

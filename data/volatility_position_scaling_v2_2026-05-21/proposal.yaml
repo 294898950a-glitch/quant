@@ -1,0 +1,81 @@
+proposal_id: volatility_position_scaling_v2_2026-05-21
+strategy_id: cb_arb_value_gap_switch
+family: volatility_based_position_scaling
+hypothesis: 'Inverse volatility adjustment of candidate ranking and trade size reduces
+  drawdowns and improves risk-adjusted returns, because high recent volatility erodes
+  the edge of value-gap signals; scaling exposure down during volatile regimes better
+  aligns risk with signal reliability.
+
+  '
+source_insight: 'Static stock‑like scaling (distance to bond floor) failed to beat
+  baseline; volatility is a more direct risk measure. The baseline strategy suffered
+  a -17.9% max drawdown in 2020, and volatility scaling is a standard method to curb
+  such tail risks.
+
+  '
+expected_improvement: 'Increased excess returns (at least matching baseline) in sealed
+  test, lower max drawdown in 2020 repair, and smoother equity curve with reduced
+  volatility-induced losses.
+
+  '
+capability_ids:
+- C001
+required_executor: volatility_based_position_scaling_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  description: 'Grid search over lookback window (5, 10, 20, 40 days) and scaling
+    strength multiplier (0.5, 1.0, 2.0). For each candidate, compute ATR from daily
+    CB/stock prices, convert to an inverse scaling factor, and multiply both the ranking
+    weight and the buy amount. Use train 2019‑2024, 2020 repair, sealed test 2025‑2026‑05‑08.
+    Evaluate total return, excess return, max drawdown, Sharpe, win rate. Compare
+    best candidate to baseline on all periods.
+
+    '
+success_criteria:
+  criteria:
+  - Excess return in sealed test ≥ baseline excess return (0.37976).
+  - Max drawdown in 2020 repair ≤ baseline 2020 drawdown (-0.179066).
+  - Win rate in sealed test not significantly worse than baseline (0.6073).
+  - 'No severe overfit: train performance not more than 2x test performance.'
+falsifiers:
+  train: &id001
+  - No grid candidate meets all success criteria.
+  - All candidates increase 2020 drawdown beyond baseline.
+  - Best candidate worsens sealed test excess return by more than 5 pp.
+  - Train‑test Sharpe ratio divergence > 0.5.
+  validate: *id001
+  test: *id001
+risk: 'Inverse volatility scaling can dampen returns in calm bull markets and may
+  fail to protect against sudden jumps if the lookback window is too long. Parameter
+  overfitting possible with small grid, mitigated by 2020 repair and sealed test gate.
+
+  '
+why_not_repeated_failure: 'The earlier static position scaling (option‑position‑sizing)
+  used bond‑floor distance, not volatility. The closed `option_position_sizing` family
+  is avoided. The recent `volatility_scaling_001` run did not receive a final reject
+  verdict and is not closed; this proposal broadens the parameter space and uses a
+  clearer grid‑search protocol, offering a fresh chance to find a working region without
+  repeating that exact setup.
+
+  '
+related_prior_runs:
+- volatility_scaling_001
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+implementation_assumption: The executor will compute ATR from daily CB/stock prices,
+  apply the chosen scaling formula, and integrate with the existing backtester. It
+  will produce a summary CSV and per‑year metrics for the grid search.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 1aa1e4045055dc97
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 1aa1e4045055dc97
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/volatility_position_scaling_v2_2026-05-21/proposal.yaml

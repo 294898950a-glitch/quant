@@ -1,0 +1,12 @@
+schema_version: 1
+run_id: iv_regime_exit_2026-05-21
+spec_path: data/iv_regime_exit_2026-05-21/spec.yaml
+validated_at: '2026-05-21T21:55:35'
+summary_sha256: 1956e9cddfec8825685ea84be726b3eb3fd878af667a756304b39b6240d09c90
+status: pass
+confidence: high
+decision_source: deterministic_data_gate
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: deterministic data gate passed

@@ -1,0 +1,154 @@
+{
+  "best_candidate": {
+    "params": {
+      "retrace_fraction": 0.3,
+      "min_hold_days": 1
+    },
+    "train_total_return": 53836983.240635,
+    "test_total_return": 6759814.455295,
+    "train_win_rate": 0.26216201971222264,
+    "test_win_rate": 0.2584419926446005,
+    "yr2020_total_return": 13465228.530098999,
+    "yr2020_win_rate": 0.2516778523489933,
+    "train_score": 53836983.240635,
+    "test_score": 6759814.455295,
+    "yr2020_score": 13465228.530098999
+  },
+  "all_candidates": [
+    {
+      "params": {
+        "retrace_fraction": 0.3,
+        "min_hold_days": 1
+      },
+      "train_total_return": 53836983.240635,
+      "test_total_return": 6759814.455295,
+      "train_win_rate": 0.26216201971222264,
+      "test_win_rate": 0.2584419926446005,
+      "yr2020_total_return": 13465228.530098999,
+      "yr2020_win_rate": 0.2516778523489933,
+      "train_score": 53836983.240635,
+      "test_score": 6759814.455295,
+      "yr2020_score": 13465228.530098999
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.3,
+        "min_hold_days": 5
+      },
+      "train_total_return": 42010743.119356,
+      "test_total_return": 3848179.6476279995,
+      "train_win_rate": 0.30109351432880843,
+      "test_win_rate": 0.29143587558585426,
+      "yr2020_total_return": 10330714.59787,
+      "yr2020_win_rate": 0.28320911880754057,
+      "train_score": 42010743.119356,
+      "test_score": 3848179.6476279995,
+      "yr2020_score": 10330714.59787
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.3,
+        "min_hold_days": 10
+      },
+      "train_total_return": 28488970.826396003,
+      "test_total_return": 1145229.0978449997,
+      "train_win_rate": 0.3110658626360717,
+      "test_win_rate": 0.2848904267589389,
+      "yr2020_total_return": 6400525.609997001,
+      "yr2020_win_rate": 0.29728166570271836,
+      "train_score": 28488970.826396003,
+      "test_score": 1145229.0978449997,
+      "yr2020_score": 6400525.609997001
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.5,
+        "min_hold_days": 1
+      },
+      "train_total_return": 49678240.972342,
+      "test_total_return": 6250741.736683,
+      "train_win_rate": 0.23817022872140983,
+      "test_win_rate": 0.2342007434944238,
+      "yr2020_total_return": 12725779.228979997,
+      "yr2020_win_rate": 0.22375954198473283,
+      "train_score": 49678240.972342,
+      "test_score": 6250741.736683,
+      "yr2020_score": 12725779.228979997
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.5,
+        "min_hold_days": 5
+      },
+      "train_total_return": 40254960.657137,
+      "test_total_return": 3728648.755254,
+      "train_win_rate": 0.27165082108902333,
+      "test_win_rate": 0.2657272269753397,
+      "yr2020_total_return": 9965036.147044,
+      "yr2020_win_rate": 0.24851752021563342,
+      "train_score": 40254960.657137,
+      "test_score": 3728648.755254,
+      "yr2020_score": 9965036.147044
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.5,
+        "min_hold_days": 10
+      },
+      "train_total_return": 28256916.047629,
+      "test_total_return": 1297021.5109269996,
+      "train_win_rate": 0.2815704962187921,
+      "test_win_rate": 0.26898326898326896,
+      "yr2020_total_return": 6364073.732861999,
+      "yr2020_win_rate": 0.26954732510288065,
+      "train_score": 28256916.047629,
+      "test_score": 1297021.5109269996,
+      "yr2020_score": 6364073.732861999
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.7,
+        "min_hold_days": 1
+      },
+      "train_total_return": 10262054.527649999,
+      "test_total_return": 1689660.8125800001,
+      "train_win_rate": 0.16975748930099857,
+      "test_win_rate": 0.1423290203327172,
+      "yr2020_total_return": 1293952.8907789998,
+      "yr2020_win_rate": 0.16253002401921537,
+      "train_score": 10262054.527649999,
+      "test_score": 1689660.8125800001,
+      "yr2020_score": 1293952.8907789998
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.7,
+        "min_hold_days": 5
+      },
+      "train_total_return": 8065905.958488,
+      "test_total_return": 713214.225866,
+      "train_win_rate": 0.20029713668287413,
+      "test_win_rate": 0.16366258111031,
+      "yr2020_total_return": 720323.5184399999,
+      "yr2020_win_rate": 0.18035714285714285,
+      "train_score": 8065905.958488,
+      "test_score": 713214.225866,
+      "yr2020_score": 720323.5184399999
+    },
+    {
+      "params": {
+        "retrace_fraction": 0.7,
+        "min_hold_days": 10
+      },
+      "train_total_return": 6506797.382462999,
+      "test_total_return": -145489.73446800013,
+      "train_win_rate": 0.21601866251944013,
+      "test_win_rate": 0.18252595155709342,
+      "yr2020_total_return": 336982.78373900003,
+      "yr2020_win_rate": 0.19106957424714435,
+      "train_score": 6506797.382462999,
+      "test_score": -145489.73446800013,
+      "yr2020_score": 336982.78373900003
+    }
+  ]
+}

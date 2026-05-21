@@ -1,0 +1,74 @@
+proposal_id: cb_arb_value_gap_switch_iv_percentile_exit_20260521
+strategy_id: cb_arb_value_gap_switch
+family: iv_regime_exit
+hypothesis: Exiting positions when convertible bond implied volatility reaches an
+  extreme percentile (e.g., 90th) reduces large losses during volatility spikes and
+  improves risk-adjusted returns compared to the baseline, which holds until gap closes.
+source_insight: Recent position-sizing and gap-based exit variants failed to beat
+  baseline, partly due to severe drawdowns in stress periods like 2020. Implied volatility
+  extremes may signal regime changes and provide a timing edge for exit that is not
+  captured by gap dynamics alone.
+expected_improvement: Reduce max drawdown below -0.30 cost-on and turn cumulative
+  excess compound return positive across all evaluation periods.
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  evaluation_periods:
+    train: 2019-01-01 to 2024-12-31
+    stress: 2020-01-01 to 2020-12-31
+    sealed_test: 2025-01-01 to 2026-05-08
+  grid_search:
+    iv_percentile_threshold:
+    - 80
+    - 85
+    - 90
+    - 95
+    min_hold_days:
+    - 1
+    - 2
+    - 5
+    - 10
+  cost_model: on (realistic costs)
+  comparison: against baseline (current main strategy with no exit rule except gap
+    closure)
+success_criteria:
+  description: Best candidate must strictly outperform baseline in both cumulative
+    excess compound return and maximum drawdown (less negative) for train, 2020 stress,
+    and sealed test periods.
+falsifiers:
+  train: &id001
+  - No candidate grid-search parameter combination outperforms baseline on both cumulative
+    excess return and max drawdown for any of the three evaluation periods.
+  - Best candidate increases drawdown beyond -0.35 cost-on in any period.
+  validate: *id001
+  test: *id001
+risk: Overfitting to historical volatility spikes if grid search is unconstrained;
+  IV may be noisy or difficult to compute reliably, leading to unintended exits.
+why_not_repeated_failure: Prior exit-rule attempts (adaptive sell gap, dynamic trail,
+  profit-taking) relied on gap dynamics or trailing stops, all rejected. This approach
+  uses implied volatility percentiles as a distinct exit signal not previously tested.
+related_prior_runs:
+- cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19 (rejected)
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519 (unusable)
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19 (rejected)
+implementation_assumption: The cb_daily.parquet contains fields (e.g., implied volatility,
+  underlying price, conversion terms) sufficient to compute daily IV for held convertible
+  bonds. If missing, a stock-volatility proxy will be used.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: bd694b6757770e99
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: bd694b6757770e99
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit_20260521/proposal.yaml

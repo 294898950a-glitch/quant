@@ -1,0 +1,25 @@
+schema_version: 1
+updated_at: "2026-05-22T00:00:00+08:00"
+purpose: "Machine-owned numeric code maps for LLM-facing status-like values. LLM prompts must request codes, not free-form labels."
+
+maps:
+  data_quality_decision:
+    1: pass
+    2: repair_candidate
+    3: fail
+  data_quality_confidence:
+    1: high
+    2: medium
+    3: low
+  data_repair_decision:
+    1: repairable
+    2: unrepairable
+  review_status:
+    1: accept
+    2: reject
+    3: inconclusive
+    4: needs_manual_review
+  review_priority:
+    1: high
+    2: medium
+    3: low

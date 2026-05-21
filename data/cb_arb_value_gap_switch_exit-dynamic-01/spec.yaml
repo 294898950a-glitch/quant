@@ -1,6 +1,6 @@
 schema_version: 1
 run_id: cb_arb_value_gap_switch_exit-dynamic-01
-date: '2026-05-19'
+date: '2026-05-20'
 strategy_id: cb_arb_value_gap_switch
 l0_entry_id: 1
 l0_source: autonomous strategy ideator from recent_results_digest
@@ -22,6 +22,7 @@ mechanics:
 new_data_sources:
 - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
 - path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
 hard_floors:
   improve_2020_excess_return: 2020 excess_return > baseline_2020 excess_return + 0.05
   test_excess_return_min: test excess_return >= baseline_test excess_return * 0.95
@@ -66,6 +67,10 @@ proposal:
   required_data:
   - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
   - data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted stock prices for compatibility with shared rank
+      loader.
+    schema_hash: null
   test_design:
     description: Run baseline vs variant using standard train (20190101-20241231)
       and test (20250101-20260508) plus 2020 repair period; compare key metrics (excess

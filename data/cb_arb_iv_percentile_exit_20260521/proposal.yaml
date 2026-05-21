@@ -1,0 +1,66 @@
+proposal_id: cb_arb_iv_percentile_exit_20260521
+strategy_id: cb_arb_value_gap_switch
+family: iv_regime_exit
+hypothesis: Exiting positions when implied volatility of CBs exceeds a high historical
+  percentile will trim drawdown during equity sell-offs without sacrificing average
+  returns, because extreme IV often signals overpriced options and heightened downside
+  risk.
+source_insight: The baseline strategy suffered a max drawdown of -32.4% (train) and
+  -17.9% in 2020 alone. Implied volatility spiked during the 2020 COVID crash and
+  similar stress events. By cutting positions when IV is in the top decile, we aim
+  to avoid the worst legs of these drawdowns.
+expected_improvement: Reduce max drawdown in training period by at least 5 percentage
+  points, and improve Sharpe ratio by ≥0.1, while limiting total excess return degradation
+  to ≤2 pp.
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  description: Grid search over IV percentile thresholds (80,85,90,95) and min hold
+    days (1,5,10). For each held CB, compute daily IV using the inverted convertible
+    bond pricing model or stock‑vol proxy, calculate a rolling 252‑day percentile
+    rank. Exit when IV exceeds the threshold. Backtest on train (2019‑2024), 2020
+    repair year, and sealed test (2025‑20260508). Compare against baseline using total
+    return, excess return, max drawdown, Sharpe ratio, and win rate.
+success_criteria:
+  criteria:
+  - Train max drawdown reduction ≥5 pp relative to baseline
+  - Or train Sharpe ratio improvement ≥0.1 with no more than 2 pp excess return loss
+  - Test period excess return not degraded by more than 2 pp
+falsifiers:
+  train: &id001
+  - No candidate reduces train max drawdown by more than 2 pp
+  - Excess return drops by >3 pp across train + test
+  - 2020 year return worsens by >5 pp vs baseline
+  validate: *id001
+  test: *id001
+risk: Data mining from grid search on IV threshold; IV estimation noise could introduce
+  false exit signals; model may underperform if stress periods change character.
+why_not_repeated_failure: Previous exit‑rule attempts (dynamic trail, profit‑taking,
+  adaptive sell gap) all conditioned on gap retracement, time decay, or PnL. This
+  proposal uses implied volatility percentile, a separate signal dimension. It is
+  not a renamed variant of those failed / unusable directions.
+related_prior_runs:
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519 (unusable)
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19 (unusable)
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19 (adoption_pass=False)
+implementation_assumption: The cb_arb_iv_percentile_exit_executor can compute daily
+  IV for each CB via an inverted CB pricing model or a stock‑vol proxy, and calculate
+  rolling percentiles using a fixed 252‑day lookback window.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 78fd86b48df8ae3a
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 78fd86b48df8ae3a
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_iv_percentile_exit_20260521/proposal.yaml

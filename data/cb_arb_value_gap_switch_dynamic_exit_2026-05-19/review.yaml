@@ -1,0 +1,60 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  decision: no_adoption_decision_unusable
+  verdict: {}
+  key_metrics:
+    selected_name: best_candidate
+    selected_params:
+      retrace_fraction: 0.3
+      min_hold_days: 1
+    train_total_return: 53836983.240635
+    test_total_return: 6759814.455295
+    yr2020_total_return: 13465228.530098999
+    train_win_rate: 0.26216201971222264
+    test_win_rate: 0.2584419926446005
+    yr2020_win_rate: 0.2516778523489933
+    train_score: 53836983.240635
+    test_score: 6759814.455295
+    yr2020_score: 13465228.530098999
+  evidence_usable: false
+  artifacts_hash: e1f79d2494545d4f
+interpretation:
+  narrative: ''
+closed_directions: []
+next_directions: []
+ai_provider_used: null
+prompt_path: null
+response_hash: null
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: no_adoption_decision_unusable
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    selected_name: best_candidate
+    selected_params:
+      retrace_fraction: 0.3
+      min_hold_days: 1
+    train_total_return: 53836983.240635
+    test_total_return: 6759814.455295
+    yr2020_total_return: 13465228.530098999
+    train_win_rate: 0.26216201971222264
+    test_win_rate: 0.2584419926446005
+    yr2020_win_rate: 0.2516778523489933
+    train_score: 53836983.240635
+    test_score: 6759814.455295
+    yr2020_score: 13465228.530098999

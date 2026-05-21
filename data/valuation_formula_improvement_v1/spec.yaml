@@ -1,6 +1,6 @@
 schema_version: 1
 run_id: valuation_formula_improvement_v1
-date: '2026-05-19'
+date: '2026-05-20'
 strategy_id: cb_arb_value_gap_switch
 l0_entry_id: 1
 l0_source: autonomous strategy ideator from recent_results_digest

@@ -9,6 +9,9 @@ Machine-owned runtime files:
 - `data/research_framework/experiments.yaml`
 - `data/research_framework/research_insights.yaml`
 - `data/research_framework/strategy_ideator.yaml`
+- `data/research_framework/ai_prompt_contracts.yaml`
+- `data/research_framework/status_code_maps.yaml`
+- `data/research_framework/hermes_executor_handoffs.yaml`
 - `data/research_framework/protocol_rules.yaml`
 - `data/research_framework/research_queue.yaml`
 
@@ -41,12 +44,18 @@ Hard boundaries:
 - Truth changes must update `data/research_framework/current.yaml` and/or
   `data/research_framework/baseline_registry.yaml`, or add a waiver under
   `data/research_framework/truth_sync_waivers/`.
-- Data quality must pass the deterministic gate before a run can start; old
-  missing data-root pointers may be rewritten to the current warehouse, but
-  unfixable missing/unreadable/broken required data blocks the flow.
+- Data quality must pass the registered AI data-quality judge before a run can
+  start. VM-side summaries provide evidence only; final pass, repair_candidate,
+  or fail decisions come from the AI judge. Old missing data-root pointers may
+  be rewritten to the current warehouse when the AI judge returns a repair plan,
+  but unfixable missing/unreadable/broken required data blocks the flow.
 - Evidence tools for strategy ideation and review must go through
   `framework/autonomous/verification_tool.py::EvidenceToolkit` and be registered
   in `data/research_framework/evidence_tool_registry.yaml` before use.
+- LLM-facing status-like outputs must use numeric codes from
+  `data/research_framework/status_code_maps.yaml`; prompts must not ask models
+  to invent or emit free-form status labels. Code may translate codes back to
+  internal labels only after validation.
 - Data-quality AI checks may only use `scripts/validate_data_quality.py` with a
   quant automation ticket for `data_quality_judge`; VM-side data is summarized
   first, then the registered local provider judges run/block.
@@ -61,6 +70,10 @@ Hard boundaries:
   time, exit code, compute metadata, and a passing data-quality decision.
   Historical artifact classification must use the backfill entry and must not
   trigger the next research step by itself.
+- Review-memory AI calls may only use `scripts/review_result.py` through the
+  registered provider. The script extracts facts deterministically first, then
+  requires the provider to return fixed-schema raw YAML only; invalid prose,
+  Markdown fences, or unknown fields must fail the review step.
 - `scripts/research_queue_runner.py` is only the queue decision entrypoint.
   Strategy ideation must be delegated to `framework/autonomous/queue_ideation.py`;
   VM launch, data-quality gating, result sync, repair requeue, and completion
@@ -73,9 +86,19 @@ Hard boundaries:
 - Quant automation write entrypoints are advanced by the project-owned WSL
   crontab entry marked `QUANT_INTERNAL_CRON_TICK`, which runs
   `scripts/quant_internal_tick.py` every 10 minutes. Hermes is not a quant
-  workflow entrypoint. Direct calls to the research queue or next-spec generator
-  require a short-lived quant automation ticket in environment variables; calls
-  without that ticket must be rejected and audited.
+  workflow entrypoint; Hermes may receive executor-code implementation handoffs
+  in `data/research_framework/hermes_executor_handoffs.yaml` and must return
+  completed code plus `generated_executor/executor_completion.yaml` instead of
+  launching runs. The project-owned handoff script reads that YAML receipt and
+  updates the executable descriptor; Hermes must not be trusted to synchronize
+  descriptor state by hand.
+  The Hermes one-minute wake path is `scripts/hermes_executor_handoff_wakeup.sh`,
+  which first calls `scripts/hermes_executor_handoff_tick.py`; it may only
+  expose, claim, or complete executor-code handoffs and must not advance the
+  research queue, launch VMs, or change strategy truth.
+  Direct calls to the research queue or next-spec generator require a
+  short-lived quant automation ticket in environment variables; calls without
+  that ticket must be rejected and audited.
 - Commits that change autonomous framework entry behavior must also stage a
   changed `AGENTS.md` or `CLAUDE.md`; the pre-commit hook blocks unchanged
   bootstrap entrypoints for those framework changes.

@@ -1,0 +1,15 @@
+proposal_id: unparseable
+capability_ids: []
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: b881ba09c3148b6a
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: b881ba09c3148b6a
+strategy_id: cb_arb_value_gap_switch
+strategy_id_corrected_from_current_yaml: true
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/unparseable/proposal.yaml

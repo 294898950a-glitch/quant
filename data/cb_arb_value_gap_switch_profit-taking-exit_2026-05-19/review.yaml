@@ -1,0 +1,56 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    selected_name: best_candidate
+  artifacts_hash: b14751caff2c36da
+interpretation:
+  review_status: reject
+  result_summary: Profit-taking exit did not pass adoption criteria; train drawdown
+    and 2020 validation remained worse than baseline.
+  main_reason: The best candidate failed to meet the hard floor of reducing train
+    max drawdown by 10% and showed worse 2020 validation excess return.
+  failure_causes:
+  - 'Train max drawdown not reduced: best candidate -1061618844.57 vs baseline -0.32
+    (required 10% reduction), in fact worsened.'
+  - 2020 validation excess return worse than baseline (-83,720,136.9) indicating stress-period
+    failure.
+  - Adoption_pass flag false based on run evaluation.
+  next_research_directions:
+  - direction: Compare remaining value against replacement opportunity in exit logic
+    why: Simple gap-contraction exits fail in stress because they don't evaluate if
+      the partial repair justifies switching.
+    priority: high
+  - direction: Include stress-period behavior directly in exit criteria
+    why: The 2020 validation loss indicates current exit does not handle stress periods.
+    priority: high
+  evidence_gaps: []
+closed_directions: []
+next_directions: []
+ai_provider_used: deepseek
+prompt_path: null
+response_hash: 68be0ba8a812902e
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    selected_name: best_candidate

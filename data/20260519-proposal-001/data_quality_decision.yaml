@@ -1,0 +1,12 @@
+schema_version: 1
+run_id: 20260519-proposal-001
+spec_path: data/20260519-proposal-001/spec.yaml
+validated_at: '2026-05-21T15:25:54'
+summary_sha256: 6c7b3a95a823612740b5a476b64820d0a424602991a39b358caeba23274849d7
+status: pass
+confidence: high
+decision_source: deterministic_data_gate
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: deterministic data gate passed

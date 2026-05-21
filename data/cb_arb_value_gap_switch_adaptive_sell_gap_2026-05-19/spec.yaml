@@ -48,7 +48,7 @@ artifacts_required:
 - report.yaml
 - l4_ack.yaml
 - diagnostic.yaml
-status: READY
+status: COMPLETE
 auxiliary_metrics:
 - train_excess_return
 - test_excess_return
@@ -171,7 +171,7 @@ budget_estimate:
   local_minutes: 0
   estimated_cost_yuan: 0.0
 automation:
-  output_dir: /home/jay/projects/quant/data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+  output_dir: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
   command:
   - .venv/bin/python
   - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
@@ -186,7 +186,7 @@ automation:
   - --test-end
   - '20260508'
   - --output-dir
-  - /home/jay/projects/quant/data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+  - data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
   - --base-ranks-path
   - data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/daily_value_gap_amounts.parquet
   - --lookback-days
@@ -200,11 +200,9 @@ automation:
   - --ceiling-factor
   - '1.5'
   - --cost-model-enabled
+  - 'true'
   sync_paths:
   - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
-  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
-  - data/cb_warehouse/cb_basic.parquet
-  - data/cb_warehouse/stk_daily_qfq.parquet
   - scripts/auto_research_pipeline.py
   - scripts/gatekeeper.py
   - scripts/validate_spec.py
@@ -229,3 +227,6 @@ data_quality_repair:
   prepared_data_root: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/data_root
   prepared_base_ranks_path: data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/prepared_data/daily_value_gap_amounts.parquet
   source_decision: /tmp/fixable_decision.yaml
+  requeue_status: queued_after_data_repair
+  requeued_at: '2026-05-20T23:19:22'
+updated_at: '2026-05-20T15:26:20Z'

@@ -4,6 +4,7 @@ policy:
   allowed_entrypoint: scripts/run_strategy_ideation_once.py
   allowed_entrypoints:
   - scripts/run_strategy_ideation_once.py
+  - scripts/review_result.py
   - scripts/validate_data_quality.py
   - scripts/repair_data_quality.py
   background_call_allowed: false
@@ -50,6 +51,7 @@ providers:
     allowed_entrypoint: scripts/run_strategy_ideation_once.py
     allowed_entrypoints:
     - scripts/run_strategy_ideation_once.py
+    - scripts/review_result.py
     - scripts/validate_data_quality.py
     - scripts/repair_data_quality.py
     timeout_seconds: 240

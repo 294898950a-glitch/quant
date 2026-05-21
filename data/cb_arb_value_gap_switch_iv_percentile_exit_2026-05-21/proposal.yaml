@@ -1,0 +1,72 @@
+proposal_id: cb_arb_value_gap_switch_iv_percentile_exit_2026-05-21
+strategy_id: cb_arb_value_gap_switch
+family: iv_regime_exit
+hypothesis: Exiting convertible bond positions when implied volatility is in the top
+  decile of its own rolling 1‑year history will reduce drawdowns in high‑volatility
+  regimes (e.g., 2020) without sacrificing normal‑period performance, because extreme
+  IV often signals fragile convexity that can reverse sharply and erode gap‑trade
+  profits.
+source_insight: The baseline strategy lost 9.0% in 2020, with a sharp -17.9% max drawdown
+  on a 7.5‑trade sample. In that year, CB implied volatilities spiked dramatically
+  during the COVID crash, and many gap‑closing trades reversed. Exiting at extreme
+  IV could clip the worst losses while allowing participation in the recovery once
+  IV normalises.
+expected_improvement: Improved 2020 total return (above baseline -9.1%) and reduced
+  max drawdown in that period, while maintaining at least 95% of baseline test‑period
+  total return (i.e., >= 0.695 on current baseline test 0.732).
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  description: Grid‑search over IV percentile threshold {0.80, 0.85, 0.90, 0.95} and
+    min‑hold‑days {1, 3, 5}. For each held CB, compute daily IV (via inverted model
+    or stock‑vol proxy), calculate rolling 252‑day percentile rank, and force exit
+    when IV >= threshold with at least min‑hold‑days satisfied. Evaluate on train
+    (2019‑2024), focus on 2020 as a high‑stress repair window, and sealed test (2025‑2026).
+    Select the variant that maximally improves 2020 total return while keeping test
+    total return >= 95% of baseline.
+success_criteria:
+  criteria:
+  - Selected variant 2020 total return > baseline_2020_total_return (-0.090593)
+  - Selected variant test total return >= 0.95 * baseline_test_total_return (0.732025)
+    => 0.695424
+falsifiers:
+  train: &id001
+  - No candidate meets both success criteria.
+  - All candidates degrade test total return below 0.695
+  - No candidate improves 2020 total return over baseline
+  validate: *id001
+  test: *id001
+risk: IV estimation from daily CB prices can be noisy and may generate false early
+  exits; if gaps close after an IV‑triggered exit, performance may be worse than baseline.
+  Also, the 2020 sample is small (75‑110 trades), so results may not be robust.
+why_not_repeated_failure: Prior exit‑rule experiments (dynamic trail, gap decay, profit‑taking)
+  focused on gap‑contraction measures and price‑based stops. None used an IV‑conditioned
+  exit. This is a fundamentally different signal rooted in option‑pricing stress rather
+  than gap dynamics.
+related_prior_runs:
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+- cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+implementation_assumption: The executor cb_arb_iv_percentile_exit_executor will implement
+  IV percentile computation using either an inverted convertible bond pricing model
+  or a stock‑volatility proxy (e.g., CBs trading near conversion value). The daily
+  IV series will be available from cb_daily or derived from stk_daily_qfq and cb_basic.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 7d3da268cc93c5a9
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 7d3da268cc93c5a9
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit_2026-05-21/proposal.yaml

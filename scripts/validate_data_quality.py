@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Summarize run data quality and ask the registered AI provider for a run/block decision."""
+"""Summarize run data quality and let the registered AI provider make the run/block decision."""
 
 from __future__ import annotations
 
@@ -17,22 +17,12 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 AI_PROVIDERS = REPO_ROOT / "data" / "research_framework" / "ai_providers.yaml"
 EXPECTATIONS = REPO_ROOT / "data" / "research_framework" / "data_schema_expectations.yaml"
 ENTRYPOINT = "scripts/validate_data_quality.py"
-WAREHOUSE_REL_PATHS = (
-    "data/cb_warehouse/cb_basic.parquet",
-    "data/cb_warehouse/cb_daily.parquet",
-    "data/cb_warehouse/cb_call.parquet",
-    "data/cb_warehouse/stk_daily_qfq.parquet",
-)
-DERIVABLE_RECOMMENDED_COLUMNS = {
-    "data/cb_warehouse/cb_daily.parquet": {"pct_chg", "cb_over_rate"},
-    "data/cb_warehouse/cb_call.parquet": {"call_type"},
-}
-
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from framework.autonomous.ai_provider_adapter import RegisteredProviderAdapter  # noqa: E402
 from framework.autonomous.executor_requirements import declared_requirements_for_spec  # noqa: E402
+from framework.autonomous.status_codes import prompt_code_menu, status_label  # noqa: E402
 from scripts.quant_access_guard import require_ticket  # noqa: E402
 
 
@@ -161,145 +151,54 @@ def _candidate_data_paths(spec_path: Path, spec: dict[str, Any]) -> list[str]:
     return unique
 
 
-def _warehouse_rel_from_path(raw_path: str) -> str | None:
-    text = raw_path.replace("\\", "/")
-    for rel_path in WAREHOUSE_REL_PATHS:
-        marker = "/" + rel_path
-        if text == rel_path or text.endswith(marker) or marker in text:
-            return rel_path
-    return None
+def _path_from_raw(raw_path: str) -> Path:
+    path = Path(raw_path)
+    if not path.is_absolute():
+        return REPO_ROOT / path
+    try:
+        path.resolve().relative_to(REPO_ROOT)
+        return path
+    except ValueError:
+        parts = path.parts
+        if "data" in parts:
+            data_index = parts.index("data")
+            candidate = REPO_ROOT.joinpath(*parts[data_index:])
+            if candidate.exists():
+                return candidate
+        return path
 
 
-def _current_warehouse_has(rel_path: str) -> bool:
-    return (REPO_ROOT / rel_path).exists()
-
-
-def _known_pool_config_repair(path: str) -> dict[str, Any] | None:
-    text = path.replace("\\", "/")
-    match = re.search(r"(pool_\d+)/best_params\.json$", text)
-    if not match:
-        return None
-    pool_name = match.group(1)
-    for candidate in (
-        REPO_ROOT / "data" / "cb_arb_concurrent_supervised_20260511_094500" / pool_name / "best_params.json",
-        REPO_ROOT / "data" / "cb_arb_value_gap_current_config_root" / pool_name / "best_params.json",
-    ):
-        if candidate.exists():
-            return {
-                "action": "copy_config_pool",
-                "missing_path": path,
-                "pool": pool_name,
-                "replacement_path": _rel(candidate),
-                "new_data_root": "prepared_data/data_root",
-            }
-    return None
-
-
-def deterministic_decision(summary: dict[str, Any]) -> dict[str, Any]:
-    """Return the non-AI risk gate decision for run data.
-
-    This gate handles facts that should not depend on model judgment:
-    missing files, unreadable inputs, required schema breakage, and obvious
-    corrupt price rows. The AI judge may add concerns only after this gate
-    passes or after a repairable path issue is fixed.
-    """
-    blocking: list[str] = []
-    warnings: list[str] = []
-    fix_plan: list[dict[str, Any]] = []
-    seen_repairs: set[tuple[str, str]] = set()
-
-    requirements_error = summary.get("executor_requirements_error")
-    if requirements_error:
-        blocking.append(f"executor data requirements unavailable: {requirements_error}")
-
-    for item in summary.get("data_files") or []:
-        if not isinstance(item, dict):
+def _requirements_by_path(requirements: dict[str, Any] | None) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    if not isinstance(requirements, dict):
+        return result
+    for item in requirements.get("required_files") or []:
+        if not isinstance(item, dict) or not item.get("path"):
             continue
-        path = str(item.get("path") or "")
-        if item.get("exists") is False:
-            pool_repair = _known_pool_config_repair(path)
-            if pool_repair:
-                repair_key = ("copy_config_pool", str(pool_repair.get("pool") or path))
-                if repair_key not in seen_repairs:
-                    fix_plan.append(pool_repair)
-                    seen_repairs.add(repair_key)
-                continue
-            warehouse_rel = _warehouse_rel_from_path(path)
-            if warehouse_rel and _current_warehouse_has(warehouse_rel):
-                repair_key = ("rewrite_spec_data_root", warehouse_rel)
-                if repair_key not in seen_repairs:
-                    fix_plan.append(
-                        {
-                            "action": "rewrite_spec_data_root",
-                            "missing_path": path,
-                            "replacement_path": warehouse_rel,
-                            "new_data_root": ".",
-                        }
-                    )
-                    seen_repairs.add(repair_key)
-                continue
-            blocking.append(f"required data file missing: {path}")
-            continue
-        if item.get("readable") is False:
-            blocking.append(f"required data file unreadable: {path} {item.get('error') or ''}".strip())
-            continue
-        missing_required = item.get("missing_required_columns") or []
-        if missing_required:
-            blocking.append(f"{path} missing required columns: {missing_required}")
-        expected_min_rows = item.get("expected_min_rows")
-        if expected_min_rows is not None:
-            try:
-                if int(item.get("rows") or 0) < int(expected_min_rows):
-                    blocking.append(f"{path} rows below expected minimum: {item.get('rows')} < {expected_min_rows}")
-            except (TypeError, ValueError):
-                blocking.append(f"{path} has invalid expected_min_rows: {expected_min_rows}")
-        for key in ("nonpositive_close_rows", "nonpositive_ohlc_rows", "bad_ohlc_rows"):
-            if int(item.get(key) or 0) > 0:
-                blocking.append(f"{path} has {key}: {item.get(key)}")
-        duplicate_rows = int(item.get("duplicate_key_rows") or 0)
-        if duplicate_rows:
-            warnings.append(f"{path} has duplicate key rows: {duplicate_rows}")
-        missing_recommended = item.get("missing_recommended_columns") or []
-        if missing_recommended:
-            warehouse_rel = _warehouse_rel_from_path(path)
-            derivable = DERIVABLE_RECOMMENDED_COLUMNS.get(warehouse_rel or "", set())
-            repairable = sorted(set(missing_recommended) & derivable)
-            not_repairable = sorted(set(missing_recommended) - derivable)
-            if repairable:
-                repair_key = ("derive_warehouse_columns", warehouse_rel or path)
-                if repair_key not in seen_repairs:
-                    fix_plan.append(
-                        {
-                            "action": "derive_warehouse_columns",
-                            "path": warehouse_rel or path,
-                            "columns": repairable,
-                            "new_data_root": "prepared_data/data_root",
-                        }
-                    )
-                    seen_repairs.add(repair_key)
-            if not_repairable:
-                warnings.append(f"{path} missing recommended columns: {not_repairable}")
+        path = _path_from_raw(str(item["path"]))
+        scoped: dict[str, Any] = {}
+        for key in ("required_columns", "nonnull_columns", "recommended_columns", "expected_min_rows"):
+            if item.get(key) is not None:
+                scoped[key] = item[key]
+        if scoped:
+            result[_rel(path)] = scoped
+    return result
 
-    if blocking:
-        status = "fail"
-        reason = "deterministic data gate found blocking data defects"
-    elif fix_plan:
-        status = "repair_candidate"
-        reason = "deterministic data gate found data issues with registered deterministic repairs"
-    else:
-        status = "pass"
-        reason = "deterministic data gate passed"
 
-    return {
-        "schema_version": 1,
-        "status": status,
-        "confidence": "high",
-        "decision_source": "deterministic_data_gate",
-        "blocking_issues": blocking,
-        "warnings": warnings,
-        "fix_plan": fix_plan,
-        "decision_reason": reason,
-    }
+def _normalize_requirement_paths(requirements: dict[str, Any] | None) -> dict[str, Any] | None:
+    if not isinstance(requirements, dict):
+        return requirements
+    normalized = dict(requirements)
+    files: list[Any] = []
+    for item in requirements.get("required_files") or []:
+        if not isinstance(item, dict) or not item.get("path"):
+            files.append(item)
+            continue
+        copied = dict(item)
+        copied["path"] = _rel(_path_from_raw(str(item["path"])))
+        files.append(copied)
+    normalized["required_files"] = files
+    return normalized
 
 
 def _date_bounds(series: pd.Series) -> dict[str, str | None]:
@@ -318,10 +217,11 @@ def _summarize_parquet(path: Path, expected: dict[str, Any]) -> dict[str, Any]:
     schema = pq.read_schema(path)
     columns = list(schema.names)
     required = [str(col) for col in expected.get("required_columns") or []]
+    nonnull = [str(col) for col in expected.get("nonnull_columns") or []]
     recommended = [str(col) for col in expected.get("recommended_columns") or []]
     key_cols = [col for col in ("ts_code", "stk_code", "trade_date") if col in columns]
     price_cols = [col for col in ("open", "high", "low", "close") if col in columns]
-    read_cols = sorted(set(required + recommended + key_cols + price_cols + ["ann_date", "call_date", "expire_date"]) & set(columns))
+    read_cols = sorted(set(required + nonnull + recommended + key_cols + price_cols) & set(columns))
     summary: dict[str, Any] = {
         "path": _rel(path),
         "kind": "parquet",
@@ -336,7 +236,7 @@ def _summarize_parquet(path: Path, expected: dict[str, Any]) -> dict[str, Any]:
     if not read_cols:
         return summary
     df = pd.read_parquet(path, columns=read_cols)
-    nulls = {col: int(df[col].isna().sum()) for col in read_cols if col in required}
+    nulls = {col: int(df[col].isna().sum()) for col in read_cols if col in nonnull}
     summary["required_nulls"] = nulls
     if "trade_date" in df.columns:
         summary["trade_date_range"] = _date_bounds(df["trade_date"])
@@ -388,13 +288,12 @@ def summarize_data_quality(spec_path: Path) -> dict[str, Any]:
         requirements_error = f"{type(exc).__name__}: {exc}"
         candidate_paths = []
     expected_map = _expected_by_path()
+    requirement_expectations = _requirements_by_path(requirements)
     files: list[dict[str, Any]] = []
     for raw_path in candidate_paths:
-        path = Path(raw_path)
-        if not path.is_absolute():
-            path = REPO_ROOT / path
+        path = _path_from_raw(raw_path)
         entry: dict[str, Any]
-        expected = expected_map.get(_rel(path), {})
+        expected = requirement_expectations.get(_rel(path)) or expected_map.get(_rel(path), {})
         if not path.exists():
             entry = {"path": _rel(path), "exists": False, "readable": False}
         else:
@@ -419,7 +318,7 @@ def summarize_data_quality(spec_path: Path) -> dict[str, Any]:
         "run_id": spec.get("run_id"),
         "strategy_id": spec.get("strategy_id"),
         "executor_script": executor_script,
-        "executor_requirements": requirements,
+        "executor_requirements": _normalize_requirement_paths(requirements),
         "executor_requirements_error": requirements_error,
         "executor_column_literals": _script_column_literals(executor_script),
         "executor_input_column_hints": _script_input_column_hints(executor_script),
@@ -431,7 +330,7 @@ def summarize_data_quality(spec_path: Path) -> dict[str, Any]:
 def _judge_prompt(summary: dict[str, Any]) -> str:
     compact = compact_for_ai(summary)
     return (
-        "你是量化实验的数据质量检查员。只判断这次实验能不能开跑，或是否值得交给数据修复器尝试处理。\n"
+        "你是量化实验的数据质量主检查员。最终能不能开跑，由你直接决定。\n"
         "不要评价策略好坏。不要提出新策略。不要写代码。\n"
         "你必须根据输入的数据摘要，判断数据是否足够支持本轮实验。\n\n"
         "重点检查：\n"
@@ -440,14 +339,16 @@ def _judge_prompt(summary: dict[str, Any]) -> str:
         "3. 训练和测试日期是否被行情数据覆盖。\n"
         "4. 关键字段空值、重复键、价格小于等于 0、开高低收关系错误是否会影响实验。\n"
         "5. executor_input_column_hints 里的输入字段，和输入数据实际字段是否对得上。\n"
-        "6. 如果只有推荐字段缺失，但当前实验未必需要，可以放行并说明。\n"
+        "6. required_columns 只代表字段必须存在；只有 required_column_quality 里出现的字段才要求非空。\n"
+        "7. 如果只有推荐字段缺失，或者未要求非空的字段存在部分空值，可以放行并说明。\n"
+        "8. 如果缺失数据能通过改路径、派生字段、复制池参数等方式修复，返回 repair_candidate 并写清 fix_plan。\n"
         "注意：required_column_quality.null_rows 是缺失行数，valid_rows 才是有效行数，不能反着理解。\n\n"
-        "只返回 YAML，字段固定为：\n"
-        "status: pass 或 repair_candidate 或 fail\n"
-        "confidence: high 或 medium 或 low\n"
+        "只返回 YAML，字段固定为；状态类字段只能输出数字编号，不能输出文字状态：\n"
+        f"status_code: {prompt_code_menu('data_quality_decision')}\n"
+        f"confidence_code: {prompt_code_menu('data_quality_confidence')}\n"
         "blocking_issues: 列表\n"
         "warnings: 列表\n"
-        "fix_plan: 列表；只有 status=repair_candidate 时填写，只能包含 rename_field、derive_alias、rewrite_spec_data_root、derive_warehouse_columns\n"
+        "fix_plan: 列表；只有 status_code=2 时填写，只能包含 rename_field、derive_alias、rewrite_spec_data_root、derive_warehouse_columns、copy_config_pool\n"
         "decision_reason: 一句话\n\n"
         "数据摘要：\n"
         f"{json.dumps(compact, ensure_ascii=False, indent=2)}\n"
@@ -505,26 +406,29 @@ def compact_for_ai(summary: dict[str, Any]) -> dict[str, Any]:
 
 
 def judge_summary(summary: dict[str, Any]) -> dict[str, Any]:
-    gate_decision = deterministic_decision(summary)
-    if str(gate_decision.get("status") or "").lower() != "pass":
-        return gate_decision
-    if not gate_decision.get("warnings"):
-        return gate_decision
     adapter = RegisteredProviderAdapter(AI_PROVIDERS, repo_root=REPO_ROOT, entrypoint=ENTRYPOINT)
     response = adapter.call_active_provider(_judge_prompt(summary), schema={})
     content = _strip_markdown_fence(response.content)
     data = yaml.safe_load(content)
     if not isinstance(data, dict):
         raise ValueError("AI data-quality response root must be YAML mapping")
-    status = str(data.get("status") or "").strip().lower()
-    if status == "fixable":
-        status = "repair_candidate"
-        data["status"] = status
-    if status not in {"pass", "repair_candidate", "fail"}:
-        raise ValueError("AI data-quality response status must be pass, repair_candidate, or fail")
+    if "status" in data or "confidence" in data:
+        raise ValueError("AI data-quality response must use numeric status_code/confidence_code, not text status fields")
+    status = status_label("data_quality_decision", data.get("status_code"))
+    confidence = status_label("data_quality_confidence", data.get("confidence_code"))
+    for list_key in ("blocking_issues", "warnings", "fix_plan"):
+        if data.get(list_key) is None:
+            data[list_key] = []
+        if not isinstance(data.get(list_key), list):
+            raise ValueError(f"AI data-quality response {list_key} must be list")
+    if not isinstance(data.get("decision_reason"), str) or not data["decision_reason"].strip():
+        raise ValueError("AI data-quality response decision_reason must be non-empty string")
+    data["schema_version"] = int(data.get("schema_version") or 1)
+    data["status"] = status
+    data["confidence"] = confidence
+    data["decision_source"] = "ai_data_quality_judge"
     data["ai_provider"] = response.provider_id
     data["response_hash"] = response.response_hash
-    data["deterministic_gate"] = gate_decision
     return data
 
 
@@ -544,7 +448,6 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--spec", help="spec.yaml path used when creating a summary")
     parser.add_argument("--summary-only", action="store_true", help="print JSON summary and do not call AI")
-    parser.add_argument("--hard-decision-only", action="store_true", help="print deterministic data gate decision and do not call AI")
     parser.add_argument("--judge-summary-stdin", action="store_true", help="read JSON summary from stdin and ask AI")
     args = parser.parse_args()
 
@@ -561,11 +464,6 @@ def main() -> int:
     if args.summary_only:
         print(json.dumps(summary, ensure_ascii=False, indent=2))
         return 0
-
-    if args.hard_decision_only:
-        decision = deterministic_decision(summary)
-        print(yaml.safe_dump(decision, allow_unicode=True, sort_keys=False))
-        return 0 if str(decision.get("status")).lower() == "pass" else 1
 
     require_ticket("data_quality_judge")
     try:

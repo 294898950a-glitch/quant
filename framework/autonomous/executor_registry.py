@@ -129,14 +129,18 @@ def match_executor(
     proposal_data: set[str],
     registry: dict[str, Any],
     proposal_capability_ids: set[str] | None = None,
+    required_executor: str | None = None,
 ) -> ExecutorMatch | None:
     """Return the first strict full match, never a nearest fallback."""
 
     mechanics = set(proposal_mechanics)
     capability_ids = set(proposal_capability_ids or set())
     data_paths = set(proposal_data)
+    required = str(required_executor or "").strip()
     for executor in _executors(registry):
         if _is_obsolete(executor):
+            continue
+        if required and required not in {str(executor.get("id") or ""), str(executor.get("family") or "")}:
             continue
         can_test = set(executor.get("can_test", []))
         cannot_test = set(executor.get("cannot_test", []))

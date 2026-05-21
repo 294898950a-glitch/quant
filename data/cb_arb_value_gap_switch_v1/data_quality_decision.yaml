@@ -1,0 +1,12 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_v1
+spec_path: data/cb_arb_value_gap_switch_v1/spec.yaml
+validated_at: '2026-05-21T06:50:27'
+summary_sha256: 78dd4c885c99adc5fe664e41023f63b9e99ebbf107fe088c035360edb63a4ef8
+status: pass
+confidence: high
+decision_source: deterministic_data_gate
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: deterministic data gate passed

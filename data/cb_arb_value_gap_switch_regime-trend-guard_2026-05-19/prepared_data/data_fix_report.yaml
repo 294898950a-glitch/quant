@@ -4,25 +4,33 @@ status: prepared
 spec_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/spec.yaml
 decision_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/data_quality_decision.yaml
 mode: deterministic_warehouse_column_derivation
-old_data_root: .
+old_data_root: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root
 new_data_root: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root
-derived_columns:
-  cb_daily:
-  - pct_chg
-  - cb_over_rate
-  cb_call:
-  - call_type
+derived_columns: {}
+copied_pool_sources:
+- pool: pool_0
+  source: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root/pool_0
+- pool: pool_2
+  source: data/cb_arb_concurrent_supervised_20260511_094500/pool_2
+- pool: pool_4
+  source: data/cb_arb_concurrent_supervised_20260511_094500/pool_4
+- pool: pool_6
+  source: data/cb_arb_concurrent_supervised_20260511_094500/pool_6
 fix_plan:
-- action: derive_warehouse_columns
-  path: data/cb_warehouse/cb_daily.parquet
-  columns:
-  - cb_over_rate
-  - pct_chg
+- action: copy_config_pool
+  missing_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root/pool_0/best_params.json
+  pool: pool_0
+  replacement_path: data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
   new_data_root: prepared_data/data_root
-- action: derive_warehouse_columns
-  path: data/cb_warehouse/cb_call.parquet
-  columns:
-  - call_type
+- action: copy_config_pool
+  missing_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root/pool_4/best_params.json
+  pool: pool_4
+  replacement_path: data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  new_data_root: prepared_data/data_root
+- action: copy_config_pool
+  missing_path: data/cb_arb_value_gap_switch_regime-trend-guard_2026-05-19/prepared_data/data_root/pool_6/best_params.json
+  pool: pool_6
+  replacement_path: data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
   new_data_root: prepared_data/data_root
 principle: original data was not overwritten; enriched inputs are run-local prepared
   data

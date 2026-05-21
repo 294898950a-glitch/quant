@@ -104,7 +104,7 @@ no_reply_default:
   - do_not_promote_to_live
 recent_results_digest:
   path: data/research_framework/recent_results_digest.yaml
-  updated_at: '2026-05-19T13:24:45+00:00'
+  updated_at: '2026-05-21T18:40:24+00:00'
   latest:
   - run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
     strategy_id: cb_arb_value_gap_switch
@@ -115,6 +115,21 @@ recent_results_digest:
     closed_direction_tags: []
   - run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
     strategy_id: cb_arb_value_gap_switch
+    verdict: reject
+    one_line_summary: null
+    closed_direction_tags: []
+  - run_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+    strategy_id: cb_arb_value_gap_switch
     verdict: null
+    one_line_summary: null
+    closed_direction_tags: []
+  - run_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+    strategy_id: cb_arb_value_gap_switch
+    verdict: no_adoption_decision_unusable
+    one_line_summary: null
+    closed_direction_tags: []
+  - run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+    strategy_id: cb_arb_value_gap_switch
+    verdict: no_adoption_decision_unusable
     one_line_summary: null
     closed_direction_tags: []

@@ -1,0 +1,7 @@
+proposal_id: cb_arb_value_gap_switch_iv-regime-exit_2026-05-21
+missing_capability_request: 'A new executor that: 1) calculates daily implied volatility
+  for each held CB (from option model or market data), 2) computes a rolling 1-year
+  (252d) percentile rank of current IV relative to its own history, 3) exits the position
+  if current IV > 90th percentile, overriding the existing gap-based exit. Needs data
+  on option prices or approximation.'
+reason: no registered capability id fits this idea

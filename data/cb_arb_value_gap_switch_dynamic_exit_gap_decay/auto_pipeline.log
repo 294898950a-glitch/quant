@@ -1,0 +1,3 @@
+$ /usr/bin/python3 scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --output-dir data/cb_arb_value_gap_switch_dynamic_exit_gap_decay --gap-decay-factor 0.5 --min-hold-days 5
+
+FATAL: [Errno 2] No such file or directory: '/home/ubuntu/data/cb_warehouse/cb_basic.parquet'

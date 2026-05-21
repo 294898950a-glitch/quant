@@ -4,6 +4,7 @@ import ast
 import json
 import re
 import shutil
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +18,7 @@ try:
     from framework.autonomous.executor_registry import validate_registry_schema
     from framework.autonomous.framework_change_recorder import record_framework_change
     from framework.autonomous.paths import ResearchPaths
+    from framework.autonomous.prompt_contracts import prompt_contract_for_role
     from framework.autonomous.spec_compiler import compile as compile_proposal
     from framework.autonomous.strategy_ideator import propose
     from framework.autonomous.verification_tool import EvidenceToolkit
@@ -28,9 +30,14 @@ except ModuleNotFoundError:  # importlib-based tests may load files directly
     from executor_registry import validate_registry_schema  # type: ignore
     from framework_change_recorder import record_framework_change  # type: ignore
     from paths import ResearchPaths  # type: ignore
+    from prompt_contracts import prompt_contract_for_role  # type: ignore
     from spec_compiler import compile as compile_proposal  # type: ignore
     from strategy_ideator import propose  # type: ignore
     from verification_tool import EvidenceToolkit  # type: ignore
+
+
+HERMES_HANDOFFS_PATH = Path("data/research_framework/hermes_executor_handoffs.yaml")
+BRIDGE_CODEX_OUTBOX = Path("/mnt/c/Users/陈教授/Desktop/ai/projects/quant/codex/outbox.md")
 
 
 class RegisteredAIProviderAdapter:
@@ -106,7 +113,10 @@ class IdeationCycle:
             run_dir = Path(pending["run_dir"])
             ai_adapter = self.ai_adapter or RegisteredAIProviderAdapter(config, repo_root=self.paths.repo_root)
             package_path = Path(pending["package_path"]) if pending.get("package_path") else None
-            if pending.get("package_status") == "draft_tool_code" and package_path:
+            if pending.get("package_status") in {"draft_tool_code", "draft_tool_code_compile_not_ready"} and package_path:
+                executor_tool_package = self.store.read_yaml(package_path)
+                executor_tool_package["descriptor_path"] = str(package_path)
+            elif pending.get("package_status") == "awaiting_hermes_executor_code" and package_path:
                 executor_tool_package = self.store.read_yaml(package_path)
                 executor_tool_package["descriptor_path"] = str(package_path)
             else:
@@ -121,7 +131,7 @@ class IdeationCycle:
                 )
             registration = None
             ready_result = None
-            if executor_tool_package.get("status") == "draft_tool_code":
+            if executor_tool_package.get("status") in {"draft_tool_code", "draft_tool_code_compile_not_ready"}:
                 registration = register_executor_tool_and_recompile(
                     proposal=proposal,
                     registry=registry,
@@ -141,7 +151,13 @@ class IdeationCycle:
                 "capability_ids": proposal.get("capability_ids"),
                 "mechanics": proposal.get("mechanics"),
                 "status": "READY" if ready_result else "DRAFT",
-                "reason": "auto-registered draft executor" if ready_result else "continued pending draft executor tooling",
+                "reason": (
+                    "auto-registered draft executor"
+                    if ready_result
+                    else "awaiting Hermes executor code"
+                    if executor_tool_package.get("status") == "awaiting_hermes_executor_code"
+                    else "continued pending draft executor tooling"
+                ),
                 "spec_path": ready_result.get("spec_path") if ready_result else str(run_dir / "spec.yaml"),
                 "implementation_plan_path": None if ready_result else str(run_dir / "implementation_plan.yaml"),
                 "errors": pending.get("errors") or [],
@@ -153,6 +169,10 @@ class IdeationCycle:
         pre_ideation_evidence = collect_pre_ideation_evidence(digest)
 
         instruction = proposal_instruction(closed_tags, digest, cap_menu, current)
+        instruction["forced_prompt_contract"] = prompt_contract_for_role(
+            "strategy_ideation",
+            repo_root=self.paths.repo_root,
+        )
         instruction["pre_ideation_evidence_from_tool"] = pre_ideation_evidence
         instruction["available_evidence_tools"] = tool_registry_store.manifest(tool_registry)
         ai_adapter = self.ai_adapter or RegisteredAIProviderAdapter(config, repo_root=self.paths.repo_root)
@@ -364,11 +384,25 @@ def find_pending_tool_draft(output_root: Path, store: ArtifactStore) -> dict[str
                 continue
             request_status = str(request.get("status") or "")
             attempts = int(request.get("tool_code_attempts") or 0)
-            if request_status not in {"draft_tool_design_pending_code", "invalid_tool_code_response", "draft_tool_code"}:
+            if request_status not in {
+                "draft_tool_design_pending_code",
+                "invalid_tool_code_response",
+                "draft_tool_code",
+                "draft_tool_code_compile_not_ready",
+                "awaiting_hermes_executor_code",
+            }:
+                continue
+            if request_status == "awaiting_hermes_executor_code":
+                candidates.append((2, spec_path.stat().st_mtime, spec_path, spec, request_status))
                 continue
             if request_status == "invalid_tool_code_response" and attempts >= 3:
                 continue
-        priority = {"draft_tool_code": 3, "draft_tool_design_pending_code": 2, "invalid_tool_code_response": 1}.get(
+        priority = {
+            "draft_tool_code": 3,
+            "draft_tool_code_compile_not_ready": 3,
+            "draft_tool_design_pending_code": 2,
+            "invalid_tool_code_response": 1,
+        }.get(
             request_status,
             0,
         )
@@ -432,6 +466,27 @@ def _fill_executor_defaults(entry: dict[str, Any], config_defaults: dict[str, An
     return enriched
 
 
+def _fill_executor_capability_ids(entry: dict[str, Any], registry: dict[str, Any]) -> dict[str, Any]:
+    """Derive executor capability ids from mechanic labels when the draft omitted ids."""
+    enriched = dict(entry)
+    catalog = capability_catalog(registry)
+    mechanic_to_ids: dict[str, list[str]] = {}
+    for cid, mechanic in catalog.items():
+        mechanic_to_ids.setdefault(str(mechanic), []).append(str(cid))
+    for mechanic_field, capability_field in (
+        ("can_test", "can_test_capability_ids"),
+        ("cannot_test", "cannot_test_capability_ids"),
+    ):
+        existing = [str(item) for item in enriched.get(capability_field) or []]
+        if existing:
+            continue
+        derived: list[str] = []
+        for mechanic in enriched.get(mechanic_field) or []:
+            derived.extend(mechanic_to_ids.get(str(mechanic), []))
+        enriched[capability_field] = sorted(set(derived))
+    return enriched
+
+
 def _command_unresolved_placeholders(entry: dict[str, Any]) -> list[str]:
     config = dict(entry.get("default_config") or {})
     config.setdefault("output_dir", "data/_registration_check")
@@ -486,7 +541,7 @@ def register_executor_tool_and_recompile(
     store: ArtifactStore,
 ) -> dict[str, Any]:
     package = store.read_yaml(package_path)
-    if package.get("status") != "draft_tool_code":
+    if package.get("status") not in {"draft_tool_code", "draft_tool_code_compile_not_ready"}:
         return {"status": "skipped", "reason": "tool package is not draft_tool_code"}
     package_errors = validate_executor_tool_package(package)
     if package_errors:
@@ -499,6 +554,10 @@ def register_executor_tool_and_recompile(
     if not isinstance(entry, dict):
         return {"status": "failed", "reason": "registry_entry missing"}
     entry = _fill_executor_defaults(entry, config_defaults)
+    entry = _fill_executor_capability_ids(entry, registry)
+    proposal_capability_ids = [str(item) for item in proposal.get("capability_ids") or []]
+    if proposal_capability_ids and not entry.get("can_test_capability_ids"):
+        entry["can_test_capability_ids"] = sorted(set(proposal_capability_ids))
     unresolved = _command_unresolved_placeholders(entry)
     if unresolved:
         return {"status": "failed", "reason": "registry command has unresolved placeholders", "unresolved": unresolved}
@@ -513,6 +572,10 @@ def register_executor_tool_and_recompile(
     if registry_errors:
         return {"status": "failed", "reason": "registered executor failed registry schema", "errors": registry_errors}
     proposal_for_compile = dict(proposal)
+    if not proposal_for_compile.get("capability_ids") and entry.get("can_test_capability_ids"):
+        proposal_for_compile["capability_ids"] = list(entry.get("can_test_capability_ids") or [])
+    if not proposal_for_compile.get("mechanics") and entry.get("can_test"):
+        proposal_for_compile["mechanics"] = list(entry.get("can_test") or [])
     proposal_data = list(proposal_for_compile.get("required_data") or [])
     proposal_data_paths = {str(item.get("path") if isinstance(item, dict) else item) for item in proposal_data}
     for data_item in entry.get("required_data") or []:
@@ -862,12 +925,14 @@ def request_executor_tool_design(
     compile_errors: list[str],
     registry: dict[str, Any],
     ai_adapter,
+    previous_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     executors = registry.get("executors") or {}
     existing = executors if isinstance(executors, dict) else {str(i): item for i, item in enumerate(executors or [])}
     prompt = yaml.safe_dump(
         {
             "task": "The proposal cannot run because no existing executor/tool matches it. Return only the missing evaluator design and registry metadata in YAML. Do not write code yet.",
+            "forced_prompt_contract": prompt_contract_for_role("executor_tool_design"),
             "rules": [
                 "Return YAML only.",
                 "Do not include markdown fences or explanation.",
@@ -881,6 +946,7 @@ def request_executor_tool_design(
             "proposal": proposal,
             "compile_reason": compile_reason,
             "compile_errors": compile_errors,
+            "previous_design_response_errors": previous_errors or [],
             "existing_executors": existing,
         },
         allow_unicode=True,
@@ -907,6 +973,7 @@ def request_executor_tool_code_from_design(
     prompt = yaml.safe_dump(
         {
             "task": "Return only the Python file content needed by this already-approved draft evaluator design. Do not repeat registry metadata.",
+            "forced_prompt_contract": prompt_contract_for_role("executor_tool_code"),
             "rules": [
                 "Return YAML only.",
                 "Do not include markdown fences or explanation.",
@@ -951,15 +1018,28 @@ def request_executor_tool_code(
     prior_code_attempts = int(existing_descriptor.get("tool_code_attempts") or 0)
     if existing_status == "invalid_tool_code_response" and prior_code_attempts == 0:
         prior_code_attempts = 1
-    if existing_status in {"draft_tool_design_pending_code", "invalid_tool_code_response"} and existing_design:
+    if (
+        existing_status in {"draft_tool_design_pending_code", "invalid_tool_code_response"}
+        and existing_design
+        and existing_design.get("status") == "draft_tool_design"
+    ):
         design = existing_design
     else:
+        previous_design_errors: list[str] = []
+        if existing_design and existing_design.get("status") == "invalid_tool_design_response":
+            previous_design_errors.extend(str(item) for item in existing_design.get("validation_errors", []) or [])
+        previous_design_errors.extend(
+            str(item).removeprefix("design: ")
+            for item in existing_descriptor.get("validation_errors", []) or []
+            if str(item).startswith("design:")
+        )
         design = request_executor_tool_design(
             proposal=proposal,
             compile_reason=compile_reason,
             compile_errors=compile_errors,
             registry=registry,
             ai_adapter=ai_adapter,
+            previous_errors=previous_design_errors,
         )
     code_response: dict[str, Any] | None = None
     if design["status"] == "draft_tool_design":
@@ -983,65 +1063,15 @@ def request_executor_tool_code(
             "status": "draft_tool_design_pending_code",
         }
         store.write_yaml(descriptor_path, pending_package, no_aliases=True)
-        try:
-            code_response = request_executor_tool_code_from_design(
-                proposal=proposal,
-                design=design,
-                ai_adapter=ai_adapter,
-                previous_errors=list(existing_descriptor.get("validation_errors") or []),
-            )
-        except Exception as exc:
-            attempts = prior_code_attempts + 1
-            validation_errors = [f"provider_error: {exc}"]
-            package = {
-                "tool_request_id": design.get("tool_request_id"),
-                "why_existing_tools_insufficient": design.get("why_existing_tools_insufficient"),
-                "reviewed_existing_executor_ids": design.get("reviewed_existing_executor_ids"),
-                "registry_entry": design.get("registry_entry"),
-                "implementation_outline": design.get("implementation_outline"),
-                "validation_plan": design.get("validation_plan"),
-                "ai_provider": design.get("ai_provider"),
-                "design_response_hash": design.get("response_hash"),
-                "code_response_hash": None,
-                "compile_reason": compile_reason,
-                "tool_design": design,
-                "tool_code_response": {
-                    "status": "provider_error",
-                    "validation_errors": validation_errors,
-                },
-                "files": [],
-                "written_files": [],
-                "tool_code_attempts": attempts,
-                "validation_errors": validation_errors,
-                "status": "abandoned_tool_code_response" if attempts >= 3 else "invalid_tool_code_response",
-            }
-            written_descriptor_path = store.write_yaml(descriptor_path, package, no_aliases=True)
-            package["descriptor_path"] = str(written_descriptor_path)
-            record_framework_change(
-                change_type="executor_tool_code_request_failed",
-                summary=f"Executor tool code request failed for {proposal.get('proposal_id')}",
-                changed_paths=[str(written_descriptor_path)],
-                actor=str(package.get("ai_provider") or "ai"),
-                reason=compile_reason,
-                impact="Provider failure is recorded on the draft so automation can retry or skip it instead of stalling.",
-                evidence={
-                    "proposal_id": proposal.get("proposal_id"),
-                    "tool_request_id": package.get("tool_request_id"),
-                    "design_response_hash": package.get("design_response_hash"),
-                    "tool_code_attempts": attempts,
-                    "status": package["status"],
-                    "validation_errors": validation_errors,
-                },
-            )
-            return {
-                "descriptor_path": str(written_descriptor_path),
-                "written_files": [],
-                "tool_request_id": package.get("tool_request_id"),
-                "design_response_hash": package.get("design_response_hash"),
-                "code_response_hash": None,
-                "status": package["status"],
-                "validation_errors": validation_errors,
-            }
+        return write_hermes_executor_code_handoff(
+            proposal=proposal,
+            design=design,
+            compile_reason=compile_reason,
+            run_dir=run_dir,
+            descriptor_path=descriptor_path,
+            store=store,
+            previous_errors=list(existing_descriptor.get("validation_errors") or []),
+        )
 
     package = {
         "tool_request_id": design.get("tool_request_id"),
@@ -1103,6 +1133,141 @@ def request_executor_tool_code(
         "status": package["status"],
         "validation_errors": validation_errors,
     }
+
+
+def write_hermes_executor_code_handoff(
+    *,
+    proposal: dict[str, Any],
+    design: dict[str, Any],
+    compile_reason: str,
+    run_dir: Path,
+    descriptor_path: Path,
+    store: ArtifactStore,
+    previous_errors: list[str] | None = None,
+) -> dict[str, Any]:
+    """Record a code implementation handoff instead of calling an LLM for code."""
+
+    handoff_id = f"{proposal.get('proposal_id') or run_dir.name}_executor_code"
+    now = datetime.now().isoformat(timespec="seconds")
+    handoff = {
+        "id": handoff_id,
+        "status": "open",
+        "created_at": now,
+        "recipient": "hermes",
+        "task": "Implement the registered draft evaluator code; do not use background LLM code generation.",
+        "proposal_id": proposal.get("proposal_id"),
+        "run_dir": str(run_dir),
+        "descriptor_path": str(descriptor_path),
+        "target_script_path": (design.get("registry_entry") or {}).get("script_path"),
+        "required_output_status_after_implementation": "draft_tool_code",
+        "required_descriptor_update": {
+            "status": "code will be registered by hermes_executor_handoff_tick.py after receipt validation",
+            "files": ["generated_executor/<implemented_evaluator>.py"],
+            "completion_receipt": "generated_executor/executor_completion.yaml",
+        },
+        "validation_requirements": [
+            "Generated Python defines main().",
+            "Generated Python defines declare_data_requirements(command, spec).",
+            "Generated Python writes summary.json, report.yaml, l4_ack.yaml, and diagnostic.yaml.",
+            "summary.json contains adoption_pass.",
+            "No placeholder, TODO, pseudocode, or demo-only code.",
+            "Do not overwrite raw warehouse data.",
+            "Write generated_executor/executor_completion.yaml with all required checks set to true.",
+        ],
+        "proposal": proposal,
+        "approved_tool_design": design,
+        "previous_errors": previous_errors or [],
+    }
+    existing = store.read_yaml(descriptor_path, default={}) if descriptor_path.exists() else {}
+    package = {
+        "tool_request_id": design.get("tool_request_id"),
+        "why_existing_tools_insufficient": design.get("why_existing_tools_insufficient"),
+        "reviewed_existing_executor_ids": design.get("reviewed_existing_executor_ids"),
+        "registry_entry": design.get("registry_entry"),
+        "implementation_outline": design.get("implementation_outline"),
+        "validation_plan": design.get("validation_plan"),
+        "ai_provider": design.get("ai_provider"),
+        "design_response_hash": design.get("response_hash"),
+        "code_response_hash": None,
+        "compile_reason": compile_reason,
+        "tool_design": design,
+        "tool_code_response": {
+            "status": "awaiting_hermes_executor_code",
+            "handoff_id": handoff_id,
+            "handoff_path": str(HERMES_HANDOFFS_PATH),
+        },
+        "files": [],
+        "written_files": [],
+        "tool_code_attempts": int(existing.get("tool_code_attempts") or 0),
+        "validation_errors": [],
+        "hermes_handoff": {
+            "id": handoff_id,
+            "path": str(HERMES_HANDOFFS_PATH),
+            "recipient": "hermes",
+        },
+        "status": "awaiting_hermes_executor_code",
+    }
+    handoff_doc = store.read_yaml(HERMES_HANDOFFS_PATH, default={})
+    if not isinstance(handoff_doc, dict):
+        handoff_doc = {}
+    tasks = handoff_doc.get("tasks")
+    if not isinstance(tasks, list):
+        tasks = []
+    tasks = [item for item in tasks if not isinstance(item, dict) or item.get("id") != handoff_id]
+    tasks.append(handoff)
+    handoff_doc.update({"schema_version": 1, "updated_at": now, "tasks": tasks})
+    written_handoff_path = store.write_yaml(HERMES_HANDOFFS_PATH, handoff_doc, no_aliases=True)
+    written_descriptor_path = store.write_yaml(descriptor_path, package, no_aliases=True)
+    _append_hermes_bridge_message(handoff)
+    record_framework_change(
+        change_type="executor_tool_code_handoff_created",
+        summary=f"Created Hermes executor-code handoff for {proposal.get('proposal_id')}",
+        changed_paths=[str(written_descriptor_path), str(written_handoff_path)],
+        actor="codex",
+        reason=compile_reason,
+        impact=(
+            "Automation will not call a background LLM for evaluator code; "
+            "Hermes or an engineering agent must provide code then mark the package draft_tool_code."
+        ),
+        evidence={
+            "proposal_id": proposal.get("proposal_id"),
+            "tool_request_id": package.get("tool_request_id"),
+            "handoff_id": handoff_id,
+            "target_script_path": handoff.get("target_script_path"),
+        },
+    )
+    return {
+        "descriptor_path": str(written_descriptor_path),
+        "written_files": [],
+        "tool_request_id": package.get("tool_request_id"),
+        "design_response_hash": package.get("design_response_hash"),
+        "code_response_hash": None,
+        "status": package["status"],
+        "validation_errors": [],
+        "hermes_handoff": package["hermes_handoff"],
+    }
+
+
+def _append_hermes_bridge_message(handoff: dict[str, Any]) -> None:
+    if not BRIDGE_CODEX_OUTBOX.parent.exists():
+        return
+    lines = [
+        "",
+        f"### {datetime.now().isoformat(timespec='seconds')} - HERMES EXECUTOR CODE HANDOFF",
+        "",
+        "Project: quant",
+        "Action required: implement evaluator code; do not use background LLM code generation.",
+        "",
+        f"- handoff_id: {handoff.get('id')}",
+        f"- proposal_id: {handoff.get('proposal_id')}",
+        f"- descriptor_path: {handoff.get('descriptor_path')}",
+        f"- target_script_path: {handoff.get('target_script_path')}",
+        f"- handoff_registry: {HERMES_HANDOFFS_PATH}",
+        "",
+    ]
+    BRIDGE_CODEX_OUTBOX.parent.mkdir(parents=True, exist_ok=True)
+    with BRIDGE_CODEX_OUTBOX.open("a", encoding="utf-8") as fh:
+        fh.write("\n".join(lines))
 
 
 def closed_tags_from_digest(digest: dict[str, Any]) -> dict[str, Any]:

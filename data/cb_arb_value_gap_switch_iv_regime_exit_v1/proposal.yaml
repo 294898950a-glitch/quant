@@ -1,0 +1,67 @@
+proposal_id: cb_arb_value_gap_switch_iv_regime_exit_v1
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_iv_regime
+hypothesis: Adding a high‑IV‑percentile exit filter reduces max drawdown in stress
+  periods (e.g., 2020) without significantly hurting overall excess returns.
+source_insight: Baseline max drawdown in 2020 was -0.179; CB implied‑volatility spikes
+  often precede large drawdowns, and exiting during high vol may cut tail risk.
+expected_improvement: Reduce max drawdown in 2020 below -0.15 while maintaining test
+  excess return above 0.25.
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+test_design:
+  description: 'Grid search over IV percentile thresholds (70, 80, 90, 95) and min_hold_days
+    (1, 3, 5). For each open position held > min_hold_days, compute a rolling 252‑day
+    IV percentile. If the percentile exceeds the threshold, trigger a sell on the
+    next trading day. Evaluate on the full train set (2019‑2024), the 2020 repair
+    year, and the sealed test set (2025‑2026). Compare metrics against the baseline
+    (no IV exit).
+
+    '
+success_criteria:
+  criteria:
+  - 2020 max drawdown < -0.15
+  - Overall test excess return > 0.25
+  - Ideally win rate improves or remains above 0.55
+falsifiers:
+  train: &id001
+  - Test max drawdown does not improve (stays ≥ -0.179 or gets worse)
+  - Test excess return falls below 0.1
+  validate: *id001
+  test: *id001
+risk: 'IV estimation may be noisy, causing false exits; the grid search might overfit;
+  frequent exits during volatile (but ultimately upward) regimes could reduce total
+  returns.
+
+  '
+why_not_repeated_failure: 'This is an IV‑regime exit, distinct from gap‑based trailing
+  exits, gap‑decay exits, or profit‑taking exits that were previously attempted and
+  rejected. The failed runs (dynamic trailing gap, profit‑taking, time‑decaying gap)
+  did not incorporate volatility regime filtering.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+implementation_assumption: CB implied volatility can be estimated from daily pricing
+  data (cb_daily.parquet) using a Black‑Scholes inverse or a stock‑volatility proxy.
+  The executor will run the grid search and produce standard metrics.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 266a45be084abb3e
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 266a45be084abb3e
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_regime_exit_v1/proposal.yaml

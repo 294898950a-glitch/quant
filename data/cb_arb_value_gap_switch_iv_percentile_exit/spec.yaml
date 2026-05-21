@@ -1,0 +1,210 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_iv_percentile_exit
+date: '2026-05-21'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'Adding an IV percentile exit filter to cb_arb_value_gap_switch will protect
+  against high-volatility regimes, reducing drawdowns and improving risk-adjusted
+  returns.
+
+  '
+source_insight: 'Overvaluation of CB option component often coincides with elevated
+  implied volatility, and systematic exit at extreme IV levels can avoid subsequent
+  price reversals.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - new_exit_rule
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C007
+mechanics:
+- new_exit_rule
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- path: data/cb_warehouse/cb_daily.parquet
+hard_floors:
+  criteria:
+  - At least one variant achieves lower max drawdown and higher Sharpe than baseline.
+  - Cumulative excess return in train and 2020 repair is non-negative vs baseline.
+  - Cumulative excess return in test is positive.
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: READY
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_iv_percentile_exit
+  strategy_id: cb_arb_value_gap_switch
+  family: exit_rule_improvement
+  hypothesis: 'Adding an IV percentile exit filter to cb_arb_value_gap_switch will
+    protect against high-volatility regimes, reducing drawdowns and improving risk-adjusted
+    returns.
+
+    '
+  source_insight: 'Overvaluation of CB option component often coincides with elevated
+    implied volatility, and systematic exit at extreme IV levels can avoid subsequent
+    price reversals.
+
+    '
+  expected_improvement: 'Reduced maximum drawdown, improved Sharpe ratio, and similar
+    or slightly better cumulative excess return relative to baseline.
+
+    '
+  capability_ids:
+  - C007
+  required_executor: cb_arb_iv_percentile_exit_executor
+  required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  test_design:
+    description: 'Perform grid search over IV percentile threshold (0.80, 0.85, 0.90,
+      0.95) and minimum hold days (1, 3, 5). Evaluate on train (2019-2024), 2020 repair,
+      and sealed test (2025 onward). Compare cumulative excess return, maximum drawdown,
+      and Sharpe ratio against the current baseline.
+
+      '
+  success_criteria:
+    criteria:
+    - At least one variant achieves lower max drawdown and higher Sharpe than baseline.
+    - Cumulative excess return in train and 2020 repair is non-negative vs baseline.
+    - Cumulative excess return in test is positive.
+  falsifiers:
+    train:
+    - No variant improves both max drawdown and Sharpe without worsening excess returns.
+    - All variants cause excessive reduction in trade counts leading to negative excess.
+    validate:
+    - No variant improves both max drawdown and Sharpe without worsening excess returns.
+    - All variants cause excessive reduction in trade counts leading to negative excess.
+    test:
+    - No variant improves both max drawdown and Sharpe without worsening excess returns.
+    - All variants cause excessive reduction in trade counts leading to negative excess.
+  risk: 'Historical IV computation may be noisy for illiquid CBs; model assumption
+    may not hold in all regimes; execution at market open after IV spike may face
+    slippage.
+
+    '
+  why_not_repeated_failure: 'Previous exit experiments (dynamic trail, profit-taking,
+    adaptive gap) did not use an IV regime signal. This is a new mechanism and not
+    a repetition of those failed directions.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+  - cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  - cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  - cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+  implementation_assumption: The executor will compute daily implied volatility for
+    each held CB (or proxy via stock ATM IV percentile) and exit at open when current
+    IV exceeds the given rolling 252-day percentile threshold, subject to min_hold_days.
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: ace80906efbede30
+  provenance:
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: ace80906efbede30
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit/proposal.yaml
+  mechanics:
+  - new_exit_rule
+executor_id: cb_arb_iv_percentile_exit_executor
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_iv_percentile_exit.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+- --iv-percentile-threshold
+- '{iv_percentile_threshold}'
+- --min-hold-days
+- '{min_hold_days}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 150
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_iv_percentile_exit
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - output/iv_exit_test
+  - --iv-percentile-threshold
+  - '90'
+  - --min-hold-days
+  - '0'
+  sync_paths:
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit/proposal.yaml
+  response_hash: ace80906efbede30
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed

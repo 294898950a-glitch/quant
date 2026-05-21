@@ -26,6 +26,7 @@ if str(REPO_ROOT) not in sys.path:
 
 from framework.autonomous.ai_provider_adapter import RegisteredProviderAdapter  # noqa: E402
 from framework.autonomous.executor_requirements import declared_requirements_for_spec  # noqa: E402
+from framework.autonomous.status_codes import prompt_code_menu, status_label  # noqa: E402
 from scripts.quant_access_guard import require_ticket  # noqa: E402
 from scripts.validate_data_quality import compact_for_ai, summarize_data_quality  # noqa: E402
 
@@ -187,8 +188,8 @@ def repair_prompt(context: dict[str, Any], previous_errors: list[str]) -> str:
         "6. 脚本必须生成 required_outputs 里列出的输出；如果某个可选源文件不存在，可以跳过。\n"
         "7. 脚本必须写 data_fix_report.yaml，说明读了哪些文件、写了哪些文件、做了哪些字段修复。\n"
         "8. 修复目标只限本轮 fix_plan；常见操作是复制 parquet，并补齐字段别名。\n\n"
-        "只返回 YAML，不要 Markdown。格式固定：\n"
-        "status: repairable 或 unrepairable\n"
+        "只返回 YAML，不要 Markdown。格式固定。状态类字段只能输出数字编号，不能输出文字状态：\n"
+        f"status_code: {prompt_code_menu('data_repair_decision')}\n"
         "reason: 一句话\n"
         "files:\n"
         "  - path: generated_repair.py\n"
@@ -219,6 +220,9 @@ def call_repair_ai(context: dict[str, Any], previous_errors: list[str]) -> dict[
     payload = yaml.safe_load(strip_markdown_fence(response.content))
     if not isinstance(payload, dict):
         raise ValueError("AI repair response root must be YAML mapping")
+    if "status" in payload:
+        raise ValueError("AI repair response must use numeric status_code, not text status")
+    payload["status"] = status_label("data_repair_decision", payload.get("status_code"))
     payload["ai_provider"] = response.provider_id
     payload["response_hash"] = response.response_hash
     return payload

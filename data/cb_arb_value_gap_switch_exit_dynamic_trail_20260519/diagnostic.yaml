@@ -1,0 +1,27 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+diagnostic_date: '2026-05-21'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: >
+  The run produced numeric output, but the evaluator omitted adoption_pass and
+  therefore failed the machine decision contract.
+verdict_rationale: >
+  Without adoption_pass, the framework cannot know whether the result passed the
+  current strategy contract. The result is classified as no_adoption_decision_unusable
+  and cannot seed promotion or strategy truth changes.
+diagnostic_verdict: reject
+diagnostic_summary: >
+  Keep as framework evidence only. The validation fix now rejects generated tools
+  that do not write adoption_pass and maps this result to unusable evidence.
+key_findings:
+- id: missing_adoption_decision
+  severity: high
+  detail: summary.json does not contain adoption_pass.
+- id: baseline_alignment_unproven
+  severity: high
+  detail: The evaluator reports raw totals without proving comparison to the current baseline contract.
+- id: mapping_required
+  severity: high
+  detail: Result status must be obtained from result_classification_map.yaml.
+recommendation: Require every generated evaluator to write adoption_pass before it can enter adoption-grade review.

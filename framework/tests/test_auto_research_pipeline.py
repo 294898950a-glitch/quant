@@ -13,10 +13,12 @@ from framework.autonomous import executor_requirements
 from framework.autonomous import result_classification
 from framework.autonomous import run_recorder
 from framework.autonomous.queue_remote_execution import QueueRemoteExecutionService
+from framework.autonomous.queue_remote_execution import _declared_path_to_repo_path
 from framework.autonomous.queue_remote_execution import pipeline_execution_failed
+from framework.autonomous.queue_remote_execution import should_sync_path_for_run
 
 
-def _remote_service(tmp_path, *, gate_passes=True):
+def _remote_service(tmp_path):
     return QueueRemoteExecutionService(
         repo_root=tmp_path,
         save_state=lambda state: None,
@@ -27,7 +29,6 @@ def _remote_service(tmp_path, *, gate_passes=True):
         rel=lambda path: str(path.resolve().relative_to(tmp_path)) if path.resolve().is_relative_to(tmp_path) else str(path),
         now_iso=lambda: "2026-05-21T00:00:00",
         issue_ticket=lambda purpose: {"path": "/tmp/ticket", "token": "token"},
-        data_quality_gate_passes_locally=lambda spec_path: gate_passes,
     )
 
 
@@ -209,8 +210,10 @@ def test_data_quality_ai_judge_requires_ticket():
     source = pipeline.Path("scripts/validate_data_quality.py").read_text(encoding="utf-8")
     assert 'require_ticket("data_quality_judge")' in source
     assert 'if args.judge_summary_stdin:\n        require_ticket("data_quality_judge")' not in source
+    assert "deterministic_decision" not in source
     assert "repair_candidate" in source
-    assert "status: pass 或 repair_candidate 或 fail" in source
+    assert "status_code:" in source
+    assert "data_quality_decision" in source
 
 
 def test_data_repairer_is_separate_and_revalidated():
@@ -226,12 +229,57 @@ def test_data_repairer_is_separate_and_revalidated():
     assert "original data was not overwritten" in repairer
 
 
-def test_deterministic_data_gate_repairs_old_warehouse_pointer(tmp_path, monkeypatch):
-    monkeypatch.setattr(validate_data_quality, "REPO_ROOT", tmp_path)
-    for rel_path in validate_data_quality.WAREHOUSE_REL_PATHS:
-        path = tmp_path / rel_path
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("placeholder", encoding="utf-8")
+def test_required_large_data_is_synced_for_run(tmp_path):
+    spec_path = tmp_path / "data" / "run_a" / "spec.yaml"
+    spec_path.parent.mkdir(parents=True)
+    spec_path.write_text("run_id: run_a\n", encoding="utf-8")
+    required = {"data/cb_warehouse/cb_daily.parquet"}
+
+    assert should_sync_path_for_run(
+        tmp_path / "data" / "cb_warehouse" / "cb_daily.parquet",
+        "data/cb_warehouse/cb_daily.parquet",
+        spec_path,
+        tmp_path,
+        required,
+    )
+    assert not should_sync_path_for_run(
+        tmp_path / "data" / "other" / "historical.parquet",
+        "data/other/historical.parquet",
+        spec_path,
+        tmp_path,
+        required,
+    )
+
+
+def test_declared_absolute_data_path_is_normalized_to_repo_data(tmp_path):
+    repo_data = tmp_path / "data" / "run_a" / "input.parquet"
+    repo_data.parent.mkdir(parents=True)
+    repo_data.write_bytes(b"stub")
+
+    normalized = _declared_path_to_repo_path(tmp_path, "/home/jay/data/run_a/input.parquet")
+
+    assert normalized == repo_data
+
+
+def test_recovered_vm_avoidance_is_cleared_before_retry(tmp_path):
+    state = {"queue": []}
+    item = {
+        "id": "run_a",
+        "status": "queued",
+        "avoid_vm_ids": ["guangzhou_spot"],
+        "last_start_error_at": "2026-05-22T01:00:00",
+    }
+    state["queue"].append(item)
+    service = _remote_service(tmp_path)
+
+    changed = service.clear_recovered_vm_avoidances(state, state["queue"], [{"id": "guangzhou_spot"}])
+
+    assert changed == 1
+    assert "avoid_vm_ids" not in item
+    assert item["workflow_stage"] == "queued_after_recovered_vm_probe"
+
+
+def test_data_quality_ai_judge_is_primary_for_old_warehouse_pointer(monkeypatch):
     summary = {
         "schema_version": 1,
         "data_files": [
@@ -240,14 +288,46 @@ def test_deterministic_data_gate_repairs_old_warehouse_pointer(tmp_path, monkeyp
                 "exists": False,
                 "readable": False,
             }
-            for rel_path in validate_data_quality.WAREHOUSE_REL_PATHS
+            for rel_path in (
+                "data/cb_warehouse/cb_basic.parquet",
+                "data/cb_warehouse/cb_daily.parquet",
+            )
         ],
     }
 
-    decision = validate_data_quality.deterministic_decision(summary)
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def call_active_provider(self, prompt, schema):
+            assert "data/old_run/data/cb_warehouse/cb_basic.parquet" in prompt
+            return type(
+                "Resp",
+                (),
+                {
+                    "content": yaml.safe_dump(
+                        {
+                            "status_code": 2,
+                            "confidence_code": 1,
+                            "blocking_issues": [],
+                            "warnings": [],
+                            "fix_plan": [{"action": "rewrite_spec_data_root", "new_data_root": "."}],
+                            "decision_reason": "old data root can be redirected to the current warehouse",
+                        },
+                        allow_unicode=True,
+                        sort_keys=False,
+                    ),
+                    "provider_id": "fake",
+                    "response_hash": "hash",
+                },
+            )()
+
+    monkeypatch.setattr(validate_data_quality, "RegisteredProviderAdapter", FakeAdapter)
+
+    decision = validate_data_quality.judge_summary(summary)
 
     assert decision["status"] == "repair_candidate"
-    assert decision["decision_source"] == "deterministic_data_gate"
+    assert decision["decision_source"] == "ai_data_quality_judge"
     assert {item["action"] for item in decision["fix_plan"]} == {"rewrite_spec_data_root"}
 
 
@@ -288,8 +368,7 @@ def test_data_root_repair_updates_spec_without_base_ranks(tmp_path, monkeypatch)
     assert "data/cb_warehouse/cb_daily.parquet" in updated["automation"]["sync_paths"]
 
 
-def test_deterministic_data_gate_repairs_derivable_recommended_columns(tmp_path, monkeypatch):
-    monkeypatch.setattr(validate_data_quality, "REPO_ROOT", tmp_path)
+def test_data_quality_ai_judge_can_request_derivable_recommended_columns(monkeypatch):
     summary = {
         "schema_version": 1,
         "data_files": [
@@ -312,9 +391,41 @@ def test_deterministic_data_gate_repairs_derivable_recommended_columns(tmp_path,
         ],
     }
 
-    decision = validate_data_quality.deterministic_decision(summary)
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def call_active_provider(self, prompt, schema):
+            assert "pct_chg" in prompt
+            return type(
+                "Resp",
+                (),
+                {
+                    "content": yaml.safe_dump(
+                        {
+                            "status_code": 2,
+                            "confidence_code": 1,
+                            "blocking_issues": [],
+                            "warnings": ["recommended derived fields are missing"],
+                            "fix_plan": [
+                                {"action": "derive_warehouse_columns", "path": "data/cb_warehouse/cb_daily.parquet"}
+                            ],
+                            "decision_reason": "missing derived fields can be prepared for this run",
+                        },
+                        allow_unicode=True,
+                        sort_keys=False,
+                    ),
+                    "provider_id": "fake",
+                    "response_hash": "hash",
+                },
+            )()
+
+    monkeypatch.setattr(validate_data_quality, "RegisteredProviderAdapter", FakeAdapter)
+
+    decision = validate_data_quality.judge_summary(summary)
 
     assert decision["status"] == "repair_candidate"
+    assert decision["decision_source"] == "ai_data_quality_judge"
     assert {item["action"] for item in decision["fix_plan"]} == {"derive_warehouse_columns"}
 
 
@@ -350,7 +461,7 @@ def test_executor_declares_all_value_gap_switch_inputs(tmp_path):
     assert "data/run_requirements/prepared_data/data_root/pool_6/best_params.json" in paths
 
 
-def test_data_gate_blocks_executor_without_declared_inputs(tmp_path):
+def test_data_quality_ai_judge_handles_executor_without_declared_inputs(tmp_path, monkeypatch):
     script = tmp_path / "scripts" / "dummy_executor.py"
     script.parent.mkdir(parents=True)
     script.write_text("print('no declaration')\n", encoding="utf-8")
@@ -372,9 +483,39 @@ def test_data_gate_blocks_executor_without_declared_inputs(tmp_path):
     finally:
         executor_requirements.REPO_ROOT = original_root
 
-    decision = validate_data_quality.deterministic_decision(summary)
+    class FakeAdapter:
+        def __init__(self, *args, **kwargs):
+            pass
+
+        def call_active_provider(self, prompt, schema):
+            assert "executor_requirements_error" in prompt
+            return type(
+                "Resp",
+                (),
+                {
+                    "content": yaml.safe_dump(
+                        {
+                            "status_code": 3,
+                            "confidence_code": 1,
+                            "blocking_issues": ["executor data requirements unavailable"],
+                            "warnings": [],
+                            "fix_plan": [],
+                            "decision_reason": "the run cannot prove which data it needs",
+                        },
+                        allow_unicode=True,
+                        sort_keys=False,
+                    ),
+                    "provider_id": "fake",
+                    "response_hash": "hash",
+                },
+            )()
+
+    monkeypatch.setattr(validate_data_quality, "RegisteredProviderAdapter", FakeAdapter)
+
+    decision = validate_data_quality.judge_summary(summary)
 
     assert decision["status"] == "fail"
+    assert decision["decision_source"] == "ai_data_quality_judge"
     assert "executor data requirements unavailable" in decision["blocking_issues"][0]
 
 
@@ -559,8 +700,8 @@ def test_repaired_data_rerun_stops_after_two_attempts(tmp_path):
             }
         ],
         "history": [
-            {"id": "run_c", "message": "data quality repair prepared run-local data and deterministic recheck passed"},
-            {"id": "run_c", "message": "data quality repair prepared run-local data and deterministic recheck passed"},
+            {"id": "run_c", "message": "data quality repair prepared run-local data; AI data judge will recheck before execution"},
+            {"id": "run_c", "message": "data quality repair prepared run-local data; AI data judge will recheck before execution"},
         ],
     }
 

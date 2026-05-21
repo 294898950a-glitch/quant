@@ -1,0 +1,11 @@
+{
+  "best_params": {
+    "multiplier": 0.5
+  },
+  "train_excess": 122.593546,
+  "repair_excess": 27.392908,
+  "test_excess": 31.682023,
+  "lookback_days": 20,
+  "floor_factor": 0.5,
+  "ceiling_factor": 1.5
+}

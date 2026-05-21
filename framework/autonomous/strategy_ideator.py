@@ -37,10 +37,15 @@ def propose(
     insights: dict[str, Any],
     ai_adapter,
 ) -> dict[str, Any]:
+    forced_prompt_contract = insights.get("forced_prompt_contract") if isinstance(insights, dict) else {}
     prompt = (
         "You are the ideation node in a five-node quant research workflow.\n"
         "Your only job is to propose the next research question. You do not run tests, "
         "write files, start VMs, update current strategy truth, promote results, or review outcomes.\n\n"
+        "Forced prompt contract:\n"
+        "- You must read and obey forced_prompt_contract.strong_prompt.\n"
+        "- You must read every forced_prompt_contract.required_reading_cards entry before answering.\n"
+        "- These cards are binding runtime facts, not optional background.\n\n"
         "You must follow this order:\n"
         "1. Read the current research context, recent result digest, closed directions, available evidence, "
         "and available executor/tool information.\n"
@@ -63,6 +68,7 @@ def propose(
         "- Do not change the current strategy, baseline, protocol, or live status.\n"
         "- Do not request local cb_arb backtests.\n\n"
         "Required output fields are listed in insights.required_fields. Fill every field concretely.\n"
+        f"forced_prompt_contract: {forced_prompt_contract}\n"
         f"closed_tags: {sorted(closed_tags)}\n"
         f"recent_digest: {recent_digest}\n"
         f"insights: {insights}\n"

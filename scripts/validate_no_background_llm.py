@@ -14,12 +14,19 @@ QUEUE_STATE = REPO_ROOT / "data" / "research_framework" / "research_queue.yaml"
 AI_PROVIDERS = REPO_ROOT / "data" / "research_framework" / "ai_providers.yaml"
 STRATEGY_IDEATOR = REPO_ROOT / "data" / "research_framework" / "strategy_ideator.yaml"
 COMMON_IDEATION_ENTRYPOINT = "scripts/run_strategy_ideation_once.py"
+REVIEW_RESULT_ENTRYPOINT = "scripts/review_result.py"
 DATA_QUALITY_ENTRYPOINT = "scripts/validate_data_quality.py"
 DATA_REPAIR_ENTRYPOINT = "scripts/repair_data_quality.py"
-ALLOWED_PROVIDER_ENTRYPOINTS = {COMMON_IDEATION_ENTRYPOINT, DATA_QUALITY_ENTRYPOINT, DATA_REPAIR_ENTRYPOINT}
+ALLOWED_PROVIDER_ENTRYPOINTS = {
+    COMMON_IDEATION_ENTRYPOINT,
+    REVIEW_RESULT_ENTRYPOINT,
+    DATA_QUALITY_ENTRYPOINT,
+    DATA_REPAIR_ENTRYPOINT,
+}
 MECHANICAL_SCRIPTS = [
     REPO_ROOT / "scripts" / "research_queue_runner.py",
     REPO_ROOT / "scripts" / "quant_internal_tick.py",
+    REPO_ROOT / "scripts" / "hermes_executor_handoff_tick.py",
     REPO_ROOT / "scripts" / "auto_research_pipeline.py",
 ]
 DECOMMISSIONED_GENERATOR = REPO_ROOT / "scripts" / "generate_option_value_next_spec.py"
