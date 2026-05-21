@@ -353,7 +353,7 @@ def find_pending_tool_draft(output_root: Path, store: ArtifactStore) -> dict[str
             continue
         if spec.get("status") != "DRAFT":
             continue
-        if spec.get("notes") not in {"no strict executor match", "missing registered capability", "executor required data missing"}:
+        if spec.get("notes") not in {"no strict executor match", "missing registered capability"}:
             continue
         request_path = spec_path.parent / "executor_tool_request.yaml"
         request_status = ""
@@ -414,6 +414,10 @@ def _fill_executor_defaults(entry: dict[str, Any], config_defaults: dict[str, An
         "ceiling_factor": 1.5,
         "fixed_source": "2",
         "rule": "score_4state",
+        "drawdown_thresholds": "0.05,0.10,0.15",
+        "exit_multipliers": "0.25,0.50,0.75",
+        "base_max_hold": "120",
+        "model_config": "{}",
     }
     for key in enriched.get("required_config_fields", []) or []:
         if key == "output_dir":
@@ -484,6 +488,13 @@ def register_executor_tool_and_recompile(
     package = store.read_yaml(package_path)
     if package.get("status") != "draft_tool_code":
         return {"status": "skipped", "reason": "tool package is not draft_tool_code"}
+    package_errors = validate_executor_tool_package(package)
+    if package_errors:
+        package["status"] = "invalid_tool_code_response"
+        package["validation_errors"] = package_errors
+        package["tool_code_attempts"] = int(package.get("tool_code_attempts") or 0) + 1
+        store.write_yaml(package_path, package, no_aliases=True)
+        return {"status": "failed", "reason": "draft executor code failed validation", "errors": package_errors}
     entry = package.get("registry_entry")
     if not isinstance(entry, dict):
         return {"status": "failed", "reason": "registry_entry missing"}
@@ -501,16 +512,39 @@ def register_executor_tool_and_recompile(
     registry_errors = validate_registry_schema(updated_registry)
     if registry_errors:
         return {"status": "failed", "reason": "registered executor failed registry schema", "errors": registry_errors}
-    copied_files = _copy_generated_files_to_registry_paths(run_dir=run_dir, package=package, registry_entry=entry)
-    registry_written = store.write_yaml(registry_path, updated_registry, no_aliases=True)
-    refreshed = store.read_yaml(registry_written)
+    proposal_for_compile = dict(proposal)
+    proposal_data = list(proposal_for_compile.get("required_data") or [])
+    proposal_data_paths = {str(item.get("path") if isinstance(item, dict) else item) for item in proposal_data}
+    for data_item in entry.get("required_data") or []:
+        data_path = str(data_item.get("path") if isinstance(data_item, dict) else data_item)
+        if data_path and data_path not in proposal_data_paths:
+            proposal_data.append(data_item)
+            proposal_data_paths.add(data_path)
+    proposal_for_compile["required_data"] = proposal_data
     result = compile_proposal(
-        proposal=proposal,
-        registry=refreshed,
+        proposal=proposal_for_compile,
+        registry=updated_registry,
         closed_tags=closed_tags,
         recent_proposals=recent_proposals,
         output_dir=run_dir,
     )
+    if result.status != "READY":
+        package["status"] = "draft_tool_code_compile_not_ready"
+        package["post_registration_compile_status"] = result.status
+        package["post_registration_compile_reason"] = result.reason
+        store.write_yaml(package_path, package, no_aliases=True)
+        return {
+            "status": package["status"],
+            "executor_id": executor_id,
+            "registered_files": [],
+            "registry_path": None,
+            "compile_status": result.status,
+            "compile_reason": result.reason,
+            "spec_path": result.spec_path,
+            "errors": result.errors,
+        }
+    copied_files = _copy_generated_files_to_registry_paths(run_dir=run_dir, package=package, registry_entry=entry)
+    registry_written = store.write_yaml(registry_path, updated_registry, no_aliases=True)
     record_framework_change(
         change_type="executor_tool_registered",
         summary=f"Registered executor tool {executor_id}",
@@ -590,9 +624,22 @@ def validate_executor_tool_package(package: dict[str, Any]) -> list[str]:
                         break
                 if str(item.get("path") or "").endswith(".py"):
                     try:
-                        ast.parse(item["content"])
+                        tree = ast.parse(item["content"])
                     except SyntaxError as exc:
                         errors.append(f"files[{index}].content is not valid Python: {exc.msg}")
+                        continue
+                    function_names = {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}
+                    if "main" not in function_names:
+                        errors.append(f"files[{index}].content must define main()")
+                    if "declare_data_requirements" not in function_names:
+                        errors.append(f"files[{index}].content must define declare_data_requirements(command, spec)")
+                    if "__name__" not in item["content"] or "__main__" not in item["content"]:
+                        errors.append(f"files[{index}].content must have a __main__ entrypoint")
+                    if "adoption_pass" not in item["content"]:
+                        errors.append(f"files[{index}].content must compute and write adoption_pass")
+                    for artifact_name in ("summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"):
+                        if artifact_name not in item["content"]:
+                            errors.append(f"files[{index}].content must write {artifact_name}")
     return errors
 
 
@@ -728,6 +775,8 @@ def executor_tool_code_required_yaml_template() -> str:
     content: |
       #!/usr/bin/env python3
       # Full Python source code goes here.
+      # Must define declare_data_requirements(command, spec) returning {"required_files": [{"path": "..."}]}.
+      # Must compute and write adoption_pass into summary.json using baseline-aligned success criteria.
       # Do not return placeholder, TODO, pseudocode, or demo-only code.
 """
 
@@ -934,12 +983,65 @@ def request_executor_tool_code(
             "status": "draft_tool_design_pending_code",
         }
         store.write_yaml(descriptor_path, pending_package, no_aliases=True)
-        code_response = request_executor_tool_code_from_design(
-            proposal=proposal,
-            design=design,
-            ai_adapter=ai_adapter,
-            previous_errors=list(existing_descriptor.get("validation_errors") or []),
-        )
+        try:
+            code_response = request_executor_tool_code_from_design(
+                proposal=proposal,
+                design=design,
+                ai_adapter=ai_adapter,
+                previous_errors=list(existing_descriptor.get("validation_errors") or []),
+            )
+        except Exception as exc:
+            attempts = prior_code_attempts + 1
+            validation_errors = [f"provider_error: {exc}"]
+            package = {
+                "tool_request_id": design.get("tool_request_id"),
+                "why_existing_tools_insufficient": design.get("why_existing_tools_insufficient"),
+                "reviewed_existing_executor_ids": design.get("reviewed_existing_executor_ids"),
+                "registry_entry": design.get("registry_entry"),
+                "implementation_outline": design.get("implementation_outline"),
+                "validation_plan": design.get("validation_plan"),
+                "ai_provider": design.get("ai_provider"),
+                "design_response_hash": design.get("response_hash"),
+                "code_response_hash": None,
+                "compile_reason": compile_reason,
+                "tool_design": design,
+                "tool_code_response": {
+                    "status": "provider_error",
+                    "validation_errors": validation_errors,
+                },
+                "files": [],
+                "written_files": [],
+                "tool_code_attempts": attempts,
+                "validation_errors": validation_errors,
+                "status": "abandoned_tool_code_response" if attempts >= 3 else "invalid_tool_code_response",
+            }
+            written_descriptor_path = store.write_yaml(descriptor_path, package, no_aliases=True)
+            package["descriptor_path"] = str(written_descriptor_path)
+            record_framework_change(
+                change_type="executor_tool_code_request_failed",
+                summary=f"Executor tool code request failed for {proposal.get('proposal_id')}",
+                changed_paths=[str(written_descriptor_path)],
+                actor=str(package.get("ai_provider") or "ai"),
+                reason=compile_reason,
+                impact="Provider failure is recorded on the draft so automation can retry or skip it instead of stalling.",
+                evidence={
+                    "proposal_id": proposal.get("proposal_id"),
+                    "tool_request_id": package.get("tool_request_id"),
+                    "design_response_hash": package.get("design_response_hash"),
+                    "tool_code_attempts": attempts,
+                    "status": package["status"],
+                    "validation_errors": validation_errors,
+                },
+            )
+            return {
+                "descriptor_path": str(written_descriptor_path),
+                "written_files": [],
+                "tool_request_id": package.get("tool_request_id"),
+                "design_response_hash": package.get("design_response_hash"),
+                "code_response_hash": None,
+                "status": package["status"],
+                "validation_errors": validation_errors,
+            }
 
     package = {
         "tool_request_id": design.get("tool_request_id"),

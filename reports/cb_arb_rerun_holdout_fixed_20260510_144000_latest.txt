@@ -1,8 +1,0 @@
-ts=2026-05-10T21:37:29Z
-process=not_running
-runs=0
-decisions=0
-outbox=0
-state=None iteration=None pool=None pool_iters=None reason=None
-best=iteration=None excess=None return=None drawdown=None sharpe=None trades=None
-last=iteration=None phase=None verdict=None change=None

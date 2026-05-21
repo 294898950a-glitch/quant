@@ -10,9 +10,10 @@ Machine-owned runtime files:
 - `data/research_framework/research_insights.yaml`
 - `data/research_framework/strategy_ideator.yaml`
 - `data/research_framework/protocol_rules.yaml`
+- `data/research_framework/research_queue.yaml`
 
 Supporting registries such as `strategies.yaml`, `baseline_registry.yaml`,
-`ai_providers.yaml`, `research_queue.yaml`, and `framework_stability_todos.yaml`
+`ai_providers.yaml`, and `framework_stability_todos.yaml`
 are not default AI context. The specific component that needs them must load
 them directly.
 
@@ -60,6 +61,12 @@ Hard boundaries:
   time, exit code, compute metadata, and a passing data-quality decision.
   Historical artifact classification must use the backfill entry and must not
   trigger the next research step by itself.
+- `scripts/research_queue_runner.py` is only the queue decision entrypoint.
+  Strategy ideation must be delegated to `framework/autonomous/queue_ideation.py`;
+  VM launch, data-quality gating, result sync, repair requeue, and completion
+  settlement must be delegated to `framework/autonomous/queue_remote_execution.py`.
+  Synced artifacts become `review_pending`; review and digest updates must be
+  delegated to `framework/autonomous/queue_review_memory.py`.
 - Before any AI proposes or registers a new evidence tool, inject the existing
   tool manifest with ids, paths, callables, descriptions, and manifest hash.
   New tool registration must include why existing tools are insufficient.

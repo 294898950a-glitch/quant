@@ -7,8 +7,28 @@ import pandas as pd
 
 from scripts import auto_research_pipeline as pipeline
 from scripts import repair_data_quality
+from scripts import research_queue_runner
 from scripts import validate_data_quality
+from framework.autonomous import executor_requirements
+from framework.autonomous import result_classification
 from framework.autonomous import run_recorder
+from framework.autonomous.queue_remote_execution import QueueRemoteExecutionService
+from framework.autonomous.queue_remote_execution import pipeline_execution_failed
+
+
+def _remote_service(tmp_path, *, gate_passes=True):
+    return QueueRemoteExecutionService(
+        repo_root=tmp_path,
+        save_state=lambda state: None,
+        write_status=lambda status, extra=None: None,
+        audit=lambda action, payload=None: None,
+        log=lambda message: None,
+        mark_history=research_queue_runner.mark_history,
+        rel=lambda path: str(path.resolve().relative_to(tmp_path)) if path.resolve().is_relative_to(tmp_path) else str(path),
+        now_iso=lambda: "2026-05-21T00:00:00",
+        issue_ticket=lambda purpose: {"path": "/tmp/ticket", "token": "token"},
+        data_quality_gate_passes_locally=lambda spec_path: gate_passes,
+    )
 
 
 def test_estimate_compute_metadata_is_record_only():
@@ -26,6 +46,11 @@ def test_estimate_compute_metadata_is_record_only():
     assert result["decision"] == "record-only"
 
 
+def test_result_decision_status_comes_from_mapping():
+    assert result_classification.status_for_decision("no_adoption_decision_unusable") == "rejected"
+    assert result_classification.evidence_usable("no_adoption_decision_unusable") is False
+
+
 def test_command_placeholder_expansion(tmp_path):
     spec_path = tmp_path / "spec.yaml"
     output_dir = tmp_path / "out"
@@ -41,6 +66,28 @@ def test_command_placeholder_expansion(tmp_path):
     assert command[0:2] == ["python3", "x.py"]
     assert "run_a" in command
     assert any(part.endswith("spec.yaml") for part in command)
+
+
+def test_pipeline_normalizes_local_repo_absolute_paths():
+    spec_path = pipeline.REPO_ROOT / "data" / "run_a" / "spec.yaml"
+    spec = {
+        "run_id": "run_a",
+        "automation": {
+            "output_dir": "/home/jay/projects/quant/data/run_a",
+            "command": [
+                "python3",
+                "x.py",
+                "--output-dir",
+                "/home/jay/projects/quant/data/run_a",
+            ],
+        },
+    }
+
+    output_dir = pipeline.output_dir_from_spec(spec, spec_path)
+    command = pipeline.command_from_spec(spec, spec_path, output_dir)
+
+    assert output_dir == pipeline.REPO_ROOT / "data" / "run_a"
+    assert command[-1] == "data/run_a"
 
 
 def test_compute_placement_reads_protocol_allowed_hostnames(monkeypatch, tmp_path):
@@ -167,11 +214,11 @@ def test_data_quality_ai_judge_requires_ticket():
 
 
 def test_data_repairer_is_separate_and_revalidated():
-    runner = pipeline.Path("scripts/research_queue_runner.py").read_text(encoding="utf-8")
+    remote_runner = pipeline.Path("framework/autonomous/queue_remote_execution.py").read_text(encoding="utf-8")
     repairer = pipeline.Path("scripts/repair_data_quality.py").read_text(encoding="utf-8")
-    assert "scripts/repair_data_quality.py" in runner
-    assert 'issue_ticket("data_quality_repair")' in runner
-    assert "repaired_summary = remote_data_quality_summary" in runner
+    assert "scripts/repair_data_quality.py" in remote_runner
+    assert 'issue_ticket("data_quality_repair")' in remote_runner
+    assert "repaired_summary = self.remote_data_quality_summary" in remote_runner
     assert 'require_ticket("data_quality_repair")' in repairer
     assert "status=repair_candidate" in repairer or "repair_candidate" in repairer
     assert "RegisteredProviderAdapter" in repairer
@@ -271,10 +318,74 @@ def test_deterministic_data_gate_repairs_derivable_recommended_columns(tmp_path,
     assert {item["action"] for item in decision["fix_plan"]} == {"derive_warehouse_columns"}
 
 
+def test_executor_declares_all_value_gap_switch_inputs(tmp_path):
+    run_dir = tmp_path / "data" / "run_requirements"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_requirements",
+                "automation": {
+                    "command": [
+                        "python3",
+                        "scripts/evaluate_cb_arb_value_gap_switch.py",
+                        "--data-root",
+                        "data/run_requirements/prepared_data/data_root",
+                        "--fixed-source",
+                        "2",
+                    ]
+                },
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    requirements = executor_requirements.declared_requirements_for_spec(spec_path)
+    paths = {item["path"] for item in requirements["required_files"]}
+
+    assert "data/run_requirements/prepared_data/data_root/pool_0/best_params.json" in paths
+    assert "data/run_requirements/prepared_data/data_root/pool_2/best_params.json" in paths
+    assert "data/run_requirements/prepared_data/data_root/pool_4/best_params.json" in paths
+    assert "data/run_requirements/prepared_data/data_root/pool_6/best_params.json" in paths
+
+
+def test_data_gate_blocks_executor_without_declared_inputs(tmp_path):
+    script = tmp_path / "scripts" / "dummy_executor.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("print('no declaration')\n", encoding="utf-8")
+    spec_path = tmp_path / "data" / "run_missing_decl" / "spec.yaml"
+    spec_path.parent.mkdir(parents=True)
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_missing_decl",
+                "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    original_root = executor_requirements.REPO_ROOT
+    executor_requirements.REPO_ROOT = tmp_path
+    try:
+        summary = validate_data_quality.summarize_data_quality(spec_path)
+    finally:
+        executor_requirements.REPO_ROOT = original_root
+
+    decision = validate_data_quality.deterministic_decision(summary)
+
+    assert decision["status"] == "fail"
+    assert "executor data requirements unavailable" in decision["blocking_issues"][0]
+
+
 def test_warehouse_column_repair_writes_run_local_data(tmp_path, monkeypatch):
     monkeypatch.setattr(repair_data_quality, "REPO_ROOT", tmp_path)
     warehouse = tmp_path / "data" / "cb_warehouse"
     warehouse.mkdir(parents=True)
+    for pool_id in (0, 2, 4, 6):
+        pool = tmp_path / "data" / "cb_arb_concurrent_supervised_20260511_094500" / f"pool_{pool_id}"
+        pool.mkdir(parents=True)
+        (pool / "best_params.json").write_text('{"params": {}}\n', encoding="utf-8")
     pd.DataFrame(
         [{"ts_code": "113001.SH", "stk_code": "600001.SH", "conv_price": 10.0}]
     ).to_parquet(warehouse / "cb_basic.parquet", index=False)
@@ -300,13 +411,20 @@ def test_warehouse_column_repair_writes_run_local_data(tmp_path, monkeypatch):
     decision_path = run_dir / "data_quality_decision.yaml"
     spec_path.write_text(
         yaml.safe_dump(
-            {
-                "run_id": "run_b",
-                "automation": {
-                    "command": ["python3", "scripts/evaluate.py", "--data-root", "."],
-                    "sync_paths": [],
-                },
-            }
+                {
+                    "run_id": "run_b",
+                    "automation": {
+                        "command": [
+                            "python3",
+                            "scripts/evaluate_cb_arb_value_gap_switch.py",
+                            "--data-root",
+                            ".",
+                            "--fixed-source",
+                            "2",
+                        ],
+                        "sync_paths": [],
+                    },
+                }
         ),
         encoding="utf-8",
     )
@@ -322,14 +440,165 @@ def test_warehouse_column_repair_writes_run_local_data(tmp_path, monkeypatch):
 
     report = repair_data_quality.repair(spec_path, decision_path)
     updated = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
-    prepared_root = tmp_path / updated["automation"]["command"][-1]
+    command = updated["automation"]["command"]
+    data_root = command[command.index("--data-root") + 1]
+    prepared_root = tmp_path / data_root
     repaired_daily = pd.read_parquet(prepared_root / "data" / "cb_warehouse" / "cb_daily.parquet")
     repaired_call = pd.read_parquet(prepared_root / "data" / "cb_warehouse" / "cb_call.parquet")
 
     assert report["mode"] == "deterministic_warehouse_column_derivation"
     assert {"pct_chg", "cb_over_rate"} <= set(repaired_daily.columns)
     assert "call_type" in repaired_call.columns
-    assert updated["automation"]["command"][-1].endswith("prepared_data/data_root")
+    for pool_id in (0, 2, 4, 6):
+        assert (prepared_root / f"pool_{pool_id}" / "best_params.json").exists()
+    assert data_root.endswith("prepared_data/data_root")
+
+
+def test_repaired_data_item_requeues_and_sets_spec_ready(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_c"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_c",
+                "status": "ARCHIVED",
+                "data_quality_repair": {"status": "prepared"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = {
+        "queue": [
+            {
+                "id": "run_c",
+                "status": "failed",
+                "spec_path": "data/run_c/spec.yaml",
+                "failure_reason": "data quality blocked before repair",
+            }
+        ],
+        "history": [],
+    }
+
+    count = service.requeue_repaired_data_items(state, state["queue"])
+    updated = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "queued"
+    assert state["queue"][0]["data_quality_repair_rerun"] is True
+    assert updated["status"] == "READY"
+
+
+def test_repaired_data_rerun_can_reset_stale_complete_spec(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_c"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_c",
+                "status": "COMPLETE",
+                "data_quality_repair": {"status": "prepared"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "vm_pipeline_stdout.log").write_text("exit_code: 1\n", encoding="utf-8")
+    state = {
+        "queue": [
+            {
+                "id": "run_c",
+                "status": "failed",
+                "spec_path": "data/run_c/spec.yaml",
+                "data_quality_repair_rerun": True,
+                "failure_reason": "remote pipeline exit_code=1",
+            }
+        ],
+        "history": [],
+    }
+
+    count = service.requeue_repaired_data_items(state, state["queue"])
+    updated = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "queued"
+    assert updated["status"] == "READY"
+    assert state["queue"][0]["previous_spec_status_before_data_requeue"] == "COMPLETE"
+
+
+def test_repaired_data_rerun_stops_after_two_attempts(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_c"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_c",
+                "status": "COMPLETE",
+                "data_quality_repair": {"status": "prepared"},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "vm_pipeline_stdout.log").write_text("exit_code: 1\n", encoding="utf-8")
+    state = {
+        "queue": [
+            {
+                "id": "run_c",
+                "status": "failed",
+                "spec_path": "data/run_c/spec.yaml",
+                "data_quality_repair_rerun": True,
+                "failure_reason": "remote pipeline exit_code=1",
+                "data_quality_repair_signature": service.data_quality_repair_signature(
+                    spec_path, {"status": "prepared"}
+                ),
+                "data_quality_repair_requeue_attempts": 1,
+            }
+        ],
+        "history": [
+            {"id": "run_c", "message": "data quality repair prepared run-local data and deterministic recheck passed"},
+            {"id": "run_c", "message": "data quality repair prepared run-local data and deterministic recheck passed"},
+        ],
+    }
+
+    count = service.requeue_repaired_data_items(state, state["queue"])
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "failed"
+    assert state["queue"][0]["failure_reason"].startswith("data repair rerun failed after prepared repair")
+
+
+def test_runner_detects_failed_pipeline_even_when_old_artifacts_exist(tmp_path):
+    run_dir = tmp_path / "run"
+    run_dir.mkdir()
+    (run_dir / "vm_pipeline_stdout.log").write_text("exit_code: 1\nmissing_artifacts: []\n", encoding="utf-8")
+    (run_dir / "summary.json").write_text("{}", encoding="utf-8")
+
+    assert pipeline_execution_failed(run_dir) == "remote pipeline exit_code=1"
+
+
+def test_runner_clears_stale_vm_avoidance(tmp_path):
+    service = _remote_service(tmp_path)
+    state = {
+        "queue": [
+            {
+                "id": "run_d",
+                "status": "queued",
+                "avoid_vm_ids": ["singapore_sig", "guangzhou_spot"],
+                "last_start_error_at": "2026-05-20T06:00:48",
+            }
+        ],
+        "history": [],
+    }
+
+    count = service.clear_stale_vm_avoidances(state, state["queue"])
+
+    assert count == 1
+    assert "avoid_vm_ids" not in state["queue"][0]
+    assert state["queue"][0]["workflow_stage"] == "queued_after_stale_vm_avoidance_reset"
 
 
 def test_derive_verdict_from_run_summary(tmp_path):

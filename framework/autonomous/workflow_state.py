@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import Any
 
 
-ACTIVE_STATUSES = {"queued", "running"}
+ACTIVE_STATUSES = {"queued", "running", "review_pending"}
 
 
 @dataclass(frozen=True)
@@ -59,6 +59,12 @@ def decide_scheduler_action(state: dict[str, Any]) -> WorkflowDecision:
         return WorkflowDecision(
             action="monitor_running",
             reason="remote work is still running",
+            counts=counts,
+        )
+    if counts.get("review_pending", 0) > 0:
+        return WorkflowDecision(
+            action="review_pending",
+            reason="synced results are waiting for review",
             counts=counts,
         )
     return WorkflowDecision(

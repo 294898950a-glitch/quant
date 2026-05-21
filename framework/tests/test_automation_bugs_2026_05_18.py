@@ -30,6 +30,9 @@ from typing import Any
 import pytest
 import yaml
 
+from framework.autonomous.queue_remote_execution import QueueRemoteExecutionService
+from framework.autonomous.queue_review_memory import QueueReviewMemoryService
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -235,7 +238,11 @@ def test_research_queue_runner_auto_resolves_exhaustion_block(tmp_path: Path, mo
     monkeypatch.setattr(runner, "STATUS_PATH", status_path)
     monkeypatch.setattr(runner, "AUDIT_LOG_PATH", audit_path)
     monkeypatch.setattr(runner, "PAUSE_FLAG_PATH", pause_flag)
-    monkeypatch.setattr(runner, "generate_next_spec_if_idle", lambda state: "queued_ideation_spec")
+    class FakeIdeationService:
+        def generate_until_actionable(self, state):
+            return "queued_ideation_spec"
+
+    monkeypatch.setattr(runner, "ideation_service", lambda: FakeIdeationService())
 
     assert runner.tick() == "queued_ideation_spec"
 
@@ -243,11 +250,6 @@ def test_research_queue_runner_auto_resolves_exhaustion_block(tmp_path: Path, mo
 def test_research_queue_completion_requires_review_and_digest(tmp_path: Path, monkeypatch):
     """A remote run is not complete until artifacts are reviewed and digest is refreshed."""
     runner = _load(REPO_ROOT / "scripts" / "research_queue_runner.py", "research_queue_runner_review_gate")
-    monkeypatch.setattr(runner, "REPO_ROOT", tmp_path)
-    state_path = tmp_path / "data" / "research_framework" / "research_queue.yaml"
-    state_path.parent.mkdir(parents=True)
-    monkeypatch.setattr(runner, "STATE_PATH", state_path)
-
     run_dir = tmp_path / "data" / "run_review_gate"
     run_dir.mkdir(parents=True)
     spec_path = run_dir / "spec.yaml"
@@ -267,11 +269,35 @@ def test_research_queue_completion_requires_review_and_digest(tmp_path: Path, mo
         (run_dir / name).write_text("{}\n", encoding="utf-8")
 
     calls: list[str] = []
-    monkeypatch.setattr(runner, "remote_running_on_vm", lambda vm, pattern: False)
-    monkeypatch.setattr(runner, "sync_remote_run_dir", lambda state, item, run_dir: calls.append("sync"))
-    monkeypatch.setattr(runner, "item_vm_config", lambda state, item: {"id": "vm1", "host": "vm", "remote_repo": "/repo"})
+    state = {}
+    item = {"id": "run_review_gate", "status": "running", "spec_path": "data/run_review_gate/spec.yaml"}
+    queue = [item]
+    rel = lambda path: str(path.resolve().relative_to(tmp_path))
+    remote = QueueRemoteExecutionService(
+        repo_root=tmp_path,
+        save_state=lambda state: None,
+        write_status=lambda status, extra=None: None,
+        audit=lambda action, payload=None: None,
+        log=lambda message: None,
+        mark_history=runner.mark_history,
+        rel=rel,
+        now_iso=lambda: "2026-05-21T00:00:00",
+        issue_ticket=lambda purpose: {"path": "/tmp/ticket", "token": "token"},
+        remote_running_on_vm=lambda vm, pattern: False,
+        sync_remote_run_dir=lambda state, item, run_dir: calls.append("sync"),
+        item_vm_config=lambda state, item: {"id": "vm1", "host": "vm", "remote_repo": "/repo"},
+    )
+    review = QueueReviewMemoryService(
+        repo_root=tmp_path,
+        run=lambda *args, **kwargs: None,
+        save_state=lambda state: None,
+        audit=lambda action, payload=None: None,
+        mark_history=runner.mark_history,
+        rel=rel,
+        now_iso=lambda: "2026-05-21T00:00:00",
+    )
     monkeypatch.setattr(
-        runner,
+        review,
         "review_and_digest_run",
         lambda run_path: calls.append("review_digest") or {
             "review_path": "data/run_review_gate/review.yaml",
@@ -279,11 +305,9 @@ def test_research_queue_completion_requires_review_and_digest(tmp_path: Path, mo
         },
     )
 
-    state = {}
-    item = {"id": "run_review_gate", "status": "running", "spec_path": "data/run_review_gate/spec.yaml"}
-    queue = [item]
-
-    assert runner.settle_running_items(state, queue) == 1
+    assert remote.settle_running_items(state, queue) == 1
+    assert item["status"] == "review_pending"
+    assert review.review_pending_items(state, queue) == 1
     assert calls == ["sync", "review_digest"]
     assert item["status"] == "complete"
     assert item["workflow_stage"] == "digested"

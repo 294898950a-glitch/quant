@@ -401,9 +401,9 @@ def test_runner_has_no_budget_gate():
 def test_runner_no_auto_run_draft_specs():
     """Runner must NOT auto-run DRAFT specs (only READY)."""
     m = _load(RUNNER_MODULE, "research_queue_runner")
-    source = RUNNER_MODULE.read_text().upper()
+    source = (REPO_ROOT / "framework" / "autonomous" / "queue_remote_execution.py").read_text().upper()
     assert "SPEC.STATUS MUST BE READY" in source
-    assert "DRAFT" not in source or "EXCLUDE_STATUSES" in source
+    assert 'SPEC_STATUS == "DRAFT"' in source
 
 
 # =================== Schema files in research_framework/ ===================

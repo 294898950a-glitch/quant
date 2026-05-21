@@ -12,9 +12,11 @@ import yaml
 
 try:
     from framework.autonomous.artifacts import ArtifactStore
+    from framework.autonomous.result_classification import closes_direction, evidence_usable
     from framework.autonomous.verification_tool import EvidenceToolkit
 except ModuleNotFoundError:  # importlib-based acceptance tests load files directly
     from artifacts import ArtifactStore  # type: ignore
+    from result_classification import closes_direction, evidence_usable  # type: ignore
     from verification_tool import EvidenceToolkit  # type: ignore
 
 
@@ -56,20 +58,74 @@ def _read_csv_metrics(path: Path) -> dict[str, Any]:
     return facts
 
 
+def _compact_summary_metrics(summary: dict[str, Any]) -> dict[str, Any]:
+    keys = (
+        "adoption_pass",
+        "selected_passes",
+        "selected_total",
+        "candidate_count",
+        "task_count",
+    )
+    out = {key: summary[key] for key in keys if key in summary}
+    if isinstance(summary.get("best_candidate"), dict):
+        best = summary["best_candidate"]
+        out["selected_name"] = "best_candidate"
+        params = best.get("params")
+        if isinstance(params, dict):
+            out["selected_params"] = params
+        for key in (
+            "train_total_return",
+            "test_total_return",
+            "yr2020_total_return",
+            "train_win_rate",
+            "test_win_rate",
+            "yr2020_win_rate",
+            "train_score",
+            "test_score",
+            "yr2020_score",
+        ):
+            if key in best:
+                out[key] = best[key]
+    return out
+
+
+def _manifest_verdict(run_dir: Path) -> dict[str, Any]:
+    run_id = run_dir.name
+    path = Path("data/research_framework/run_manifests") / f"{run_id}.yaml"
+    if not path.exists():
+        return {}
+    manifest = _read_yaml(path)
+    verdict = manifest.get("automation", {}).get("verdict") if isinstance(manifest.get("automation"), dict) else None
+    return verdict if isinstance(verdict, dict) else {}
+
+
 def extract_facts(run_dir: Path) -> dict[str, Any]:
     run_dir = Path(run_dir)
     spec = _read_yaml(run_dir / "spec.yaml")
     summary = _read_json(run_dir / "summary.json")
     report = _read_yaml(run_dir / "report.yaml")
+    manifest_verdict = _manifest_verdict(run_dir)
+    decision = (
+        manifest_verdict.get("decision")
+        or (((spec.get("automation") or {}).get("verdict") or {}).get("decision"))
+        or report.get("decision")
+    )
+    key_metrics = _compact_summary_metrics(summary)
+    if not key_metrics.get("adoption_pass") and not manifest_verdict.get("pass_value") and "adoption_pass" not in summary:
+        decision = decision or "no_adoption_decision_unusable"
     facts: dict[str, Any] = {
         "run_id": spec.get("run_id") or run_dir.name,
         "strategy_id": spec.get("strategy_id"),
-        "decision": (((spec.get("automation") or {}).get("verdict") or {}).get("decision") or report.get("decision")),
+        "decision": decision,
+        "verdict": manifest_verdict,
+        "key_metrics": key_metrics,
         "exit_code": summary.get("exit_code"),
         "cost_yuan": summary.get("compute_cost_yuan") or summary.get("cost_yuan"),
         "best_train_variant": summary.get("best_train_variant"),
         "best_test_variant": summary.get("best_test_variant"),
     }
+    if decision:
+        facts["evidence_usable"] = evidence_usable(str(decision))
     for csv_name in ("summary.csv", "summary_test.csv"):
         facts.update(_read_csv_metrics(run_dir / csv_name))
     facts = {k: v for k, v in facts.items() if v is not None}
@@ -112,7 +168,7 @@ def review(run_dir: Path, verification_callback=None, ai_adapter=None) -> dict[s
     spec = _read_yaml(run_dir / "spec.yaml")
     decision = str(facts.get("decision") or "")
     closed_directions = []
-    if "reject" in decision or "failed" in decision:
+    if decision and closes_direction(decision):
         for mechanic in spec.get("mechanics", []) or []:
             closed_directions.append({"mechanic_tag": mechanic, "reason": f"run decision={decision}"})
 

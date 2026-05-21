@@ -49,6 +49,47 @@ from strategies.cb_arb.verifier import (  # noqa: E402
 )
 
 
+def _command_value_from_parts(command: list[Any], flag: str) -> str | None:
+    parts = [str(part) for part in command]
+    for index, part in enumerate(parts[:-1]):
+        if part == flag:
+            return parts[index + 1]
+    return None
+
+
+def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = None) -> dict[str, Any]:
+    """Return the files this executor will read before it is allowed to run."""
+    data_root_raw = _command_value_from_parts(command, "--data-root")
+    if not data_root_raw:
+        raise ValueError("evaluate_cb_arb_value_gap_switch requires --data-root")
+    data_root = Path(data_root_raw)
+    fixed_source_raw = _command_value_from_parts(command, "--fixed-source") or "2"
+    fixed_source = int(fixed_source_raw)
+    pool_ids = sorted({0, 2, 4, 6, fixed_source})
+    warehouse_files = [
+        "data/cb_warehouse/cb_basic.parquet",
+        "data/cb_warehouse/cb_daily.parquet",
+        "data/cb_warehouse/cb_call.parquet",
+        "data/cb_warehouse/stk_daily_qfq.parquet",
+    ]
+    required_files: list[dict[str, str]] = [
+        {"path": str(data_root / rel_path), "role": "warehouse_input"}
+        for rel_path in warehouse_files
+    ]
+    required_files.extend(
+        {
+            "path": str(data_root / f"pool_{pool_id}" / "best_params.json"),
+            "role": "config_pool",
+        }
+        for pool_id in pool_ids
+    )
+    return {
+        "schema_version": 1,
+        "executor": "scripts/evaluate_cb_arb_value_gap_switch.py",
+        "required_files": required_files,
+    }
+
+
 @dataclass
 class Position:
     ts_code: str

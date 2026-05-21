@@ -18,6 +18,8 @@ from typing import Any
 
 import yaml
 
+from framework.autonomous.result_classification import status_for_decision
+
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 EXPERIMENTS = REPO_ROOT / "data" / "research_framework" / "experiments.yaml"
@@ -149,23 +151,18 @@ def derive_verdict(spec: dict[str, Any], output_dir: Path, exit_code: int | None
         for flag in falsifier_result.get("falsifier_flags", {}).values()
     )
     if exit_code not in (None, 0):
-        status = "abandoned"
         decision = "execution_failed"
     elif missing_artifacts:
-        status = "abandoned"
         decision = "missing_artifacts"
     elif pass_value is True and falsifier_failed:
-        status = "rejected"
         decision = "passed_mechanical_but_falsifier_failed"
     elif pass_value is True:
-        status = "wip"
         decision = "passed_mechanical_thresholds_not_promoted"
     elif pass_value is False:
-        status = "rejected"
         decision = "failed_mechanical_thresholds"
     else:
-        status = "wip"
-        decision = "no_pass_field_found_needs_review"
+        decision = "no_adoption_decision_unusable"
+    status = status_for_decision(decision)
     return {
         "status": status,
         "decision": decision,
@@ -667,4 +664,22 @@ def compact_metrics(summary: dict[str, Any]) -> dict[str, Any]:
         for key in ("excess_return", "total_return", "max_drawdown", "score", "total_trades", "win_rate"):
             if key in selected:
                 out[key] = selected[key]
+    if isinstance(summary.get("best_candidate"), dict):
+        best = summary["best_candidate"]
+        params = best.get("params") if isinstance(best.get("params"), dict) else {}
+        out["selected_name"] = out.get("selected_name") or "best_candidate"
+        out["selected_params"] = params
+        for key in (
+            "train_total_return",
+            "test_total_return",
+            "yr2020_total_return",
+            "train_win_rate",
+            "test_win_rate",
+            "yr2020_win_rate",
+            "train_score",
+            "test_score",
+            "yr2020_score",
+        ):
+            if key in best:
+                out[key] = best[key]
     return out

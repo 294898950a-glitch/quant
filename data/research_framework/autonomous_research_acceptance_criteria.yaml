@@ -33,6 +33,7 @@ active_components:
       - provenance for all AI responses
     files:
       - framework/autonomous/ideation_cycle.py
+      - framework/autonomous/queue_ideation.py
       - framework/autonomous/strategy_ideator.py
       - framework/autonomous/ai_provider_adapter.py
       - scripts/run_strategy_ideation_once.py
@@ -74,10 +75,12 @@ active_components:
       - VM launch
       - remote status checks
       - result sync
+      - marking synced results review_pending
     files:
       - scripts/quant_internal_tick.py
       - scripts/run_quant_internal_tick.sh
       - scripts/research_queue_runner.py
+      - framework/autonomous/queue_remote_execution.py
       - framework/autonomous/workflow_state.py
       - scripts/quant_access_guard.py
       - scripts/auto_research_pipeline.py
@@ -99,6 +102,7 @@ active_components:
     files:
       - framework/autonomous/result_reviewer.py
       - framework/autonomous/recent_results_digest.py
+      - framework/autonomous/queue_review_memory.py
       - framework/autonomous/verification_tool.py
       - framework/autonomous/evidence_tool_registry.py
       - scripts/build_recent_results_digest.py

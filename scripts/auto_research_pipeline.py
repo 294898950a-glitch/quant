@@ -37,10 +37,12 @@ except ImportError:
     sys.exit(2)
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+LOCAL_REPO_ALIASES = ("/home/jay/projects/quant",)
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from framework.autonomous import run_recorder
+from framework.autonomous.result_classification import status_for_decision
 from scripts.gatekeeper import GateKeeper, GateKeeperError
 
 
@@ -233,7 +235,7 @@ def command_from_spec(spec: dict[str, Any], spec_path: Path, output_dir: Path) -
         "{spec_path}": rel(spec_path),
         "{output_dir}": rel(output_dir),
     }
-    resolved = [replace_placeholders(part, replacements) for part in parts]
+    resolved = [normalize_portable_repo_path(replace_placeholders(part, replacements)) for part in parts]
     if resolved and resolved[0] == ".venv/bin/python" and not (REPO_ROOT / resolved[0]).exists():
         resolved[0] = sys.executable or "python3"
     return resolved
@@ -245,11 +247,21 @@ def replace_placeholders(value: str, replacements: dict[str, str]) -> str:
     return value
 
 
+def normalize_portable_repo_path(value: str) -> str:
+    for alias in LOCAL_REPO_ALIASES:
+        prefix = alias.rstrip("/") + "/"
+        if value == alias:
+            return "."
+        if value.startswith(prefix):
+            return value[len(prefix) :]
+    return value
+
+
 def output_dir_from_spec(spec: dict[str, Any], spec_path: Path) -> Path:
     automation = spec.get("automation") or spec.get("execution") or {}
     output = automation.get("output_dir") if isinstance(automation, dict) else None
     if isinstance(output, str) and output.strip():
-        path = Path(output)
+        path = Path(normalize_portable_repo_path(output.strip()))
         return path if path.is_absolute() else REPO_ROOT / path
     return spec_path.parent
 
@@ -374,23 +386,18 @@ def derive_verdict(spec: dict[str, Any], output_dir: Path, exit_code: int | None
         for flag in falsifier_result.get("falsifier_flags", {}).values()
     )
     if exit_code not in (None, 0):
-        status = "abandoned"
         decision = "execution_failed"
     elif missing_artifacts:
-        status = "abandoned"
         decision = "missing_artifacts"
     elif pass_value is True and falsifier_failed:
-        status = "rejected"
         decision = "passed_mechanical_but_falsifier_failed"
     elif pass_value is True:
-        status = "wip"
         decision = "passed_mechanical_thresholds_not_promoted"
     elif pass_value is False:
-        status = "rejected"
         decision = "failed_mechanical_thresholds"
     else:
-        status = "wip"
-        decision = "no_pass_field_found_needs_review"
+        decision = "no_adoption_decision_unusable"
+    status = status_for_decision(decision)
     return {
         "status": status,
         "decision": decision,
@@ -765,6 +772,24 @@ def compact_metrics(summary: dict[str, Any]) -> dict[str, Any]:
         for key in ("excess_return", "total_return", "max_drawdown", "score", "total_trades", "win_rate"):
             if key in selected:
                 out[key] = selected[key]
+    if isinstance(summary.get("best_candidate"), dict):
+        best = summary["best_candidate"]
+        params = best.get("params") if isinstance(best.get("params"), dict) else {}
+        out["selected_name"] = out.get("selected_name") or "best_candidate"
+        out["selected_params"] = params
+        for key in (
+            "train_total_return",
+            "test_total_return",
+            "yr2020_total_return",
+            "train_win_rate",
+            "test_win_rate",
+            "yr2020_win_rate",
+            "train_score",
+            "test_score",
+            "yr2020_score",
+        ):
+            if key in best:
+                out[key] = best[key]
     return out
 
 
@@ -833,7 +858,8 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
     verdict = record["verdict"]
     manifest_path = record["manifest_path"]
     if not args.no_execute or original_status in SPEC_STATUSES_RUNNABLE:
-        set_spec_status(spec_path, "COMPLETE", dry_run=False)
+        final_status = "ARCHIVED" if verdict.get("status") == "abandoned" else "COMPLETE"
+        set_spec_status(spec_path, final_status, dry_run=False)
 
     run_after_gatekeeper = bool((spec.get("automation") or {}).get("gatekeeper_after_run", True))
     if not args.no_execute and run_after_gatekeeper:

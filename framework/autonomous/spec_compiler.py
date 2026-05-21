@@ -52,6 +52,13 @@ def _registry_mechanics(registry: dict[str, Any]) -> set[str]:
     return vocab
 
 
+def _portable_path(path: Path) -> str:
+    try:
+        return str(path.resolve().relative_to(REPO_ROOT))
+    except ValueError:
+        return str(path)
+
+
 def _registry_capability_ids(registry: dict[str, Any]) -> set[str]:
     return set(capability_catalog(registry))
 
@@ -121,13 +128,14 @@ def _format_command_template(executor: Any, proposal: dict[str, Any], output_dir
         return []
     config = dict(_executor_value(executor, "default_config", {}) or {})
     config.update(proposal.get("executor_config") or {})
-    config.setdefault("output_dir", str(output_dir))
+    portable_output_dir = _portable_path(output_dir)
+    config.setdefault("output_dir", portable_output_dir)
     formatted: list[str] = []
     for item in template:
         text = str(item)
         for key, value in config.items():
             text = text.replace("{" + str(key) + "}", str(value))
-        text = text.replace("{output_dir}", str(output_dir))
+        text = text.replace("{output_dir}", portable_output_dir)
         formatted.append(text)
     return formatted
 
@@ -150,6 +158,7 @@ def _executor_sync_paths(executor: Any) -> list[str]:
             "data/research_framework/runtime_entrypoints.yaml",
             "data/research_framework/protocol_rules.yaml",
             "data/research_framework/experiments.yaml",
+            "data/research_framework/result_classification_map.yaml",
         ]
     )
     return list(dict.fromkeys(paths))
@@ -328,7 +337,7 @@ def compile(
             "command_template": _executor_value(match, "command_template"),
             "budget_estimate": _executor_value(match, "budget_estimate"),
             "automation": {
-                "output_dir": str(output_dir),
+                "output_dir": _portable_path(Path(output_dir)),
                 "command": command,
                 "sync_paths": _executor_sync_paths(match),
                 "verdict": {"pass_field": "adoption_pass"},

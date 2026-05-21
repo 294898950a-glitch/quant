@@ -7,6 +7,7 @@ import argparse
 import ast
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -24,6 +25,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from framework.autonomous.ai_provider_adapter import RegisteredProviderAdapter  # noqa: E402
+from framework.autonomous.executor_requirements import declared_requirements_for_spec  # noqa: E402
 from scripts.quant_access_guard import require_ticket  # noqa: E402
 from scripts.validate_data_quality import compact_for_ai, summarize_data_quality  # noqa: E402
 
@@ -87,6 +89,14 @@ def command_value(command: list[Any], flag: str) -> str:
     raise ValueError(f"automation.command missing {flag}")
 
 
+def command_value_optional(command: list[Any], flag: str) -> str | None:
+    parts = [str(part) for part in command]
+    for index, part in enumerate(parts[:-1]):
+        if part == flag:
+            return parts[index + 1]
+    return None
+
+
 def update_command_path(command: list[Any], flag: str, value: str) -> list[str]:
     parts = [str(part) for part in command]
     for index, part in enumerate(parts[:-1]):
@@ -94,6 +104,15 @@ def update_command_path(command: list[Any], flag: str, value: str) -> list[str]:
             parts[index + 1] = value
             return parts
     raise ValueError(f"automation.command missing {flag}")
+
+
+def update_command_path_optional(command: list[Any], flag: str, value: str) -> list[str]:
+    parts = [str(part) for part in command]
+    for index, part in enumerate(parts[:-1]):
+        if part == flag:
+            parts[index + 1] = value
+            return parts
+    return parts
 
 
 def warehouse_source(original_data_root: Path, rel_path: str) -> Path | None:
@@ -287,7 +306,10 @@ def update_spec_for_prepared_data(spec_path: Path, context: dict[str, Any], repa
         raise ValueError("spec automation.command must be list")
     command = update_command_path(command, "--data-root", str(context["prepared_data_root"]))
     command = update_command_path(command, "--base-ranks-path", str(context["prepared_base_ranks_path"]))
+    command = update_command_path_optional(command, "--output-dir", rel(spec_path.parent))
     automation["command"] = command
+    if "output_dir" in automation:
+        automation["output_dir"] = rel(spec_path.parent)
     sync_paths = [str(path) for path in automation.get("sync_paths") or []]
     sync_paths.extend(
         [
@@ -327,6 +349,15 @@ def _has_derive_warehouse_columns_fix(decision: dict[str, Any]) -> bool:
         if isinstance(item, dict) and str(item.get("action") or "") == "derive_warehouse_columns":
             return True
         if isinstance(item, str) and item == "derive_warehouse_columns":
+            return True
+    return False
+
+
+def _has_copy_config_pool_fix(decision: dict[str, Any]) -> bool:
+    for item in decision.get("fix_plan") or []:
+        if isinstance(item, dict) and str(item.get("action") or "") == "copy_config_pool":
+            return True
+        if isinstance(item, str) and item == "copy_config_pool":
             return True
     return False
 
@@ -398,6 +429,43 @@ def _copy_or_enrich_warehouse(source_root: Path, prepared_data_root: Path) -> di
     return written
 
 
+def _required_config_pool_ids(spec_path: Path) -> list[str]:
+    requirements = declared_requirements_for_spec(spec_path)
+    required: set[str] = set()
+    for item in requirements.get("required_files") or []:
+        if not isinstance(item, dict):
+            continue
+        match = re.search(r"/?(pool_(\d+))/best_params\.json$", str(item.get("path") or "").replace("\\", "/"))
+        if match:
+            required.add(match.group(2))
+    return sorted(required, key=int)
+
+
+def _copy_required_config_pools(spec_path: Path, source_root: Path, prepared_data_root: Path) -> list[dict[str, str]]:
+    copied: list[dict[str, str]] = []
+    for pool_id in _required_config_pool_ids(spec_path):
+        pool_name = f"pool_{pool_id}"
+        candidates = [
+            source_root / pool_name,
+            REPO_ROOT / "data" / "cb_arb_concurrent_supervised_20260511_094500" / pool_name,
+            REPO_ROOT / "data" / "cb_arb_value_gap_current_config_root" / pool_name,
+        ]
+        for candidate in candidates:
+            if (candidate / "best_params.json").exists():
+                destination = prepared_data_root / pool_name
+                if candidate.resolve() == destination.resolve():
+                    copied.append({"pool": pool_name, "source": rel(candidate)})
+                    break
+                if destination.exists():
+                    shutil.rmtree(destination)
+                shutil.copytree(candidate, destination)
+                copied.append({"pool": pool_name, "source": rel(candidate)})
+                break
+        else:
+            raise ValueError(f"cannot repair data root; missing {pool_name}/best_params.json in known sources")
+    return copied
+
+
 def repair_warehouse_columns(spec_path: Path, decision_path: Path, decision: dict[str, Any]) -> dict[str, Any]:
     spec = read_yaml(spec_path)
     automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
@@ -409,10 +477,14 @@ def repair_warehouse_columns(spec_path: Path, decision_path: Path, decision: dic
     prepared_root = spec_path.parent / "prepared_data"
     prepared_data_root = prepared_root / "data_root"
     derived_columns = _copy_or_enrich_warehouse(source_root, prepared_data_root)
+    copied_pool_sources = _copy_required_config_pools(spec_path, source_root, prepared_data_root)
 
     new_data_root = rel(prepared_data_root)
     command = update_command_path(command, "--data-root", new_data_root)
+    command = update_command_path_optional(command, "--output-dir", rel(spec_path.parent))
     automation["command"] = command
+    if "output_dir" in automation:
+        automation["output_dir"] = rel(spec_path.parent)
     sync_paths = [str(path) for path in automation.get("sync_paths") or []]
     sync_paths.extend([rel(prepared_root), new_data_root])
     seen: set[str] = set()
@@ -430,6 +502,7 @@ def repair_warehouse_columns(spec_path: Path, decision_path: Path, decision: dic
         "old_data_root": old_data_root,
         "new_data_root": new_data_root,
         "derived_columns": derived_columns,
+        "copied_pool_sources": copied_pool_sources,
         "fix_plan": decision.get("fix_plan") or [],
         "principle": "original data was not overwritten; enriched inputs are run-local prepared data",
     }
@@ -442,6 +515,7 @@ def repair_warehouse_columns(spec_path: Path, decision_path: Path, decision: dic
         "source_decision": rel(decision_path),
         "data_fix_report": rel(report_path),
         "derived_columns": derived_columns,
+        "copied_pool_sources": copied_pool_sources,
     }
     write_yaml(spec_path, spec)
     return {
@@ -453,6 +527,7 @@ def repair_warehouse_columns(spec_path: Path, decision_path: Path, decision: dic
         "old_data_root": old_data_root,
         "new_data_root": new_data_root,
         "derived_columns": derived_columns,
+        "copied_pool_sources": copied_pool_sources,
         "data_fix_report": rel(report_path),
         "spec_updated": True,
     }
@@ -466,7 +541,10 @@ def repair_spec_data_root(spec_path: Path, decision_path: Path, decision: dict[s
         raise ValueError("spec automation.command must be list")
     old_data_root = command_value(command, "--data-root")
     command = update_command_path(command, "--data-root", ".")
+    command = update_command_path_optional(command, "--output-dir", rel(spec_path.parent))
     automation["command"] = command
+    if "output_dir" in automation:
+        automation["output_dir"] = rel(spec_path.parent)
 
     sync_paths = [str(path) for path in automation.get("sync_paths") or []]
     sync_paths.extend(
@@ -520,7 +598,9 @@ def repair_spec_data_root(spec_path: Path, decision_path: Path, decision: dict[s
 def repair(spec_path: Path, decision_path: Path | None = None, attempts: int = 3) -> dict[str, Any]:
     decision_file = decision_path or spec_path.parent / "data_quality_decision.yaml"
     decision = read_yaml(decision_file)
-    if str(decision.get("status") or "").lower() in {"repair_candidate", "fixable"} and _has_derive_warehouse_columns_fix(decision):
+    if str(decision.get("status") or "").lower() in {"repair_candidate", "fixable"} and (
+        _has_derive_warehouse_columns_fix(decision) or _has_copy_config_pool_fix(decision)
+    ):
         return repair_warehouse_columns(spec_path, decision_file, decision)
     if str(decision.get("status") or "").lower() in {"repair_candidate", "fixable"} and _has_rewrite_spec_data_root_fix(decision):
         return repair_spec_data_root(spec_path, decision_file, decision)

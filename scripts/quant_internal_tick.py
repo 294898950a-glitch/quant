@@ -36,6 +36,7 @@ TICK_LOG_PATH = REPO_ROOT / "logs" / "quant_internal_tick.log"
 BRIDGE_CODEX_OUTBOX = Path("/mnt/c/Users/陈教授/Desktop/ai/projects/quant/codex/outbox.md")
 BRIDGE_STATE = Path("/mnt/c/Users/陈教授/Desktop/ai/projects/quant/state.md")
 TZ = ZoneInfo("Asia/Shanghai")
+RUNNER_TIMEOUT_SECONDS = 30 * 60
 
 
 def now() -> str:
@@ -148,28 +149,38 @@ def run_once_under_lock() -> tuple[str, int, str]:
         env["QUANT_AUTOMATION_ACTOR"] = "quant_internal_cron"
         env["QUANT_AUTOMATION_TICKET_PATH"] = ticket["path"]
         env["QUANT_AUTOMATION_TICKET_TOKEN"] = ticket["token"]
-        result = subprocess.run(
-            [sys.executable, "scripts/research_queue_runner.py"],
-            cwd=REPO_ROOT,
-            env=env,
-            text=True,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.STDOUT,
-            timeout=540,
-            check=False,
-        )
-        output = (result.stdout or "").strip()
+        try:
+            result = subprocess.run(
+                [sys.executable, "scripts/research_queue_runner.py"],
+                cwd=REPO_ROOT,
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                timeout=RUNNER_TIMEOUT_SECONDS,
+                check=False,
+            )
+            returncode = result.returncode
+            output = (result.stdout or "").strip()
+            run_kind = "ran_once"
+        except subprocess.TimeoutExpired as exc:
+            returncode = 124
+            output = (exc.stdout or exc.stderr or "")
+            if isinstance(output, bytes):
+                output = output.decode("utf-8", errors="replace")
+            output = f"research_queue_runner timed out after {RUNNER_TIMEOUT_SECONDS}s\n{str(output).strip()}"
+            run_kind = "runner_timeout"
         TICK_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
         with TICK_LOG_PATH.open("a", encoding="utf-8") as log_fh:
             log_fh.write(
                 json.dumps(
-                    {"ts": now(), "returncode": result.returncode, "output": output[-4000:]},
+                    {"ts": now(), "returncode": returncode, "output": output[-4000:]},
                     ensure_ascii=False,
                     sort_keys=True,
                 )
                 + "\n"
             )
-        return ("ran_once", result.returncode, output)
+        return (run_kind, returncode, output)
 
 
 def main() -> int:

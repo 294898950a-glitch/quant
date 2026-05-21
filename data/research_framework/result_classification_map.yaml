@@ -1,0 +1,32 @@
+schema_version: 1
+result_decisions:
+  execution_failed:
+    status: abandoned
+    evidence_usable: false
+    closes_direction: false
+    can_seed_ideation: false
+  missing_artifacts:
+    status: abandoned
+    evidence_usable: false
+    closes_direction: false
+    can_seed_ideation: false
+  passed_mechanical_but_falsifier_failed:
+    status: rejected
+    evidence_usable: true
+    closes_direction: true
+    can_seed_ideation: true
+  passed_mechanical_thresholds_not_promoted:
+    status: wip
+    evidence_usable: true
+    closes_direction: false
+    can_seed_ideation: true
+  failed_mechanical_thresholds:
+    status: rejected
+    evidence_usable: true
+    closes_direction: true
+    can_seed_ideation: true
+  no_adoption_decision_unusable:
+    status: rejected
+    evidence_usable: false
+    closes_direction: false
+    can_seed_ideation: false

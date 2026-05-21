@@ -653,7 +653,20 @@ def test_ideation_cycle_missing_executor_requests_tool_code(tmp_path, monkeypatc
         "files": [
             {
                 "path": "generated_executor/adaptive_exit_evaluator.py",
-                "content": "print('draft evaluator')\n",
+                    "content": (
+                        "from pathlib import Path\n"
+                        "import json\n"
+                        "def declare_data_requirements(command, spec):\n"
+                        "    return {'required_files': [{'path': 'data/source.parquet'}]}\n"
+                        "def main():\n"
+                        "    out = Path('out')\n"
+                        "    out.mkdir(exist_ok=True)\n"
+                    "    (out / 'summary.json').write_text(json.dumps({'adoption_pass': False}))\n"
+                    "    for name in ['report.yaml', 'l4_ack.yaml', 'diagnostic.yaml']:\n"
+                    "        (out / name).write_text('{}')\n"
+                    "if __name__ == '__main__':\n"
+                    "    main()\n"
+                ),
                 "purpose": "draft evaluator",
             }
         ],
@@ -724,6 +737,59 @@ def test_executor_tool_package_validation_blocks_bad_ai_tool_response(tmp_path, 
     assert result["status"] == "invalid_tool_code_response"
     assert result["written_files"] == []
     assert result["validation_errors"]
+
+
+def test_executor_tool_code_provider_failure_is_recorded_on_draft(tmp_path, monkeypatch):
+    m = _load(IDEATION_CYCLE_MODULE, "ideation_cycle")
+    monkeypatch.setattr(m, "record_framework_change", lambda **_: "eventhash")
+
+    run_dir = tmp_path / "run"
+    design = {
+        "tool_request_id": "new_executor",
+        "why_existing_tools_insufficient": "Existing tools do not cover this exit rule.",
+        "reviewed_existing_executor_ids": ["baseline_executor"],
+        "registry_entry": {
+            "id": "new_executor",
+            "script_path": "scripts/evaluate_new_executor.py",
+            "strategy_id": "cb_arb_value_gap_switch",
+            "family": "new_exit_rule",
+            "command_template": ["python3", "scripts/evaluate_new_executor.py"],
+            "artifacts_produced": ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
+        },
+        "implementation_outline": {"steps": ["run baseline-aligned backtest"]},
+        "validation_plan": ["python syntax check"],
+    }
+
+    class FakeResponse:
+        content = yaml.safe_dump(design)
+        provider_id = "fake_ai"
+        response_hash = "designhash"
+        retries_used = 0
+
+    class FakeAdapter:
+        calls = 0
+
+        def call_active_provider(self, prompt, schema):
+            self.calls += 1
+            if self.calls == 1:
+                return FakeResponse()
+            raise RuntimeError("provider returned empty content")
+
+    result = m.request_executor_tool_code(
+        proposal={"proposal_id": "p1"},
+        compile_reason="no strict executor match",
+        compile_errors=[],
+        registry={"executors": []},
+        ai_adapter=FakeAdapter(),
+        run_dir=run_dir,
+        store=m.ArtifactStore(),
+    )
+    assert result["status"] == "invalid_tool_code_response"
+    assert result["written_files"] == []
+    assert result["validation_errors"] == ["provider_error: provider returned empty content"]
+    descriptor = yaml.safe_load((run_dir / "executor_tool_request.yaml").read_text())
+    assert descriptor["tool_code_attempts"] == 1
+    assert descriptor["status"] == "invalid_tool_code_response"
 
 
 def test_executor_tool_package_validation_blocks_placeholder_code():

@@ -32,6 +32,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from framework.autonomous.ai_provider_adapter import RegisteredProviderAdapter  # noqa: E402
+from framework.autonomous.executor_requirements import declared_requirements_for_spec  # noqa: E402
 from scripts.quant_access_guard import require_ticket  # noqa: E402
 
 
@@ -144,36 +145,13 @@ def _expected_by_path() -> dict[str, dict[str, Any]]:
     return result
 
 
-def _candidate_data_paths(spec: dict[str, Any]) -> list[str]:
-    paths: list[str] = []
-    command = ((spec.get("automation") or {}).get("command") or []) if isinstance(spec.get("automation"), dict) else []
-    command_paths: list[str] = []
-    data_root = _command_value(command, "--data-root") if isinstance(command, list) else None
-    base_ranks = _command_value(command, "--base-ranks-path") if isinstance(command, list) else None
-    if base_ranks:
-        command_paths.append(base_ranks)
-    if data_root:
-        for rel_path in WAREHOUSE_REL_PATHS:
-            command_paths.append(str(Path(data_root) / rel_path))
-    paths.extend(command_paths)
-    if not command_paths:
-        for entry in spec.get("new_data_sources") or []:
-            if isinstance(entry, dict) and entry.get("path"):
-                paths.append(str(entry["path"]))
-        proposal = spec.get("proposal") if isinstance(spec.get("proposal"), dict) else {}
-        for path in proposal.get("required_data") or []:
-            paths.append(str(path))
-    automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
-    if not command_paths:
-        for path in automation.get("sync_paths") or []:
-            path_str = str(path)
-            if path_str.startswith("data/") and (
-                path_str.endswith(".parquet") or path_str.endswith(".csv") or path_str.endswith(".yaml")
-            ):
-                paths.append(path_str)
-    if not command_paths:
-        for path in _expected_by_path():
-            paths.append(path)
+def _candidate_data_paths(spec_path: Path, spec: dict[str, Any]) -> list[str]:
+    requirements = declared_requirements_for_spec(spec_path)
+    paths = [
+        str(item.get("path"))
+        for item in requirements.get("required_files") or []
+        if isinstance(item, dict) and item.get("path")
+    ]
     seen: set[str] = set()
     unique: list[str] = []
     for path in paths:
@@ -196,6 +174,27 @@ def _current_warehouse_has(rel_path: str) -> bool:
     return (REPO_ROOT / rel_path).exists()
 
 
+def _known_pool_config_repair(path: str) -> dict[str, Any] | None:
+    text = path.replace("\\", "/")
+    match = re.search(r"(pool_\d+)/best_params\.json$", text)
+    if not match:
+        return None
+    pool_name = match.group(1)
+    for candidate in (
+        REPO_ROOT / "data" / "cb_arb_concurrent_supervised_20260511_094500" / pool_name / "best_params.json",
+        REPO_ROOT / "data" / "cb_arb_value_gap_current_config_root" / pool_name / "best_params.json",
+    ):
+        if candidate.exists():
+            return {
+                "action": "copy_config_pool",
+                "missing_path": path,
+                "pool": pool_name,
+                "replacement_path": _rel(candidate),
+                "new_data_root": "prepared_data/data_root",
+            }
+    return None
+
+
 def deterministic_decision(summary: dict[str, Any]) -> dict[str, Any]:
     """Return the non-AI risk gate decision for run data.
 
@@ -209,11 +208,22 @@ def deterministic_decision(summary: dict[str, Any]) -> dict[str, Any]:
     fix_plan: list[dict[str, Any]] = []
     seen_repairs: set[tuple[str, str]] = set()
 
+    requirements_error = summary.get("executor_requirements_error")
+    if requirements_error:
+        blocking.append(f"executor data requirements unavailable: {requirements_error}")
+
     for item in summary.get("data_files") or []:
         if not isinstance(item, dict):
             continue
         path = str(item.get("path") or "")
         if item.get("exists") is False:
+            pool_repair = _known_pool_config_repair(path)
+            if pool_repair:
+                repair_key = ("copy_config_pool", str(pool_repair.get("pool") or path))
+                if repair_key not in seen_repairs:
+                    fix_plan.append(pool_repair)
+                    seen_repairs.add(repair_key)
+                continue
             warehouse_rel = _warehouse_rel_from_path(path)
             if warehouse_rel and _current_warehouse_has(warehouse_rel):
                 repair_key = ("rewrite_spec_data_root", warehouse_rel)
@@ -369,9 +379,17 @@ def _summarize_csv(path: Path) -> dict[str, Any]:
 def summarize_data_quality(spec_path: Path) -> dict[str, Any]:
     spec = _load_yaml(spec_path)
     executor_script = _executor_script(spec)
+    requirements: dict[str, Any] | None = None
+    requirements_error: str | None = None
+    try:
+        requirements = declared_requirements_for_spec(spec_path)
+        candidate_paths = _candidate_data_paths(spec_path, spec)
+    except Exception as exc:
+        requirements_error = f"{type(exc).__name__}: {exc}"
+        candidate_paths = []
     expected_map = _expected_by_path()
     files: list[dict[str, Any]] = []
-    for raw_path in _candidate_data_paths(spec):
+    for raw_path in candidate_paths:
         path = Path(raw_path)
         if not path.is_absolute():
             path = REPO_ROOT / path
@@ -401,6 +419,8 @@ def summarize_data_quality(spec_path: Path) -> dict[str, Any]:
         "run_id": spec.get("run_id"),
         "strategy_id": spec.get("strategy_id"),
         "executor_script": executor_script,
+        "executor_requirements": requirements,
+        "executor_requirements_error": requirements_error,
         "executor_column_literals": _script_column_literals(executor_script),
         "executor_input_column_hints": _script_input_column_hints(executor_script),
         "periods": _run_periods(spec),
@@ -476,6 +496,8 @@ def compact_for_ai(summary: dict[str, Any]) -> dict[str, Any]:
         "run_id": summary.get("run_id"),
         "strategy_id": summary.get("strategy_id"),
         "executor_script": summary.get("executor_script"),
+        "executor_requirements": summary.get("executor_requirements"),
+        "executor_requirements_error": summary.get("executor_requirements_error"),
         "executor_input_column_hints": summary.get("executor_input_column_hints"),
         "periods": summary.get("periods"),
         "data_files": compact_files,
@@ -485,6 +507,8 @@ def compact_for_ai(summary: dict[str, Any]) -> dict[str, Any]:
 def judge_summary(summary: dict[str, Any]) -> dict[str, Any]:
     gate_decision = deterministic_decision(summary)
     if str(gate_decision.get("status") or "").lower() != "pass":
+        return gate_decision
+    if not gate_decision.get("warnings"):
         return gate_decision
     adapter = RegisteredProviderAdapter(AI_PROVIDERS, repo_root=REPO_ROOT, entrypoint=ENTRYPOINT)
     response = adapter.call_active_provider(_judge_prompt(summary), schema={})
