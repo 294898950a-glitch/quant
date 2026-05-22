@@ -300,6 +300,29 @@ def _build_registry_entry(
             pass
 
     command_template = list(spec.get("automation", {}).get("command") or [])
+    if not command_template:
+        # When the proposing spec doesn't supply a concrete command, fall back
+        # to the canonical cb_arb argparse contract — every cb_arb evaluator
+        # accepts --data-root / --train-start / --train-end / --test-start /
+        # --test-end / --output-dir. Spec compiler will substitute the values
+        # from default_config. Evaluator-specific optional flags can still be
+        # appended later by hand-editing the registry entry.
+        command_template = [
+            ".venv/bin/python", script_path,
+            "--data-root", "{data_root}",
+            "--train-start", "{train_start}",
+            "--train-end", "{train_end}",
+            "--test-start", "{test_start}",
+            "--test-end", "{test_end}",
+            "--output-dir", "{output_dir}",
+        ]
+    default_config: dict[str, Any] = {
+        "data_root": "data/cb_arb_concurrent_supervised_20260511_094500",
+        "train_start": "20190101",
+        "train_end": "20241231",
+        "test_start": "20250101",
+        "test_end": "20260508",
+    }
     compute = spec.get("compute_estimate") or {}
     budget_estimate = {
         "sig_minutes": compute.get("sig_minutes", 0),
@@ -337,9 +360,9 @@ def _build_registry_entry(
         "cannot_test": cannot_test,
         "cannot_test_capability_ids": cannot_test_ids,
         "required_data": required_data,
-        "required_config_fields": [],
+        "required_config_fields": ["data_root", "train_start", "train_end", "test_start", "test_end", "output_dir"],
         "command_template": command_template,
-        "default_config": {},
+        "default_config": default_config,
         "artifacts_produced": ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
         "budget_estimate": budget_estimate,
         # cb_arb-family executors all require VM execution (per CLAUDE.md "VM
