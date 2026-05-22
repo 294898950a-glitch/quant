@@ -1,0 +1,41 @@
+best_params:
+  decay_period_factor: 0.5
+  effective_max_hold_days: 45
+  initial_threshold_fraction: 0.7
+  min_hold_days: 5
+data_rows:
+  test: 95787
+  train: 392852
+  validate_2020: 49117
+errors: []
+grid_combos_tested: 27
+warnings: []
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+diagnostic_date: '2026-05-22'
+diagnostic_by: codex
+verdict_referenced: mini-spec-retry
+summary: The run tested only duration-adaptive parameter grid variants, not the gap-speed-adaptive
+  hypothesis it was proposed to test; the executor used (exit_rule_duration_adaptive)
+  is identical to the previously accepted run, and no gap-convergence-speed dimension
+  appears in any candidate parameters.
+verdict_rationale: Executor mismatch — the hypothesis proposed modulating decay rate
+  by gap trajectory but zero gap-speed parameters were introduced or tested; all 27
+  grid combos vary only min_hold_days, initial_threshold_fraction, and decay_period_factor,
+  exactly as the prior duration-adaptive run.
+normalized_at: '2026-05-22T18:40:17+00:00'
+normalized_by: normalize_report_schema
+verdict_normalized_from: inconclusive
+next_step_spec_changes:
+- field: executor_id
+  old_value: exit_rule_duration_adaptive_executor
+  new_value: gap_velocity_adaptive_executor (to be implemented) OR an existing executor
+    whose mechanics actually cover gap-speed
+  reason: duration-adaptive does not test the gap-speed hypothesis the proposal claimed
+- field: mechanics
+  old_value:
+  - new_exit_rule
+  new_value:
+  - new_exit_rule
+  - gap_velocity_sensitivity
+  reason: add an explicit gap-velocity mechanic so spec/executor alignment is enforced

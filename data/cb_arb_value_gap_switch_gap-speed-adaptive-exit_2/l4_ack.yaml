@@ -1,0 +1,67 @@
+adoption_pass: true
+candidate_count: 27
+message: Time-decaying gap exit evaluation finished.
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-22T17:36:03.041168Z'
+  description: Auto-filled q1_floor_binding description from review.
+  answer: The run tested only duration-adaptive parameter grid variants, not the gap-speed-adaptive
+    hypothesis it was proposed to test; the executor used (exit_rule_duration_adaptive)
+    is identical to the previously accepted run, and no gap-convergence-speed dimension
+    appears in any candidate parameters.
+  pass: false
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T17:36:03.041177Z'
+  description: Auto-filled q2_selection_score description from review.
+  answer: The run tested only duration-adaptive parameter grid variants, not the gap-speed-adaptive
+    hypothesis it was proposed to test; the executor used (exit_rule_duration_adaptive)
+    is identical to the previously accepted run, and no gap-convergence-speed dimension
+    appears in any candidate parameters.
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-22T17:36:03.041179Z'
+  description: Auto-filled q3_baseline_alignment description from review.
+  answer: The run tested only duration-adaptive parameter grid variants, not the gap-speed-adaptive
+    hypothesis it was proposed to test; the executor used (exit_rule_duration_adaptive)
+    is identical to the previously accepted run, and no gap-convergence-speed dimension
+    appears in any candidate parameters.
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T17:36:03.041181Z'
+  description: Auto-filled q4_monotonic description from review.
+  answer: The run tested only duration-adaptive parameter grid variants, not the gap-speed-adaptive
+    hypothesis it was proposed to test; the executor used (exit_rule_duration_adaptive)
+    is identical to the previously accepted run, and no gap-convergence-speed dimension
+    appears in any candidate parameters.
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-22T17:36:03.041182Z'
+  description: Auto-filled q5_trade_overlap description from review.
+  answer: The run tested only duration-adaptive parameter grid variants, not the gap-speed-adaptive
+    hypothesis it was proposed to test; the executor used (exit_rule_duration_adaptive)
+    is identical to the previously accepted run, and no gap-convergence-speed dimension
+    appears in any candidate parameters.
+  pass: false
+auto_computed_at: '2026-05-22T17:36:03.041184Z'
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+reviewer: codex
+ack_at: '2026-05-22T18:40:17+00:00'
+overall_pass: false
+overall_decision: mini-spec-retry
+overall_reason: Executor mismatch — the hypothesis proposed modulating decay rate
+  by gap trajectory but zero gap-speed parameters were introduced or tested; all 27
+  grid combos vary only min_hold_days, initial_threshold_fraction, and decay_period_factor,
+  exactly as the prior duration-adaptive run.
+normalized_at: '2026-05-22T18:40:17+00:00'
+normalized_by: normalize_report_schema

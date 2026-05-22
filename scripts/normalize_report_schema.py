@@ -298,7 +298,21 @@ def normalize_l5_diagnostic(run_dir: Path) -> dict[str, Any]:
     new_data.setdefault("diagnostic_date", now_iso().split("T", 1)[0])
     if new_data.get("diagnostic_by") not in L5_DIAGNOSTIC_ALLOWED_DIAGNOSTICIAN:
         new_data["diagnostic_by"] = "codex"
-    new_data.setdefault("verdict_referenced", str(interp.get("review_status") or "reject"))
+
+    # verdict_referenced must be an L6 decision, not a review_status. Map the
+    # review_status to the closest L6 verdict, since these two vocabularies
+    # historically got conflated when the evaluator wrote the file.
+    REVIEW_TO_L6 = {
+        "accept": "adopt", "accepted": "adopt", "adopt": "adopt",
+        "reject": "reject", "rejected": "reject",
+        "inconclusive": "mini-spec-retry",
+        "needs_manual_review": "mini-spec-retry",
+    }
+    ALLOWED_L6 = {"adopt", "archive-direction", "mini-spec-retry", "reject"}
+    current_verdict = str(new_data.get("verdict_referenced") or "").lower()
+    if current_verdict not in ALLOWED_L6:
+        review_status = str(interp.get("review_status") or "").lower()
+        new_data["verdict_referenced"] = REVIEW_TO_L6.get(review_status) or REVIEW_TO_L6.get(current_verdict) or "reject"
     new_data.setdefault("summary", str(interp.get("result_summary") or interp.get("main_reason") or "auto-filled from review.yaml")[:600])
     new_data.setdefault("verdict_rationale", str(interp.get("main_reason") or interp.get("result_summary") or "auto-filled from review.yaml")[:600])
     new_data["normalized_at"] = now_iso()

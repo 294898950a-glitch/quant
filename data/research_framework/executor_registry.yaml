@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-22T17:13:11+00:00'
+updated_at: '2026-05-22T18:38:32+00:00'
 purpose: Machine-readable registry of implemented research executors. Spec Compiler
   must use this file for hard executor matching; AI proposals cannot self-certify
   executability.
@@ -160,7 +160,13 @@ executors:
     vm_local_limits:
       vm_required: true
       local_allowed: false
-    obsolescence_date: null
+    obsolescence_date: '2026-05-22'
+    obsolescence_reason: Legacy evaluator predates declare_data_requirements requirement.
+      AI data-quality judge rejects proposals using this executor. Marked obsolete
+      to prevent ideator from selecting it; add declare_data_requirements(command,
+      spec) and clear this field to revive.
+    obsolescence_set_at: '2026-05-22T00:00:00+00:00'
+    obsolescence_set_by: install_generated_executors_audit
   option_source_pnl_feedback_scaler:
     id: option_source_pnl_feedback_scaler
     version: 1
@@ -1045,6 +1051,9 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: cb_arb_value_gap_switch_new_valuation_formula_v1_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
   evaluate_cb_arb_iv_percentile_exit_v2:
     id: evaluate_cb_arb_iv_percentile_exit_v2
     version: 1
@@ -1116,6 +1125,9 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: cb_arb_iv_percentile_exit_2026-05-21_1_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
   evaluate_cb_arb_valuation_formula:
     id: evaluate_cb_arb_valuation_formula
     version: 1
@@ -1171,6 +1183,9 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: cb_arb_value_gap_switch_valuation_formula_v1_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
   evaluate_cb_arb_exit_gap_closing_percentile:
     id: evaluate_cb_arb_exit_gap_closing_percentile
     version: 1
@@ -1237,6 +1252,9 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: exit_gap_closing_percentile_001_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
   evaluate_cb_arb_pnl_feedback_scaling_grid:
     id: evaluate_cb_arb_pnl_feedback_scaling_grid
     version: 1
@@ -1292,6 +1310,9 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
   evaluate_cb_arb_bond_floor_entry_filter:
     id: evaluate_cb_arb_bond_floor_entry_filter
     version: 1
@@ -1360,6 +1381,9 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: cb_arb_value_gap_switch_bond_floor_entry_filter_20260522_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
   evaluate_cb_arb_regime_adaptive_exit:
     id: evaluate_cb_arb_regime_adaptive_exit
     version: 1
@@ -1429,6 +1453,9 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: cb_arb_value_gap_switch_regime_adaptive_exit_20260523_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
   evaluate_cb_arb_moneyness_entry_filter:
     id: evaluate_cb_arb_moneyness_entry_filter
     version: 1
@@ -1512,3 +1539,6 @@ executors:
     auto_registered_at: '2026-05-22T17:13:11+00:00'
     auto_registered_by: install_generated_executors
     auto_registered_from_handoff: cb_arb_value_gap_switch_moneyness_entry_filter_executor_code
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false

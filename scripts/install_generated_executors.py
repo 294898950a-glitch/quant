@@ -342,6 +342,11 @@ def _build_registry_entry(
         "default_config": {},
         "artifacts_produced": ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
         "budget_estimate": budget_estimate,
+        # cb_arb-family executors all require VM execution (per CLAUDE.md "VM
+        # only, no local exec" rule). The registry schema requires this field
+        # to be present; leaving it out makes validate_registry_schema reject
+        # the whole registry and breaks spec compilation for every proposal.
+        "vm_local_limits": {"vm_required": True, "local_allowed": False},
         "auto_registered": True,
         "auto_registered_at": now_iso(),
         "auto_registered_by": "install_generated_executors",
