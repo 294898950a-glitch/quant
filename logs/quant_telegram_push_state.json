@@ -1,0 +1,102 @@
+{
+  "pushed": {
+    "cb_arb_value_gap_switch_bond-floor-entry-filter_1": {
+      "signature": "bbb6e49f391c1c6c",
+      "pushed_at": "2026-05-22T19:50:40+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522": {
+      "signature": "165b7c1132fdf966",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    },
+    "cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22": {
+      "signature": "a577be41d4732a4e",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "accept",
+      "backfilled": true
+    },
+    "cb_arb_value_gap_switch_duration-exit_2026-05-22": {
+      "signature": "a1a3a99ef89b908d",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "needs_manual_review",
+      "backfilled": true
+    },
+    "cb_arb_value_gap_switch_gap-speed-adaptive-exit_2": {
+      "signature": "6efe35ae965ad1eb",
+      "pushed_at": "2026-05-22T19:50:41+00:00",
+      "verdict": "inconclusive"
+    },
+    "cb_arb_value_gap_switch_gap-trailing-exit": {
+      "signature": "d1c5198f377173be",
+      "pushed_at": "2026-05-22T19:50:42+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_iv_percentile_exit_v1_1": {
+      "signature": "70fe00d230ee3573",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    },
+    "cb_arb_value_gap_switch_market_drawdown_entry_filter": {
+      "signature": "952624e7145e0817",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    },
+    "cb_arb_value_gap_switch_pnl_feedback_scaling_20260522": {
+      "signature": "df92cc7f613170ce",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    },
+    "cb_arb_value_gap_switch_profit-take-exit_2026-05-22": {
+      "signature": "ba428331af7137dc",
+      "pushed_at": "2026-05-22T19:50:43+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1": {
+      "signature": "1957822829a65dca",
+      "pushed_at": "2026-05-22T19:50:43+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_profit-take-exit_v1": {
+      "signature": "6eb35eb2c2c82061",
+      "pushed_at": "2026-05-22T19:50:44+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_profit-taking-exit_2026-05-19": {
+      "signature": "76d38efe80f25bbb",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    },
+    "cb_arb_value_gap_switch_volatility_position_scaling_v1": {
+      "signature": "d0a820c06088762a",
+      "pushed_at": "2026-05-22T19:50:44+00:00",
+      "verdict": "reject"
+    },
+    "market_drawdown_entry_gate_v1_20260521": {
+      "signature": "2b60083ea2ed5c2f",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    },
+    "volatility_position_scaling_v2_2026-05-21": {
+      "signature": "483af49de196c62c",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    },
+    "volatility_scaling_001": {
+      "signature": "5aaf956631d82393",
+      "pushed_at": "2026-05-23T00:00:00+00:00",
+      "verdict": "reject",
+      "backfilled": true
+    }
+  },
+  "backfilled_at": "2026-05-22T19:50:38+00:00",
+  "last_run_at": "2026-05-22T19:50:44+00:00",
+  "last_sent_count": 7
+}
