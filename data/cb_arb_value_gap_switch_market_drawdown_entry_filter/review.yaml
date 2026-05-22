@@ -1,0 +1,80 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: cd54ef0106320e66
+interpretation:
+  review_status_code: 2
+  result_summary: Market drawdown entry gate failed all adoption criteria — train
+    score degraded from 0.105 to 0.024 and stress_2020 remained deeply negative with
+    no improvement, while validate saw zero gate activation.
+  main_reason: The gate worsened train-period excess return from 17.9% to 9.8% and
+    failed both the train score threshold (0.024 < 0.1) and the stress_2020 score
+    threshold (-0.231 < -0.1).
+  failure_causes:
+  - Train score 0.024 fell far below the 0.1 threshold and excess return dropped from
+    17.9% to 9.8% versus baseline
+  - Stress 2020 score -0.231 remained deeply negative with essentially zero improvement
+    over baseline
+  - Validate period had zero gate activation — identical gated and baseline metrics
+    — providing no evidence the gate adds value in any regime
+  next_research_directions:
+  - direction: Abandon CSI 300 drawdown as an entry-gating signal for this strategy
+    why: The gate degraded train performance rather than improving it and had no effect
+      in validate; macro drawdown is not the right entry-timing dimension
+    priority_code: 1
+    priority: high
+  - direction: Investigate negative suppression_pct bug — gate increased trade count
+      from 988 to 1009
+    why: A global entry filter should reduce entries but the gate added 21 trades
+      in train; this suggests either a calculation error or the gate was applied post-facto
+      to a resampled universe rather than suppressing original entry signals
+    priority_code: 2
+    priority: medium
+  - direction: Explore bond-level or credit-spread-based entry signals instead of
+      macro index drawdown
+    why: The original insight that entry timing is the highest-leverage unexplored
+      dimension remains valid; the signal type — not the gating concept — needs to
+      change
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No explanation for negative suppression_pct: gate increased trade count from 988
+      to 1009 instead of reducing it
+  - No per-year or per-regime activation breakdown to diagnose when and why the gate
+    triggered
+  - No comparison of which specific trades were suppressed versus added between gated
+    and baseline runs
+  review_status: reject
+closed_directions:
+- mechanic_tag: global_entry_filter
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: bfdcacbbd3bb658b
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

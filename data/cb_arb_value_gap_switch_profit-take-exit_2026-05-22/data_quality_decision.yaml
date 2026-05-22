@@ -1,0 +1,16 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+validated_at: '2026-05-22T17:29:07'
+summary_sha256: 72eceeeb48b66a81d5b7598327b14f2a8260a44b5a94088d98eb319225e56982
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 必需文件存在可读，488639行覆盖20190102~20260508，包含训练和测试全周期，无缺失字段要求或质量约束被违反。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 4f500d653b5e4f65

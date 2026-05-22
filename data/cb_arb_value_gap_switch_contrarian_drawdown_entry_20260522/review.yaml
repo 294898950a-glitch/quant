@@ -1,0 +1,76 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: 01faf680b6da2c71
+interpretation:
+  review_status_code: 2
+  result_summary: Contrarian drawdown entry gate failed fixed criteria on train (score
+    0.024 < 0.1) and 2020 stress (score -0.231 < -0.1), with suppression_pct negative
+    meaning it added rather than filtered trades.
+  main_reason: Hypothesis that buying during drawdowns improves entry quality rejected
+    — gate worsened train performance and failed stress while having zero effect on
+    validate.
+  failure_causes:
+  - Train excess return degraded from 0.179 to 0.098 vs baseline with more trades,
+    opposite of intended filtering
+  - 2020 stress gated score (-0.231) barely below stress fail threshold of -0.1, but
+    added no protective benefit over baseline (-0.230)
+  - Validate period saw zero trade suppression (212/212 trades identical to baseline),
+    suggesting drawdown events too rare in 2025-2026 window to test hypothesis
+  next_research_directions:
+  - direction: Drop market-level timing entirely and focus on bond-level entry quality
+    why: Two drawdown-gate runs in a row failed; the duration-adaptive exit succeeded
+      by working at the individual bond level, not macro timing
+    priority_code: 1
+    priority: high
+  - direction: Contrarian entry on value gap widening rather than index drawdown
+    why: The core insight of durability-adaptive exit is patience; on the entry side,
+      wider gaps (absolute deviation from intrinsic) may be a better stress signal
+      than CSI 300 drawdown
+    priority_code: 2
+    priority: medium
+  - direction: Re-test drawdown entry with longer buffer_days to avoid entering too
+      early in a selloff
+    why: buffer_days=0 may have captured entries too soon; the stress failure was
+      marginal (-0.231 vs -0.1), a small buffer could flip it
+    priority_code: 3
+    priority: low
+  evidence_gaps:
+  - No per-trade drawdown severity analysis — unclear whether gate caught extreme
+    days or only mild dips
+  - Validate period had zero effect (identical to baseline), insufficient 2025-2026
+    drawdown events to test hypothesis meaningfully
+  review_status: reject
+closed_directions:
+- mechanic_tag: regime_conditioning
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 0094e6a069048daf
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

@@ -309,6 +309,11 @@ def _plain(value: Any) -> Any:
         return {str(key): _plain(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_plain(item) for item in value]
+    if hasattr(value, "item") and type(value).__module__ == "numpy":
+        try:
+            return _plain(value.item())
+        except (TypeError, ValueError):
+            pass
     if isinstance(value, (str, int, float, bool)) or value is None:
         return value
     if hasattr(value, "item"):

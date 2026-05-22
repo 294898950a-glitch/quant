@@ -1,0 +1,278 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-trailing-exit
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'A trailing gap-based exit — exiting when the current gap falls below
+  entry_gap multiplied by a decay factor, subject to a minimum holding period — will
+  outperform fixed-duration exits by adapting each position''s exit timing to the
+  actual path of value convergence. This directly tracks the core alpha signal (gap
+  closure) rather than relying on calendar time or fixed gap targets.
+
+  '
+source_insight: 'The duration-adaptive-exit was accepted (best params: min_hold_days=5,
+  initial_threshold_fraction=0.7, decay_period_factor=0.5), confirming exit timing
+  is a high-leverage improvement area. But it uses a time-decaying threshold on the
+  ratio current_gap/entry_gap — the exit decision is time-driven, not gap-driven.
+  The profit-taking-exit failed (adoption_pass=False), but that was a fixed target
+  exit (exit when gap <= (1-target_fraction)*entry_gap). A trailing stop on gap is
+  different: it follows the gap down as it closes and only triggers when the gap reverses
+  and expands back above the trailing threshold. This should capture more of the convergence
+  move while protecting against gap re-expansion.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - new_exit_rule
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C007
+mechanics:
+- new_exit_rule
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  criteria:
+  - cumulative_excess_compound over full backtest period exceeds baseline cost-on
+    by at least +2pp
+  - Sharpe ratio improves vs baseline cost-on in at least 2 of 3 holdout years
+  - max_drawdown does not exceed baseline cost-on max_drawdown by more than 3pp
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: COMPLETE
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_gap-trailing-exit
+  strategy_id: cb_arb_value_gap_switch
+  family: exit_rule_trailing_gap
+  hypothesis: 'A trailing gap-based exit — exiting when the current gap falls below
+    entry_gap multiplied by a decay factor, subject to a minimum holding period —
+    will outperform fixed-duration exits by adapting each position''s exit timing
+    to the actual path of value convergence. This directly tracks the core alpha signal
+    (gap closure) rather than relying on calendar time or fixed gap targets.
+
+    '
+  source_insight: 'The duration-adaptive-exit was accepted (best params: min_hold_days=5,
+    initial_threshold_fraction=0.7, decay_period_factor=0.5), confirming exit timing
+    is a high-leverage improvement area. But it uses a time-decaying threshold on
+    the ratio current_gap/entry_gap — the exit decision is time-driven, not gap-driven.
+    The profit-taking-exit failed (adoption_pass=False), but that was a fixed target
+    exit (exit when gap <= (1-target_fraction)*entry_gap). A trailing stop on gap
+    is different: it follows the gap down as it closes and only triggers when the
+    gap reverses and expands back above the trailing threshold. This should capture
+    more of the convergence move while protecting against gap re-expansion.
+
+    '
+  expected_improvement: 'Improved cumulative excess return over the baseline by 2-5pp
+    through better capture of gap convergence moves, without increasing max drawdown
+    by more than 3pp relative to the baseline cost-on result.
+
+    '
+  capability_ids:
+  - C007
+  required_executor: dynamic_exit_gap_decay_executor
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  required_data_fields:
+    data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+    - ts_code
+    - trade_date
+    - gap_amount
+    - entry_date
+    - entry_gap
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - conv_price
+    - delist_date
+    - maturity_date
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - ts_code
+    - trade_date
+    - close
+  test_design:
+    description: 'Grid search over gap_decay_factor (0.30 to 0.90 in steps of 0.10)
+      and min_hold_days (3 to 20 in steps of 1). For each open position, the trailing
+      exit level is updated daily: trail_level = max(trail_level, current_gap * gap_decay_factor).
+      After min_hold_days have elapsed, exit the position when current_gap falls below
+      trail_level. Apply the exit rule to the existing baseline entry signals without
+      altering scoring, sizing, or entry eligibility. Evaluate against the baseline
+      (cost-on) and the accepted duration-adaptive-exit benchmark. Use standard train/test/validation
+      split consistent with prior runs.
+
+      '
+  success_criteria:
+    criteria:
+    - cumulative_excess_compound over full backtest period exceeds baseline cost-on
+      by at least +2pp
+    - Sharpe ratio improves vs baseline cost-on in at least 2 of 3 holdout years
+    - max_drawdown does not exceed baseline cost-on max_drawdown by more than 3pp
+  falsifiers:
+    train:
+    - cumulative_excess_compound worse than baseline cost-on by more than 2pp in any
+      holdout period
+    - any single holdout year Sharpe ratio below 0.3
+    - max_drawdown exceeds baseline cost-on max_drawdown by more than 5pp
+    - fewer than 50 trades total across all grid-search candidates (insufficient sample
+      for reliable inference)
+    validate:
+    - cumulative_excess_compound worse than baseline cost-on by more than 2pp in any
+      holdout period
+    - any single holdout year Sharpe ratio below 0.3
+    - max_drawdown exceeds baseline cost-on max_drawdown by more than 5pp
+    - fewer than 50 trades total across all grid-search candidates (insufficient sample
+      for reliable inference)
+    test:
+    - cumulative_excess_compound worse than baseline cost-on by more than 2pp in any
+      holdout period
+    - any single holdout year Sharpe ratio below 0.3
+    - max_drawdown exceeds baseline cost-on max_drawdown by more than 5pp
+    - fewer than 50 trades total across all grid-search candidates (insufficient sample
+      for reliable inference)
+  risk: 'Medium. The profit-taking-exit (fixed gap target) failed with adoption_pass=False,
+    which raises the possibility that gap-based exits are inherently hard to calibrate
+    for Chinese convertible bonds due to noisy gap estimates. A trailing stop may
+    exit too early in slow convergence (whipsaw on gap noise) or too late in rapid
+    convergence (giving back gains). However, the trailing mechanism is structurally
+    different from a fixed target and the accepted duration-adaptive result suggests
+    the exit problem is worth further exploration.
+
+    '
+  why_not_repeated_failure: 'The profit-taking-exit (2026-05-19) used a fixed target:
+    exit when gap <= (1-target_fraction) * entry_gap. The dynamic trailing exit is
+    not a fixed target; it tracks the gap down by updating a trailing floor and only
+    exits when the gap reverses through that floor. This is a trailing stop, not a
+    take-profit target. The duration-adaptive-exit was accepted but is time-driven
+    (threshold decays with calendar time). The IV-percentile-exit was rejected but
+    used implied volatility, not gap levels. This is a new, untested exit mechanic
+    within the same family.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  - cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  - cb_arb_value_gap_switch_duration-exit_2026-05-22
+  implementation_assumption: The dynamic_exit_gap_decay_executor can read per-position
+    entry gap and daily gap amounts from the run-specific parquet file, maintain a
+    per-position trailing floor, and apply the exit rule subject to min_hold_days.
+    The grid search infrastructure is already available from prior exit-rule runs.
+    Baseline trade PnL is available for comparison and the executor can produce the
+    standard output format used by the runner and review_memory nodes.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: b9e13bb14f20d543
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: b9e13bb14f20d543
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_gap-trailing-exit/proposal.yaml
+  mechanics:
+  - new_exit_rule
+  dropped_unmatched_required_data_fields:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_warehouse/cb_daily.parquet
+executor_id: dynamic_exit_gap_decay_executor
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+- --gap-decay-factor
+- '{gap_decay_factor}'
+- --min-hold-days
+- '{min_hold_days}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 90
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_gap-trailing-exit
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_gap-trailing-exit
+  - --gap-decay-factor
+  - '0.5'
+  - --min-hold-days
+  - '5'
+  sync_paths:
+  - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_gap-trailing-exit/proposal.yaml
+  response_hash: b9e13bb14f20d543
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_warehouse/cb_daily.parquet
+updated_at: '2026-05-22T08:17:37Z'

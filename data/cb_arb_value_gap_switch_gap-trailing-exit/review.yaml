@@ -1,0 +1,90 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-trailing-exit
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_gap-trailing-exit
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  artifacts_hash: 2962698f0b8453e9
+interpretation:
+  review_status_code: 2
+  result_summary: Gap-trailing exit with gap_decay_factor=0.5 and min_hold_days=5
+    fails comprehensively — train excess is deeply negative (-13.5%), and 2020 holdout
+    year fails both excess and drawdown floors.
+  main_reason: The strategy loses money across train and test periods, fails the 2020
+    holdout excess and drawdown hard floors, and the falsifier is triggered.
+  failure_causes:
+  - Train excess return is -13.50%, indicating the trailing-gap exit logic does not
+    capture convergence value and instead erodes returns
+  - 2020 holdout year excess=-2.35% (floor is >-0.10%) and max drawdown=-3.22% (floor
+    is >-0.18%), both breaching hard floors
+  - Test total return is -0.22% (floor is >=0.70), win rate is 60.8% (floor is >=55%
+    — this one barely passes) but total return is far below threshold
+  - The trailing-gap concept — exit when gap reverses and expands — may be too reactive,
+    triggering exits on noise rather than genuine re-expansion signals
+  next_research_directions:
+  - direction: Make the trailing-gap exit coarser / less reactive
+    why: The current parameter space (gap_decay_factor=0.5) may trigger exits on trivial
+      gap retracements. A wider trailing band or a confirm-before-exit rule could
+      reduce noise-induced early exits while still protecting against genuine re-expansion.
+    priority_code: 2
+    priority: medium
+  - direction: Combine time-decay threshold with trailing-gap as dual-exit
+    why: The accepted duration-adaptive-exit uses time-driven threshold decay and
+      passed review. Layering a trailing-gap floor underneath the time-decay ceiling
+      could capture the best of both — time forces exit on stale positions while the
+      trailing floor protects against gap re-expansion.
+    priority_code: 1
+    priority: high
+  - direction: Abandon gap-based exit entirely, pivot to signal-decay exit
+    why: Both trailing-gap (this run) and profit-taking exit (prior rejected run)
+      failed. The duration-adaptive exit succeeded because it uses time as the driver,
+      not gap magnitude. Next exit experiments should build on what worked — time-based
+      or entry-quality-based decay — rather than iterating on gap-tracking approaches
+      that have now failed twice.
+    priority_code: 1
+    priority: high
+  - direction: Investigate why train excess is so much worse than test
+    why: Train excess (-13.50%) is dramatically worse than test excess (-2.49%). This
+      asymmetry suggests the trailing-gap rule may be overfitting to a specific market
+      regime or that gap dynamics fundamentally differ between the train and test
+      periods. Understanding this divergence is prerequisite to any further gap-based
+      exit work.
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No comparison to the baseline cost-on metrics — the hard floor criteria reference
+    baseline cost-on as a benchmark but the facts_lock_by_code contain only the candidate's
+    own metrics, making it impossible to independently verify floor violations
+  - No per-year Sharpe ratio data — one hard floor criterion requires Sharpe improvement
+    in 2 of 3 holdout years, but only 2020 is reported with detail and Sharpe is not
+    shown for any year
+  - Only a single parameter combination tested (gap_decay_factor=0.5, min_hold_days=5)
+    — no evidence this result generalizes across the parameter space or that 0.5 is
+    representative of the trailing-gap concept as a whole
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 08e749a48071c91f
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

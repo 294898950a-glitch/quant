@@ -1,0 +1,132 @@
+proposal_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_profit_take
+hypothesis: 'Exiting when the option-implied value gap has partially closed relative
+  to entry gap (exit when current_gap <= (1 - target_fraction) * entry_gap, with a
+  minimum hold period) locks in gains before gaps re-widen. The accepted duration-adaptive
+  exit proved gap-ratio-based exits work; this tests whether a simpler fixed-target
+  exit delivers better risk-adjusted returns with fewer premature exits.
+
+  '
+source_insight: 'The duration-adaptive exit (accepted, best: min_hold_days=5, initial_threshold=0.7,
+  decay_factor=0.5, max_hold=45) showed that comparing current gap to entry gap is
+  a viable exit mechanic. However, the decaying-threshold approach starts aggressive
+  and relaxes over time, which may force exits on temporarily-widening gaps early
+  in the hold. A fixed profit-target flips the logic: exit only when the gap has demonstrably
+  closed enough, regardless of time (beyond min_hold). This is mechanically distinct:
+  duration-adaptive changes the bar over time; profit-take holds a constant bar and
+  waits for gap closure.
+
+  '
+expected_improvement: 'Higher win rate per trade (every exit locks in a gap contraction),
+  lower drawdown on cost-on basis vs baseline (fewer gap-re-widening losses), simpler
+  parameter surface (one or two knobs vs four).
+
+  '
+capability_ids:
+- C007
+required_executor: profit_take_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap
+  - entry_gap
+  - position_entry_date
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  parameter_grid:
+    target_fraction:
+    - 0.1
+    - 0.2
+    - 0.3
+    - 0.4
+    - 0.5
+    - 0.6
+    min_hold_days:
+    - 3
+    - 5
+    - 10
+    - 15
+    - 21
+  train_test_split: same as baseline (rolling-origin cross-validation, 2018-2025)
+  cost_model: cost_on (identical to baseline cost assumptions)
+  evaluation_metric: cumulative_excess_compound, Sharpe, max_drawdown per year slice
+success_criteria:
+  criteria:
+  - cumulative_excess_compound > 0 on cost-on test aggregate
+  - Sharpe improvement over baseline on at least two test-year slices
+  - at least one candidate passes adoption review thresholds
+  - max single-year drawdown vs benchmark <= 15% on cost-on
+falsifiers:
+  train: &id001
+  - All candidates produce negative cumulative excess on cost-on basis (mirrors iv_percentile_exit
+    failure pattern)
+  - No candidate improves Sharpe over baseline on any test-year slice
+  - The profit-take mechanic exits too early on average, missing larger gap closures
+    that the baseline captures
+  validate: *id001
+  test: *id001
+risk: 'Low-medium. The mechanic is a straightforward modification of the exit rule.
+  Main risk is that profit-take exits prematurely on gaps that eventually close fully,
+  forfeiting the tail of the distribution in exchange for a higher win rate. If the
+  gap-re-widening probability is high, this trade-off is positive; if gaps typically
+  close fully, it''s negative. The grid search across target_fraction covers both
+  conservative (0.1-0.2, exit on small closure) and aggressive (0.5-0.6, wait for
+  substantial closure) regimes.
+
+  '
+why_not_repeated_failure: 'The gap-trailing-exit (adoption_pass: false) likely used
+  dynamic_exit_gap_decay_executor, which exits when current_gap < entry_gap * gap_decay_factor
+  — mathematically equivalent to profit-take''s (1 - target_fraction). If gap-trailing-exit
+  used a trailing/dynamic reference gap instead of a fixed entry gap, the profit-take
+  is genuinely different (fixed vs dynamic reference). If they are the same executor
+  with different parameter naming, the failure may have been due to parameter range
+  or min_hold interaction rather than the mechanic itself, and a targeted grid sweep
+  with explicit min_hold_days + cost-on evaluation provides new evidence. Either way,
+  this is not a renamed repeat of duration-adaptive-exit (different mechanic: fixed
+  target vs decaying threshold), iv_percentile_exit (different signal: gap ratio vs
+  IV), or pnl_feedback_scaling (different domain: exit rule vs position sizing).
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_duration-exit_2026-05-22
+- cb_arb_value_gap_switch_gap-trailing-exit
+- cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+implementation_assumption: The profit_take_exit_executor compares each held position's
+  current daily gap to its entry gap. Per the capability menu description, it exits
+  when current_gap <= (1 - target_fraction) * entry_gap. A min_hold_days parameter
+  prevents exits in the first N days. If the position reaches delist_date or maturity
+  before the profit-take condition triggers, the default exit logic applies. The executor
+  runs on the existing daily_value_gap_amounts data without modifying entry eligibility,
+  scoring, or position sizing.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: ad7f864aa1dc44a5
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: ad7f864aa1dc44a5
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/proposal.yaml

@@ -1,0 +1,12 @@
+$ /usr/bin/python3 scripts/evaluate_cb_arb_volatility_position_scaling.py --data-root data/cb_arb_concurrent_supervised_20260511_094500 --train-start 20190101 --train-end 20241231 --test-start 20250101 --test-end 20260508 --fixed-source 2 --rule score_4state --output-dir data/cb_arb_value_gap_switch_volatility_position_scaling_v1 --base-ranks-path data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet --reuse-ranks --cost-model-enabled --volatility-lookback 20 --scaling-beta 1.0
+
+[volatility_scaling] baseline_no_scaling train_excess=0.131363 train_dd=-0.324048 test_excess=0.37976 test_dd=-0.097762
+[volatility_scaling] vol_scale_lb10_beta0p5 train_excess=-0.013284 train_dd=-0.285536 test_excess=0.270519 test_dd=-0.092876
+[volatility_scaling] vol_scale_lb10_beta1p0 train_excess=-0.051261 train_dd=-0.24885 test_excess=0.200682 test_dd=-0.085763
+[volatility_scaling] vol_scale_lb10_beta2p0 train_excess=-0.16443 train_dd=-0.250123 test_excess=-0.049681 test_dd=-0.064362
+[volatility_scaling] vol_scale_lb20_beta0p5 train_excess=-0.010786 train_dd=-0.284533 test_excess=0.337025 test_dd=-0.095668
+[volatility_scaling] vol_scale_lb20_beta1p0 train_excess=-0.0266 train_dd=-0.249329 test_excess=0.164923 test_dd=-0.091415
+[volatility_scaling] vol_scale_lb20_beta2p0 train_excess=-0.028381 train_dd=-0.183368 test_excess=0.002526 test_dd=-0.068682
+[volatility_scaling] vol_scale_lb30_beta0p5 train_excess=0.057555 train_dd=-0.284103 test_excess=0.288669 test_dd=-0.095668
+[volatility_scaling] vol_scale_lb30_beta1p0 train_excess=-0.037909 train_dd=-0.249173 test_excess=0.191367 test_dd=-0.092314
+[volatility_scaling] vol_scale_lb30_beta2p0 train_excess=-0.045667 train_dd=-0.201014 test_excess=-0.007733 test_dd=-0.06115

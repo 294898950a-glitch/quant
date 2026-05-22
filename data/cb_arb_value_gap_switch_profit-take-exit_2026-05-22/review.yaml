@@ -1,0 +1,79 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    selected_name: best_candidate
+  artifacts_hash: bc49474ed0b912a5
+interpretation:
+  review_status_code: 2
+  result_summary: Profit-take exit rejected — best candidate (target_fraction=0.5)
+    fails hard floor on train-period excess return (-99.4M), and all candidates remain
+    deeply unprofitable in absolute PnL regardless of exit rule.
+  main_reason: Train excess return is negative for all candidates, directly violating
+    the non-negative train excess hard floor inherited from the iv_percentile_exit
+    failure mode.
+  failure_causes:
+  - Train-period excess return is -99.4M for best candidate (target_fraction=0.5),
+    violating the non-negative train excess hard floor
+  - All three target_fraction candidates produce deeply negative absolute PnL in both
+    train and test, indicating the entry signal itself generates unprofitable positions
+    that no exit rule variant can salvage
+  - No candidate meaningfully improves on the duration-adaptive exit baseline; the
+    gap-contraction exit does not address the root cause of negative PnL
+  next_research_directions:
+  - direction: Re-examine entry signal (value gap definition or regime gate)
+    why: Consistently negative PnL across three profit-take exit variants and earlier
+      exit rules suggests the entry logic selects positions with negative expected
+      return; improving exits cannot fix a broken entry
+    priority_code: 1
+    priority: high
+  - direction: Investigate gap re-widening dynamics
+    why: The hypothesis assumed gap contraction would produce profitable exits, but
+      deeply negative per-trade PnL suggests gaps re-widen after partial closure,
+      eroding any exit-rule advantage
+    priority_code: 2
+    priority: medium
+  - direction: Narrow universe or add quality filter to entry gate
+    why: Extreme max drawdowns (-1B+ train, -257M test) indicate exposure to outlier
+      positions; a pre-entry quality screen may filter out uninvestable bonds before
+      entry logic runs
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No per-trade decomposition showing whether losses come from gap re-widening, credit
+    deterioration, or liquidity-driven decay
+  - No comparison of exit timing distribution between profit-take and duration-adaptive
+    exits to confirm the hypothesis that profit-take exits earlier on fast-closing
+    gaps
+  - No breakdown of PnL by bond quality tier or market regime to isolate whether losses
+    concentrate in specific segments
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: bdf0885ead0c381f
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    selected_name: best_candidate

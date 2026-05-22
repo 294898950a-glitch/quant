@@ -1,0 +1,87 @@
+proposal_id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+strategy_id: cb_arb_value_gap_switch
+family: contrarian_entry_gate
+hypothesis: 'Market stress widens value gaps. Entering exclusively during CSI 300
+  drawdown periods — rather than suppressing entries during drawdowns — captures wider
+  entry gaps at better risk-adjusted prices. The prior market_drawdown_entry_gate
+  failed by blocking drawdown entries; the reverse logic tests whether stress is opportunity,
+  not risk.
+
+  '
+source_insight: 'market_drawdown_entry_gate_v1_20260521 suppressed entries during
+  drawdowns and hit failed_mechanical_thresholds (too restrictive). Duration-adaptive
+  exit (accepted 2026-05-22) showed patience wins — the entry side may benefit from
+  the same contrarian patience: wait for fear, then buy.
+
+  '
+expected_improvement: 'Improve cumulative excess by concentrating entries into wider-gap
+  periods and avoiding narrow-gap calm-market entries where transaction costs dominate.
+  Expected magnitude: positive cumulative excess over baseline in test.
+
+  '
+capability_ids:
+- C010
+required_executor: market_drawdown_entry_gate_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  - entry_signal
+  data/cb_warehouse/csi300_daily.parquet:
+  - trade_date
+  - close
+test_design:
+  description: 'Compute CSI 300 rolling N-day return from rolling peak. Grid-search
+    over lookback (20/60/120 days) and drawdown threshold (-3%/-5%/-10%/-15% from
+    peak). Invert the boolean mask: ALLOW entries only when CSI 300 is below threshold
+    (drawdown condition), BLOCK entries above threshold (recovery/rally). Fix exit
+    rule to duration-adaptive best params (min_hold_days=5, initial_threshold_fraction=0.7,
+    decay_period_factor=0.5). Compare cumulative excess against baseline, test-slice
+    only.
+
+    '
+success_criteria:
+  criteria:
+  - cumulative_excess_compound_test > 0 for at least one candidate
+  - min 100 trades in test period per candidate
+falsifiers:
+  train: &id001
+  - all candidates produce negative test cumulative excess vs baseline
+  - insufficient trades (fewer than 100 in test) for all candidates
+  validate: *id001
+  test: *id001
+risk: 'Low conceptual risk. Drawdown-only entry may reduce trade count below usable
+  threshold, but prior market_drawdown test showed entries were plentiful (failure
+  was threshold tightness, not data sparsity). If trade count collapses, falsifier
+  catches it.
+
+  '
+why_not_repeated_failure: 'market_drawdown_entry_gate_v1 tested "suppress entries
+  DURING drawdowns" and failed mechanical thresholds. This proposal tests the inverted
+  hypothesis: "enter ONLY during drawdowns, suppress during rallies." Different prediction,
+  different expected direction of improvement. Not a reparameterization of the same
+  idea — it''s a reversal of the causal arrow.
+
+  '
+related_prior_runs:
+- market_drawdown_entry_gate_v1_20260521
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+implementation_assumption: 'market_drawdown_entry_gate_executor can accept an inverted
+  mask parameter (entry_mode: drawdown_only) or its threshold comparison can be flipped.
+  If the executor does not support this, compiler will produce DRAFT and the required
+  parameter can be added as a minor executor patch.'
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 333ba5a15cbc776a
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 333ba5a15cbc776a
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/proposal.yaml

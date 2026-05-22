@@ -1,0 +1,120 @@
+proposal_id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+strategy_id: cb_arb_value_gap_switch
+family: entry_gate
+hypothesis: 'Suppressing new entries when the CSI 300 is in a significant drawdown
+  (rolling N-day return below a tunable threshold, with a buffer period to prevent
+  immediate re-entry) will reduce the strategy''s exposure during bear market regimes.
+  This should improve cumulative excess return and reduce max drawdown without destroying
+  upside capture, because the duration-adaptive exit already handles individual position
+  discipline — the missing piece is macro-level entry gating.
+
+  '
+source_insight: 'The duration-adaptive exit (min_hold_days=5, effective_max_hold_days=45,
+  decay_period_factor=0.5) was accepted as evidence but the strategy remains deeply
+  unprofitable in absolute terms (cost-on cumulative excess -10.47%). Multiple exit-rule
+  variants (profit-take, gap-trailing, IV-percentile, PnL-adaptive) all failed to
+  meaningfully improve the strategy. The contrarian-drawdown-entry approach failed
+  at mechanical thresholds, suggesting drawdown periods are structurally harmful rather
+  than opportunities. This points to entry timing — not exit refinement — as the highest-leverage
+  unexplored dimension.
+
+  '
+expected_improvement: 'Reduce max drawdown by 3-8 percentage points and improve cumulative
+  excess by 2-5 percentage points relative to the current baseline, primarily by avoiding
+  new positions during the worst market environments. The duration-adaptive exit already
+  prevents positions from lingering; this filter prevents them from being opened in
+  the first place.
+
+  '
+capability_ids:
+- C009
+required_executor: market_drawdown_entry_gate_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  - entry_signal
+  - ranking_weight
+  data/cb_warehouse/csi300_daily.parquet:
+  - trade_date
+  - close
+test_design:
+  grid_search:
+    drawdown_lookback_days:
+    - 20
+    - 60
+    - 120
+    - 252
+    drawdown_threshold_pct:
+    - -0.05
+    - -0.1
+    - -0.15
+    - -0.2
+    - -0.25
+    buffer_days:
+    - 5
+    - 10
+    - 20
+  train_period: 2018-01-01 to 2021-12-31
+  test_period: 2022-01-01 to 2026-05-20
+  benchmark: current baseline (value-gap-switch-medium-signal-cost-on)
+  fixed_params:
+    entry_logic: value_gap_amount ranking (unchanged)
+    exit_logic: duration-adaptive exit with best accepted params
+    position_sizing: equal weight (unchanged)
+success_criteria:
+  criteria:
+  - cumulative_excess_compound_cross_year_gt_-0.05
+  - max_drawdown_improvement_vs_baseline_gt_0.02
+  - train_test_consistency_ratio_gt_0.5
+  - at_least_one_parameter_set_passes_adoption
+falsifiers:
+  train: &id001
+  - cumulative_excess_compound_cross_year_lt_-0.10
+  - max_drawdown_not_improved_vs_baseline
+  - train_period_negative_excess
+  - fewer_than_100_trades_in_any_year
+  validate: *id001
+  test: *id001
+risk: 'Medium. The contrarian drawdown entry approach failed at mechanical thresholds,
+  which raises the possibility that the executor or data pipeline for CSI 300 integration
+  has issues. However, this proposal uses a simpler boolean mask (suppress, don''t
+  invert), which is less data-intensive. The main risk is that suppressing entries
+  during drawdowns may also suppress the highest value-gap opportunities (since gaps
+  widen during stress), reducing the strategy''s ability to capture reversions.
+
+  '
+why_not_repeated_failure: 'This is not a renamed repeat of contrarian_drawdown_entry
+  because: (1) contrarian_drawdown_entry tried to INCREASE entries during drawdowns
+  and failed at mechanical thresholds; this proposal does the OPPOSITE — it SUPPRESSES
+  entries during drawdowns. (2) This is not an exit-rule variant (C007), all of which
+  have been extensively tested. The entry gate dimension (C009) has not been tested
+  with the registered market_drawdown_entry_gate_executor. (3) This is not a regime_classifier_variant
+  or regime_conditioned_option_entry_gate (both closed families); it is a simple CSI
+  300 rolling-return threshold, not a multi-factor regime model.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+- cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+implementation_assumption: The executor applies a boolean entry mask to the existing
+  daily value-gap signal dataframe without modifying the scoring, ranking, sizing,
+  or exit logic. When CSI 300 rolling N-day return < drawdown_threshold_pct, all entry
+  signals for that day are suppressed. After suppression ends, a buffer_days period
+  must pass before entries resume, preventing whipsaw re-entry during volatile bottoms.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: ca13fef4f54bce17
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: ca13fef4f54bce17
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_market_drawdown_entry_filter/proposal.yaml

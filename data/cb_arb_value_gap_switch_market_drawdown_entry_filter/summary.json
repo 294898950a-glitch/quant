@@ -1,0 +1,96 @@
+{
+  "variant": "gate_n20_t0p12_buf0",
+  "N": 20,
+  "threshold": 0.12,
+  "buffer_days": 0,
+  "adoption_pass": false,
+  "baseline_params": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 180.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0
+  },
+  "rows": [
+    {
+      "variant": "baseline",
+      "period": "train",
+      "start": "20190101",
+      "end": "20241231",
+      "total_return": 0.450977,
+      "excess_return": 0.178662,
+      "max_drawdown": -0.295256,
+      "win_rate": 0.4848,
+      "sharpe_ratio": 0.0,
+      "total_trades": 988,
+      "score": 0.104848
+    },
+    {
+      "variant": "gate_n20_t0p12_buf0",
+      "period": "train",
+      "start": "20190101",
+      "end": "20241231",
+      "total_return": 0.370559,
+      "excess_return": 0.098245,
+      "max_drawdown": -0.296944,
+      "win_rate": 0.4926,
+      "sharpe_ratio": 0.0,
+      "total_trades": 1009,
+      "score": 0.024009
+    },
+    {
+      "variant": "baseline",
+      "period": "stress_2020",
+      "start": "20200101",
+      "end": "20201231",
+      "total_return": -0.082493,
+      "excess_return": -0.18666,
+      "max_drawdown": -0.173984,
+      "win_rate": 0.3158,
+      "sharpe_ratio": 0.0,
+      "total_trades": 76,
+      "score": -0.230156
+    },
+    {
+      "variant": "gate_n20_t0p12_buf0",
+      "period": "stress_2020",
+      "start": "20200101",
+      "end": "20201231",
+      "total_return": -0.08307,
+      "excess_return": -0.187236,
+      "max_drawdown": -0.174465,
+      "win_rate": 0.3158,
+      "sharpe_ratio": 0.0,
+      "total_trades": 76,
+      "score": -0.230852
+    },
+    {
+      "variant": "baseline",
+      "period": "validate",
+      "start": "20250101",
+      "end": "20260508",
+      "total_return": 0.817948,
+      "excess_return": 0.465683,
+      "max_drawdown": -0.097527,
+      "win_rate": 0.684,
+      "sharpe_ratio": 0.0,
+      "total_trades": 212,
+      "score": 0.441301
+    },
+    {
+      "variant": "gate_n20_t0p12_buf0",
+      "period": "validate",
+      "start": "20250101",
+      "end": "20260508",
+      "total_return": 0.817948,
+      "excess_return": 0.465683,
+      "max_drawdown": -0.097527,
+      "win_rate": 0.684,
+      "sharpe_ratio": 0.0,
+      "total_trades": 212,
+      "score": 0.441301
+    }
+  ],
+  "generated_at": "2026-05-22T18:25:18.341806"
+}

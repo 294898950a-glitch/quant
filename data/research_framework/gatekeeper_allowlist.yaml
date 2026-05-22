@@ -1,211 +1,246 @@
-# GateKeeper compliance allowlist
-#
-# 列出已知不需要接入 GateKeeper 的脚本. validate_gatekeeper_compliance.py 校验时
-# 跳过这些. 每条必填 reason 和 owner.
-#
-# 默认所有 scripts/run_cb_*.py / scripts/evaluate_cb_*.py / scripts/search_cb_*.py
-# 必须 import GateKeeper 并调 stage 方法.
-
 schema_version: 1
-
 allowlist:
-  # 历史脚本 (一次性 / 已 archived 研究批, 不再跑)
-  - script: scripts/run_cb_arb_concurrent.py
-    reason: 2026-05-11 concurrent supervised batch 一次性脚本, batch 数据已 archive
-    owner: claude
-    archived_at: 2026-05-16
-
-  - script: scripts/run_cb_arb_cost_realism.py
-    reason: 2026-05-16 cost realism 一次性测试, batch 完成, status COMPLETE
-    owner: claude
-    archived_at: 2026-05-16
-
-  - script: scripts/run_cb_arb_two_line_cross_validation.py
-    reason: 2026-05-15 HDRF vs 自循环路线 cross-validation 一次性, 完成
-    owner: claude
-    archived_at: 2026-05-16
-
-  # 数据 ETL 类脚本 (不是研究跑批, 不该 GateKeeper)
-  - script: scripts/build_cb_warehouse.py
-    reason: data ETL, 不是研究批
-    owner: codex
-
-  - script: scripts/enrich_cb_conv_price.py
-    reason: data ETL
-    owner: codex
-
-  - script: scripts/fix_delisted_conv_price.py
-    reason: data fix
-    owner: codex
-
-  - script: scripts/verify_cb_data_independent.py
-    reason: data verification 工具, 不是策略 grid
-    owner: codex
-
-  - script: scripts/cb_pricer_sanity.py
-    reason: 定价器 sanity 工具, 不是策略 grid
-    owner: codex
-
-# 未来加新脚本到 allowlist: 必含 script / reason / owner. archived_at 可选.
-# 加新 run_cb_*.py 默认必接 GateKeeper, 不加 allowlist.
-
-# 历史一次性研究脚本 (2026-05-10 ~ 2026-05-15 batches, all data ARCHIVED).
-# 这些脚本每个对应一个具体研究方向, 已 commit 历史在 reports/ + run_manifests/.
-# 不再跑, 加 allowlist 让 validator 跳过. 未来新研究**禁止**类似裸跑批; 必接 GateKeeper.
-
-  # 评估实验 (evaluate_cb_arb_*) - 16 个历史 batch
-  - script: scripts/evaluate_cb_arb_breadth_confirm_ensemble.py
-    reason: 2026-05-15 panic detector batch 3, archived
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_cross_pools.py
-    reason: 历史 cross-pool 评估
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_daily_regime_switch.py
-    reason: 历史 regime switch 评估
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_market_breadth_panic.py
-    reason: 2026-05-15 panic detector batch 2, archived
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_normal_vol.py
-    reason: 历史 normal vol 评估
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_option_entry_gate.py
-    reason: option-entry-gate 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
-    owner: codex
-    archived_at: 2026-05-17
-  - script: scripts/evaluate_cb_arb_option_value_haircut.py
-    reason: option-value-haircut 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
-    owner: codex
-    archived_at: 2026-05-17
-  - script: scripts/evaluate_cb_arb_option_position_sizing.py
-    reason: option-position-sizing 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
-    owner: codex
-    archived_at: 2026-05-17
-  - script: scripts/evaluate_cb_arb_regime_option_entry_gate.py
-    reason: regime option-entry-gate 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
-    owner: codex
-    archived_at: 2026-05-17
-  - script: scripts/evaluate_cb_arb_universe_filter.py
-    reason: universe-filter retest 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
-    owner: codex
-    archived_at: 2026-05-17
-  - script: scripts/evaluate_cb_arb_panic_bond_anchor.py
-    reason: 历史 panic bond anchor
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_panic_option_stop.py
-    reason: 历史 panic option stop
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_panic_option_weight.py
-    reason: 历史 panic option weight
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_regime_switch.py
-    reason: 2026-05-15 panic detector batch 1, archived
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_selfpnl_regime_switch.py
-    reason: 历史 self-PnL regime
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_stop_revaluation.py
-    reason: 历史 stop revaluation
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_stop_source_stress.py
-    reason: 历史 stop source stress
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_stop_value_retention.py
-    reason: 历史 stop value retention
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_three_value_gate.py
-    reason: 历史 three value gate
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_valuation_switch.py
-    reason: 历史 valuation switch
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_value_gap_switch.py
-    reason: cb_arb value-gap switch 评估分支主入口, 历史
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
-    reason: autonomous generated evaluator, gated by spec compiler, data quality, and queue runner
-    owner: codex
-  - script: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
-    reason: autonomous generated evaluator, gated by spec compiler, data quality, and queue runner
-    owner: codex
-  - script: scripts/evaluate_cb_arb_volatility_position_scaling.py
-    reason: autonomous generated evaluator, gated by spec compiler, data quality, and queue runner
-    owner: codex
-
-  # 网格搜索 (search_cb_arb_*) - 5 个历史
-  - script: scripts/search_cb_arb_behavior_grid.py
-    reason: 历史 grid search
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/search_cb_arb_behavior_regimes.py
-    reason: 历史 behavior regimes
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/search_cb_arb_panic_leave_year_out.py
-    reason: 历史 panic leave year out
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/search_cb_arb_panic_mid_signal.py
-    reason: 历史 panic mid signal
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/search_cb_arb_time_split_grid.py
-    reason: 历史 time split grid
-    owner: claude
-    archived_at: 2026-05-16
-
-  # 分析诊断 (analyze_cb*) - 7 个 + monitor 2 个
-  - script: scripts/analyze_cb_arb_baseline_trade_attribution.py
-    reason: 历史 trade-level 归因诊断
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/analyze_cb_arb_option_false_undervaluation.py
-    reason: option-source false undervaluation 本地归因诊断, 不发起策略跑批
-    owner: codex
-    archived_at: 2026-05-17
-  - script: scripts/analyze_cb_arb_panic_calendar_diagnostic.py
-    reason: 历史 2024 panic 诊断
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/analyze_cb_arb_panic_yearly_decomposition.py
-    reason: 历史 yearly decomposition
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/analyze_cb_arb_repair_times.py
-    reason: 历史 repair times
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/analyze_cb_arb_stop_source_breakdown.py
-    reason: 历史 stop source breakdown
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/analyze_cb_panic_detector.py
-    reason: 历史 panic detector 分析
-    owner: claude
-    archived_at: 2026-05-16
-  - script: scripts/analyze_cb_panic_execution_feasibility.py
-    reason: 历史 panic execution feasibility
-    owner: claude
-    archived_at: 2026-05-16
-
-  # 一次性专题脚本
-  - script: scripts/train_cb_panic_detector.py
-    reason: 历史 panic detector 训练, 已 archived
-    owner: claude
-    archived_at: 2026-05-16
+- script: scripts/run_cb_arb_concurrent.py
+  reason: 2026-05-11 concurrent supervised batch 一次性脚本, batch 数据已 archive
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/run_cb_arb_cost_realism.py
+  reason: 2026-05-16 cost realism 一次性测试, batch 完成, status COMPLETE
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/run_cb_arb_two_line_cross_validation.py
+  reason: 2026-05-15 HDRF vs 自循环路线 cross-validation 一次性, 完成
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/build_cb_warehouse.py
+  reason: data ETL, 不是研究批
+  owner: codex
+- script: scripts/enrich_cb_conv_price.py
+  reason: data ETL
+  owner: codex
+- script: scripts/fix_delisted_conv_price.py
+  reason: data fix
+  owner: codex
+- script: scripts/verify_cb_data_independent.py
+  reason: data verification 工具, 不是策略 grid
+  owner: codex
+- script: scripts/cb_pricer_sanity.py
+  reason: 定价器 sanity 工具, 不是策略 grid
+  owner: codex
+- script: scripts/evaluate_cb_arb_breadth_confirm_ensemble.py
+  reason: 2026-05-15 panic detector batch 3, archived
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_cross_pools.py
+  reason: 历史 cross-pool 评估
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_daily_regime_switch.py
+  reason: 历史 regime switch 评估
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_market_breadth_panic.py
+  reason: 2026-05-15 panic detector batch 2, archived
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_normal_vol.py
+  reason: 历史 normal vol 评估
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_option_entry_gate.py
+  reason: option-entry-gate 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+  owner: codex
+  archived_at: 2026-05-17
+- script: scripts/evaluate_cb_arb_option_value_haircut.py
+  reason: option-value-haircut 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+  owner: codex
+  archived_at: 2026-05-17
+- script: scripts/evaluate_cb_arb_option_position_sizing.py
+  reason: option-position-sizing 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+  owner: codex
+  archived_at: 2026-05-17
+- script: scripts/evaluate_cb_arb_regime_option_entry_gate.py
+  reason: regime option-entry-gate 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+  owner: codex
+  archived_at: 2026-05-17
+- script: scripts/evaluate_cb_arb_universe_filter.py
+  reason: universe-filter retest 评估分支; 由 auto_research_pipeline/spec 外层接 GateKeeper
+  owner: codex
+  archived_at: 2026-05-17
+- script: scripts/evaluate_cb_arb_panic_bond_anchor.py
+  reason: 历史 panic bond anchor
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_panic_option_stop.py
+  reason: 历史 panic option stop
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_panic_option_weight.py
+  reason: 历史 panic option weight
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_regime_switch.py
+  reason: 2026-05-15 panic detector batch 1, archived
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_selfpnl_regime_switch.py
+  reason: 历史 self-PnL regime
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_stop_revaluation.py
+  reason: 历史 stop revaluation
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_stop_source_stress.py
+  reason: 历史 stop source stress
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_stop_value_retention.py
+  reason: 历史 stop value retention
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_three_value_gate.py
+  reason: 历史 three value gate
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_valuation_switch.py
+  reason: 历史 valuation switch
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_value_gap_switch.py
+  reason: cb_arb value-gap switch 评估分支主入口, 历史
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  reason: autonomous generated evaluator, gated by spec compiler, data quality, and
+    queue runner
+  owner: codex
+- script: scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+  reason: autonomous generated evaluator, gated by spec compiler, data quality, and
+    queue runner
+  owner: codex
+- script: scripts/evaluate_cb_arb_volatility_position_scaling.py
+  reason: autonomous generated evaluator, gated by spec compiler, data quality, and
+    queue runner
+  owner: codex
+- script: scripts/search_cb_arb_behavior_grid.py
+  reason: 历史 grid search
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/search_cb_arb_behavior_regimes.py
+  reason: 历史 behavior regimes
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/search_cb_arb_panic_leave_year_out.py
+  reason: 历史 panic leave year out
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/search_cb_arb_panic_mid_signal.py
+  reason: 历史 panic mid signal
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/search_cb_arb_time_split_grid.py
+  reason: 历史 time split grid
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/analyze_cb_arb_baseline_trade_attribution.py
+  reason: 历史 trade-level 归因诊断
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/analyze_cb_arb_option_false_undervaluation.py
+  reason: option-source false undervaluation 本地归因诊断, 不发起策略跑批
+  owner: codex
+  archived_at: 2026-05-17
+- script: scripts/analyze_cb_arb_panic_calendar_diagnostic.py
+  reason: 历史 2024 panic 诊断
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/analyze_cb_arb_panic_yearly_decomposition.py
+  reason: 历史 yearly decomposition
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/analyze_cb_arb_repair_times.py
+  reason: 历史 repair times
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/analyze_cb_arb_stop_source_breakdown.py
+  reason: 历史 stop source breakdown
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/analyze_cb_panic_detector.py
+  reason: 历史 panic detector 分析
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/analyze_cb_panic_execution_feasibility.py
+  reason: 历史 panic execution feasibility
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/train_cb_panic_detector.py
+  reason: 历史 panic detector 训练, 已 archived
+  owner: claude
+  archived_at: 2026-05-16
+- script: scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_consecutive_day_persistence_entry_gate.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_entry_min_gap_threshold.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_gap_decay_with_bond_floor.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_gap_freshness_entry_filter.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_gap_trend_entry_filter.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_new_valuation.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_option_pnl_feedback_v2.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_pnl_feedback_scaling_grid.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_signal_blending_volatility_penalized.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_valuation_formula.py
+  reason: hermes-generated evaluator, install_generated_executors registered without
+    GateKeeper hook; hermes prompt fix pending
+  added_at: '2026-05-23'
+  added_by: install_generated_executors

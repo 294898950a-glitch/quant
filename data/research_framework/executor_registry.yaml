@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-22T03:08:48'
+updated_at: '2026-05-22T17:13:11+00:00'
 purpose: Machine-readable registry of implemented research executors. Spec Compiler
   must use this file for hard executor matching; AI proposals cannot self-certify
   executability.
@@ -7,6 +7,7 @@ matching_rules:
   require_all_mechanics_in_can_test: true
   reject_if_any_mechanic_in_cannot_test: true
   reject_closest_executor_fallback: true
+  require_executor_script_exists: true
   require_required_data_exists: true
   require_vm_for_cb_arb: true
   require_local_minutes_zero_for_cb_arb: true
@@ -593,7 +594,7 @@ executors:
   pnl_adaptive_exit_executor:
     id: pnl_adaptive_exit_executor
     version: 1
-    status: draft
+    status: implemented
     strategy_id: cb_arb_value_gap_switch
     family: pnl_adaptive_exit
     script_path: scripts/evaluate_cb_arb_pnl_adaptive_exit.py
@@ -686,6 +687,8 @@ executors:
       vm_required: true
       local_allowed: false
     obsolescence_date: null
+    status_flipped_at: '2026-05-22T15:34:20+00:00'
+    status_flipped_by: install_generated_executors
   cb_arb_iv_percentile_exit_executor:
     id: cb_arb_iv_percentile_exit_executor
     version: 1
@@ -976,3 +979,536 @@ executors:
     obsolescence_date: null
     extra_sync_paths:
     - scripts/evaluate_cb_arb_value_gap_switch.py
+  evaluate_cb_arb_new_valuation:
+    id: evaluate_cb_arb_new_valuation
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: new_valuation
+    script_path: scripts/evaluate_cb_arb_new_valuation.py
+    owner: hermes_auto_install
+    description: Refining the theoretical value model for convertible bonds to incorporate
+      dynamic credit spread and option‑adjusted spread (OAS) will produce more accurate
+      value gaps, improving signal quality and leading to higher risk‑adjusted excess
+      returns.
+    can_test:
+    - new_valuation_formula
+    can_test_capability_ids:
+    - C006
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_exit_rule
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C002
+    - C005
+    - C009
+    - C003
+    - C008
+    - C007
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market prices.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic terms, ratings, conversion prices.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices for vol computation.
+      schema_hash: null
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Existing value gaps for baseline comparison.
+      schema_hash: null
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: cb_arb_value_gap_switch_new_valuation_formula_v1_executor_code
+  evaluate_cb_arb_iv_percentile_exit_v2:
+    id: evaluate_cb_arb_iv_percentile_exit_v2
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: iv_percentile_exit_v2
+    script_path: scripts/evaluate_cb_arb_iv_percentile_exit_v2.py
+    owner: hermes_auto_install
+    description: Exiting positions when the convertible bond's implied volatility
+      exceeds a high rolling percentile (e.g., 90th) will trim tail events, reduce
+      max drawdown, and improve risk-adjusted returns without sacrificing excess return
+      in normal periods.
+    can_test:
+    - new_exit_rule
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_valuation_formula
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C002
+    - C005
+    - C009
+    - C003
+    - C008
+    - C006
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Daily value‑gap amounts from regime‑option‑entry‑gate run — theoretical
+        value, bond floor, option value, rank.
+      schema_hash: null
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+      description: Baseline trade‑level realised PnL for comparison. Optional — simulated
+        baseline used if missing.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB‑to‑underlying‑stock mapping.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward‑adjusted daily stock prices for volatility calc.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market prices (close).
+      schema_hash: null
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: cb_arb_iv_percentile_exit_2026-05-21_1_executor_code
+  evaluate_cb_arb_valuation_formula:
+    id: evaluate_cb_arb_valuation_formula
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: valuation_formula
+    script_path: scripts/evaluate_cb_arb_valuation_formula.py
+    owner: hermes_auto_install
+    description: A more accurate theoretical value for convertible bonds, incorporating
+      time-varying credit spreads and implied volatility, will improve the value‑gap
+      signal quality, leading to better entry timing and significantly reduced drawdown
+      in stress periods (e.g. 2020) while preserving or improving excess returns in
+      normal markets.
+    can_test:
+    - new_valuation_formula
+    can_test_capability_ids:
+    - C006
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_exit_rule
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C002
+    - C005
+    - C009
+    - C003
+    - C008
+    - C007
+    - C010
+    - C004
+    - C001
+    required_data: []
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: cb_arb_value_gap_switch_valuation_formula_v1_executor_code
+  evaluate_cb_arb_exit_gap_closing_percentile:
+    id: evaluate_cb_arb_exit_gap_closing_percentile
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: exit_gap_closing_percentile
+    script_path: scripts/evaluate_cb_arb_exit_gap_closing_percentile.py
+    owner: hermes_auto_install
+    description: Using the historical empirical distribution of days-to-close for
+      gaps of similar initial magnitude will produce a dynamic, non‑parametric exit
+      that avoids premature exits and holds winners longer, improving risk-adjusted
+      returns.
+    can_test:
+    - new_exit_rule
+    can_test_capability_ids:
+    - C007
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_valuation_formula
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C002
+    - C005
+    - C009
+    - C003
+    - C008
+    - C006
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Daily value-gap amounts from regime-option-entry-gate run.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic reference table.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market prices.
+      schema_hash: null
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: exit_gap_closing_percentile_001_executor_code
+  evaluate_cb_arb_pnl_feedback_scaling_grid:
+    id: evaluate_cb_arb_pnl_feedback_scaling_grid
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: pnl_feedback_scaling_grid
+    script_path: scripts/evaluate_cb_arb_pnl_feedback_scaling_grid.py
+    owner: hermes_auto_install
+    description: Rolling realized PnL carries predictive signal about near-term strategy
+      edge quality. Scaling position size inversely with recent losses reduces cost
+      drag during cold periods — fewer contracts traded when the strategy is losing,
+      full exposure when it is winning — without abandoning the value-gap ranking
+      signal or changing exit logic.
+    can_test:
+    - rolling_pnl_feedback
+    can_test_capability_ids:
+    - C004
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_exit_rule
+    - new_valuation_formula
+    - regime_conditioning
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C002
+    - C005
+    - C009
+    - C003
+    - C008
+    - C007
+    - C006
+    - C010
+    - C001
+    required_data: []
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_executor_code
+  evaluate_cb_arb_bond_floor_entry_filter:
+    id: evaluate_cb_arb_bond_floor_entry_filter
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: bond_floor_entry_filter
+    script_path: scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+    owner: hermes_auto_install
+    description: Constraining entries to periods when the CB price is near its bond
+      floor provides intrinsic downside protection. The bond floor acts as a hard
+      valuation anchor — when the CB trades far above it, the value-gap signal may
+      reflect noise or speculative premium rather than genuine mispricing. Filtering
+      to near-floor entries should reduce drawdowns and improve risk-adjusted returns
+      without destroying the alpha signal.
+    can_test:
+    - close_to_bond_floor_threshold
+    can_test_capability_ids:
+    - C002
+    cannot_test:
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_exit_rule
+    - new_valuation_formula
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C005
+    - C009
+    - C003
+    - C008
+    - C007
+    - C006
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Daily value-gap ranks from regime-option-entry-gate run.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: 'CB basic info: par_value, coupon_rate, maturity_date.'
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market close prices for ratio calculation.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted stock prices (loaded for compatibility).
+      schema_hash: null
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: cb_arb_value_gap_switch_bond_floor_entry_filter_20260522_executor_code
+  evaluate_cb_arb_regime_adaptive_exit:
+    id: evaluate_cb_arb_regime_adaptive_exit
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: regime_adaptive_exit
+    script_path: scripts/evaluate_cb_arb_regime_adaptive_exit.py
+    owner: hermes_auto_install
+    description: The duration-adaptive exit accepted on 2026-05-22 uses a single fixed
+      decay schedule (initial_threshold_fraction=0.7, decay_period_factor=0.5) regardless
+      of market conditions. In high-volatility regimes, gaps close faster and a single
+      decay schedule may exit too early (leaving money on the table) or too late (allowing
+      gaps to re-widen). Conditioning the decay parameters on a daily market regime
+      classifier can improve cumulative excess by tailoring exit patience to the prevailing
+      environment.
+    can_test:
+    - dynamic_regime_switch
+    - new_exit_rule
+    can_test_capability_ids:
+    - C005
+    - C007
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_valuation_formula
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C002
+    - C009
+    - C003
+    - C008
+    - C006
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: ''
+      schema_hash: null
+    - path: data/cb_warehouse/csi300_daily.parquet
+      description: ''
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: ''
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: ''
+      schema_hash: null
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: cb_arb_value_gap_switch_regime_adaptive_exit_20260523_executor_code
+  evaluate_cb_arb_moneyness_entry_filter:
+    id: evaluate_cb_arb_moneyness_entry_filter
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: moneyness_entry_filter
+    script_path: scripts/evaluate_cb_arb_moneyness_entry_filter.py
+    owner: hermes_auto_install
+    description: Restricting entries to candidates where the underlying stock price
+      is at or above a threshold fraction of the conversion price (stock_close / conv_price
+      >= threshold) will improve signal quality by screening out deep out-of-the-money
+      CBs. Deep OTM CB option values are dominated by time premium and IV assumptions,
+      making their theoretical-value gaps least reliable and most likely to represent
+      model noise rather than tradable mispricing.
+    can_test:
+    - moneyness_stock_to_conv_threshold
+    can_test_capability_ids:
+    - C003
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - dynamic_regime_switch
+    - global_entry_filter
+    - new_data_source
+    - new_exit_rule
+    - new_valuation_formula
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C002
+    - C005
+    - C009
+    - C008
+    - C007
+    - C006
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Daily value-gap ranks with trade_date, ts_code, value_gap_amount.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: ''
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: ''
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: ''
+      schema_hash: null
+    - path: data/cb_warehouse/cb_call.parquet
+      description: ''
+      schema_hash: null
+    - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+      description: ''
+      schema_hash: null
+    - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+      description: ''
+      schema_hash: null
+    - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+      description: ''
+      schema_hash: null
+    - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+      description: ''
+      schema_hash: null
+    required_config_fields: []
+    command_template: []
+    default_config: {}
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 0
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    auto_registered: true
+    auto_registered_at: '2026-05-22T17:13:11+00:00'
+    auto_registered_by: install_generated_executors
+    auto_registered_from_handoff: cb_arb_value_gap_switch_moneyness_entry_filter_executor_code

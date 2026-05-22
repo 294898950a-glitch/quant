@@ -1,0 +1,59 @@
+adoption_pass: false
+message: Profit-taking exit evaluation finished.
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-22T09:36:25.713785Z'
+  description: Auto-filled q1_floor_binding description from review.
+  answer: Profit-take exit rejected at adoption gate (adoption_pass=false); best candidate
+    (target_fraction=0.5) showed +8.8M test excess return but -99.4M train excess,
+    with deeply negative absolute PnL across all windows and win rates below 2.5%.
+  pass: false
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T09:36:25.713793Z'
+  description: Auto-filled q2_selection_score description from review.
+  answer: Profit-take exit rejected at adoption gate (adoption_pass=false); best candidate
+    (target_fraction=0.5) showed +8.8M test excess return but -99.4M train excess,
+    with deeply negative absolute PnL across all windows and win rates below 2.5%.
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-22T09:36:25.713795Z'
+  description: Auto-filled q3_baseline_alignment description from review.
+  answer: Profit-take exit rejected at adoption gate (adoption_pass=false); best candidate
+    (target_fraction=0.5) showed +8.8M test excess return but -99.4M train excess,
+    with deeply negative absolute PnL across all windows and win rates below 2.5%.
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T09:36:25.713797Z'
+  description: Auto-filled q4_monotonic description from review.
+  answer: Profit-take exit rejected at adoption gate (adoption_pass=false); best candidate
+    (target_fraction=0.5) showed +8.8M test excess return but -99.4M train excess,
+    with deeply negative absolute PnL across all windows and win rates below 2.5%.
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-22T09:36:25.713798Z'
+  description: Auto-filled q5_trade_overlap description from review.
+  answer: Profit-take exit rejected at adoption gate (adoption_pass=false); best candidate
+    (target_fraction=0.5) showed +8.8M test excess return but -99.4M train excess,
+    with deeply negative absolute PnL across all windows and win rates below 2.5%.
+  pass: false
+auto_computed_at: '2026-05-22T09:36:25.713799Z'
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_v1
+reviewer: codex
+ack_at: '2026-05-22T17:19:21+00:00'
+overall_pass: false
+overall_decision: reject
+overall_reason: adoption_pass is false, directly violating the first hard floor (at
+  least one candidate must meet mechanical thresholds).
+normalized_at: '2026-05-22T17:19:21+00:00'
+normalized_by: normalize_report_schema

@@ -1,0 +1,20 @@
+best_fraction: 0.5
+data_rows:
+  test: 95787
+  train: 392852
+  validate_2020: 49117
+errors: []
+warnings: []
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+diagnostic_date: '2026-05-22'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: Profit-take exit rejected — best candidate (target_fraction=0.5) fails hard
+  floor on train-period excess return (-99.4M), and all candidates remain deeply unprofitable
+  in absolute PnL regardless of exit rule.
+verdict_rationale: Train excess return is negative for all candidates, directly violating
+  the non-negative train excess hard floor inherited from the iv_percentile_exit failure
+  mode.
+normalized_at: '2026-05-22T17:19:21+00:00'
+normalized_by: normalize_report_schema

@@ -1,0 +1,60 @@
+adoption_pass: false
+message: Profit-taking exit evaluation finished.
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-22T09:30:48.787368Z'
+  description: Auto-filled q1_floor_binding description from review.
+  answer: Profit-take exit rejected — best candidate (target_fraction=0.5) fails hard
+    floor on train-period excess return (-99.4M), and all candidates remain deeply
+    unprofitable in absolute PnL regardless of exit rule.
+  pass: false
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T09:30:48.787378Z'
+  description: Auto-filled q2_selection_score description from review.
+  answer: Profit-take exit rejected — best candidate (target_fraction=0.5) fails hard
+    floor on train-period excess return (-99.4M), and all candidates remain deeply
+    unprofitable in absolute PnL regardless of exit rule.
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-22T09:30:48.787380Z'
+  description: Auto-filled q3_baseline_alignment description from review.
+  answer: Profit-take exit rejected — best candidate (target_fraction=0.5) fails hard
+    floor on train-period excess return (-99.4M), and all candidates remain deeply
+    unprofitable in absolute PnL regardless of exit rule.
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T09:30:48.787382Z'
+  description: Auto-filled q4_monotonic description from review.
+  answer: Profit-take exit rejected — best candidate (target_fraction=0.5) fails hard
+    floor on train-period excess return (-99.4M), and all candidates remain deeply
+    unprofitable in absolute PnL regardless of exit rule.
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-22T09:30:48.787383Z'
+  description: Auto-filled q5_trade_overlap description from review.
+  answer: Profit-take exit rejected — best candidate (target_fraction=0.5) fails hard
+    floor on train-period excess return (-99.4M), and all candidates remain deeply
+    unprofitable in absolute PnL regardless of exit rule.
+  pass: false
+auto_computed_at: '2026-05-22T09:30:48.787397Z'
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+reviewer: codex
+ack_at: '2026-05-22T17:19:21+00:00'
+overall_pass: false
+overall_decision: reject
+overall_reason: Train excess return is negative for all candidates, directly violating
+  the non-negative train excess hard floor inherited from the iv_percentile_exit failure
+  mode.
+normalized_at: '2026-05-22T17:19:21+00:00'
+normalized_by: normalize_report_schema

@@ -1,0 +1,71 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 10
+  artifacts_hash: 32c4cefe82a0fa28
+interpretation:
+  review_status_code: 2
+  result_summary: All 10 volatility-scaling position-sizing candidates underperformed
+    baseline_no_scaling across train, 2020 repair, and sealed test.
+  main_reason: No variant reduced cost-on cumulative excess by the 2pp hard floor;
+    baseline uniform sizing won at every exit gate.
+  failure_causes:
+  - Volatility-based down-weighting did not reduce cost drag as hypothesized
+  - All 10 candidates failed the 2pp cumulative-excess improvement hard floor
+  - adoption_pass=false — no variant beat baseline in train or test
+  next_research_directions:
+  - direction: cost-aware candidate filtering
+    why: if scaling exposure by volatility fails, the next logical step is to exclude
+      high-cost names from the candidate pool entirely instead of down-sizing them
+    priority_code: 1
+    priority: high
+  - direction: revisit signal strength by volatility bucket
+    why: the hypothesis assumed high-ATR CBs have no stronger value-gap signals than
+      low-volatility peers — this assumption needs empirical validation before abandoning
+      the direction
+    priority_code: 2
+    priority: medium
+  - direction: alternative position-sizing mechanics
+    why: both PnL-feedback scaling (unstable) and volatility scaling (no improvement)
+      failed — a fundamentally different sizing approach is needed for the -7.47pp
+      cost realism wall
+    priority_code: 1
+    priority: high
+  evidence_gaps:
+  - per-candidate granular results (not available in locked facts) — unable to assess
+    whether candidates were marginally close or uniformly far from baseline
+  - signal-strength-by-volatility-bucket analysis missing — cannot confirm or refute
+    the core hypothesis assumption
+  - no breakdown of cost drag attribution by ATR quintile — unclear whether cost drag
+    is concentrated in the names that volatility scaling would have down-weighted
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: e70a82eae54225b2
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 10

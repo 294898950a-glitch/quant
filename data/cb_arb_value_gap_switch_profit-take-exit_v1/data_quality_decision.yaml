@@ -1,0 +1,16 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_v1
+spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+validated_at: '2026-05-22T17:32:47'
+summary_sha256: adfcd6fa53bd626e325afa73a29b10767e392ef2c9a13c58101d814ae5a9a7ac
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 单一必需文件存在且可读，日期范围覆盖训练和测试期，无显式字段质量要求，空输入列提示无冲突可能。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 0fe5586542fffc3a

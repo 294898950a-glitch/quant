@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+spec_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/spec.yaml
+validated_at: '2026-05-22T18:24:15'
+summary_sha256: faa130355c00020ff9292fe44ff477fe042eaacf1778b4b95c8b3e24f67aa790
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- daily_value_gap_amounts 最早日期 2019-01-02 比 train_start 2019-01-01 晚一天，但 1 月 1 日为法定假日无交易，不影响覆盖。
+- 数据摘要未提供 required_column_quality 级别的空值统计（null_rows / valid_rows），仅验证了列存在性和日期覆盖；若原始文件存在关键列大量空值，需在运行时由执行器自行处理。
+fix_plan: []
+decision_reason: 所有必需文件存在且可读，必需列全部就位，训练与测试日期被行情数据完整覆盖（假日缺口属正常），无阻塞性问题。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: bc36024e3c2f4e0f

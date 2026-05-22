@@ -1,0 +1,19 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/spec.yaml
+validated_at: '2026-05-22T17:11:09'
+summary_sha256: f35b4fc963fb2ac8e0533d5585c1d17088c1592c5e5e625de7a7088a652eb4ce
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- executor_requirements 未声明 required_columns，无法校验字段级约束；实际数据文件包含 17 个字段、488639 行，结构与上游
+  entry-gate 产出一致
+- train_start=20190101 为元旦假期，实际行情从 20190102 开始，覆盖无缺口
+decision_reason: 必需文件存在可读，488639 行覆盖 2019-01-02 至 2026-05-08，完整包含训练期和测试期，无字段级硬性约束未满足
+fix_plan: []
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: cf809657a353ce43

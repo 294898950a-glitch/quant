@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-trailing-exit
+spec_path: data/cb_arb_value_gap_switch_gap-trailing-exit/spec.yaml
+validated_at: '2026-05-22T16:17:07'
+summary_sha256: 482f8b4b2626ad8fcd047139a53e0350c738b5048540993052cd9b73d5ef406b
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- train_start 设为 2019-01-01，但 daily_value_gap_amounts 最早日期为 2019-01-02（元旦非交易日），实际覆盖无缺口
+- cb_basic 无 trade_date_range 字段，作为参考表属正常，不影响实验
+fix_plan: []
+decision_reason: 三个必需文件全部存在可读，行数达标，行情覆盖训练和测试期，无列级硬性要求未满足
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 55bd7d02e0007020

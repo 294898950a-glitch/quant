@@ -1,0 +1,65 @@
+adoption_pass: false
+message: Profit-taking exit evaluation finished.
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-22T09:12:50.347706Z'
+  description: Auto-filled q1_floor_binding description from review.
+  answer: All three target_fraction candidates are deeply unprofitable in absolute
+    terms; best candidate (target_fraction=0.5) shows slight positive test excess
+    (+8.8M) but train excess remains deeply negative (-99M) with total test PnL of
+    -251M.
+  pass: false
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T09:12:50.347716Z'
+  description: Auto-filled q2_selection_score description from review.
+  answer: All three target_fraction candidates are deeply unprofitable in absolute
+    terms; best candidate (target_fraction=0.5) shows slight positive test excess
+    (+8.8M) but train excess remains deeply negative (-99M) with total test PnL of
+    -251M.
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-22T09:12:50.347719Z'
+  description: Auto-filled q3_baseline_alignment description from review.
+  answer: All three target_fraction candidates are deeply unprofitable in absolute
+    terms; best candidate (target_fraction=0.5) shows slight positive test excess
+    (+8.8M) but train excess remains deeply negative (-99M) with total test PnL of
+    -251M.
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T09:12:50.347720Z'
+  description: Auto-filled q4_monotonic description from review.
+  answer: All three target_fraction candidates are deeply unprofitable in absolute
+    terms; best candidate (target_fraction=0.5) shows slight positive test excess
+    (+8.8M) but train excess remains deeply negative (-99M) with total test PnL of
+    -251M.
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-22T09:12:50.347722Z'
+  description: Auto-filled q5_trade_overlap description from review.
+  answer: All three target_fraction candidates are deeply unprofitable in absolute
+    terms; best candidate (target_fraction=0.5) shows slight positive test excess
+    (+8.8M) but train excess remains deeply negative (-99M) with total test PnL of
+    -251M.
+  pass: false
+auto_computed_at: '2026-05-22T09:12:50.347735Z'
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+reviewer: codex
+ack_at: '2026-05-22T17:19:21+00:00'
+overall_pass: false
+overall_decision: reject
+overall_reason: adoption_pass is false and all candidates have negative train excess
+  returns with absolute PnL losses exceeding -250M in every slice, failing the cumulative-excess-compound
+  hard floor on train data and the adoption-review-thresholds hard floor.
+normalized_at: '2026-05-22T17:19:21+00:00'
+normalized_by: normalize_report_schema

@@ -1,0 +1,20 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/spec.yaml
+validated_at: '2026-05-22T17:58:31'
+summary_sha256: 391199beb6be1feba72f60af175a9d52146c4b4d77fdfe88f131e23a7a0abfde
+status_code: 1
+confidence_code: 2
+blocking_issues: []
+warnings:
+- daily_value_gap_amounts.parquet 日期从 20190102 开始，train_start=20190101 差一天，但 2019-01-01
+  非交易日，不影响
+- stk_daily_qfq.parquet 包含额外字段 ts_code、open、high、low、volume，非必需，不阻塞
+- cb_call.parquet 中 ann_date、call_date、expire_date 不在 nonnull 列中，允许空值（未强赎的转债自然无此字段），不阻塞
+fix_plan: []
+decision_reason: 所有必需文件存在可读，必需字段齐全，行情日期覆盖训练和测试区间，无阻塞性问题
+status: pass
+confidence: medium
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 0373670e12cd5a64

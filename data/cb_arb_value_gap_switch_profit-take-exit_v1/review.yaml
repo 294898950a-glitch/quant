@@ -1,0 +1,71 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_profit-take-exit_v1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_profit-take-exit_v1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    selected_name: best_candidate
+  artifacts_hash: 94ceef10186b5c12
+interpretation:
+  review_status_code: 2
+  result_summary: Profit-take exit rejected at adoption gate (adoption_pass=false);
+    best candidate (target_fraction=0.5) showed +8.8M test excess return but -99.4M
+    train excess, with deeply negative absolute PnL across all windows and win rates
+    below 2.5%.
+  main_reason: adoption_pass is false, directly violating the first hard floor (at
+    least one candidate must meet mechanical thresholds).
+  failure_causes:
+  - adoption_pass=false — no candidate passed mechanical thresholds
+  - All three candidates remain deeply unprofitable in absolute PnL (test range -251M
+    to -267M)
+  - Win rates uniformly below 2.5% across all windows, suggesting the entry signal
+    itself needs work before exit mechanics can help
+  next_research_directions:
+  - direction: Re-examine entry signal quality — win rates too low for exit tuning
+      to matter
+    why: Win rates of 0.9-2.4% across all profit-take variants indicate the value-gap
+      entry signal may need fundamental refinement; exit mechanics optimize timing
+      but cannot rescue a signal that generates mostly losing trades
+    priority_code: 1
+    priority: high
+  - direction: Layer profit-take exit on top of accepted duration-adaptive exit
+    why: The profit-take (gap contraction) and duration-adaptive (time decay) exits
+      are complementary mechanisms; the duration-adaptive exit was previously accepted
+      and combining them could capture both early gap-closure profits and time-decay
+      discipline
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - Baseline excess return not included in facts_locked_by_code — cannot independently
+    verify whether best candidate's test excess of +8.8M met the 2pp cumulative excess
+    improvement hard floor
+  - No per-trade cost attribution breakdown — cannot confirm that profit-taking actually
+    reduced round-trip costs or holding-period drag as hypothesized
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 7c09878ff12f3019
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    selected_name: best_candidate

@@ -1,0 +1,57 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-trailing-exit
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  adoption_pass: false
+  review_summary: Gap-trailing exit with gap_decay_factor=0.5 and min_hold_days=5
+    fails comprehensively — train excess is deeply negative (-13.5%), and 2020 holdout
+    year fails both excess and drawdown floors.
+  review_main_reason: The strategy loses money across train and test periods, fails
+    the 2020 holdout excess and drawdown hard floors, and the falsifier is triggered.
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- 'cb_arb_value_gap_switch_gap-trailing-exit: rejected by review; evidence-only, not
+  promoted'
+learnings:
+- 'Gap decay factor=0.5, min_hold_days=5: 2020 excess=-2.345039 (need >-0.10), dd=-3.222428
+  (need >-0.179); test total_return=-0.220444 (need >=0.70), win_rate=0.608142 (need
+  >=0.55); falsifier triggered'
+follow_up_actions:
+- Do not promote.
+status: COMPLETE
+normalized_at: '2026-05-22T17:16:17+00:00'
+normalized_by: normalize_report_schema
+evaluator_report:
+  params:
+    gap_decay_factor: 0.5
+    min_hold_days: 5
+  train:
+    total_return: -15.836084
+    excess_return: -13.50282
+    max_drawdown: -16.01508
+    win_rate: 0.253918
+    trade_count: 638
+    early_exits: 1
+    total_positions: 638
+  test:
+    total_return: -0.220444
+    excess_return: -2.486327
+    max_drawdown: -0.815253
+    win_rate: 0.608142
+    trade_count: 393
+    early_exits: 1
+    total_positions: 393
+  yr2020:
+    total_return: -3.13416
+    excess_return: -2.345039
+    max_drawdown: -3.222428
+    win_rate: 0.389068
+    trade_count: 311
+    early_exits: 1
+    total_positions: 311
+  adoption_pass: false
+  summary: 2020 excess=-2.345039 (need >-0.10), dd=-3.222428 (need >-0.179); test
+    total_return=-0.220444 (need >=0.70), win_rate=0.608142 (need >=0.55); falsifier
+    triggered
