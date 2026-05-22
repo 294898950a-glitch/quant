@@ -1,0 +1,120 @@
+proposal_id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_duration_adaptive
+hypothesis: 'A time-decaying gap exit threshold — that starts lenient after a minimum
+  hold period and linearly tightens to zero over a maximum hold window — will outperform
+  both the baseline (no time constraint) and the simple duration-exit (fixed time
+  limit) by distinguishing between positions where the gap is actively closing (deserves
+  more time) and positions where the gap is stagnant (should exit sooner).
+
+  '
+source_insight: 'The duration-exit run (cb_arb_value_gap_switch_duration-exit_2026-05-22)
+  achieved adoption_pass=True, proving that time-constrained exits add value over
+  the baseline''s indefinite hold. However, a fixed time limit is crude: it treats
+  a position where the gap narrowed from 5% to 1% in 3 days the same as one where
+  the gap stayed at 5% for 3 days. The time-decaying threshold approach from exit_rule_duration_adaptive_executor
+  introduces gap-awareness into the time constraint — the exit bar lowers as time
+  passes, so positions must show progressively more gap closure to justify staying
+  in the portfolio.
+
+  '
+expected_improvement: 'Higher win rate and lower drawdown vs. simple duration-exit,
+  especially in periods where gap-closing speed varies widely across positions (e.g.,
+  2020 stress). Expected to improve capital efficiency by releasing stagnant positions
+  sooner while preserving upside from positions where the gap is genuinely closing.
+
+  '
+capability_ids:
+- C007
+required_executor: exit_rule_duration_adaptive_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  - entry_signal
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet:
+  - ts_code
+  - entry_date
+  - exit_date
+  - entry_gap
+  - realized_pnl
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  description: 'Grid search over two parameters: initial_threshold_fraction (the gap
+    ratio that triggers exit on the first day after min_hold_days, e.g., [0.5, 0.6,
+    0.7, 0.8, 0.9, 1.0]) and max_hold_days (the window over which the threshold linearly
+    decays to zero, e.g., [5, 10, 15, 20, 30, 45, 60]). For each combination, the
+    exit rule: after min_hold_days (fixed at 1), compute ratio = current_gap / entry_gap,
+    compute threshold = initial_threshold_fraction * (1 - (days_since_min_hold / max_hold_days)),
+    clamped to [0, initial_threshold_fraction], and exit if ratio >= threshold. Evaluate
+    on train (2019-2024) with 2020 repair check, select best by train score, validate
+    on sealed test (2025-2026). Compare against baseline and simple duration-exit.
+
+    '
+success_criteria:
+  criteria:
+  - best_candidate_train_score_gt_baseline_train_score
+  - best_candidate_2020_score_gt_baseline_2020_score
+  - best_candidate_test_score_gt_baseline_test_score
+  - best_candidate_test_excess_return_gt_0
+falsifiers:
+  train: &id001
+  - No parameter combination beats baseline simultaneously on train, 2020, and test
+  - Best candidate test excess return <= 0
+  - Parameter grid collapses to effective fixed-duration behavior (initial_threshold_fraction
+    near 1.0), meaning the adaptive component adds no value
+  validate: *id001
+  test: *id001
+risk: 'Medium. Two-parameter grid search on exit rules has moderate overfitting risk,
+  mitigated by the 2020 repair check and sealed test period. The executor is untested
+  on this strategy; there may be integration issues similar to the dynamic_exit bugs.
+
+  '
+why_not_repeated_failure: 'This is not a rehash of prior failed exit experiments.
+  The dynamic_exit and exit_dynamic_trail runs failed due to data bugs (total returns
+  in millions), not conceptual invalidity — those bugs need fixing, not the idea.
+  The profit-taking-exit run used a fixed gap-contraction fraction, not a time-decaying
+  threshold. The simple duration-exit just passed, and this proposal extends it with
+  gap-awareness rather than replacing the mechanism. No prior run has tested the time-decaying
+  threshold approach on this strategy.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-exit_2026-05-22
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+implementation_assumption: The executor computes the exit decision daily for each
+  open position using the stored entry_gap and the current day's value_gap_amount.
+  It applies min_hold_days=1, then checks the linearly decaying threshold. It does
+  not modify entry eligibility, ranking, or position sizing. The executor reads daily_value_gap_amounts.parquet
+  for current gaps and baseline_trade_pnl.parquet for entry gaps.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 824d20ead56c847d
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 824d20ead56c847d
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/proposal.yaml

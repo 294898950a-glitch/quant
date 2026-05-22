@@ -1,0 +1,21 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+diagnostic_date: '2026-05-22'
+diagnostic_by: claude
+verdict_referenced: archive-direction
+summary: Auto-filled diagnostic by inconsistency repair 2026-05-22. Run cb_arb_value_gap_switch_duration-exit_2026-05-22
+  review verdict=archive-direction. Original evaluator did not produce framework-schema
+  diagnostic.yaml.
+verdict_rationale: contradiction between adoption_pass=true and hard floor
+best_params:
+  decay_period_factor: 0.5
+  effective_max_hold_days: 45
+  initial_threshold_fraction: 0.7
+  min_hold_days: 5
+data_rows:
+  test: 95787
+  train: 392852
+  validate_2020: 49117
+errors: []
+grid_combos_tested: 27
+warnings: []

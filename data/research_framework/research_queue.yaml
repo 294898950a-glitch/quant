@@ -1,6 +1,6 @@
 schema_version: 1
 enabled: true
-updated_at: '2026-05-22T03:22:18'
+updated_at: '2026-05-22T15:21:14'
 escalation:
   status: auto_resolved
   reason: all 10 autonomous research families exhausted (regime_classifier_variant
@@ -610,7 +610,7 @@ queue:
   completed_at: '2026-05-18T13:42:06'
 - id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_133452
   family: auto_discovered_option_value
-  status: failed
+  status: blocked
   spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_133452/spec.yaml
   process_pattern: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_133452
   sync_paths:
@@ -624,12 +624,20 @@ queue:
   - scripts/evaluate_cb_arb_option_pnl_feedback.py
   discovered_at: '2026-05-18T13:34:52'
   started_at: '2026-05-18T13:52:14'
-  remote_pid: '184014'
   vm_id: guangzhou_spot
   vm_host: ubuntu@106.55.255.129
   remote_repo: /home/ubuntu/projects/quant
-  failed_at: '2026-05-18T14:02:00'
-  failure_reason: remote process exited but required artifacts are missing
+  pipeline_failure_signature: f9145ef0088dc2a077812a94fe8ed6c4378a30867b69a874cd1a42ee89baf076
+  pipeline_failure_signature_recorded_at: '2026-05-22T05:12:21'
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  requeued_at: '2026-05-22T14:46:02'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: 734f891e229f779991584821d90b92d4cc705c4aec48fc454a1be65167e668aa
+  pipeline_failure_requeue_attempts: 1
+  blocked_at: '2026-05-22T14:46:20'
+  block_reason: family option_source_pnl_feedback is forbidden
 - id: cb_arb_value_gap_switch_low-freq-concentrated_2026-05-18
   family: auto_discovered_option_value
   status: failed
@@ -642,12 +650,17 @@ queue:
   - scripts/grid_concentrated.py
   discovered_at: '2026-05-19T08:24:00'
   started_at: '2026-05-19T08:31:49'
-  remote_pid: '192758'
   vm_id: guangzhou_spot
   vm_host: ubuntu@106.55.255.129
   remote_repo: /home/ubuntu/projects/quant
-  failed_at: '2026-05-19T08:32:09'
-  failure_reason: remote process exited but required artifacts are missing
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: null
+  pipeline_failure_signature: 02c40d9dc77f3bfb0feca9cd5df346929d22f46b427df7f364ae86dfcf9cebb7
+  pipeline_failure_requeue_attempts: 1
+  failed_at: '2026-05-22T05:14:16'
+  failure_reason: historical failed item restored after over-broad pipeline infra
+    requeue; not eligible for automatic rerun
 - id: cb_arb_value_gap_switch_low-freq-concentrated-v2_2026-05-19
   family: low_freq_concentrated
   status: complete
@@ -825,6 +838,8 @@ queue:
   remote_pid: '319033'
   failed_at: '2026-05-21T07:00:18'
   failure_reason: remote pipeline exit_code=1
+  pipeline_failure_signature: 09066ef4b121509816789f1cae9fa6885c02ec6a1642ceb23e8ed8bdd954d860
+  pipeline_failure_signature_recorded_at: '2026-05-22T05:12:21'
 - id: cb_arb_value_gap_switch_dynamic-regime-switch-20260521
   family: dynamic_regime_switch
   status: failed
@@ -931,12 +946,17 @@ queue:
   source: project_owned_ideation
   workflow_stage: running_remote
   started_at: '2026-05-21T14:40:50'
-  remote_pid: '336619'
   vm_id: guangzhou_spot
   vm_host: ubuntu@106.55.255.129
   remote_repo: /home/ubuntu/projects/quant
-  failed_at: '2026-05-21T14:50:20'
-  failure_reason: remote process exited but required artifacts are missing
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: null
+  pipeline_failure_signature: 49ab469867150ac6fa6a53bb010bc171d46d24fec556ea54d81356990b2a2412
+  pipeline_failure_requeue_attempts: 1
+  failed_at: '2026-05-22T05:14:16'
+  failure_reason: historical failed item restored after over-broad pipeline infra
+    requeue; not eligible for automatic rerun
 - id: 20260519-proposal-001
   family: exit_rule_adaptive_hold
   status: failed
@@ -959,12 +979,17 @@ queue:
   source: project_owned_ideation
   workflow_stage: running_remote
   started_at: '2026-05-21T15:26:16'
-  remote_pid: '340739'
   vm_id: guangzhou_spot
   vm_host: ubuntu@106.55.255.129
   remote_repo: /home/ubuntu/projects/quant
-  failed_at: '2026-05-21T15:40:19'
-  failure_reason: remote process exited but required artifacts are missing
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: null
+  pipeline_failure_signature: bb9171536315a65717b16f8b8016c4d1fb1ce58335164d23d545865c84bfc655
+  pipeline_failure_requeue_attempts: 1
+  failed_at: '2026-05-22T05:14:16'
+  failure_reason: historical failed item restored after over-broad pipeline infra
+    requeue; not eligible for automatic rerun
 - id: adaptive_exit_rule_2026-05-19
   family: exit_rule_optimization
   status: failed
@@ -1096,12 +1121,17 @@ queue:
   source: project_owned_ideation
   workflow_stage: running_remote
   started_at: '2026-05-21T21:55:55'
-  remote_pid: '348995'
   vm_id: guangzhou_spot
   vm_host: ubuntu@106.55.255.129
   remote_repo: /home/ubuntu/projects/quant
-  failed_at: '2026-05-21T22:00:21'
-  failure_reason: remote process exited but required artifacts are missing
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: null
+  pipeline_failure_signature: 851b8b91f9f6bb54fbcb71d610278945ca5c6e1f6e73068f36c39cfc3155fc13
+  pipeline_failure_requeue_attempts: 1
+  failed_at: '2026-05-22T05:14:16'
+  failure_reason: historical failed item restored after over-broad pipeline infra
+    requeue; not eligible for automatic rerun
 - id: cb_arb_value_gap_switch_iv_percentile_exit_20260521
   family: iv_regime_exit
   status: failed
@@ -1343,7 +1373,7 @@ queue:
     \ unknown result decision: 'FAIL: variant does not meet all criteria'\n"
 - id: volatility_position_scaling_v2_2026-05-21
   family: volatility_based_position_scaling
-  status: queued
+  status: complete
   spec_path: data/volatility_position_scaling_v2_2026-05-21/spec.yaml
   process_pattern: volatility_position_scaling_v2_2026-05-21
   sync_paths:
@@ -1362,6 +1392,301 @@ queue:
   - data/research_framework/result_classification_map.yaml
   discovered_at: '2026-05-22T03:22:18'
   source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T03:38:26'
+  remote_pid: '395027'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T03:50:21'
+  review_path: data/volatility_position_scaling_v2_2026-05-21/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T03:51:07'
+- id: market_drawdown_entry_gate_v1_20260521
+  family: entry_gate
+  status: complete
+  spec_path: data/market_drawdown_entry_gate_v1_20260521/spec.yaml
+  process_pattern: market_drawdown_entry_gate_v1_20260521
+  sync_paths:
+  - scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T03:53:09'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T04:09:12'
+  remote_pid: '399779'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T04:10:16'
+  review_path: data/market_drawdown_entry_gate_v1_20260521/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T04:10:47'
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  family: iv_regime_exit
+  status: failed
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T04:34:38'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  requeued_at: '2026-05-22T05:14:16'
+  requeue_reason: pipeline infra changed or post-run gate failed; rerun same task
+    automatically
+  started_at: '2026-05-22T05:22:59'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: null
+  pipeline_failure_signature: 567d309653807b5a6107c73e0e8d851dd25a5f08de1fde0b6be83235ae0711f1
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '410766'
+  failed_at: '2026-05-22T05:30:17'
+  failure_reason: remote process exited but required artifacts are missing
+  pipeline_failure_signature_recorded_at: '2026-05-22T06:00:02'
+- id: cb_arb_iv_percentile_exit_v1_20260521
+  family: new_exit_rule
+  status: failed
+  spec_path: data/cb_arb_iv_percentile_exit_v1_20260521/spec.yaml
+  process_pattern: cb_arb_iv_percentile_exit_v1_20260521
+  sync_paths:
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T05:39:48'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-22T05:46:55'
+  remote_pid: '414420'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  failed_at: '2026-05-22T05:50:20'
+  failure_reason: remote process exited but required artifacts are missing
+  pipeline_failure_signature: bb86b12b9ab721cc191080cdb4ce443fb4d571a3051f9a010663e653b35a7f52
+  pipeline_failure_signature_recorded_at: '2026-05-22T07:10:02'
+- id: dynamic_regime_switch_001
+  family: dynamic_regime_switch
+  status: failed
+  spec_path: data/dynamic_regime_switch_001/spec.yaml
+  process_pattern: dynamic_regime_switch_001
+  sync_paths:
+  - scripts/evaluate_cb_arb_dynamic_regime_switch.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T06:15:58'
+  source: project_owned_ideation
+  workflow_stage: spec_validated
+  failed_at: '2026-05-22T06:20:58'
+  failure_reason: 'FileNotFoundError: sync path missing: scripts/evaluate_cb_arb_dynamic_regime_switch.py'
+- id: iv_percentile_exit_001
+  family: exit_rule_enhancement
+  status: failed
+  spec_path: data/iv_percentile_exit_001/spec.yaml
+  process_pattern: iv_percentile_exit_001
+  sync_paths:
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T07:23:15'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-22T07:30:46'
+  remote_pid: '421356'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  failed_at: '2026-05-22T07:40:22'
+  failure_reason: remote process exited but required artifacts are missing
+  pipeline_failure_signature: bb0564f1498ad39183273a6246c23108ad8203aa4cf1cfbf6602591f8bc398e5
+  pipeline_failure_signature_recorded_at: '2026-05-22T08:00:02'
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  family: new_exit_rule
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  sync_paths:
+  - scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T10:23:59'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T11:07:28'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  previous_status_before_manual_system_fix_requeue: failed
+  requeued_at: '2026-05-22T10:58:45'
+  requeue_reason: 'system fix: evaluator result serialization and Hermes command path
+    repaired; rerun same task'
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '429150'
+  review_pending_at: '2026-05-22T11:20:23'
+  review_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T11:22:02'
+- id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  family: exit_rule_duration_adaptive
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  sync_paths:
+  - scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T11:24:45'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T11:32:18'
+  remote_pid: '432790'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T11:50:59'
+  review_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T11:51:51'
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  family: exit_rule
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  sync_paths:
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T12:04:02'
+  source: project_owned_ideation
+  workflow_stage: digested
+  start_retry_count: 1
+  recovered_vm_retry_at: '2026-05-22T12:10:20'
+  started_at: '2026-05-22T12:18:48'
+  remote_pid: '437832'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T12:20:21'
+  review_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T12:21:30'
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  family: pnl_adaptive_position_sizing
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T13:07:40'
+  source: project_owned_ideation
+  workflow_stage: digested
+  start_retry_count: 0
+  recovered_vm_retry_at: '2026-05-22T14:40:41+08:00'
+  manual_unblock_note: user-authorized full unblock at 2026-05-22T14:40:41+08:00
+  data_quality_block_signature: 18bb76ab0505e51ac86a4c27a1dd7df21d4a070e34f694d80fbe7ea5d3b5b98e
+  data_quality_block_signature_recorded_at: '2026-05-22T14:26:28'
+  requeued_at: '2026-05-22T14:48:27'
+  requeue_reason: data-quality inputs changed; re-run data-quality gate automatically
+  previous_status_before_data_quality_recheck: blocked
+  previous_data_quality_block_signature: dda2d51dd4e6394e506d551df7db94ef6a46a37886bf85148eb444b4c9d30d9a
+  data_quality_recheck_attempts: 1
+  started_at: '2026-05-22T15:02:44'
+  remote_pid: '451201'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T15:20:40'
+  review_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T15:21:14'
 history:
 - id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
   spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
@@ -3434,6 +3759,525 @@ history:
   at: '2026-05-22T03:22:18'
   vm_id: null
   vm_host: null
+- id: volatility_position_scaling_v2_2026-05-21
+  spec_path: data/volatility_position_scaling_v2_2026-05-21/spec.yaml
+  status: running
+  message: started remote pid 395027 on guangzhou_spot
+  at: '2026-05-22T03:38:26'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: volatility_position_scaling_v2_2026-05-21
+  spec_path: data/volatility_position_scaling_v2_2026-05-21/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T03:50:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: volatility_position_scaling_v2_2026-05-21
+  spec_path: data/volatility_position_scaling_v2_2026-05-21/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T03:50:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: volatility_position_scaling_v2_2026-05-21
+  spec_path: data/volatility_position_scaling_v2_2026-05-21/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T03:51:07'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: market_drawdown_entry_gate_v1_20260521
+  spec_path: data/market_drawdown_entry_gate_v1_20260521/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T03:53:09'
+  vm_id: null
+  vm_host: null
+- id: market_drawdown_entry_gate_v1_20260521
+  spec_path: data/market_drawdown_entry_gate_v1_20260521/spec.yaml
+  status: running
+  message: started remote pid 399779 on guangzhou_spot
+  at: '2026-05-22T04:09:12'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: market_drawdown_entry_gate_v1_20260521
+  spec_path: data/market_drawdown_entry_gate_v1_20260521/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T04:10:16'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: market_drawdown_entry_gate_v1_20260521
+  spec_path: data/market_drawdown_entry_gate_v1_20260521/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T04:10:16'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: market_drawdown_entry_gate_v1_20260521
+  spec_path: data/market_drawdown_entry_gate_v1_20260521/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T04:10:47'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T04:34:38'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: blocked
+  message: "data_quality_blocked: status_code: 3\nconfidence_code: 1\nblocking_issues:\n\
+    - executor_input_column_hints.df 要求的 stk_code 和 stock_vol 在 daily_value_gap_amounts.parquet\n\
+    \  中不存在\n- executor_input_column_hints.df_vol 和 df_vol_renamed 要求的 stk_code、stock_vol\
+    \ 也不存在\n- stk_daily_qfq.parquet 无 stock_vol 列，且无法通过简单派生或映射从现有数据生成 stk_code 和 stock_vol\n\
+    warnings:\n- 训练期从 2019-01-01 开始，daily_value_gap_amounts 最早日期为 2019-01-02，可能缺少一个非交易日，影响轻微\n\
+    - daily_value_gap_amounts 存在 ts_code 列，与 stk_code 相似但未验证是否可映射\nfix_plan: []\n\
+    decision_reason: 缺失必需的 stk_code 和 stock_vol 输入字段，且无法通过现有数据修复，导致 executor 无法运行。\n\
+    schema_version: 1\nstatus: fail\nconfidence: high\ndecision_source: ai_data_quality_judge\n\
+    ai_provider: deepseek\nresponse_hash: 2d0e08e04392cbcc\n\n"
+  at: '2026-05-22T04:42:37'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: queued
+  message: executor data mapping and generated-column data-quality summary fixed;
+    re-run data-quality gate
+  at: '2026-05-22T04:46:52'
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: running
+  message: started remote pid 406716 on guangzhou_spot
+  at: '2026-05-22T04:54:22'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: failed
+  message: remote process exited but required artifacts are missing
+  at: '2026-05-22T05:00:18'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_low-freq-concentrated_2026-05-18
+  spec_path: data/cb_arb_value_gap_switch_low-freq-concentrated_2026-05-18/spec.yaml
+  status: queued
+  message: pipeline infra changed or post-run gate failed; rerun same task automatically
+  at: '2026-05-22T05:12:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_dynamic_exit_gap_decay
+  spec_path: data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/spec.yaml
+  status: queued
+  message: pipeline infra changed or post-run gate failed; rerun same task automatically
+  at: '2026-05-22T05:12:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: 20260519-proposal-001
+  spec_path: data/20260519-proposal-001/spec.yaml
+  status: queued
+  message: pipeline infra changed or post-run gate failed; rerun same task automatically
+  at: '2026-05-22T05:12:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: iv_regime_exit_2026-05-21
+  spec_path: data/iv_regime_exit_2026-05-21/spec.yaml
+  status: queued
+  message: pipeline infra changed or post-run gate failed; rerun same task automatically
+  at: '2026-05-22T05:12:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: queued
+  message: pipeline infra changed or post-run gate failed; rerun same task automatically
+  at: '2026-05-22T05:12:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: pipeline_requeue_scope_fix
+  status: corrected
+  message: restored historical failed items; kept current post-run failure queued
+  at: '2026-05-22T05:14:16'
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: running
+  message: started remote pid 410766 on guangzhou_spot
+  at: '2026-05-22T05:22:59'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+  status: failed
+  message: remote process exited but required artifacts are missing
+  at: '2026-05-22T05:30:17'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_iv_percentile_exit_v1_20260521
+  spec_path: data/cb_arb_iv_percentile_exit_v1_20260521/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T05:39:49'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_iv_percentile_exit_v1_20260521
+  spec_path: data/cb_arb_iv_percentile_exit_v1_20260521/spec.yaml
+  status: running
+  message: started remote pid 414420 on guangzhou_spot
+  at: '2026-05-22T05:46:55'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_iv_percentile_exit_v1_20260521
+  spec_path: data/cb_arb_iv_percentile_exit_v1_20260521/spec.yaml
+  status: failed
+  message: remote process exited but required artifacts are missing
+  at: '2026-05-22T05:50:20'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: dynamic_regime_switch_001
+  spec_path: data/dynamic_regime_switch_001/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T06:15:58'
+  vm_id: null
+  vm_host: null
+- id: dynamic_regime_switch_001
+  spec_path: data/dynamic_regime_switch_001/spec.yaml
+  status: failed
+  message: 'FileNotFoundError: sync path missing: scripts/evaluate_cb_arb_dynamic_regime_switch.py'
+  at: '2026-05-22T06:20:58'
+  vm_id: null
+  vm_host: null
+- id: iv_percentile_exit_001
+  spec_path: data/iv_percentile_exit_001/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T07:23:15'
+  vm_id: null
+  vm_host: null
+- id: iv_percentile_exit_001
+  spec_path: data/iv_percentile_exit_001/spec.yaml
+  status: running
+  message: started remote pid 421356 on guangzhou_spot
+  at: '2026-05-22T07:30:46'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: iv_percentile_exit_001
+  spec_path: data/iv_percentile_exit_001/spec.yaml
+  status: failed
+  message: remote process exited but required artifacts are missing
+  at: '2026-05-22T07:40:22'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T10:23:59'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: running
+  message: started remote pid 425519 on guangzhou_spot
+  at: '2026-05-22T10:32:02'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-22T10:50:19'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: queued
+  message: 'system fix: evaluator result serialization and Hermes command path repaired;
+    rerun same task'
+  at: '2026-05-22T10:58:45'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: running
+  message: started remote pid 429150 on guangzhou_spot
+  at: '2026-05-22T11:07:28'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T11:20:23'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T11:20:23'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T11:22:02'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T11:24:46'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/spec.yaml
+  status: running
+  message: started remote pid 432790 on guangzhou_spot
+  at: '2026-05-22T11:32:18'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T11:50:59'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T11:50:59'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T11:51:51'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T12:04:02'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  status: queued
+  message: transient VM start error on guangzhou_spot; requeued
+  at: '2026-05-22T12:07:36'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''guangzhou_spot'']'
+  at: '2026-05-22T12:10:20'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  status: running
+  message: started remote pid 437832 on guangzhou_spot
+  at: '2026-05-22T12:18:48'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T12:20:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T12:20:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T12:21:30'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T13:07:40'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: transient VM start error on guangzhou_spot; requeued
+  at: '2026-05-22T13:13:49'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''guangzhou_spot'']'
+  at: '2026-05-22T13:20:21'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: transient VM start error on guangzhou_spot; requeued
+  at: '2026-05-22T13:20:26'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-22T13:30:18'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''guangzhou_spot'', ''singapore_sig'']'
+  at: '2026-05-22T13:40:19'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: transient VM start error on guangzhou_spot; requeued
+  at: '2026-05-22T13:40:51'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''guangzhou_spot'']'
+  at: '2026-05-22T13:50:14'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: transient VM start error on guangzhou_spot; requeued
+  at: '2026-05-22T13:50:53'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''guangzhou_spot'']'
+  at: '2026-05-22T14:10:13'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: transient VM start error on guangzhou_spot; requeued
+  at: '2026-05-22T14:10:15'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: blocked
+  message: 'data_quality_blocked: status_code: 3
+
+    confidence_code: 1
+
+    blocking_issues:
+
+    - executor_requirements 为空，执行器 scripts/evaluate_cb_arb_option_pnl_feedback.py
+    未声明数据需求，无法确定本轮实验需要哪些数据文件、哪些字段、哪些质量约束
+
+    - data_files 为空列表，没有任何输入数据文件可供检查
+
+    warnings: []
+
+    fix_plan: []
+
+    decision_reason: 执行器未声明 executor_requirements 且数据文件清单为空，无法执行任何质量检查，必须阻断
+
+    schema_version: 1
+
+    status: fail
+
+    confidence: high
+
+    decision_source: ai_data_quality_judge
+
+    ai_provider: hermes
+
+    response_hash: c4cad37703ded53d
+
+
+    '
+  at: '2026-05-22T14:26:28'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_133452
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_133452/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-22T14:46:02'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_133452
+  spec_path: data/cb_arb_value_gap_switch_option-pnl-feedback_2026-05-18_133452/spec.yaml
+  status: blocked
+  message: family option_source_pnl_feedback is forbidden
+  at: '2026-05-22T14:46:20'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: queued
+  message: data-quality inputs changed; re-run data-quality gate automatically
+  at: '2026-05-22T14:48:27'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: running
+  message: started remote pid 451201 on guangzhou_spot
+  at: '2026-05-22T15:02:44'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T15:20:40'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T15:20:40'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T15:21:14'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
 vm_hosts:
 - id: guangzhou_spot
   host: ubuntu@106.55.255.129

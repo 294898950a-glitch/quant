@@ -1,0 +1,51 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: true
+    selected_name: best_candidate
+  artifacts_hash: a19d1b37aa9cab29
+interpretation:
+  review_status_code: 1
+  result_summary: Adaptive time-decaying gap exit threshold adopted with all hard
+    floors passed.
+  main_reason: Best candidate PnL exceeds baseline across train, test, and 2020 validation
+    windows.
+  failure_causes: []
+  next_research_directions:
+  - direction: Explore gap-closure-speed-adaptive exit thresholds
+    why: All candidates still produce negative absolute test PnL despite positive
+      excess returns; conditioning exit tightness on gap closure velocity may further
+      improve absolute returns.
+    priority_code: 2
+    priority: medium
+  evidence_gaps: []
+  review_status: accept
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: c95dcf2d3d1f8496
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: true
+    selected_name: best_candidate

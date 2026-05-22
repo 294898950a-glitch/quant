@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/spec.yaml
+validated_at: '2026-05-22T15:02:22'
+summary_sha256: ce04f9b553595c17bd11a3d4ca85bd24d421e4bddf00dd159d644844b6f567fe
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 全部 5 个必需文件存在且可读，必需字段齐全，训练期和测试期均被行情数据覆盖，无要求非空字段，无 executor_input_column_hints
+  冲突。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 5a9b8b50499e15e0

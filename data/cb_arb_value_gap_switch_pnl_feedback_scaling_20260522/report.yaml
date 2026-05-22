@@ -1,0 +1,38 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+date: '2026-05-18'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+status: COMPLETE
+three_exits_section:
+  train_exit: Train winner selected baseline_no_feedback.
+  validation_exit: Sealed test winner selected feedback_60d_min2_scale_0p5.
+  decision_exit: No rolling option-source PnL feedback variant beat baseline across
+    train, 2020, and test together.
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- rolling_option_source_pnl_feedback
+learnings:
+- Rolling realized PnL feedback is path-dependent and must be judged on train, 2020,
+  and sealed test together.
+- No rolling option-source PnL feedback variant beat baseline across train, 2020,
+  and test together.
+follow_up_actions:
+- Keep this run as evidence for future option-source false-undervaluation ideation.
+- Do not promote unless follow-up review confirms train/test/2020 robustness.
+summary: No rolling option-source PnL feedback variant beat baseline across train,
+  2020, and test together.
+notes: Result reviewed by code-generated summary.json, l4_ack.yaml, and diagnostic.yaml.
+references:
+- summary_option_pnl_feedback.csv
+- yearly_option_pnl_feedback.csv
+- entry_source_2020_option_pnl_feedback.csv
+- entry_source_test_option_pnl_feedback.csv
+- feedback_option_pnl_feedback.csv
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+related_reports:
+- data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/report.yaml
+- data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17/report.yaml

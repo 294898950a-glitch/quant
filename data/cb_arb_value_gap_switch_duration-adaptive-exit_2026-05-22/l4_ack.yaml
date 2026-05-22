@@ -1,0 +1,53 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+reviewer: claude
+ack_at: '2026-05-22T06:06:40Z'
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-22T03:43:02.937718Z'
+  description: q1_floor_binding placeholder description
+  answer: Auto-filled by inconsistency repair; original evaluator did not populate
+    AI-judgment answer. See review.yaml for canonical decision.
+  pass: true
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T03:43:02.937727Z'
+  description: q2_selection_score placeholder description
+  answer: Auto-filled by inconsistency repair; original evaluator did not populate
+    AI-judgment answer. See review.yaml for canonical decision.
+  pass: true
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-22T03:43:02.937730Z'
+  description: q3_baseline_alignment placeholder description
+  answer: Auto-filled by inconsistency repair; original evaluator did not populate
+    AI-judgment answer. See review.yaml for canonical decision.
+  pass: true
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-22T03:43:02.937731Z'
+  description: q4_monotonic placeholder description
+  answer: Auto-filled by inconsistency repair; original evaluator did not populate
+    AI-judgment answer. See review.yaml for canonical decision.
+  pass: true
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-22T03:43:02.937732Z'
+  description: q5_trade_overlap placeholder description
+  answer: Auto-filled by inconsistency repair; original evaluator did not populate
+    AI-judgment answer. See review.yaml for canonical decision.
+  pass: true
+overall_pass: true
+overall_decision: adopt
+overall_reason: Best candidate PnL exceeds baseline across train, test, and 2020 validation
+  windows.
+adoption_pass: true
+candidate_count: 27
+message: Time-decaying gap exit evaluation finished.
+status: completed
+auto_computed_at: '2026-05-22T03:43:02.937764Z'

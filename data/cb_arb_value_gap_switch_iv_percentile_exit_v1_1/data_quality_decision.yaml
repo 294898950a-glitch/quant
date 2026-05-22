@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+validated_at: '2026-05-22T12:18:19'
+summary_sha256: d0f33893d1b0d27bb36bf3dbb691d3d88d808c01c623e04d11945e6dd76ae7a8
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 三个必需文件全部存在可读，required_columns 全部命中，行情日期覆盖完整训练和测试区间，无 required_column_quality
+  约束，executor_generated_columns 均为运行时生成不要求原始输入存在，放行。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: daa3f7ccaa5a8530

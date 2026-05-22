@@ -32,6 +32,41 @@ from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
 from scripts.gatekeeper import GateKeeper  # noqa: E402
 
 
+def declare_data_requirements(command: list[str], spec: dict[str, Any]) -> dict[str, Any]:
+    base_ranks_path: str | None = None
+    if "--base-ranks-path" in command:
+        idx = command.index("--base-ranks-path")
+        if idx + 1 < len(command):
+            base_ranks_path = str(command[idx + 1])
+
+    required_files: list[dict[str, Any]] = [
+        {
+            "path": "data/cb_warehouse/cb_basic.parquet",
+            "required_columns": ["ts_code", "stk_code", "issue_size", "rating", "conv_price"],
+        },
+        {
+            "path": "data/cb_warehouse/cb_daily.parquet",
+            "required_columns": ["ts_code", "trade_date", "open", "high", "low", "close", "vol"],
+        },
+        {
+            "path": "data/cb_warehouse/cb_call.parquet",
+            "required_columns": ["ts_code", "ann_date", "call_date", "expire_date"],
+        },
+        {
+            "path": "data/cb_warehouse/stk_daily_qfq.parquet",
+            "required_columns": ["stk_code", "trade_date", "close"],
+        },
+    ]
+    if base_ranks_path:
+        required_files.append(
+            {
+                "path": base_ranks_path,
+                "note": "precomputed daily_value_gap_amounts ranks; consumed by _load_base_ranks",
+            }
+        )
+    return {"required_files": required_files}
+
+
 BASE_PARAMS: dict[str, Any] = {
     "min_gap_pct": 0.0,
     "sell_gap_pct": 0.0,

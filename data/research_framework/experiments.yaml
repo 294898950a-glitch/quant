@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-18T11:40:05.254365'
+updated_at: '2026-05-22T05:38:04Z'
 authority: machine
 purpose: Machine-readable experiment registry. AI reads this instead of Markdown experiment
   summaries.
@@ -547,6 +547,60 @@ experiments:
     remote_pid: '133784'
     launched_at: '2026-05-18T11:40:05.254340'
     completed_at: '2026-05-18T11:43:00'
+- id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  branch: auto
+  status: wip
+  summary: 'A time-decaying gap exit threshold — that starts lenient after a minimum
+    hold period and linearly tightens to zero over a maximum hold window — will outperform
+    both the baseline (no time constraint) and the simple duration-exit (fixed time
+    limit) by distinguishing between positions where the gap is '
+  key_metrics:
+    adoption_pass: true
+    falsifier_flags: {}
+    falsifier_warnings:
+    - yearly_csv_missing_skip_train_falsifiers
+    selected_name: best_candidate
+    selected_params: {}
+  artifacts:
+  - data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  - data/research_framework/run_manifests/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22.yaml
+  affects_current_strategy: false
+  current_strategy_effect: auto-run record only; does not promote current strategy
+  automation:
+    decision: passed_mechanical_thresholds_not_promoted
+    compute:
+      estimated_compute_cost_yuan: 0.0
+      decision: backfill_record_only
+    updated_at: '2026-05-22T05:38:04Z'
+- id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  branch: auto
+  status: wip
+  summary: When a held CB's implied volatility is elevated (high percentile relative
+    to its own 252-day rolling history), the observed value gap is more likely driven
+    by volatility premium than genuine mispricing. Exiting positions when IV crosses
+    above a high percentile threshold (e.g., 90th) should improve r
+  key_metrics:
+    adoption_pass: true
+    falsifier_flags: {}
+    falsifier_warnings:
+    - yearly_csv_missing_skip_train_falsifiers
+    selected_name: best_candidate
+    selected_params: {}
+  artifacts:
+  - data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  - data/research_framework/run_manifests/cb_arb_value_gap_switch_iv_percentile_exit_v1_1.yaml
+  affects_current_strategy: false
+  current_strategy_effect: auto-run record only; does not promote current strategy
+  automation:
+    decision: passed_mechanical_thresholds_not_promoted
+    compute:
+      estimated_compute_cost_yuan: 0.0
+      decision: backfill_record_only
+    updated_at: '2026-05-22T05:38:04Z'
 research_insights:
 - id: cb_arb_2020_fundamental_dead_zone_20260517
   summary: '2020 is a fundamental dead zone for cb_arb: weakness was broad across

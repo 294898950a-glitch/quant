@@ -1,0 +1,66 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 19
+  artifacts_hash: 913dc21a212ad545
+interpretation:
+  review_status_code: 2
+  result_summary: No rolling option-source PnL feedback variant beat baseline across
+    train, 2020, and test together.
+  main_reason: All 19 candidates failed to outperform baseline on the combined train/2020/sealed-test
+    criteria required by the hard floors.
+  failure_causes:
+  - Rolling PnL feedback scaling did not improve cumulative excess over baseline on
+    cost-on basis
+  - No variant passed the three-way robustness check (train, 2020, sealed test)
+  - The hypothesis that shrinking exposure during losing streaks offsets cost drag
+    was not supported by the data
+  next_research_directions:
+  - direction: Abandon rolling PnL feedback as a sizing mechanism for this strategy
+    why: This run plus related option-position-sizing and option-value-haircut runs
+      collectively rule out PnL-feedback-based position overlay as a cost-reduction
+      path
+    priority_code: 1
+    priority: high
+  - direction: Explore non-PnL-driven sizing approaches targeting cost drag
+    why: The cumulative excess gap between cost-off (-0.03) and cost-on (-0.1047)
+      remains the core problem to solve, but feedback-based sizing is not the lever
+    priority_code: 2
+    priority: medium
+  - direction: Revisit entry-side valuation improvements instead of sizing overlays
+    why: If exit and sizing overlays both fail to close the cost drag gap, the remaining
+      lever is to improve entry signal quality to reduce the 26% win rate
+    priority_code: 2
+    priority: medium
+  evidence_gaps: []
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 9a0f762797db7613
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 19

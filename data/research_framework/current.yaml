@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-17T06:20:00+08:00'
+updated_at: '2026-05-22T13:30:00+08:00'
 trigger: user approved promoting absolute value-gap switch to current main strategy
 summary:
   deployable_strategies: 0
@@ -7,6 +7,22 @@ summary:
   current_main_baseline_row: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
   promotion_note: User approved replacing the relative-rank cb_arb main path with
     the absolute value-gap switch path. This is not a deployment approval.
+  latest_evidence_pointers:
+    accepted_2026_05_22:
+      run_id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+      review_status: accept
+      best_params:
+        min_hold_days: 5
+        initial_threshold_fraction: 0.7
+        decay_period_factor: 0.5
+        effective_max_hold_days: 45
+      note: Evidence for the research direction, not automatic promotion to current
+        strategy truth.
+    rejected_2026_05_22:
+      run_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+      review_status: reject
+      main_reason: Train-period excess return is negative; strategy remains deeply
+        unprofitable in absolute PnL.
   cost_realism_wall:
     applies_to:
     - cb_arb
@@ -104,32 +120,30 @@ no_reply_default:
   - do_not_promote_to_live
 recent_results_digest:
   path: data/research_framework/recent_results_digest.yaml
-  updated_at: '2026-05-21T18:40:24+00:00'
+  updated_at: '2026-05-22T07:21:14+00:00'
   latest:
-  - run_id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+  - run_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
     strategy_id: cb_arb_value_gap_switch
-    verdict: reject
-    one_line_summary: 'cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411:
-      review_status=complete; decision=reject; No position sizing variant beat baseline
-      across train, 2020 repair, and sealed test together.'
+    verdict: no_adoption_decision_unusable
+    one_line_summary: null
+    closed_direction_tags: []
+  - run_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+    strategy_id: cb_arb_value_gap_switch
+    verdict: null
+    one_line_summary: null
     closed_direction_tags: []
   - run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
     strategy_id: cb_arb_value_gap_switch
     verdict: reject
     one_line_summary: null
     closed_direction_tags: []
-  - run_id: cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
+  - run_id: volatility_scaling_001
     strategy_id: cb_arb_value_gap_switch
     verdict: null
     one_line_summary: null
     closed_direction_tags: []
-  - run_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+  - run_id: volatility_position_scaling_v2_2026-05-21
     strategy_id: cb_arb_value_gap_switch
-    verdict: no_adoption_decision_unusable
-    one_line_summary: null
-    closed_direction_tags: []
-  - run_id: cb_arb_value_gap_switch_dynamic_exit_2026-05-19
-    strategy_id: cb_arb_value_gap_switch
-    verdict: no_adoption_decision_unusable
+    verdict: null
     one_line_summary: null
     closed_direction_tags: []

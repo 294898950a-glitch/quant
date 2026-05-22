@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+spec_path: data/cb_arb_value_gap_switch_duration-exit_2026-05-22/spec.yaml
+validated_at: '2026-05-22T11:07:07'
+summary_sha256: adefb0b1c23326fd093abfae0146b658c4481dbde9a385ce98437ffb7b734463
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 唯一必需文件存在且可读，数据日期范围（2019-01-02 至 2026-05-08）完全覆盖训练期和测试期。执行器未声明 required_columns
+  或 required_column_quality，无字段级别约束需检查。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: ef5d5411c055588f

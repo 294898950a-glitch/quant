@@ -1,0 +1,159 @@
+proposal_id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+strategy_id: cb_arb_value_gap_switch
+family: new_exit_rule
+hypothesis: 'The baseline strategy''s low win rate (29.3% in 2020, 45.3% in train)
+  signals many positions are held too long waiting for a gap closure that never materializes.
+  A duration-adaptive exit rule that linearly tightens the exit gap threshold from
+  initial_threshold_fraction down to 0 over max_hold_days (subject to min_hold_days)
+  will force earlier exits on stale positions, improving win rate and reducing drawdown
+  without destroying the upside from genuine fast gap closures.
+
+  '
+source_insight: 'From the position-sizing review: the progressive_stocklike variant
+  improved 2020 win_rate from 0.2933 (baseline) to 0.3636 and max_drawdown from -0.179
+  to -0.135 by reducing exposure to positions far from bond floor. This suggests managing
+  exposure to stale or low-conviction positions is the key lever for 2020 robustness.
+  A time-based exit decay formalizes this on the exit side: instead of reducing position
+  size, force liquidation when the expected gap closure has not occurred within a
+  reasonable holding window.
+
+  '
+expected_improvement: 'Train win_rate improvement from 0.4533 to >= 0.50. 2020 max_drawdown
+  improvement from -0.179 to >= -0.15. Maintain test excess_return > 0 (baseline test
+  excess = 0.37976). The mechanism converts negative-carry stale positions into early
+  small-loss exits while preserving full upside on positions where the gap closes
+  quickly.
+
+  '
+capability_ids:
+- C007
+required_executor: exit_rule_duration_adaptive_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- data/cb_warehouse/cb_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - code
+  - conv_price
+  - delist_date
+  - list_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet:
+  - ts_code
+  - entry_date
+  - exit_date
+  - pnl
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  parameter_grid:
+    initial_threshold_fraction:
+    - 0.3
+    - 0.4
+    - 0.5
+    - 0.6
+    - 0.7
+    - 0.8
+    - 0.9
+    max_hold_days:
+    - 5
+    - 10
+    - 15
+    - 20
+    - 25
+    - 30
+    - 40
+    min_hold_days:
+    - 1
+    - 2
+    - 3
+    - 5
+    - 7
+    - 10
+  periods:
+    train:
+    - 2019-01-01
+    - 2024-12-31
+    repair_2020:
+    - 2020-01-01
+    - 2020-12-31
+    test:
+    - 2025-01-01
+    - 2026-05-08
+  selection_rule: 'best combined score = (train_excess_return * 0.5) + (2020_excess_return
+    * 0.3) + (2020_max_drawdown_z_score * 0.2)
+
+    '
+  baseline_comparison: mandatory, must run baseline alongside every grid point
+success_criteria:
+  criteria:
+  - train_win_rate >= 0.50
+  - 2020_max_drawdown >= -0.15
+  - test_excess_return > 0.0
+falsifiers:
+  train: &id001
+  - 'If train_win_rate < 0.50: duration-adaptive exit does not meaningfully improve
+    trade selection versus baseline holding until gap closure'
+  - 'If 2020_max_drawdown <= -0.179: the stale-position hypothesis is wrong; 2020
+    losses are not from holding positions too long'
+  - 'If test_excess_return < 0: the exit rule overfits to the train period and destroys
+    recent performance'
+  - 'If total_trades drops below 0.3x baseline: the exit rule is so aggressive it
+    starves the strategy of participation'
+  validate: *id001
+  test: *id001
+risk: 'Medium. The duration-adaptive exit could reduce total trade count and leave
+  money on the table if the original gap-closure signal was directionally correct
+  but slow. The 2025-2026 test period has been exceptionally strong for the baseline,
+  and any exit tightening risks destroying that alpha. The bet is that stale positions
+  held beyond ~20 days without gap closure are systematically negative-carry, and
+  the test period strength came from fast-closing gaps that survive a holding-period
+  cap intact.
+
+  '
+why_not_repeated_failure: 'Not a repeat. Prior exit runs (dynamic_exit_2026-05-19,
+  exit_dynamic_trail_20260519) were unusable due to engineering bugs (absurd return
+  numbers in the millions), not because the exit mechanism was invalidly conceived.
+  Profit-taking-exit (2026-05-19) was rejected but is a fundamentally different mechanism
+  (gap-contraction-based partial exits) versus duration-adaptive (time-based decaying
+  threshold forcing full exit). Position-sizing rejection targeted entry sizing logic,
+  not exit timing. The exit_rule_duration_adaptive_executor has not been run and targets
+  the specific failure mode (stale positions in drawdown markets) visible in the 2020
+  baseline evidence.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+- cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
+implementation_assumption: The exit_rule_duration_adaptive_executor modifies only
+  the exit logic. After min_hold_days, for each held position compute ratio = current_gap
+  / entry_gap. Exit if ratio exceeds a threshold that linearly decays from initial_threshold_fraction
+  (at day = min_hold_days) to 0 (at day = max_hold_days). Entry logic, ranking, sizing,
+  stop-loss, and all other baseline mechanics remain unchanged.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: a8d3a47f48f767a8
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: a8d3a47f48f767a8
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_duration-exit_2026-05-22/proposal.yaml

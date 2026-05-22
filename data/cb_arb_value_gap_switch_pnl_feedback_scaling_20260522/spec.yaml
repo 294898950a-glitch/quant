@@ -1,0 +1,261 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'A rolling realized PnL feedback scaler can reduce cost drag by shrinking
+  position sizes when recent strategy-level PnL is negative and restoring normal sizing
+  when PnL recovers. The underlying idea: with a ~26% win rate, the strategy suffers
+  long sequences of small losing trades. Reducing exposure during those streaks lowers
+  turnover, shrink cost, and preserves capital for the next winning cluster — without
+  touching entry eligibility, valuation, or exit logic.
+
+  '
+source_insight: 'Baseline cost-on cumulative excess is -0.1047 despite cost-off being
+  near breakeven (-0.03). The degradation is driven by frequent losing trades whose
+  costs compound. Exit-side improvements (duration-adaptive, IV percentile) help but
+  do not address the sizing side of the cost equation. Rolling PnL feedback is a lightweight
+  overlay that needs no regime classifier, no new data, and no valuation change.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - rolling_pnl_feedback
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C004
+mechanics:
+- rolling_pnl_feedback
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  criteria:
+  - cost_on_cumulative_excess_improvement_ge_2pp: true
+  - test_cumulative_excess_compound_gt_baseline: true
+  - yr2020_excess_not_worse_than_baseline: true
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: COMPLETE
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  strategy_id: cb_arb_value_gap_switch
+  family: pnl_adaptive_position_sizing
+  hypothesis: 'A rolling realized PnL feedback scaler can reduce cost drag by shrinking
+    position sizes when recent strategy-level PnL is negative and restoring normal
+    sizing when PnL recovers. The underlying idea: with a ~26% win rate, the strategy
+    suffers long sequences of small losing trades. Reducing exposure during those
+    streaks lowers turnover, shrink cost, and preserves capital for the next winning
+    cluster — without touching entry eligibility, valuation, or exit logic.
+
+    '
+  source_insight: 'Baseline cost-on cumulative excess is -0.1047 despite cost-off
+    being near breakeven (-0.03). The degradation is driven by frequent losing trades
+    whose costs compound. Exit-side improvements (duration-adaptive, IV percentile)
+    help but do not address the sizing side of the cost equation. Rolling PnL feedback
+    is a lightweight overlay that needs no regime classifier, no new data, and no
+    valuation change.
+
+    '
+  expected_improvement: 'Reduce cost-on cumulative excess degradation by 2-4 percentage
+    points relative to the medium-signal-cost-on baseline, primarily through lower
+    turnover and smaller position sizes during losing streaks.
+
+    '
+  capability_ids:
+  - C004
+  required_executor: option_source_pnl_feedback_scaler
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  required_data_fields:
+    data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+    - trade_date
+    - ts_code
+    - value_gap
+    - rank
+    - buy_amount
+    - signal
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - stk_code
+    - conv_price
+    - list_date
+    - delist_date
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - ts_code
+    - stk_code
+    - trade_date
+    - close
+  test_design:
+    description: 'Grid search over three parameters: (a) PnL lookback window in trading
+      days [10, 20, 40, 60], (b) minimum scaling floor [0.25, 0.50, 0.75], (c) whether
+      scaling is symmetric (boost above 1.0 when PnL positive) or asymmetric (cap
+      at 1.0, only shrink on negative). At each rebalance, compute strategy-level
+      rolling-N-day realized PnL (sum of closed-trade PnL over the window). If rolling
+      PnL < 0, multiply baseline position weight by max(floor, 1 + PnL/some_normalizer).
+      If symmetric mode and rolling PnL > 0, weight multiplier capped at 1.25. Evaluate
+      on the standard train / test / 2020-holdout split. Primary metric: cost-on cumulative
+      excess compound vs baseline.
+
+      '
+  success_criteria:
+    criteria:
+    - cost_on_cumulative_excess_improvement_ge_2pp: true
+    - test_cumulative_excess_compound_gt_baseline: true
+    - yr2020_excess_not_worse_than_baseline: true
+  falsifiers:
+    train:
+    - any_holdout_year_sharpe_lt_0_5
+    - cumulative_excess_compound_cross_year_still_lt_negative_0_08
+    - train_test_gap_gt_50pct_relative
+    validate:
+    - any_holdout_year_sharpe_lt_0_5
+    - cumulative_excess_compound_cross_year_still_lt_negative_0_08
+    - train_test_gap_gt_50pct_relative
+    test:
+    - any_holdout_year_sharpe_lt_0_5
+    - cumulative_excess_compound_cross_year_still_lt_negative_0_08
+    - train_test_gap_gt_50pct_relative
+  risk: 'Low. This is an additive overlay on the existing backtest. It changes only
+    position sizing, not entry eligibility, exit rules, or valuation. If it fails,
+    the baseline is untouched. Maximum downside is underperformance from over-shrinking
+    during temporary dips that would have recovered.
+
+    '
+  why_not_repeated_failure: 'This is not a volatility-based sizing attempt (volatility_scaling_001
+    and volatility_position_scaling_v2 both failed — those used ATR/sigma to scale,
+    which is a different mechanic). It is not an exit rule (C007 family heavily explored).
+    It is not a regime classifier or entry gate (both C009 and C010 approaches failed
+    or are in closed_tags). It is not a static position scaling re-run (C001 with
+    volatility executor). Rolling realized PnL feedback has zero prior runs in the
+    recent digest — this is genuinely untested territory for this strategy.
+
+    '
+  related_prior_runs:
+  - volatility_scaling_001
+  - volatility_position_scaling_v2_2026-05-21
+  implementation_assumption: The executor wraps the existing evaluate_cb_arb_value_gap_switch.py
+    pipeline. At each daily rebalance, before computing final buy amounts, it reads
+    the rolling past-N-day realized PnL from closed positions, computes a scaling
+    multiplier, and applies it to the baseline weight/buy_amount. No change to entry
+    signal, universe filter, exit rules, or valuation formula. The scaling multiplier
+    is parametrized and grid-searched.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: b0014ac8b1b69f3f
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: b0014ac8b1b69f3f
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/proposal.yaml
+  mechanics:
+  - rolling_pnl_feedback
+executor_id: option_source_pnl_feedback_scaler
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_option_pnl_feedback.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --fixed-source
+- '{fixed_source}'
+- --rule
+- '{rule}'
+- --output-dir
+- '{output_dir}'
+- --base-ranks-path
+- '{base_ranks_path}'
+- --reuse-ranks
+- --cost-model-enabled
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 90
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --fixed-source
+  - '2'
+  - --rule
+  - score_4state
+  - --output-dir
+  - data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+  - --base-ranks-path
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - --reuse-ranks
+  - --cost-model-enabled
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_pnl_feedback.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/proposal.yaml
+  response_hash: b0014ac8b1b69f3f
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data: []
+updated_at: '2026-05-22T07:16:43Z'

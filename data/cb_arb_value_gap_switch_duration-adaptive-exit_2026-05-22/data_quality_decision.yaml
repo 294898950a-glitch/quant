@@ -1,0 +1,16 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+spec_path: data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/spec.yaml
+validated_at: '2026-05-22T11:31:57'
+summary_sha256: 7228a0747e58be9282e0aa6d711d31ff91e70459703c78bf16fa6a133ed95f2b
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 单文件存在可读，488,639行覆盖train(20190102-20241231)与test(20250101-20260508)全区间，无required_column_quality约束，无阻断项。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 57dba987de23bbb6

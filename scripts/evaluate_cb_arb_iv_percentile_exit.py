@@ -44,6 +44,7 @@ _PREVIOUS_RUN_DATA = (
     "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/"
     "daily_value_gap_amounts.parquet"
 )
+_CB_BASIC_PATH = "data/cb_warehouse/cb_basic.parquet"
 _STK_DAILY_PATH = "data/cb_warehouse/stk_daily_qfq.parquet"
 _IV_PERCENTILE_THRESHOLDS = (80, 85, 90, 95)
 _MIN_HOLD_DAYS_SWEEP = (0, 1)
@@ -57,12 +58,24 @@ def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = 
             {
                 "path": _PREVIOUS_RUN_DATA,
                 "description": "Daily value-gap amounts from regime-option-entry-gate run.",
+                "required_columns": ["trade_date", "ts_code", "value_gap_amount"],
+            },
+            {
+                "path": _CB_BASIC_PATH,
+                "description": "CB-to-underlying-stock mapping used to join stock volatility.",
+                "required_columns": ["ts_code", "stk_code"],
             },
             {
                 "path": _STK_DAILY_PATH,
                 "description": "Forward-adjusted daily stock prices for volatility calculation.",
+                "required_columns": ["stk_code", "trade_date", "close"],
             },
-        ]
+        ],
+        "generated_columns": {
+            "stk_code": "Derived for value-gap rows by joining cb_basic.ts_code to cb_basic.stk_code.",
+            "stock_vol": "Computed inside the executor from stk_daily_qfq close returns.",
+            "vol_pctile": "Computed inside the executor from rolling stock_vol history.",
+        },
     }
 
 
@@ -89,6 +102,15 @@ def _load_gap_data(data_root: str) -> pd.DataFrame:
     df["trade_date"] = pd.to_datetime(df["trade_date"])
     df = df.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
     return df
+
+
+def _load_cb_basic(data_root: str) -> pd.DataFrame:
+    path = _resolve_path(_CB_BASIC_PATH, data_root)
+    df = pd.read_parquet(path)
+    missing = {"ts_code", "stk_code"} - set(df.columns)
+    if missing:
+        raise ValueError(f"cb_basic missing columns: {sorted(missing)}")
+    return df[["ts_code", "stk_code"]].dropna().drop_duplicates()
 
 
 def _load_and_compute_stock_vol(data_root: str) -> pd.DataFrame:
@@ -395,32 +417,6 @@ def _plain(value: Any) -> Any:
     return str(value)
 
 
-def _build_cb_to_stock_map(df_gap: pd.DataFrame, df_vol: pd.DataFrame) -> dict[str, str]:
-    """Build a mapping from CB ts_code → stock stk_code.
-
-    Strategy: for each CB ts_code appearing in gap data, find the
-    stock that best matches by looking at which stock codes share
-    the same numeric prefix. Also try direct matching via the
-    stk_daily data which often has both codes.
-    """
-    cb_codes = sorted(df_gap["ts_code"].unique())
-
-    # Use stk_daily (which may have ts_code + stk_code if from warehouse)
-    # Try reading stk_daily directly for ts_code→stk_code mapping
-    mapping: dict[str, str] = {}
-    for cb in cb_codes:
-        # Extract numeric prefix: '128037.SZ' → '128037'
-        parts = cb.split(".")
-        if len(parts) >= 2:
-            numeric = parts[0]
-            exchange = parts[1]
-            # Try common patterns
-            candidate = f"{numeric}.{exchange}"
-            mapping[cb] = candidate
-
-    return mapping
-
-
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True, help="Path to data root directory")
@@ -450,7 +446,17 @@ def main() -> int:
         print(f"[iv_percentile_exit] FATAL: {exc}", flush=True)
         return 1
 
-    # ── Load stock vol data ──
+    # ── Load CB-to-stock map and stock vol data ──
+    try:
+        df_basic = _load_cb_basic(args.data_root)
+    except Exception as exc:
+        diag = {"error": str(exc), "step": "load_cb_basic"}
+        (output_dir / "diagnostic.yaml").write_text(
+            yaml.safe_dump(_plain(diag), allow_unicode=True), encoding="utf-8"
+        )
+        print(f"[iv_percentile_exit] FATAL: {exc}", flush=True)
+        return 1
+
     try:
         df_vol = _load_and_compute_stock_vol(args.data_root)
     except Exception as exc:
@@ -462,36 +468,9 @@ def main() -> int:
         return 1
 
     # ── Merge vol into gap data and compute percentile ──
-    # The gap data has ts_code (CB code like 128037.SZ). The vol data has
-    # stk_code (stock code like 000610.SZ). We need to bridge them.
-    #
-    # Approach: extract numeric prefix from ts_code, search for matching
-    # stk_code in vol data. E.g. ts_code '128037.SZ' → try '128037.SZ'
-    # as stk_code (some datasets use same codes), then fall back to
-    # finding matching stocks.
-    cb_codes = sorted(df_raw["ts_code"].unique())
-    stock_codes = sorted(df_vol["stk_code"].unique())
-
-    # Build mapping: ts_code → stk_code
-    cb_to_stk: dict[str, str] = {}
-    for cb in cb_codes:
-        # Direct match: try ts_code as stk_code
-        if cb in stock_codes:
-            cb_to_stk[cb] = cb
-            continue
-        # Try prefix match: '128037.SZ' → find stock starting with '128037'
-        parts = cb.split(".")
-        if len(parts) >= 2:
-            prefix = parts[0]
-            matches = [s for s in stock_codes if s.startswith(prefix)]
-            if len(matches) == 1:
-                cb_to_stk[cb] = matches[0]
-            elif len(matches) > 1:
-                cb_to_stk[cb] = matches[0]  # ambiguous, pick first
-
-    # Apply mapping
+    cb_to_stk = dict(zip(df_basic["ts_code"].astype(str), df_basic["stk_code"].astype(str)))
     df_enriched = df_raw.copy()
-    df_enriched["stk_code"] = df_enriched["ts_code"].map(cb_to_stk)
+    df_enriched["stk_code"] = df_enriched["ts_code"].astype(str).map(cb_to_stk)
 
     # Merge stock vol
     df_vol_lean = df_vol[["stk_code", "trade_date", "stock_vol"]].copy()
@@ -644,8 +623,12 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    # ── report.yaml ──
-    report = {
+    # ── report.yaml (framework HDRF schema) ──
+    from datetime import datetime as _dt, timezone as _tz
+    _now = _dt.now(_tz.utc).isoformat(timespec="seconds")
+    _today = _now.split("T", 1)[0]
+    l6_decision = "adopt" if adoption_pass else "reject"
+    evaluator_report = {
         "proposal_id": "cb_arb_value_gap_switch_iv-regime-exit_2026-05-21",
         "strategy_id": "cb_arb_value_gap_switch",
         "executor": "iv_percentile_exit",
@@ -662,8 +645,38 @@ def main() -> int:
             "test_pnl": baseline_test["total_pnl"],
         },
     }
+    report = {
+        "schema_version": 1,
+        "run_id": output_dir.name,
+        "date": _today,
+        "strategy_id": "cb_arb_value_gap_switch",
+        "l6_exit_decision": l6_decision,
+        "three_exits_section": {
+            "adoption_pass": adoption_pass,
+            "best_iv_percentile_threshold": evaluator_report["best_iv_percentile_threshold"],
+            "best_min_hold_days": evaluator_report["best_min_hold_days"],
+            "evaluator": "iv_percentile_exit",
+        },
+        "compute_cost_yuan": 0.0,
+        "confirmed_invalid_directions": (
+            [f"variants below {output_dir.name} best by adoption criteria — evidence only, not promoted"]
+            if adoption_pass
+            else [f"{output_dir.name}: rejected by mechanical thresholds; review.yaml must finalize."]
+        ),
+        "learnings": [
+            "IV percentile exit grid evaluated end-to-end.",
+        ],
+        "follow_up_actions": (
+            ["evidence-only record; do not promote without user approval"]
+            if adoption_pass
+            else ["review reject reason; do not revive without new mechanism"]
+        ),
+        "status": "COMPLETE",
+        "generated_at": _now,
+        "evaluator_report": evaluator_report,
+    }
     (output_dir / "report.yaml").write_text(
-        yaml.safe_dump(_plain(report), allow_unicode=True), encoding="utf-8"
+        yaml.safe_dump(_plain(report), allow_unicode=True, sort_keys=False), encoding="utf-8"
     )
 
     # ── l4_ack.yaml ──

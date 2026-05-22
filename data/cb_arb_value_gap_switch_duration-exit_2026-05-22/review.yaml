@@ -1,0 +1,81 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: true
+    selected_name: best_candidate
+  artifacts_hash: 6044130ff9907353
+interpretation:
+  review_status_code: 4
+  result_summary: adoption_pass is true but the selected best_candidate (decay_period_factor=0.5,
+    initial_threshold_fraction=0.7) has train_win_rate=0.4227 which violates hard
+    floor train_win_rate>=0.50; 2020_max_drawdown cannot be verified because it is
+    reported as absolute PnL without a capital base to convert to the -0.15 percentage
+    threshold.
+  main_reason: contradiction between adoption_pass=true and hard floor
+  failure_causes:
+  - train_win_rate of best_candidate (0.4227) falls well below hard floor 0.50
+  - max_drawdown reported as absolute PnL rather than percentage, making hard floor
+    2020_max_drawdown>=-0.15 unverifiable
+  - no candidate simultaneously satisfies all three hard floors; high initial_threshold_fraction=1.0
+    candidates reach train_win_rate>0.50 but destroy test PnL
+  next_research_directions:
+  - direction: hard floor recalibration
+    why: the 0.50 train_win_rate floor appears unachievable without collapsing test
+      profitability; the strategy may need a different success metric or a composite
+      score that balances win_rate against total PnL
+    priority_code: 1
+    priority: high
+  - direction: decay mechanism refinement
+    why: initial_threshold_fraction=0.7 improved 2020 win_rate from 0.2933 to 0.4675
+      and test excess_return to 229M, showing the decay idea works directionally;
+      tightening the decay curve shape or adding a per-bond convexity adjustment might
+      bridge the gap to 0.50 train_win_rate without the cost of full-threshold (1.0)
+      decay
+    priority_code: 1
+    priority: high
+  - direction: investigate train vs 2020 divergence
+    why: train win_rate (0.4227) is notably worse than 2020 win_rate (0.4675) for
+      the best candidate, and the opposite pattern holds for high-threshold candidates;
+      understanding whether this is structural (different market regimes in train
+      period) or parameter-driven could unlock a regime-conditional decay rule
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - max_drawdown values are absolute PnL figures; the capital base or portfolio NAV
+    curve is needed to compute percentage drawdowns for hard floor verification
+  - no explanation recorded for why adoption_pass was set to true despite the hard
+    floor violation on train_win_rate
+  - the hypothesis targeted win_rate improvement without destroying upside, but the
+    tradeoff surface (win_rate vs total_pnl across all 27 grid combos) is not summarized
+    to confirm that the best_candidate sits at a genuine Pareto frontier rather than
+    an arbitrary grid point
+  review_status: needs_manual_review
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: c9fd542a120bea5a
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: true
+    selected_name: best_candidate

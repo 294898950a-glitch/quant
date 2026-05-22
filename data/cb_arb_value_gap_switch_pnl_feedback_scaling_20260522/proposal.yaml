@@ -1,0 +1,108 @@
+proposal_id: cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+strategy_id: cb_arb_value_gap_switch
+family: pnl_adaptive_position_sizing
+hypothesis: 'A rolling realized PnL feedback scaler can reduce cost drag by shrinking
+  position sizes when recent strategy-level PnL is negative and restoring normal sizing
+  when PnL recovers. The underlying idea: with a ~26% win rate, the strategy suffers
+  long sequences of small losing trades. Reducing exposure during those streaks lowers
+  turnover, shrink cost, and preserves capital for the next winning cluster — without
+  touching entry eligibility, valuation, or exit logic.
+
+  '
+source_insight: 'Baseline cost-on cumulative excess is -0.1047 despite cost-off being
+  near breakeven (-0.03). The degradation is driven by frequent losing trades whose
+  costs compound. Exit-side improvements (duration-adaptive, IV percentile) help but
+  do not address the sizing side of the cost equation. Rolling PnL feedback is a lightweight
+  overlay that needs no regime classifier, no new data, and no valuation change.
+
+  '
+expected_improvement: 'Reduce cost-on cumulative excess degradation by 2-4 percentage
+  points relative to the medium-signal-cost-on baseline, primarily through lower turnover
+  and smaller position sizes during losing streaks.
+
+  '
+capability_ids:
+- C004
+required_executor: option_source_pnl_feedback_scaler
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap
+  - rank
+  - buy_amount
+  - signal
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - stk_code
+  - conv_price
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+test_design:
+  description: 'Grid search over three parameters: (a) PnL lookback window in trading
+    days [10, 20, 40, 60], (b) minimum scaling floor [0.25, 0.50, 0.75], (c) whether
+    scaling is symmetric (boost above 1.0 when PnL positive) or asymmetric (cap at
+    1.0, only shrink on negative). At each rebalance, compute strategy-level rolling-N-day
+    realized PnL (sum of closed-trade PnL over the window). If rolling PnL < 0, multiply
+    baseline position weight by max(floor, 1 + PnL/some_normalizer). If symmetric
+    mode and rolling PnL > 0, weight multiplier capped at 1.25. Evaluate on the standard
+    train / test / 2020-holdout split. Primary metric: cost-on cumulative excess compound
+    vs baseline.
+
+    '
+success_criteria:
+  criteria:
+  - cost_on_cumulative_excess_improvement_ge_2pp: true
+  - test_cumulative_excess_compound_gt_baseline: true
+  - yr2020_excess_not_worse_than_baseline: true
+falsifiers:
+  train: &id001
+  - any_holdout_year_sharpe_lt_0_5
+  - cumulative_excess_compound_cross_year_still_lt_negative_0_08
+  - train_test_gap_gt_50pct_relative
+  validate: *id001
+  test: *id001
+risk: 'Low. This is an additive overlay on the existing backtest. It changes only
+  position sizing, not entry eligibility, exit rules, or valuation. If it fails, the
+  baseline is untouched. Maximum downside is underperformance from over-shrinking
+  during temporary dips that would have recovered.
+
+  '
+why_not_repeated_failure: 'This is not a volatility-based sizing attempt (volatility_scaling_001
+  and volatility_position_scaling_v2 both failed — those used ATR/sigma to scale,
+  which is a different mechanic). It is not an exit rule (C007 family heavily explored).
+  It is not a regime classifier or entry gate (both C009 and C010 approaches failed
+  or are in closed_tags). It is not a static position scaling re-run (C001 with volatility
+  executor). Rolling realized PnL feedback has zero prior runs in the recent digest
+  — this is genuinely untested territory for this strategy.
+
+  '
+related_prior_runs:
+- volatility_scaling_001
+- volatility_position_scaling_v2_2026-05-21
+implementation_assumption: The executor wraps the existing evaluate_cb_arb_value_gap_switch.py
+  pipeline. At each daily rebalance, before computing final buy amounts, it reads
+  the rolling past-N-day realized PnL from closed positions, computes a scaling multiplier,
+  and applies it to the baseline weight/buy_amount. No change to entry signal, universe
+  filter, exit rules, or valuation formula. The scaling multiplier is parametrized
+  and grid-searched.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: b0014ac8b1b69f3f
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: b0014ac8b1b69f3f
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/proposal.yaml

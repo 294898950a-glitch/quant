@@ -1,0 +1,245 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  adoption_pass: false
+  l6_decision_from_review: reject
+  selected_params_summary: 'note: no best_params in evaluator report'
+  evaluator: iv_percentile_exit
+  review_reason: Train-period excess return is negative, violating the hard floor
+    requiring cumulative excess improvement over the full backtest.
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- 'cb_arb_value_gap_switch_iv_percentile_exit_v1_1: rejected — Train-period excess
+  return is negative, violating the hard floor requiring cumulative excess improvement
+  over the full backtest.'
+learnings:
+- Evaluator iv_percentile_exit ran end-to-end; framework report schema added by inconsistency
+  repair 2026-05-22.
+- 'Review-memory decision: reject.'
+follow_up_actions:
+- Reject confirmed; do not revive iv_percentile_exit variants without genuinely new
+  mechanism.
+status: COMPLETE
+generated_by: claude_inconsistency_repair
+generated_at: '2026-05-22T06:05:48+00:00'
+evaluator_report:
+  adoption_pass: true
+  baseline:
+    test_pnl: -259842942.3
+    train_pnl: -872139688.64
+  best_iv_percentile_threshold: 95
+  best_min_hold_days: 0
+  candidates:
+  - iv_percentile_threshold: 80
+    min_hold_days: 0
+    test:
+      avg_loss: -219518.15
+      avg_win: 166439.83
+      excess_return: 34655914.47
+      max_drawdown: -226411679.79000008
+      total_pnl: -225187027.83
+      trade_count: 2617
+      win_rate: 0.3458
+    train:
+      avg_loss: -172417.51
+      avg_win: 149338.51
+      excess_return: -41604261.4
+      max_drawdown: -939137252.869998
+      total_pnl: -913743950.04
+      trade_count: 23655
+      win_rate: 0.4158
+    validate_2020:
+      avg_loss: -331522.95
+      avg_win: 219246.35
+      excess_return: 22170953.2
+      max_drawdown: -303779631.7800001
+      total_pnl: -290447707.41
+      trade_count: 2672
+      win_rate: 0.4046
+  - iv_percentile_threshold: 80
+    min_hold_days: 1
+    test:
+      avg_loss: -219518.15
+      avg_win: 166439.83
+      excess_return: 34655914.47
+      max_drawdown: -226411679.79000008
+      total_pnl: -225187027.83
+      trade_count: 2617
+      win_rate: 0.3458
+    train:
+      avg_loss: -172417.51
+      avg_win: 149338.51
+      excess_return: -41604261.4
+      max_drawdown: -939137252.869998
+      total_pnl: -913743950.04
+      trade_count: 23655
+      win_rate: 0.4158
+    validate_2020:
+      avg_loss: -331522.95
+      avg_win: 219246.35
+      excess_return: 22170953.2
+      max_drawdown: -303779631.7800001
+      total_pnl: -290447707.41
+      trade_count: 2672
+      win_rate: 0.4046
+  - iv_percentile_threshold: 85
+    min_hold_days: 0
+    test:
+      avg_loss: -250585.41
+      avg_win: 177871.57
+      excess_return: 21189889.89
+      max_drawdown: -240708931.54000014
+      total_pnl: -238653052.41
+      trade_count: 2139
+      win_rate: 0.3245
+    train:
+      avg_loss: -183095.08
+      avg_win: 163225.8
+      excess_return: 24990634.61
+      max_drawdown: -890299085.0000044
+      total_pnl: -847149054.03
+      trade_count: 19753
+      win_rate: 0.4048
+    validate_2020:
+      avg_loss: -356568.94
+      avg_win: 243701.21
+      excess_return: 17246186.02
+      max_drawdown: -307346529.04000014
+      total_pnl: -295372474.59
+      trade_count: 2261
+      win_rate: 0.3764
+  - iv_percentile_threshold: 85
+    min_hold_days: 1
+    test:
+      avg_loss: -250585.41
+      avg_win: 177871.57
+      excess_return: 21189889.89
+      max_drawdown: -240708931.54000014
+      total_pnl: -238653052.41
+      trade_count: 2139
+      win_rate: 0.3245
+    train:
+      avg_loss: -183095.08
+      avg_win: 163225.8
+      excess_return: 24990634.61
+      max_drawdown: -890299085.0000044
+      total_pnl: -847149054.03
+      trade_count: 19753
+      win_rate: 0.4048
+    validate_2020:
+      avg_loss: -356568.94
+      avg_win: 243701.21
+      excess_return: 17246186.02
+      max_drawdown: -307346529.04000014
+      total_pnl: -295372474.59
+      trade_count: 2261
+      win_rate: 0.3764
+  - iv_percentile_threshold: 90
+    min_hold_days: 0
+    test:
+      avg_loss: -273300.02
+      avg_win: 193700.31
+      excess_return: 22903571.38
+      max_drawdown: -240357428.75000015
+      total_pnl: -236939370.92
+      trade_count: 1735
+      win_rate: 0.2928
+    train:
+      avg_loss: -198085.35
+      avg_win: 177641.94
+      excess_return: 44807099.81
+      max_drawdown: -871486844.6500012
+      total_pnl: -827332588.83
+      trade_count: 15804
+      win_rate: 0.3879
+    validate_2020:
+      avg_loss: -393017.86
+      avg_win: 249294.51
+      excess_return: 9845921.0
+      max_drawdown: -308457720.1700003
+      total_pnl: -302772739.61
+      trade_count: 1867
+      win_rate: 0.3594
+  - iv_percentile_threshold: 90
+    min_hold_days: 1
+    test:
+      avg_loss: -273300.02
+      avg_win: 193700.31
+      excess_return: 22903571.38
+      max_drawdown: -240357428.75000015
+      total_pnl: -236939370.92
+      trade_count: 1735
+      win_rate: 0.2928
+    train:
+      avg_loss: -198085.35
+      avg_win: 177641.94
+      excess_return: 44807099.81
+      max_drawdown: -871486844.6500012
+      total_pnl: -827332588.83
+      trade_count: 15804
+      win_rate: 0.3879
+    validate_2020:
+      avg_loss: -393017.86
+      avg_win: 249294.51
+      excess_return: 9845921.0
+      max_drawdown: -308457720.1700003
+      total_pnl: -302772739.61
+      trade_count: 1867
+      win_rate: 0.3594
+  - iv_percentile_threshold: 95
+    min_hold_days: 0
+    test:
+      avg_loss: -298368.53
+      avg_win: 236315.92
+      excess_return: 26888920.59
+      max_drawdown: -236716454.7400003
+      total_pnl: -232954021.71
+      trade_count: 1356
+      win_rate: 0.2367
+    train:
+      avg_loss: -224051.43
+      avg_win: 194040.11
+      excess_return: -22029635.08
+      max_drawdown: -894653279.5999981
+      total_pnl: -894169323.72
+      trade_count: 11610
+      win_rate: 0.3517
+    validate_2020:
+      avg_loss: -427730.14
+      avg_win: 289001.03
+      excess_return: 23597471.59
+      max_drawdown: -293821562.26000035
+      total_pnl: -289021189.02
+      trade_count: 1475
+      win_rate: 0.3234
+  - iv_percentile_threshold: 95
+    min_hold_days: 1
+    test:
+      avg_loss: -298368.53
+      avg_win: 236315.92
+      excess_return: 26888920.59
+      max_drawdown: -236716454.7400003
+      total_pnl: -232954021.71
+      trade_count: 1356
+      win_rate: 0.2367
+    train:
+      avg_loss: -224051.43
+      avg_win: 194040.11
+      excess_return: -22029635.08
+      max_drawdown: -894653279.5999981
+      total_pnl: -894169323.72
+      trade_count: 11610
+      win_rate: 0.3517
+    validate_2020:
+      avg_loss: -427730.14
+      avg_win: 289001.03
+      excess_return: 23597471.59
+      max_drawdown: -293821562.26000035
+      total_pnl: -289021189.02
+      trade_count: 1475
+      win_rate: 0.3234
+  executor: iv_percentile_exit
+  proposal_id: cb_arb_value_gap_switch_iv-regime-exit_2026-05-21

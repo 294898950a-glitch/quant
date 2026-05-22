@@ -1,0 +1,23 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+diagnostic_date: '2026-05-22'
+diagnostic_by: claude
+verdict_referenced: reject
+summary: Auto-filled diagnostic by inconsistency repair 2026-05-22. Run cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  review verdict=reject. Original evaluator did not produce framework-schema diagnostic.yaml.
+verdict_rationale: Train-period excess return is negative, violating the hard floor
+  requiring cumulative excess improvement over the full backtest.
+cb_to_stk_mapping_count: 1012
+data_rows:
+  test: 95787
+  train: 392852
+  validate_2020: 49117
+errors: []
+test_exit_reasons:
+  force_close: 21
+  gap_closed: 725
+  iv_spike: 610
+vol_coverage:
+  test_missing: 0
+  train_missing: 0
+warnings: []

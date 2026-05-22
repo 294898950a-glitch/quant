@@ -348,13 +348,13 @@ def _plain(value: Any) -> Any:
         return {str(key): _plain(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
         return [_plain(item) for item in value]
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
     if hasattr(value, "item"):
         try:
             return _plain(value.item())
         except (TypeError, ValueError):
             pass
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
     return str(value)
 
 
@@ -536,8 +536,12 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    # Write report.yaml
-    report = {
+    # Write report.yaml (framework HDRF schema; evaluator-specific fields kept under evaluator_report)
+    from datetime import datetime as _dt, timezone as _tz
+    _now = _dt.now(_tz.utc).isoformat(timespec="seconds")
+    _today = _now.split("T", 1)[0]
+    l6_decision = "adopt" if adoption_pass else "reject"
+    evaluator_report = {
         "proposal_id": "20260519-proposal-001",
         "strategy_id": "cb_arb_value_gap_switch",
         "executor": "exit_rule_duration_adaptive",
@@ -555,8 +559,37 @@ def main() -> int:
             "y2020_pnl": baseline_2020["total_pnl"],
         },
     }
+    report = {
+        "schema_version": 1,
+        "run_id": output_dir.name,
+        "date": _today,
+        "strategy_id": "cb_arb_value_gap_switch",
+        "l6_exit_decision": l6_decision,
+        "three_exits_section": {
+            "adoption_pass": adoption_pass,
+            "selected_params_summary": evaluator_report["best_params"],
+            "evaluator": "exit_rule_duration_adaptive",
+        },
+        "compute_cost_yuan": 0.0,
+        "confirmed_invalid_directions": (
+            [f"variants below {output_dir.name} best by adoption criteria — evidence only, not promoted"]
+            if adoption_pass
+            else [f"{output_dir.name}: rejected by mechanical thresholds; review.yaml must finalize."]
+        ),
+        "learnings": [
+            "Duration-adaptive exit grid evaluated end-to-end with cost_model_enabled.",
+        ],
+        "follow_up_actions": (
+            ["evidence-only record; do not promote to truth without user approval"]
+            if adoption_pass
+            else ["review reject reason; do not revive without new mechanism"]
+        ),
+        "status": "COMPLETE",
+        "generated_at": _now,
+        "evaluator_report": evaluator_report,
+    }
     (output_dir / "report.yaml").write_text(
-        yaml.safe_dump(_plain(report), allow_unicode=True), encoding="utf-8"
+        yaml.safe_dump(_plain(report), allow_unicode=True, sort_keys=False), encoding="utf-8"
     )
 
     # Write l4_ack.yaml

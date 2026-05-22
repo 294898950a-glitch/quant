@@ -1,0 +1,1125 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_duration-exit_2026-05-22
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: archive-direction
+three_exits_section:
+  adoption_pass: false
+  l6_decision_from_review: archive-direction
+  selected_params_summary: 'decay_period_factor: 0.5
+
+    effective_max_hold_days: 45
+
+    initial_threshold_fraction: 0.7
+
+    min_hold_days: 5'
+  evaluator: exit_rule_duration_adaptive
+  review_reason: contradiction between adoption_pass=true and hard floor
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- 'cb_arb_value_gap_switch_duration-exit_2026-05-22: rejected — contradiction between
+  adoption_pass=true and hard floor'
+learnings:
+- Evaluator exit_rule_duration_adaptive ran end-to-end; framework report schema added
+  by inconsistency repair 2026-05-22.
+- 'Review-memory decision: archive-direction.'
+follow_up_actions:
+- Reject confirmed; do not revive exit_rule_duration_adaptive variants without genuinely
+  new mechanism.
+status: COMPLETE
+generated_by: claude_inconsistency_repair
+generated_at: '2026-05-22T06:05:48+00:00'
+evaluator_report:
+  adoption_pass: true
+  baseline:
+    test_pnl: -259842942.3
+    train_pnl: -872139688.64
+    y2020_pnl: -312618660.61
+  best_params:
+    decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 0.7
+    min_hold_days: 5
+  candidates:
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 0.5
+    min_hold_days: 5
+    test:
+      avg_hold_days: 6.1
+      avg_loss: -212035.47
+      avg_win: 280002.76
+      decay_exits: 2326
+      excess_return: 208636943.55
+      force_closes: 22
+      gap_closed_exits: 706
+      max_drawdown: -126042176.96999988
+      total_pnl: -51205998.75
+      trade_count: 3054
+      win_rate: 0.3969
+    train:
+      avg_hold_days: 6.2
+      avg_loss: -150072.54
+      avg_win: 186177.75
+      decay_exits: 33803
+      excess_return: 461568567.99
+      force_closes: 145
+      gap_closed_exits: 3490
+      max_drawdown: -874278272.9100004
+      total_pnl: -410571120.65
+      trade_count: 37438
+      win_rate: 0.4137
+    validate_2020:
+      avg_hold_days: 6.0
+      avg_loss: -239287.53
+      avg_win: 309823.32
+      decay_exits: 4105
+      excess_return: 381452102.57
+      force_closes: 133
+      gap_closed_exits: 454
+      max_drawdown: -242297444.1299997
+      total_pnl: 68833441.96
+      trade_count: 4692
+      win_rate: 0.4625
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 0.5
+    min_hold_days: 5
+    test:
+      avg_hold_days: 6.3
+      avg_loss: -211950.64
+      avg_win: 278297.36
+      decay_exits: 2259
+      excess_return: 217773515.05
+      force_closes: 22
+      gap_closed_exits: 707
+      max_drawdown: -126856280.91999997
+      total_pnl: -42069427.25
+      trade_count: 2988
+      win_rate: 0.4036
+    train:
+      avg_hold_days: 6.4
+      avg_loss: -145869.06
+      avg_win: 188657.28
+      decay_exits: 32894
+      excess_return: 615820084.41
+      force_closes: 145
+      gap_closed_exits: 3492
+      max_drawdown: -723217636.839999
+      total_pnl: -256319604.23
+      trade_count: 36531
+      win_rate: 0.4151
+    validate_2020:
+      avg_hold_days: 6.1
+      avg_loss: -234461.35
+      avg_win: 306438.36
+      decay_exits: 4089
+      excess_return: 389795296.53
+      force_closes: 133
+      gap_closed_exits: 455
+      max_drawdown: -235409473.59999967
+      total_pnl: 77176635.92
+      trade_count: 4677
+      win_rate: 0.464
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 0.5
+    min_hold_days: 5
+    test:
+      avg_hold_days: 6.4
+      avg_loss: -213553.53
+      avg_win: 277657.91
+      decay_exits: 2226
+      excess_return: 218523638.51
+      force_closes: 22
+      gap_closed_exits: 708
+      max_drawdown: -127821837.23999995
+      total_pnl: -41319303.79
+      trade_count: 2956
+      win_rate: 0.4063
+    train:
+      avg_hold_days: 6.5
+      avg_loss: -145700.72
+      avg_win: 190806.37
+      decay_exits: 32211
+      excess_return: 659168704.8
+      force_closes: 145
+      gap_closed_exits: 3493
+      max_drawdown: -677486046.1200033
+      total_pnl: -212970983.84
+      trade_count: 35849
+      win_rate: 0.4153
+    validate_2020:
+      avg_hold_days: 6.1
+      avg_loss: -234637.72
+      avg_win: 306517.17
+      decay_exits: 4086
+      excess_return: 389686910.62
+      force_closes: 133
+      gap_closed_exits: 455
+      max_drawdown: -235488035.4799996
+      total_pnl: 77068250.01
+      trade_count: 4674
+      win_rate: 0.4641
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 0.7
+    min_hold_days: 5
+    test:
+      avg_hold_days: 6.8
+      avg_loss: -225808.7
+      avg_win: 271354.87
+      decay_exits: 2070
+      excess_return: 229554488.22
+      force_closes: 22
+      gap_closed_exits: 715
+      max_drawdown: -127589879.68999998
+      total_pnl: -30288454.08
+      trade_count: 2807
+      win_rate: 0.4325
+    train:
+      avg_hold_days: 6.6
+      avg_loss: -150584.19
+      avg_win: 191051.08
+      decay_exits: 31645
+      excess_return: 653651039.06
+      force_closes: 141
+      gap_closed_exits: 3553
+      max_drawdown: -679068554.1400007
+      total_pnl: -218488649.58
+      trade_count: 35339
+      win_rate: 0.4227
+    validate_2020:
+      avg_hold_days: 6.3
+      avg_loss: -238543.32
+      avg_win: 313669.38
+      decay_exits: 3903
+      excess_return: 400790696.5
+      force_closes: 134
+      gap_closed_exits: 464
+      max_drawdown: -224901173.26999998
+      total_pnl: 88172035.89
+      trade_count: 4501
+      win_rate: 0.4675
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 0.7
+    min_hold_days: 5
+    test:
+      avg_hold_days: 7.1
+      avg_loss: -235528.85
+      avg_win: 275736.82
+      decay_exits: 1940
+      excess_return: 219372994.45
+      force_closes: 22
+      gap_closed_exits: 717
+      max_drawdown: -128683693.89999998
+      total_pnl: -40469947.85
+      trade_count: 2679
+      win_rate: 0.4311
+    train:
+      avg_hold_days: 7.0
+      avg_loss: -151871.04
+      avg_win: 197388.9
+      decay_exits: 29715
+      excess_return: 739336270.3
+      force_closes: 141
+      gap_closed_exits: 3564
+      max_drawdown: -588038684.5600005
+      total_pnl: -132803418.34
+      trade_count: 33420
+      win_rate: 0.4235
+    validate_2020:
+      avg_hold_days: 6.5
+      avg_loss: -241507.95
+      avg_win: 316800.44
+      decay_exits: 3825
+      excess_return: 398527716.67
+      force_closes: 133
+      gap_closed_exits: 467
+      max_drawdown: -224375901.99999988
+      total_pnl: 85909056.06
+      trade_count: 4425
+      win_rate: 0.4673
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 0.7
+    min_hold_days: 5
+    test:
+      avg_hold_days: 7.3
+      avg_loss: -237286.95
+      avg_win: 277376.44
+      decay_exits: 1894
+      excess_return: 219724019.67
+      force_closes: 22
+      gap_closed_exits: 717
+      max_drawdown: -128188896.80999994
+      total_pnl: -40118922.63
+      trade_count: 2633
+      win_rate: 0.4314
+    train:
+      avg_hold_days: 7.4
+      avg_loss: -156230.35
+      avg_win: 202800.58
+      decay_exits: 28217
+      excess_return: 750072965.65
+      force_closes: 142
+      gap_closed_exits: 3566
+      max_drawdown: -577397612.4599993
+      total_pnl: -122066722.99
+      trade_count: 31925
+      win_rate: 0.4245
+    validate_2020:
+      avg_hold_days: 6.5
+      avg_loss: -242245.62
+      avg_win: 317503.81
+      decay_exits: 3803
+      excess_return: 399412511.79
+      force_closes: 134
+      gap_closed_exits: 467
+      max_drawdown: -224025557.5
+      total_pnl: 86793851.18
+      trade_count: 4404
+      win_rate: 0.468
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 1.0
+    min_hold_days: 5
+    test:
+      avg_hold_days: 8.6
+      avg_loss: -308185.09
+      avg_win: 253596.31
+      decay_exits: 1541
+      excess_return: 184925004.41
+      force_closes: 20
+      gap_closed_exits: 731
+      max_drawdown: -134188286.08000001
+      total_pnl: -74917937.89
+      trade_count: 2292
+      win_rate: 0.4904
+    train:
+      avg_hold_days: 8.9
+      avg_loss: -210404.71
+      avg_win: 191908.65
+      decay_exits: 23097
+      excess_return: 823012121.92
+      force_closes: 144
+      gap_closed_exits: 3605
+      max_drawdown: -441527403.01
+      total_pnl: -49127566.72
+      trade_count: 26846
+      win_rate: 0.5184
+    validate_2020:
+      avg_hold_days: 8.2
+      avg_loss: -322469.89
+      avg_win: 286304.48
+      decay_exits: 2942
+      excess_return: 287923060.8
+      force_closes: 134
+      gap_closed_exits: 478
+      max_drawdown: -173339537.27000004
+      total_pnl: -24695599.81
+      trade_count: 3554
+      win_rate: 0.5183
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 1.0
+    min_hold_days: 5
+    test:
+      avg_hold_days: 10.4
+      avg_loss: -353159.25
+      avg_win: 245464.23
+      decay_exits: 1201
+      excess_return: 137510286.69
+      force_closes: 21
+      gap_closed_exits: 733
+      max_drawdown: -145238494.69
+      total_pnl: -122332655.61
+      trade_count: 1955
+      win_rate: 0.4854
+    train:
+      avg_hold_days: 11.5
+      avg_loss: -266694.03
+      avg_win: 204087.24
+      decay_exits: 17683
+      excess_return: 857609541.56
+      force_closes: 146
+      gap_closed_exits: 3615
+      max_drawdown: -404193512.5799993
+      total_pnl: -14530147.08
+      trade_count: 21444
+      win_rate: 0.5651
+    validate_2020:
+      avg_hold_days: 10.0
+      avg_loss: -389076.25
+      avg_win: 296012.86
+      decay_exits: 2381
+      excess_return: 266863960.35
+      force_closes: 132
+      gap_closed_exits: 480
+      max_drawdown: -197532398.88000014
+      total_pnl: -45754700.26
+      trade_count: 2993
+      win_rate: 0.5456
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 1.0
+    min_hold_days: 5
+    test:
+      avg_hold_days: 11.4
+      avg_loss: -379087.2
+      avg_win: 252747.36
+      decay_exits: 1046
+      excess_return: 131857640.52
+      force_closes: 22
+      gap_closed_exits: 733
+      max_drawdown: -147510171.00000006
+      total_pnl: -127985301.78
+      trade_count: 1801
+      win_rate: 0.4875
+    train:
+      avg_hold_days: 13.5
+      avg_loss: -307466.42
+      avg_win: 208213.17
+      decay_exits: 14761
+      excess_return: 785073403.85
+      force_closes: 147
+      gap_closed_exits: 3623
+      max_drawdown: -408583583.4599998
+      total_pnl: -87066284.79
+      trade_count: 18531
+      win_rate: 0.5871
+    validate_2020:
+      avg_hold_days: 11.3
+      avg_loss: -441158.53
+      avg_win: 262361.12
+      decay_exits: 2060
+      excess_return: 187977859.16
+      force_closes: 133
+      gap_closed_exits: 480
+      max_drawdown: -217876303.15999997
+      total_pnl: -124640801.45
+      trade_count: 2673
+      win_rate: 0.5608
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 0.5
+    min_hold_days: 10
+    test:
+      avg_hold_days: 9.4
+      avg_loss: -256036.67
+      avg_win: 310783.54
+      decay_exits: 1293
+      excess_return: 132967346.36
+      force_closes: 21
+      gap_closed_exits: 729
+      max_drawdown: -141207105.14999986
+      total_pnl: -126875595.94
+      trade_count: 2043
+      win_rate: 0.3421
+    train:
+      avg_hold_days: 10.1
+      avg_loss: -207245.02
+      avg_win: 288059.1
+      decay_exits: 19302
+      excess_return: 594190099.03
+      force_closes: 150
+      gap_closed_exits: 3652
+      max_drawdown: -484616972.71999896
+      total_pnl: -277949589.61
+      trade_count: 23104
+      win_rate: 0.3941
+    validate_2020:
+      avg_hold_days: 9.9
+      avg_loss: -304576.16
+      avg_win: 503870.0
+      decay_exits: 2315
+      excess_return: 407733129.11
+      force_closes: 130
+      gap_closed_exits: 481
+      max_drawdown: -177039685.77000013
+      total_pnl: 95114468.5
+      trade_count: 2926
+      win_rate: 0.417
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 0.5
+    min_hold_days: 10
+    test:
+      avg_hold_days: 9.6
+      avg_loss: -253530.95
+      avg_win: 316178.2
+      decay_exits: 1260
+      excess_return: 147649183.23
+      force_closes: 21
+      gap_closed_exits: 730
+      max_drawdown: -136113889.57999992
+      total_pnl: -112193759.07
+      trade_count: 2011
+      win_rate: 0.3471
+    train:
+      avg_hold_days: 10.4
+      avg_loss: -194686.68
+      avg_win: 270604.41
+      decay_exits: 18749
+      excess_return: 565069367.56
+      force_closes: 150
+      gap_closed_exits: 3662
+      max_drawdown: -442244701.9799988
+      total_pnl: -307070321.08
+      trade_count: 22561
+      win_rate: 0.3892
+    validate_2020:
+      avg_hold_days: 10.1
+      avg_loss: -245996.37
+      avg_win: 386301.75
+      decay_exits: 2280
+      excess_return: 332414399.32
+      force_closes: 133
+      gap_closed_exits: 483
+      max_drawdown: -99040306.36000004
+      total_pnl: 19795738.71
+      trade_count: 2896
+      win_rate: 0.3999
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 0.5
+    min_hold_days: 10
+    test:
+      avg_hold_days: 9.7
+      avg_loss: -252406.9
+      avg_win: 318694.39
+      decay_exits: 1251
+      excess_return: 151121030.18
+      force_closes: 21
+      gap_closed_exits: 729
+      max_drawdown: -135719445.7799999
+      total_pnl: -108721912.12
+      trade_count: 2001
+      win_rate: 0.3468
+    train:
+      avg_hold_days: 10.6
+      avg_loss: -192929.35
+      avg_win: 274788.16
+      decay_exits: 18375
+      excess_return: 638500994.11
+      force_closes: 150
+      gap_closed_exits: 3661
+      max_drawdown: -427538581.5499991
+      total_pnl: -233638694.53
+      trade_count: 22186
+      win_rate: 0.39
+    validate_2020:
+      avg_hold_days: 10.1
+      avg_loss: -241580.0
+      avg_win: 381578.22
+      decay_exits: 2268
+      excess_return: 333398631.82
+      force_closes: 133
+      gap_closed_exits: 482
+      max_drawdown: -92341674.00000006
+      total_pnl: 20779971.21
+      trade_count: 2883
+      win_rate: 0.3992
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 0.7
+    min_hold_days: 10
+    test:
+      avg_hold_days: 10.1
+      avg_loss: -269779.83
+      avg_win: 314178.78
+      decay_exits: 1171
+      excess_return: 146368008.72
+      force_closes: 21
+      gap_closed_exits: 733
+      max_drawdown: -135459259.2299999
+      total_pnl: -113474933.58
+      trade_count: 1925
+      win_rate: 0.361
+    train:
+      avg_hold_days: 10.8
+      avg_loss: -208217.28
+      avg_win: 293415.69
+      decay_exits: 18123
+      excess_return: 711237687.64
+      force_closes: 146
+      gap_closed_exits: 3666
+      max_drawdown: -490141843.90000045
+      total_pnl: -160902001.0
+      trade_count: 21935
+      win_rate: 0.4005
+    validate_2020:
+      avg_hold_days: 10.4
+      avg_loss: -276977.71
+      avg_win: 470584.7
+      decay_exits: 2186
+      excess_return: 415023189.15
+      force_closes: 134
+      gap_closed_exits: 487
+      max_drawdown: -107252079.9
+      total_pnl: 102404528.54
+      trade_count: 2807
+      win_rate: 0.4193
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 0.7
+    min_hold_days: 10
+    test:
+      avg_hold_days: 10.5
+      avg_loss: -269504.75
+      avg_win: 312500.91
+      decay_exits: 1111
+      excess_return: 154726453.71
+      force_closes: 21
+      gap_closed_exits: 733
+      max_drawdown: -131968954.33999985
+      total_pnl: -105116488.59
+      trade_count: 1865
+      win_rate: 0.3662
+    train:
+      avg_hold_days: 11.4
+      avg_loss: -200848.4
+      avg_win: 272842.68
+      decay_exits: 16998
+      excess_return: 619068975.24
+      force_closes: 146
+      gap_closed_exits: 3677
+      max_drawdown: -417636360.2299998
+      total_pnl: -253070713.4
+      trade_count: 20821
+      win_rate: 0.3983
+    validate_2020:
+      avg_hold_days: 10.8
+      avg_loss: -245483.13
+      avg_win: 381232.08
+      decay_exits: 2108
+      excess_return: 338213335.24
+      force_closes: 133
+      gap_closed_exits: 486
+      max_drawdown: -83109030.39999999
+      total_pnl: 25594674.63
+      trade_count: 2727
+      win_rate: 0.4067
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 0.7
+    min_hold_days: 10
+    test:
+      avg_hold_days: 10.7
+      avg_loss: -278076.26
+      avg_win: 313758.8
+      decay_exits: 1077
+      excess_return: 147250476.58
+      force_closes: 21
+      gap_closed_exits: 735
+      max_drawdown: -139636763.75999984
+      total_pnl: -112592465.72
+      trade_count: 1833
+      win_rate: 0.3661
+    train:
+      avg_hold_days: 12.0
+      avg_loss: -201980.08
+      avg_win: 284260.35
+      decay_exits: 16129
+      excess_return: 702578253.54
+      force_closes: 147
+      gap_closed_exits: 3678
+      max_drawdown: -463885249.1400012
+      total_pnl: -169561435.1
+      trade_count: 19954
+      win_rate: 0.3979
+    validate_2020:
+      avg_hold_days: 10.9
+      avg_loss: -248048.8
+      avg_win: 381781.98
+      decay_exits: 2074
+      excess_return: 330890744.38
+      force_closes: 134
+      gap_closed_exits: 486
+      max_drawdown: -79317013.20999996
+      total_pnl: 18272083.77
+      trade_count: 2694
+      win_rate: 0.4046
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 1.0
+    min_hold_days: 10
+    test:
+      avg_hold_days: 11.7
+      avg_loss: -314989.33
+      avg_win: 273546.17
+      decay_exits: 975
+      excess_return: 96746611.59
+      force_closes: 20
+      gap_closed_exits: 741
+      max_drawdown: -163967822.4700003
+      total_pnl: -163096330.71
+      trade_count: 1736
+      win_rate: 0.3756
+    train:
+      avg_hold_days: 13.3
+      avg_loss: -247657.75
+      avg_win: 252694.24
+      decay_exits: 14631
+      excess_return: 531116429.11
+      force_closes: 146
+      gap_closed_exits: 3688
+      max_drawdown: -522938084.320001
+      total_pnl: -341023259.53
+      trade_count: 18465
+      win_rate: 0.4581
+    validate_2020:
+      avg_hold_days: 12.6
+      avg_loss: -341347.87
+      avg_win: 395443.23
+      decay_exits: 1766
+      excess_return: 260400086.3
+      force_closes: 133
+      gap_closed_exits: 488
+      max_drawdown: -88996224.9
+      total_pnl: -52218574.31
+      trade_count: 2387
+      win_rate: 0.4336
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 1.0
+    min_hold_days: 10
+    test:
+      avg_hold_days: 13.3
+      avg_loss: -354650.53
+      avg_win: 270206.9
+      decay_exits: 790
+      excess_return: 98981708.51
+      force_closes: 21
+      gap_closed_exits: 742
+      max_drawdown: -162090584.96000025
+      total_pnl: -160861233.79
+      trade_count: 1553
+      win_rate: 0.4018
+    train:
+      avg_hold_days: 16.2
+      avg_loss: -300212.11
+      avg_win: 269121.11
+      decay_exits: 11608
+      excess_return: 597977536.08
+      force_closes: 149
+      gap_closed_exits: 3700
+      max_drawdown: -484923548.10999876
+      total_pnl: -274162152.56
+      trade_count: 15457
+      win_rate: 0.4962
+    validate_2020:
+      avg_hold_days: 14.4
+      avg_loss: -397154.89
+      avg_win: 369616.69
+      decay_exits: 1501
+      excess_return: 227001610.3
+      force_closes: 134
+      gap_closed_exits: 490
+      max_drawdown: -129230282.88000003
+      total_pnl: -85617050.31
+      trade_count: 2125
+      win_rate: 0.4654
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 1.0
+    min_hold_days: 10
+    test:
+      avg_hold_days: 14.1
+      avg_loss: -369341.55
+      avg_win: 274134.11
+      decay_exits: 707
+      excess_return: 88839795.55
+      force_closes: 21
+      gap_closed_exits: 742
+      max_drawdown: -172403222.73000032
+      total_pnl: -171003146.75
+      trade_count: 1470
+      win_rate: 0.3932
+    train:
+      avg_hold_days: 18.4
+      avg_loss: -328497.11
+      avg_win: 269874.73
+      decay_exits: 9839
+      excess_return: 578635042.8
+      force_closes: 147
+      gap_closed_exits: 3702
+      max_drawdown: -505692218.3399998
+      total_pnl: -293504645.84
+      trade_count: 13688
+      win_rate: 0.5132
+    validate_2020:
+      avg_hold_days: 15.9
+      avg_loss: -425803.95
+      avg_win: 356820.52
+      decay_exits: 1314
+      excess_return: 199598869.19
+      force_closes: 134
+      gap_closed_exits: 490
+      max_drawdown: -155895881.81000003
+      total_pnl: -113019791.42
+      trade_count: 1938
+      win_rate: 0.4696
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 0.5
+    min_hold_days: 15
+    test:
+      avg_hold_days: 12.2
+      avg_loss: -281514.74
+      avg_win: 316329.68
+      decay_exits: 937
+      excess_return: 69112570.11
+      force_closes: 22
+      gap_closed_exits: 740
+      max_drawdown: -192816589.77000028
+      total_pnl: -190730372.19
+      trade_count: 1699
+      win_rate: 0.2831
+    train:
+      avg_hold_days: 14.3
+      avg_loss: -245073.22
+      avg_win: 343549.45
+      decay_exits: 13592
+      excess_return: 399772936.72
+      force_closes: 122
+      gap_closed_exits: 3686
+      max_drawdown: -597009939.249999
+      total_pnl: -472366751.92
+      trade_count: 17400
+      win_rate: 0.3702
+    validate_2020:
+      avg_hold_days: 13.7
+      avg_loss: -445712.94
+      avg_win: 507426.96
+      decay_exits: 1610
+      excess_return: 69307337.44
+      force_closes: 129
+      gap_closed_exits: 492
+      max_drawdown: -262778942.19000012
+      total_pnl: -243311323.17
+      trade_count: 2231
+      win_rate: 0.3532
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 0.5
+    min_hold_days: 15
+    test:
+      avg_hold_days: 12.4
+      avg_loss: -281776.95
+      avg_win: 316605.17
+      decay_exits: 905
+      excess_return: 70831637.65
+      force_closes: 22
+      gap_closed_exits: 744
+      max_drawdown: -191162628.08000013
+      total_pnl: -189011304.65
+      trade_count: 1671
+      win_rate: 0.2819
+    train:
+      avg_hold_days: 14.6
+      avg_loss: -231858.87
+      avg_win: 328130.32
+      decay_exits: 13209
+      excess_return: 459490541.73
+      force_closes: 126
+      gap_closed_exits: 3692
+      max_drawdown: -540072605.869999
+      total_pnl: -412649146.91
+      trade_count: 17027
+      win_rate: 0.3708
+    validate_2020:
+      avg_hold_days: 13.8
+      avg_loss: -389697.41
+      avg_win: 458229.77
+      decay_exits: 1585
+      excess_return: 128354438.88
+      force_closes: 128
+      gap_closed_exits: 494
+      max_drawdown: -203731840.77999997
+      total_pnl: -184264221.73
+      trade_count: 2207
+      win_rate: 0.3611
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 0.5
+    min_hold_days: 15
+    test:
+      avg_hold_days: 12.4
+      avg_loss: -281708.77
+      avg_win: 317872.99
+      decay_exits: 901
+      excess_return: 72037854.66
+      force_closes: 22
+      gap_closed_exits: 744
+      max_drawdown: -189891305.1700002
+      total_pnl: -187805087.64
+      trade_count: 1667
+      win_rate: 0.2819
+    train:
+      avg_hold_days: 14.9
+      avg_loss: -231687.66
+      avg_win: 335867.67
+      decay_exits: 12932
+      excess_return: 502036958.58
+      force_closes: 125
+      gap_closed_exits: 3694
+      max_drawdown: -499049233.68999916
+      total_pnl: -370102730.06
+      trade_count: 16751
+      win_rate: 0.3693
+    validate_2020:
+      avg_hold_days: 13.9
+      avg_loss: -382547.04
+      avg_win: 455037.41
+      decay_exits: 1578
+      excess_return: 137732401.69
+      force_closes: 128
+      gap_closed_exits: 494
+      max_drawdown: -194353878.01999998
+      total_pnl: -174886258.92
+      trade_count: 2200
+      win_rate: 0.3618
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 0.7
+    min_hold_days: 15
+    test:
+      avg_hold_days: 12.7
+      avg_loss: -289043.96
+      avg_win: 315541.84
+      decay_exits: 865
+      excess_return: 77404257.85
+      force_closes: 22
+      gap_closed_exits: 744
+      max_drawdown: -185010590.59000024
+      total_pnl: -182438684.45
+      trade_count: 1631
+      win_rate: 0.2931
+    train:
+      avg_hold_days: 14.9
+      avg_loss: -236387.71
+      avg_win: 329139.54
+      decay_exits: 12924
+      excess_return: 441628336.95
+      force_closes: 136
+      gap_closed_exits: 3692
+      max_drawdown: -543468387.8299994
+      total_pnl: -430511351.69
+      trade_count: 16752
+      win_rate: 0.3726
+    validate_2020:
+      avg_hold_days: 14.1
+      avg_loss: -390578.56
+      avg_win: 462235.17
+      decay_exits: 1549
+      excess_return: 146533012.32
+      force_closes: 129
+      gap_closed_exits: 494
+      max_drawdown: -186340163.4
+      total_pnl: -166085648.29
+      trade_count: 2172
+      win_rate: 0.3683
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 0.7
+    min_hold_days: 15
+    test:
+      avg_hold_days: 13.3
+      avg_loss: -294522.4
+      avg_win: 308734.09
+      decay_exits: 797
+      excess_return: 77605669.73
+      force_closes: 22
+      gap_closed_exits: 744
+      max_drawdown: -184621941.45000023
+      total_pnl: -182237272.57
+      trade_count: 1563
+      win_rate: 0.2949
+    train:
+      avg_hold_days: 15.8
+      avg_loss: -239975.37
+      avg_win: 339608.18
+      decay_exits: 12016
+      excess_return: 516812237.13
+      force_closes: 138
+      gap_closed_exits: 3697
+      max_drawdown: -468037156.66999626
+      total_pnl: -355327451.51
+      trade_count: 15851
+      win_rate: 0.3754
+    validate_2020:
+      avg_hold_days: 14.5
+      avg_loss: -379466.57
+      avg_win: 449588.82
+      decay_exits: 1494
+      excess_return: 168386958.98
+      force_closes: 128
+      gap_closed_exits: 495
+      max_drawdown: -164399646.9200001
+      total_pnl: -144231701.63
+      trade_count: 2117
+      win_rate: 0.3755
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 0.7
+    min_hold_days: 15
+    test:
+      avg_hold_days: 13.6
+      avg_loss: -299204.74
+      avg_win: 305641.86
+      decay_exits: 768
+      excess_return: 73043834.67
+      force_closes: 22
+      gap_closed_exits: 744
+      max_drawdown: -189201402.2000004
+      total_pnl: -186799107.63
+      trade_count: 1534
+      win_rate: 0.2934
+    train:
+      avg_hold_days: 16.5
+      avg_loss: -239909.49
+      avg_win: 346470.26
+      decay_exits: 11400
+      excess_return: 579873074.05
+      force_closes: 139
+      gap_closed_exits: 3699
+      max_drawdown: -423952169.42000175
+      total_pnl: -292266614.59
+      trade_count: 15238
+      win_rate: 0.3764
+    validate_2020:
+      avg_hold_days: 14.6
+      avg_loss: -378467.27
+      avg_win: 444315.61
+      decay_exits: 1479
+      excess_return: 173282733.65
+      force_closes: 129
+      gap_closed_exits: 495
+      max_drawdown: -159691259.74000004
+      total_pnl: -139335926.96
+      trade_count: 2103
+      win_rate: 0.3795
+  - decay_period_factor: 0.5
+    effective_max_hold_days: 45
+    initial_threshold_fraction: 1.0
+    min_hold_days: 15
+    test:
+      avg_hold_days: 13.9
+      avg_loss: -326480.39
+      avg_win: 287738.81
+      decay_exits: 738
+      excess_return: 70724547.81
+      force_closes: 22
+      gap_closed_exits: 743
+      max_drawdown: -191463796.06000027
+      total_pnl: -189118394.49
+      trade_count: 1503
+      win_rate: 0.3267
+    train:
+      avg_hold_days: 16.8
+      avg_loss: -278799.62
+      avg_win: 327365.96
+      decay_exits: 11172
+      excess_return: 588603071.84
+      force_closes: 147
+      gap_closed_exits: 3702
+      max_drawdown: -400384798.9700001
+      total_pnl: -283536616.8
+      trade_count: 15021
+      win_rate: 0.4288
+    validate_2020:
+      avg_hold_days: 15.7
+      avg_loss: -435118.68
+      avg_win: 392693.34
+      decay_exits: 1349
+      excess_return: 113502989.39
+      force_closes: 130
+      gap_closed_exits: 493
+      max_drawdown: -226020760.2300002
+      total_pnl: -199115671.22
+      trade_count: 1972
+      win_rate: 0.4037
+  - decay_period_factor: 1.0
+    effective_max_hold_days: 90
+    initial_threshold_fraction: 1.0
+    min_hold_days: 15
+    test:
+      avg_hold_days: 15.4
+      avg_loss: -361198.52
+      avg_win: 294098.21
+      decay_exits: 598
+      excess_return: 73191734.23
+      force_closes: 22
+      gap_closed_exits: 744
+      max_drawdown: -189089800.30000016
+      total_pnl: -186651208.07
+      trade_count: 1364
+      win_rate: 0.3424
+    train:
+      avg_hold_days: 19.8
+      avg_loss: -318632.12
+      avg_win: 340385.36
+      decay_exits: 9029
+      excess_return: 683083938.28
+      force_closes: 147
+      gap_closed_exits: 3707
+      max_drawdown: -395961927.5400003
+      total_pnl: -189055750.36
+      trade_count: 12883
+      win_rate: 0.4612
+    validate_2020:
+      avg_hold_days: 17.6
+      avg_loss: -431330.92
+      avg_win: 374214.24
+      decay_exits: 1147
+      excess_return: 150042510.76
+      force_closes: 132
+      gap_closed_exits: 493
+      max_drawdown: -191083653.2
+      total_pnl: -162576149.85
+      trade_count: 1772
+      win_rate: 0.4216
+  - decay_period_factor: 1.5
+    effective_max_hold_days: 135
+    initial_threshold_fraction: 1.0
+    min_hold_days: 15
+    test:
+      avg_hold_days: 16.4
+      avg_loss: -374109.05
+      avg_win: 287059.5
+      decay_exits: 527
+      excess_return: 62318873.98
+      force_closes: 22
+      gap_closed_exits: 746
+      max_drawdown: -199650182.50000018
+      total_pnl: -197524068.32
+      trade_count: 1295
+      win_rate: 0.3351
+    train:
+      avg_hold_days: 22.1
+      avg_loss: -338848.58
+      avg_win: 338779.91
+      decay_exits: 7757
+      excess_return: 670146540.53
+      force_closes: 145
+      gap_closed_exits: 3709
+      max_drawdown: -406710913.4499995
+      total_pnl: -201993148.11
+      trade_count: 11611
+      win_rate: 0.4744
+    validate_2020:
+      avg_hold_days: 19.2
+      avg_loss: -478369.78
+      avg_win: 382420.75
+      decay_exits: 1014
+      excess_return: 135427914.2
+      force_closes: 132
+      gap_closed_exits: 493
+      max_drawdown: -207684433.34000006
+      total_pnl: -177190746.41
+      trade_count: 1639
+      win_rate: 0.4301
+  executor: exit_rule_duration_adaptive
+  proposal_id: 20260519-proposal-001

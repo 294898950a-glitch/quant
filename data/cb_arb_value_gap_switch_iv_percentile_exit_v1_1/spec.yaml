@@ -1,0 +1,272 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'When a held CB''s implied volatility is elevated (high percentile relative
+  to its own 252-day rolling history), the observed value gap is more likely driven
+  by volatility premium than genuine mispricing. Exiting positions when IV crosses
+  above a high percentile threshold (e.g., 90th) should improve realized returns by
+  cutting exposure during volatility-inflated gap periods, while keeping the baseline
+  entry logic untouched.
+
+  '
+source_insight: 'Recent exit experiments show mixed results: dynamic exit and dynamic
+  trail were unusable (no_adoption_decision_unusable), profit-taking exit failed adoption,
+  but duration-based exits (duration-exit, duration-adaptive-exit) both passed adoption
+  with adoption_pass=True. This suggests exit improvements can work, but the signal
+  matters. None of the prior exit experiments used market-implied volatility as the
+  exit trigger — they all operated on gap dynamics or time alone. IV provides an orthogonal
+  signal: it captures whether the gap is real mispricing (low IV) or inflated by fear/uncertainty
+  (high IV). The IV-regime exit executor (cb_arb_iv_percentile_exit_executor) is registered
+  but has never been run.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - new_exit_rule
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C007
+mechanics:
+- new_exit_rule
+new_data_sources:
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+- path: data/cb_warehouse/cb_daily.parquet
+hard_floors:
+  criteria:
+  - cumulative_excess_compound over full backtest improves relative to baseline
+  - no single year drawdown vs benchmark exceeds 15%
+  - at least one holdout year Sharpe >= 0.5
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: COMPLETE
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  strategy_id: cb_arb_value_gap_switch
+  family: exit_rule
+  hypothesis: 'When a held CB''s implied volatility is elevated (high percentile relative
+    to its own 252-day rolling history), the observed value gap is more likely driven
+    by volatility premium than genuine mispricing. Exiting positions when IV crosses
+    above a high percentile threshold (e.g., 90th) should improve realized returns
+    by cutting exposure during volatility-inflated gap periods, while keeping the
+    baseline entry logic untouched.
+
+    '
+  source_insight: 'Recent exit experiments show mixed results: dynamic exit and dynamic
+    trail were unusable (no_adoption_decision_unusable), profit-taking exit failed
+    adoption, but duration-based exits (duration-exit, duration-adaptive-exit) both
+    passed adoption with adoption_pass=True. This suggests exit improvements can work,
+    but the signal matters. None of the prior exit experiments used market-implied
+    volatility as the exit trigger — they all operated on gap dynamics or time alone.
+    IV provides an orthogonal signal: it captures whether the gap is real mispricing
+    (low IV) or inflated by fear/uncertainty (high IV). The IV-regime exit executor
+    (cb_arb_iv_percentile_exit_executor) is registered but has never been run.
+
+    '
+  expected_improvement: 'Reduce negative excess returns during high-volatility regimes
+    by exiting before IV-driven gap inflation reverses. Should improve cumulative
+    excess compound and reduce max drawdown relative to the baseline exit, particularly
+    in volatile years.
+
+    '
+  capability_ids:
+  - C007
+  required_executor: cb_arb_iv_percentile_exit_executor
+  required_data:
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  - path: data/cb_warehouse/cb_daily.parquet
+  required_data_fields:
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - stk_code
+    - conv_price
+    - list_date
+    - delist_date
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - ts_code
+    - stk_code
+    - trade_date
+    - close
+    data/cb_warehouse/cb_daily.parquet:
+    - ts_code
+    - trade_date
+    - close
+  test_design:
+    description: 'Grid-search over IV percentile thresholds (e.g., 0.80, 0.85, 0.90,
+      0.95) and min_hold_days (e.g., 1, 3, 5, 10). For each held position, compute
+      daily IV proxy from stock volatility and CB price, calculate rolling 252-day
+      percentile rank, and exit when IV exceeds the threshold after min_hold_days.
+      Compare against baseline exit on cumulative excess compound, max single-year
+      drawdown, and Sharpe ratio.
+
+      '
+  success_criteria:
+    criteria:
+    - cumulative_excess_compound over full backtest improves relative to baseline
+    - no single year drawdown vs benchmark exceeds 15%
+    - at least one holdout year Sharpe >= 0.5
+  falsifiers:
+    train:
+    - IV-percentile exit produces cumulative excess compound worse than or equal to
+      baseline exit
+    - IV-percentile exit increases max drawdown vs baseline instead of reducing it
+    - grid search returns adoption_pass=False on all candidates
+    validate:
+    - IV-percentile exit produces cumulative excess compound worse than or equal to
+      baseline exit
+    - IV-percentile exit increases max drawdown vs baseline instead of reducing it
+    - grid search returns adoption_pass=False on all candidates
+    test:
+    - IV-percentile exit produces cumulative excess compound worse than or equal to
+      baseline exit
+    - IV-percentile exit increases max drawdown vs baseline instead of reducing it
+    - grid search returns adoption_pass=False on all candidates
+  risk: 'Medium. The IV proxy may be noisy — using stock volatility as a proxy for
+    CB IV adds estimation error. Also possible that IV-driven exits trim both bad
+    and good positions, producing neutral or negative net effect. However, the orthogonal
+    signal (volatility regime vs gap dynamics) justifies the attempt.
+
+    '
+  why_not_repeated_failure: 'This is not a renamed repeat of any prior exit experiment.
+    Dynamic exit (C007) and dynamic trail (C007) both used gap retracement logic;
+    profit-taking exit (C007) used gap contraction from entry; duration exits (C007)
+    used time-based gap threshold decay. None of them used implied volatility as the
+    exit trigger. The cb_arb_iv_percentile_exit_executor has never been run. The IV
+    signal is orthogonal to gap dynamics and time — it captures market conditions
+    (fear, uncertainty, volatility premium) that drive gap behavior but are not directly
+    observable from the gap itself. This is a genuinely new direction within the exit_rule
+    family.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_duration-exit_2026-05-22
+  - cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  - cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  - cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+  - cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  implementation_assumption: The executor will compute IV using a stock-volatility
+    proxy (e.g., 252-day rolling annualized volatility of stk_daily_qfq.close returns)
+    scaled to CB terms via conversion parity, rather than a full convertible bond
+    pricing model inversion. cb_daily.close will be used to verify CB price alignment
+    but the primary IV signal will come from the underlying stock's realized volatility.
+    This is a pragmatic approximation that keeps the executor computationally feasible.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: c3f970122fabba18
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: c3f970122fabba18
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_id_deduped_from: cb_arb_value_gap_switch_iv_percentile_exit_v1
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/proposal.yaml
+  mechanics:
+  - new_exit_rule
+  dropped_unmatched_required_data_fields:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+executor_id: cb_arb_iv_percentile_exit_executor
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_iv_percentile_exit.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+- --iv-percentile-threshold
+- '{iv_percentile_threshold}'
+- --min-hold-days
+- '{min_hold_days}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 150
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  - --iv-percentile-threshold
+  - '90'
+  - --min-hold-days
+  - '0'
+  sync_paths:
+  - scripts/evaluate_cb_arb_iv_percentile_exit.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/proposal.yaml
+  response_hash: c3f970122fabba18
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+updated_at: '2026-05-22T04:20:07Z'
