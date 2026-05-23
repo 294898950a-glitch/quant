@@ -1,6 +1,6 @@
 schema_version: 1
 enabled: true
-updated_at: '2026-05-22T15:21:14'
+updated_at: '2026-05-24T01:09:08'
 escalation:
   status: auto_resolved
   reason: all 10 autonomous research families exhausted (regime_classifier_variant
@@ -1687,6 +1687,832 @@ queue:
   review_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/review.yaml
   digest_path: data/research_framework/recent_results_digest.yaml
   completed_at: '2026-05-22T15:21:14'
+- id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  family: contrarian_entry_gate
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  sync_paths:
+  - scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T15:43:01'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T15:52:54'
+  remote_pid: '456525'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T16:00:26'
+  review_path: data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T16:01:07'
+- id: cb_arb_value_gap_switch_gap-trailing-exit
+  family: exit_rule_trailing_gap
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_gap-trailing-exit/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_gap-trailing-exit
+  sync_paths:
+  - scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T16:09:18'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T16:17:27'
+  remote_pid: '460595'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T16:20:19'
+  review_path: data/cb_arb_value_gap_switch_gap-trailing-exit/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T16:21:05'
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  family: exit_rule
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  sync_paths:
+  - scripts/evaluate_cb_arb_profit_take_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T16:24:03'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T17:29:31'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  pipeline_failure_signature: df4977babbfeaf1410cf83f6c1b6e022969000ddca052cb000d42493895a6e46
+  pipeline_failure_signature_recorded_at: '2026-05-22T16:40:21'
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  requeued_at: '2026-05-22T17:22:15'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: 928ac93fddcbad9ad42cd8e38a35d739112f39ef8eb30bcefaba5f417c5379a0
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '474949'
+  review_pending_at: '2026-05-22T17:40:17'
+  review_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T17:41:14'
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  family: exit_rule
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_profit-take-exit_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_profit_take_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T16:42:51'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T17:32:58'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  pipeline_failure_signature: 37a9430290a242b6070d75554211d9204aa6192e239f8a7cae5021e55554170f
+  pipeline_failure_signature_recorded_at: '2026-05-22T17:00:18'
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  requeued_at: '2026-05-22T17:22:15'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: ae1b5ea82dcd3afd6be310fd8be9e72c8475d2e6bb221ec04b1ae0ebebd3432f
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '759398'
+  review_pending_at: '2026-05-22T17:40:25'
+  review_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T17:42:13'
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+  family: exit_rule_profit_take
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+  sync_paths:
+  - scripts/evaluate_cb_arb_profit_take_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T17:03:07'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T17:11:35'
+  remote_pid: '471438'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T17:20:22'
+  review_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T17:22:14'
+- id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  family: static_volatility_position_scaling
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_volatility_position_scaling.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T17:49:07'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T17:58:48'
+  remote_pid: '479385'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T18:10:28'
+  review_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T18:11:21'
+- id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  family: entry_gate
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  sync_paths:
+  - scripts/evaluate_cb_arb_market_drawdown_entry_gate.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-22T18:13:55'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-22T18:24:44'
+  remote_pid: '484208'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  review_pending_at: '2026-05-22T18:30:19'
+  review_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-22T18:31:17'
+- id: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
+  family: entry_quality_filter
+  status: blocked
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_proximity_filter_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_option_position_sizing.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T00:34:12'
+  source: project_owned_ideation
+  workflow_stage: synced_to_vm
+  blocked_at: '2026-05-23T00:37:45'
+  block_reason: "data_quality_blocked: status_code: 3\nconfidence_code: 1\nblocking_issues:\n\
+    - executor 脚本 evaluate_cb_arb_option_position_sizing.py 未声明 data requirements，无法获取\n\
+    \  required_files / required_columns / required_column_quality，无法执行任何实质性数据质量校验\n\
+    - data_files 为空，没有任何数据文件可供验证\nwarnings: []\nfix_plan: []\ndecision_reason: Executor\
+    \ 未声明数据需求且无可验证的数据文件，硬阻断，必须先在 executor 中补齐 data requirements\n  声明后才能重新提交数据质量检查\n\
+    schema_version: 1\nstatus: fail\nconfidence: high\ndecision_source: ai_data_quality_judge\n\
+    ai_provider: hermes\nresponse_hash: 889f76bf21c1daa8\n\n"
+  data_quality_block_signature: ef5e0403bfca43fce04a45c61dcdb98c32a76d7e3f359471bed98adf17ec1952
+  data_quality_block_signature_recorded_at: '2026-05-23T00:37:45'
+- id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  family: exit_rule_duration_adaptive
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  sync_paths:
+  - scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T01:02:15'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-23T01:05:56'
+  remote_pid: '877431'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  review_pending_at: '2026-05-23T01:40:10'
+  review_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-23T01:41:04'
+- id: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
+  family: entry_filter
+  status: blocked
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
+  sync_paths:
+  - scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T02:37:56'
+  source: project_owned_ideation
+  workflow_stage: synced_to_vm
+  blocked_at: '2026-05-23T02:41:50'
+  block_reason: 'data_quality_blocked: status_code: 3
+
+    confidence_code: 1
+
+    blocking_issues:
+
+    - ''executor_requirements_error: spec automation.command 未指向有效的 scripts/*.py 执行器，无法确定实验所需的数据文件、字段、时间区间''
+
+    - data_files 为空：没有任何输入数据文件可用
+
+    - periods 全部为空：train_start、train_end、test_start、test_end 均未定义，无法验证行情覆盖
+
+    - executor_requirements 为 null：无法确定 required_columns 和 required_column_quality，无法进行字段级质量检查
+
+    warnings: []
+
+    fix_plan: []
+
+    decision_reason: spec 的 automation.command 无效且无任何数据文件，实验基础设施层面的阻断，非数据质量修复能解决
+
+    schema_version: 1
+
+    status: fail
+
+    confidence: high
+
+    decision_source: ai_data_quality_judge
+
+    ai_provider: hermes
+
+    response_hash: 562892ae09f14111
+
+
+    '
+  data_quality_block_signature: bcf49a932ce1fe95da10533a5abcc7bf03794a0ac6b976f0fad138f63aa89c99
+  data_quality_block_signature_recorded_at: '2026-05-23T02:41:50'
+- id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  family: entry_filter
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  sync_paths:
+  - scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T02:49:22'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-23T02:58:26'
+  remote_pid: '908673'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  review_pending_at: '2026-05-23T03:10:10'
+  review_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-23T03:10:52'
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  family: exit_rule_nonparametric
+  status: running
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_exit_gap_closing_percentile.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T03:12:18'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-23T20:37:12'
+  remote_pid: '5588'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  manual_requeue_note: spot now up; force run on spot (2026-05-23T20:29:19+08:00)
+  stale_vm_avoidance_reset_at: '2026-05-23T20:30:07'
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  family: regime_adaptive_exit
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T20:58:40'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-23T22:17:07'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  pipeline_failure_signature: a23c6d3d6b0bc2b19fd04e53c18717024c044cfc82a42e5860ef870dc8279083
+  pipeline_failure_signature_recorded_at: '2026-05-23T21:03:14'
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  requeued_at: '2026-05-23T22:13:04'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: 8c7fe1e8fa9117b84dabffc1200a17efe9cf9c5738fe9f6fc1933bc501074993
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '1215551'
+  review_pending_at: '2026-05-23T22:18:16'
+  review_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-23T22:19:03'
+- id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  family: entry_filter_moneyness
+  status: failed
+  spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T21:04:20'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-23T21:08:56'
+  remote_pid: '1195349'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  failed_at: '2026-05-23T21:09:14'
+  failure_reason: remote pipeline exit_code=1
+  pipeline_failure_signature: 9f4efec8d307c18a7ff8a3f568c6faf6805f8394a66449bdddfc0b93a7daa1aa
+  pipeline_failure_signature_recorded_at: '2026-05-23T21:09:14'
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  family: moneyness_entry_filter
+  status: failed
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  sync_paths:
+  - scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T21:13:55'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-23T21:18:50'
+  remote_pid: '1198243'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  failed_at: '2026-05-23T21:21:17'
+  failure_reason: remote pipeline exit_code=1
+  pipeline_failure_signature: 81faef4dbaae8218f6a948624832617f62a212eaa2801e06a4a19a52ec7f2741
+  pipeline_failure_signature_recorded_at: '2026-05-23T21:21:17'
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  family: regime_adaptive_exit
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  sync_paths:
+  - scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T21:22:49'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-23T22:23:06'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  pipeline_failure_signature: d253515ba7d9288bde57475559ce31d5afd95c6dc4d35a6d42dd08604226c40c
+  pipeline_failure_signature_recorded_at: '2026-05-23T21:27:13'
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  requeued_at: '2026-05-23T22:13:04'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: d9081efcc9e8c044c7a995facb7371a02b2645857ed7af7f08bff434337c19e4
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '1217413'
+  review_pending_at: '2026-05-23T22:24:16'
+  review_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-23T22:24:54'
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+  family: moneyness_entry_filter
+  status: failed
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+  sync_paths:
+  - scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T21:29:12'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-23T21:34:10'
+  remote_pid: '1202894'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  failed_at: '2026-05-23T21:36:42'
+  failure_reason: remote pipeline exit_code=1
+  pipeline_failure_signature: 6a07dba57809dc30b4b12bec84f0006365b55b5c3e2f5a1e7c8f7b82dbda9f70
+  pipeline_failure_signature_recorded_at: '2026-05-23T21:36:42'
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  family: regime_adaptive_exit
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  sync_paths:
+  - scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T21:38:51'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-23T22:29:01'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  pipeline_failure_signature: a0b5ba73ff3894a7523518ed737510b6b68e0a9088e7343b1873fc4976eab908
+  pipeline_failure_signature_recorded_at: '2026-05-23T21:45:14'
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  requeued_at: '2026-05-23T22:13:04'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: d9c365b08d18c44722e80421eb6ac16de1b03d00036185d5c01110b4edc0fdc4
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '1219259'
+  review_pending_at: '2026-05-23T22:30:14'
+  review_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-23T22:30:48'
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  family: entry_filter
+  status: failed
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_5/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  sync_paths:
+  - scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T21:47:19'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-23T21:52:12'
+  remote_pid: '1208218'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  failed_at: '2026-05-23T21:54:15'
+  failure_reason: remote pipeline exit_code=1
+  pipeline_failure_signature: 59e38cc6f36d7adcf77911816fabfc629245ced91815c59cafc5bd20d42d8e11
+  pipeline_failure_signature_recorded_at: '2026-05-23T21:54:15'
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  family: regime_adaptive_exit
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  sync_paths:
+  - scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T21:55:57'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-23T22:34:44'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  pipeline_failure_signature: f010c8fa44eaf2a1bf7508d217ad2606d4a1ea558f52a0f1d1994f3f86469ced
+  pipeline_failure_signature_recorded_at: '2026-05-23T22:00:17'
+  previous_spec_status_before_pipeline_requeue: ARCHIVED
+  requeued_at: '2026-05-23T22:13:04'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: fae162a5bc09a6fbe214844d4e6b2f7a80623f88104eb8d2e55b3dfa7eea140f
+  pipeline_failure_requeue_attempts: 1
+  remote_pid: '1221050'
+  review_pending_at: '2026-05-23T22:36:13'
+  review_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-23T22:36:48'
+- id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  family: regime_adaptive_exit
+  status: complete
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T22:06:54'
+  source: project_owned_ideation
+  workflow_stage: digested
+  started_at: '2026-05-23T22:11:08'
+  remote_pid: '1213718'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  review_pending_at: '2026-05-23T22:12:18'
+  review_path: data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/review.yaml
+  digest_path: data/research_framework/recent_results_digest.yaml
+  completed_at: '2026-05-23T22:12:57'
+- id: cb_arb_value_gap_switch_pnl-feedback-scaling_v1
+  family: pnl_feedback_scaling
+  status: failed
+  spec_path: data/cb_arb_value_gap_switch_pnl-feedback-scaling_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_pnl-feedback-scaling_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_pnl_feedback_scaling_grid.py
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T22:44:06'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-23T22:48:05'
+  remote_pid: '1224991'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+  remote_repo: /root/projects/quant
+  failed_at: '2026-05-23T22:51:16'
+  failure_reason: remote pipeline exit_code=1
+  pipeline_failure_signature: be88b1d298ab4a495825b2876f033128ba8a4a8845f464580d346244c5064b40
+  pipeline_failure_signature_recorded_at: '2026-05-23T22:51:16'
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  family: moneyness_entry_filter
+  status: queued
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  sync_paths:
+  - scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-23T22:53:05'
+  source: project_owned_ideation
+  workflow_stage: queued_after_stale_vm_avoidance_reset
+  last_start_error_at: '2026-05-24T00:36:59'
+  start_retry_count: 0
+  recovered_vm_retry_at: '2026-05-24T00:34:39'
+  manual_unblock_note: sig disabled, retry on spot
+  stale_vm_avoidance_reset_at: '2026-05-24T01:09:08'
+- id: cb_arb_value_gap_switch_reverse-probe_20260524
+  family: meta_validation_probe
+  status: queued
+  spec_path: data/cb_arb_value_gap_switch_reverse-probe_20260524/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_reverse-probe_20260524
+  sync_paths:
+  - scripts/evaluate_cb_arb_reverse_probe.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-24T07:03:04'
+  source: user_manual_meta_probe
+  workflow_stage: spec_validated
 history:
 - id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
   spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
@@ -4278,6 +5104,1150 @@ history:
   at: '2026-05-22T15:21:14'
   vm_id: guangzhou_spot
   vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  spec_path: data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T15:43:01'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  spec_path: data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/spec.yaml
+  status: running
+  message: started remote pid 456525 on guangzhou_spot
+  at: '2026-05-22T15:52:54'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  spec_path: data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T16:00:26'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  spec_path: data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T16:00:26'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  spec_path: data/cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T16:01:07'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_gap-trailing-exit
+  spec_path: data/cb_arb_value_gap_switch_gap-trailing-exit/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T16:09:18'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_gap-trailing-exit
+  spec_path: data/cb_arb_value_gap_switch_gap-trailing-exit/spec.yaml
+  status: running
+  message: started remote pid 460595 on guangzhou_spot
+  at: '2026-05-22T16:17:27'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_gap-trailing-exit
+  spec_path: data/cb_arb_value_gap_switch_gap-trailing-exit/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T16:20:19'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_gap-trailing-exit
+  spec_path: data/cb_arb_value_gap_switch_gap-trailing-exit/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T16:20:19'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_gap-trailing-exit
+  spec_path: data/cb_arb_value_gap_switch_gap-trailing-exit/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T16:21:05'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T16:24:03'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: running
+  message: started remote pid 464192 on guangzhou_spot
+  at: '2026-05-22T16:31:26'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-22T16:40:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T16:42:51'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 467700 on guangzhou_spot
+  at: '2026-05-22T16:50:03'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-22T17:00:18'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T17:03:08'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/spec.yaml
+  status: running
+  message: started remote pid 471438 on guangzhou_spot
+  at: '2026-05-22T17:11:35'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T17:20:22'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T17:20:22'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22_1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T17:22:14'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-22T17:22:15'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-22T17:22:15'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: running
+  message: started remote pid 474949 on guangzhou_spot
+  at: '2026-05-22T17:29:31'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 759398 on singapore_sig
+  at: '2026-05-22T17:32:58'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T17:40:17'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T17:40:17'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T17:40:25'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T17:40:25'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_2026-05-22/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T17:41:14'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_profit-take-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_profit-take-exit_v1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T17:42:13'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T17:49:07'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/spec.yaml
+  status: running
+  message: started remote pid 479385 on guangzhou_spot
+  at: '2026-05-22T17:58:48'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T18:10:28'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T18:10:28'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_volatility_position_scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T18:11:21'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  spec_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-22T18:13:55'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  spec_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/spec.yaml
+  status: running
+  message: started remote pid 484208 on guangzhou_spot
+  at: '2026-05-22T18:24:44'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  spec_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-22T18:30:19'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  spec_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-22T18:30:19'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_market_drawdown_entry_filter
+  spec_path: data/cb_arb_value_gap_switch_market_drawdown_entry_filter/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-22T18:31:17'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_proximity_filter_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T00:34:12'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_proximity_filter_v1/spec.yaml
+  status: blocked
+  message: "data_quality_blocked: status_code: 3\nconfidence_code: 1\nblocking_issues:\n\
+    - executor 脚本 evaluate_cb_arb_option_position_sizing.py 未声明 data requirements，无法获取\n\
+    \  required_files / required_columns / required_column_quality，无法执行任何实质性数据质量校验\n\
+    - data_files 为空，没有任何数据文件可供验证\nwarnings: []\nfix_plan: []\ndecision_reason: Executor\
+    \ 未声明数据需求且无可验证的数据文件，硬阻断，必须先在 executor 中补齐 data requirements\n  声明后才能重新提交数据质量检查\n\
+    schema_version: 1\nstatus: fail\nconfidence: high\ndecision_source: ai_data_quality_judge\n\
+    ai_provider: hermes\nresponse_hash: 889f76bf21c1daa8\n\n"
+  at: '2026-05-23T00:37:45'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  spec_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T01:02:15'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  spec_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/spec.yaml
+  status: running
+  message: started remote pid 877431 on singapore_sig
+  at: '2026-05-23T01:05:56'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  spec_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-23T01:40:10'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  spec_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-23T01:40:10'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  spec_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-23T01:41:04'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T02:37:57'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8/spec.yaml
+  status: blocked
+  message: 'data_quality_blocked: status_code: 3
+
+    confidence_code: 1
+
+    blocking_issues:
+
+    - ''executor_requirements_error: spec automation.command 未指向有效的 scripts/*.py 执行器，无法确定实验所需的数据文件、字段、时间区间''
+
+    - data_files 为空：没有任何输入数据文件可用
+
+    - periods 全部为空：train_start、train_end、test_start、test_end 均未定义，无法验证行情覆盖
+
+    - executor_requirements 为 null：无法确定 required_columns 和 required_column_quality，无法进行字段级质量检查
+
+    warnings: []
+
+    fix_plan: []
+
+    decision_reason: spec 的 automation.command 无效且无任何数据文件，实验基础设施层面的阻断，非数据质量修复能解决
+
+    schema_version: 1
+
+    status: fail
+
+    confidence: high
+
+    decision_source: ai_data_quality_judge
+
+    ai_provider: hermes
+
+    response_hash: 562892ae09f14111
+
+
+    '
+  at: '2026-05-23T02:41:50'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  spec_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T02:49:23'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  spec_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/spec.yaml
+  status: running
+  message: started remote pid 908673 on singapore_sig
+  at: '2026-05-23T02:58:26'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  spec_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-23T03:10:10'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  spec_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-23T03:10:10'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  spec_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-23T03:10:52'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T03:12:18'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 913463 on singapore_sig
+  at: '2026-05-23T03:16:15'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 1087943 on singapore_sig
+  at: '2026-05-23T14:07:09'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  status: queued
+  message: 'cleared stale transient VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T14:20:04'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 1092485 on singapore_sig
+  at: '2026-05-23T14:23:59'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  status: queued
+  message: 'cleared stale transient VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T20:30:07'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 5588 on guangzhou_spot
+  at: '2026-05-23T20:37:12'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T20:58:40'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 1193356 on singapore_sig
+  at: '2026-05-23T21:02:29'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T21:03:14'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T21:04:20'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1/spec.yaml
+  status: running
+  message: started remote pid 1195349 on singapore_sig
+  at: '2026-05-23T21:08:56'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T21:09:14'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T21:13:56'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/spec.yaml
+  status: running
+  message: started remote pid 1198243 on singapore_sig
+  at: '2026-05-23T21:18:50'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T21:21:17'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T21:22:50'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: running
+  message: started remote pid 1200578 on singapore_sig
+  at: '2026-05-23T21:26:43'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T21:27:13'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T21:29:12'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/spec.yaml
+  status: running
+  message: started remote pid 1202894 on singapore_sig
+  at: '2026-05-23T21:34:10'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T21:36:42'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T21:38:51'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: running
+  message: started remote pid 1205572 on singapore_sig
+  at: '2026-05-23T21:43:23'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T21:45:14'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_5/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T21:47:20'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_5/spec.yaml
+  status: running
+  message: started remote pid 1208218 on singapore_sig
+  at: '2026-05-23T21:52:12'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_5/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T21:54:15'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T21:55:57'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: running
+  message: started remote pid 1210472 on singapore_sig
+  at: '2026-05-23T21:59:53'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T22:00:17'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T22:06:55'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/spec.yaml
+  status: running
+  message: started remote pid 1213718 on singapore_sig
+  at: '2026-05-23T22:11:08'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-23T22:12:18'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-23T22:12:18'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-23T22:12:57'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-23T22:13:04'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-23T22:13:04'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-23T22:13:04'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-23T22:13:04'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: running
+  message: started remote pid 1215551 on singapore_sig
+  at: '2026-05-23T22:17:07'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-23T22:18:16'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-23T22:18:16'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-23T22:19:03'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: running
+  message: started remote pid 1217413 on singapore_sig
+  at: '2026-05-23T22:23:06'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-23T22:24:16'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-23T22:24:16'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-23T22:24:54'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: running
+  message: started remote pid 1219259 on singapore_sig
+  at: '2026-05-23T22:29:01'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-23T22:30:14'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-23T22:30:14'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-23T22:30:48'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: running
+  message: started remote pid 1221050 on singapore_sig
+  at: '2026-05-23T22:34:44'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: artifacts_synced
+  message: remote run artifacts synced
+  at: '2026-05-23T22:36:13'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: review_pending
+  message: remote artifacts synced; waiting for review_memory
+  at: '2026-05-23T22:36:13'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+  status: complete
+  message: remote run reviewed and digest updated
+  at: '2026-05-23T22:36:48'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_pnl-feedback-scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_pnl-feedback-scaling_v1/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T22:44:06'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_pnl-feedback-scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_pnl-feedback-scaling_v1/spec.yaml
+  status: running
+  message: started remote pid 1224991 on singapore_sig
+  at: '2026-05-23T22:48:05'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_pnl-feedback-scaling_v1
+  spec_path: data/cb_arb_value_gap_switch_pnl-feedback-scaling_v1/spec.yaml
+  status: failed
+  message: remote pipeline exit_code=1
+  at: '2026-05-23T22:51:16'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: queued READY spec generated by project-owned ideation
+  at: '2026-05-23T22:53:05'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T22:54:12'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T22:57:24'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T22:58:05'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:03:26'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:05:05'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:09:23'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:09:38'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:12:19'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:12:20'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:15:20'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:15:33'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:21:24'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:21:47'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:24:24'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:25:48'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:30:19'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:30:25'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:48:24'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:48:41'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:51:23'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:51:38'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:54:20'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:54:21'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-23T23:57:20'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-23T23:57:21'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:00:23'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:00:36'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:06:41'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:06:53'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:09:34'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:09:36'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:12:49'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:13:08'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:18:25'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:18:49'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:21:38'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:22:14'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:30:46'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:30:48'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared recovered VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T00:34:39'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: transient VM start error on singapore_sig; requeued
+  at: '2026-05-24T00:36:59'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
+  status: queued
+  message: 'cleared stale transient VM avoid list: [''singapore_sig'']'
+  at: '2026-05-24T01:09:08'
+  vm_id: null
+  vm_host: null
 vm_hosts:
 - id: guangzhou_spot
   host: ubuntu@106.55.255.129
@@ -4292,5 +6262,8 @@ vm_hosts:
 - id: singapore_sig
   host: root@100.91.245.108
   remote_repo: /root/projects/quant
-  enabled: true
+  enabled: false
   note: Always-on Singapore sig VM.
+  disabled_at: '2026-05-24T00:36:00+08:00'
+  disabled_reason: sshd flaky (8/10 connection reset by peer); too many ssh probes
+    from local cron jobs. Re-enable after diagnosing.

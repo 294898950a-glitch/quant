@@ -244,3 +244,8 @@ allowlist:
     GateKeeper hook; hermes prompt fix pending
   added_at: '2026-05-23'
   added_by: install_generated_executors
+- script: scripts/evaluate_cb_arb_reverse_probe.py
+  reason: monkey-patches sort_values on value_gap_switch base; no GateKeeper hook
+    needed (meta probe, single run, no parameter grid).
+  added_at: '2026-05-24'
+  added_by: claude

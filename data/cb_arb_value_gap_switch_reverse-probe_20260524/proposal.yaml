@@ -1,0 +1,87 @@
+proposal_id: cb_arb_value_gap_switch_reverse-probe_20260524
+strategy_id: cb_arb_value_gap_switch
+family: meta_validation_probe
+hypothesis: 'The value_gap_amount ranking is supposed to identify under-priced CBs.
+  Current
+
+  strategy loses 3% cost-off and 10% cost-on. Reverse-rank probe disambiguates
+
+  whether signal is real-but-cost-eaten / universe-negative-drift / anti-alpha.
+
+  '
+source_insight: 'All 8 directions tested today plus the canonical strategy lose money
+  cost-off.
+
+  A reverse-rank probe is the cheapest disambiguator — it stress-tests whether the
+
+  existing signal contains any information at all.
+
+  '
+expected_improvement: 'No improvement expected. Meta probe to disambiguate three explanations
+  of
+
+  current losses. The comparison of reverse_cost_off vs forward_cost_off (-0.03)
+
+  is the artifact.
+
+  '
+capability_ids:
+- C002
+required_executor: evaluate_cb_arb_reverse_probe
+required_data:
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+falsifiers:
+  train: &id001
+  - reverse cost_off pnl < forward cost_off pnl by more than 3pp (signal confirmed
+    anti-informative)
+  - abs(reverse_cost_off - forward_cost_off) < 0.005 cumulative excess (signal confirmed
+    noise)
+  validate: *id001
+  test: *id001
+test_design:
+  split: 'train 2019-01-01 to 2024-12-31; holdout 2020 (stress year); sealed test
+
+    2025-01-01 to 2026-05-08. Same as canonical strategy.
+
+    '
+  variants: 'Single run, no parameter grid; the only intervention is reversing the
+
+    value_gap_amount sort.
+
+    '
+  data_root: data/cb_arb_concurrent_supervised_20260511_094500
+success_criteria:
+  primary: 'Quantify reverse_cost_off cumulative excess vs forward -0.03; quantify
+
+    reverse_cost_on vs forward -0.1047.
+
+    '
+  secondary: 'Compare reverse train_pnl vs forward train_pnl; compare per-year max
+    drawdown.
+
+    '
+risk: 'Low — read-only on truth, no strategy promotion. Underlying evaluator code
+
+  unchanged; only sort direction is monkey-patched within this process.
+
+  '
+why_not_repeated_failure: 'Meta-validation probe, never run before. Orthogonal to
+  confirmed_invalid_directions
+
+  list — its purpose is to interpret existing failures, not chase new alpha.
+
+  '
+implementation_assumption: 'Reverse-probe evaluator monkey-patches sort_values(''value_gap_amount'')
+  to
+
+  ascending=True; candidate filter value_gap_amount > 0 left intact for first probe
+
+  iteration. If first probe is ambiguous, refine to also flip the > 0 filter.
+
+  '
+related_prior_runs:
+- cb_arb-main-yaml-current-cost-on-20260516
+- cb_arb-value-gap-switch-medium-signal-cost-on-20260516
