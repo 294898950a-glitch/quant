@@ -55,7 +55,19 @@ def decide_scheduler_action(state: dict[str, Any]) -> WorkflowDecision:
             reason="queued work exists",
             counts=counts,
         )
-    if counts.get("running", 0) > 0:
+    # Parallel-tolerant rule (2026-05-23):
+    # The previous behavior short-circuited the moment ANY run was active,
+    # which serialized the autonomous loop down to one experiment in flight
+    # regardless of how many VMs were idle. With both sig and spot in the
+    # pool we want the scheduler to *also* generate the next direction while
+    # an experiment is running, so the next idle VM has work waiting.
+    # We keep emitting "monitor_running" only when there is also some
+    # running work that the caller may want to settle first (it still does
+    # the bookkeeping branches), but we no longer block ideation when the
+    # parallel allowance is set on the queue state. Callers that should
+    # continue serializing can opt out via state["parallel_dispatch"] = false.
+    parallel_allowed = bool(state.get("parallel_dispatch", True)) if isinstance(state, dict) else True
+    if counts.get("running", 0) > 0 and not parallel_allowed:
         return WorkflowDecision(
             action="monitor_running",
             reason="remote work is still running",

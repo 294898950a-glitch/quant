@@ -65,6 +65,15 @@ Load `runtime_entrypoints.yaml` first. It names the files that must be injected
 into the AI context. Do not use Markdown maps or Markdown protocol files as
 runtime sources.
 
+Parallel-dispatch rule (2026-05-23):
+
+`workflow_state.decide_scheduler_action()` is parallel-tolerant by default.
+With Guangzhou spot and Singapore sig both in the pool, the scheduler will
+keep ideating new directions while one experiment is already running, so
+the next idle VM has work waiting. To force the older serial behavior on a
+particular run, set `state["parallel_dispatch"] = false` in
+`research_queue.yaml`.
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live
