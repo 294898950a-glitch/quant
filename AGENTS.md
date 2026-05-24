@@ -270,6 +270,47 @@ installed are NOT pickable; failed is NOT pickable; stale-claim
 recovery is unchanged; the constant set is asserted explicitly so
 adding a new status forces a code-review change.
 
+Compliance-repair overwrite (2026-05-25):
+
+`install_one()`'s "refuse to overwrite different content" guard now
+splits into two cases instead of always refusing:
+
+* **Normal flow** — target exists, hash differs, task has no
+  `compliance_failed_at` history. Continues to refuse (the destination
+  is presumed hand-edited; the generated_executor copy is a stale
+  Hermes draft).
+* **Repair flow** — target exists, hash differs, AND the task carries
+  `compliance_failed_at` (set earlier when install rejected the
+  noncompliant source), AND the new source has already passed
+  `validate_executor()` (which includes the GateKeeper compliance
+  check). The new source is therefore verified compliant, and the
+  destination is a known-bad noncompliant version we explicitly
+  asked Hermes to rewrite. Overwrite is allowed and returns
+  `action: overwritten_after_compliance_repair`.
+
+After a successful compliance-repair overwrite, `main()` writes:
+
+```
+installed_at: <now>
+repair_installed_at: <now>
+installed_sha256: <new>
+install_action: overwritten_after_compliance_repair
+last_compliance_status: passed
+previous_compliance_failed_at: <old>     ← moved from compliance_failed_at
+previous_compliance_errors: <old>        ← moved from compliance_errors
+```
+
+The current-state fields `compliance_failed_at` / `compliance_errors`
+are removed; their values are preserved in the `previous_*` history
+so audit can still tell the run went through a repair cycle.
+
+Pinned by `framework/tests/test_install_compliance_recompile.py`
+(4 new cases on top of the existing 6): normal flow still refuses
+on hash mismatch; repair flow + compliant source overwrites; repair
+flow + still-noncompliant source is blocked at the validate_executor
+gate (not the overwrite branch); main() cleans the stale compliance
+fields and writes the repair_installed_at audit trail.
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live

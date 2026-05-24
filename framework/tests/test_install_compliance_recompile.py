@@ -214,3 +214,183 @@ def test_install_one_compliant_executor_returns_installed(tmp_path, monkeypatch)
     outcome = install_mod.install_one(task, dry_run=False)
     assert outcome["action"] == "installed", outcome
     assert (repo / "scripts/evaluate_z.py").exists()
+
+
+# ---------------------------------------------------------------------------
+# Repair-flow overwrite tests (2026-05-25 round 3)
+#
+# After install_one started flipping noncompliant tasks to
+# needs_compliance_repair and Hermes started actually rewriting the
+# generated executor, install hit a third漏接 point: install_one's
+# refuse-overwrite guard treated the repair's healthy new source as if it
+# were a Hermes draft trying to clobber a hand-edited destination.
+#
+# The fix splits "refuse" into two cases:
+#   - Normal flow (no compliance_failed_at history): keep refusing. The
+#     destination is presumed hand-edited.
+#   - Repair flow (task.compliance_failed_at present + new source already
+#     passed validate_executor including the GateKeeper check): allow
+#     overwrite. The destination is the known-bad noncompliant version we
+#     explicitly asked Hermes to rewrite.
+# ---------------------------------------------------------------------------
+
+
+def test_normal_flow_hash_diff_still_refuses_overwrite(tmp_path, monkeypatch):
+    """Plain hash-mismatch with no compliance history must still refuse
+    overwrite. This protects hand-edited destinations from being clobbered
+    by stale Hermes drafts."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    run_dir = repo / "data/run_a"
+    run_dir.mkdir(parents=True)
+    src = run_dir / "generated_executor" / "executor.py"
+    _write_executor(src, with_gatekeeper=True)
+    (repo / "scripts").mkdir()
+    # Pre-existing hand-edited target.
+    hand_edited = (repo / "scripts/evaluate_a.py")
+    hand_edited.write_text(
+        f"# hand-edited content\n{GATEKEEPER_IMPORT}\n"
+        "def main():\n    return 1\n"
+        "def declare_data_requirements(*a, **k):\n    return {}\n",
+        encoding="utf-8",
+    )
+    task = {
+        "id": "task_a_executor_code",
+        "target_script_path": "scripts/evaluate_a.py",
+        "run_dir": "data/run_a",
+        # NOTE: no compliance_failed_at — this is a plain (non-repair) flow.
+    }
+    outcome = install_mod.install_one(task, dry_run=False)
+    assert outcome["action"] == "skipped"
+    assert "refusing to overwrite" in outcome["reason"]
+    # Hand-edited file untouched.
+    after = hand_edited.read_text(encoding="utf-8")
+    assert "hand-edited content" in after
+
+
+def test_repair_flow_hash_diff_overwrites_when_source_compliant(tmp_path, monkeypatch):
+    """Repair flow: task carries compliance_failed_at AND new source has
+    GateKeeper import → install must overwrite the known-bad target."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    run_dir = repo / "data/run_b"
+    run_dir.mkdir(parents=True)
+    # The new repaired source has GateKeeper.
+    src = run_dir / "generated_executor" / "executor.py"
+    _write_executor(src, with_gatekeeper=True)
+    (repo / "scripts").mkdir()
+    # The old destination does NOT have GateKeeper — it's the noncompliant
+    # version we are repairing.
+    old_target = repo / "scripts/evaluate_b.py"
+    old_target.write_text(
+        "# noncompliant old version\n"
+        "def main():\n    return 0\n"
+        "def declare_data_requirements(*a, **k):\n    return {}\n",
+        encoding="utf-8",
+    )
+    task = {
+        "id": "task_b_executor_code",
+        "target_script_path": "scripts/evaluate_b.py",
+        "run_dir": "data/run_b",
+        "compliance_failed_at": "2026-05-24T18:10:05+00:00",
+        "compliance_errors": ["compliance_failed: missing GateKeeper import"],
+    }
+    outcome = install_mod.install_one(task, dry_run=False)
+    assert outcome["action"] == "overwritten_after_compliance_repair", outcome
+    assert outcome["overwrite_reason"] == "compliance_repair"
+    assert "previous_target_sha256" in outcome
+    # Destination now matches the repaired source — must contain GateKeeper.
+    after = old_target.read_text(encoding="utf-8")
+    assert GATEKEEPER_IMPORT in after
+    assert "noncompliant old version" not in after
+
+
+def test_repair_flow_noncompliant_source_still_blocked(tmp_path, monkeypatch):
+    """Repair flow guard: even if task has compliance_failed_at, a source
+    that is still missing GateKeeper must NOT overwrite. validate_executor
+    runs before the overwrite branch, so the result is the same
+    compliance_failed path with a repair_request marker."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    run_dir = repo / "data/run_c"
+    run_dir.mkdir(parents=True)
+    src = run_dir / "generated_executor" / "executor.py"
+    # Hermes "tried" but the new source is STILL noncompliant.
+    _write_executor(src, with_gatekeeper=False)
+    (repo / "scripts").mkdir()
+    (repo / "scripts/evaluate_c.py").write_text(
+        "# previous noncompliant\n"
+        "def main():\n    return 0\n"
+        "def declare_data_requirements(*a, **k):\n    return {}\n",
+        encoding="utf-8",
+    )
+    task = {
+        "id": "task_c_executor_code",
+        "target_script_path": "scripts/evaluate_c.py",
+        "run_dir": "data/run_c",
+        "compliance_failed_at": "2026-05-24T18:10:05+00:00",
+    }
+    outcome = install_mod.install_one(task, dry_run=False)
+    assert outcome["action"] == "compliance_failed", (
+        f"noncompliant repair source must NOT overwrite via the repair branch; "
+        f"got {outcome}"
+    )
+    # Target untouched.
+    after = (repo / "scripts/evaluate_c.py").read_text(encoding="utf-8")
+    assert "previous noncompliant" in after
+
+
+def test_main_clears_stale_compliance_fields_after_repair_overwrite(tmp_path, monkeypatch):
+    """After a successful overwrite_after_compliance_repair, main() must:
+      - set installed_at + repair_installed_at + installed_sha256
+      - move compliance_failed_at → previous_compliance_failed_at
+      - move compliance_errors → previous_compliance_errors
+      - set last_compliance_status: passed
+    so the task is no longer presented as currently noncompliant."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    handoffs = repo / "data/research_framework/hermes_executor_handoffs.yaml"
+    handoffs.parent.mkdir(parents=True)
+    run_dir = repo / "data/run_d"
+    run_dir.mkdir(parents=True)
+    src = run_dir / "generated_executor" / "executor.py"
+    _write_executor(src, with_gatekeeper=True)
+    (repo / "scripts").mkdir()
+    (repo / "scripts/evaluate_d.py").write_text("# noncompliant", encoding="utf-8")
+    handoffs.write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "tasks": [{
+                "id": "task_d_executor_code",
+                "status": "completed",
+                "target_script_path": "scripts/evaluate_d.py",
+                "run_dir": "data/run_d",
+                "compliance_failed_at": "2026-05-24T18:10:05+00:00",
+                "compliance_errors": ["compliance_failed: missing GateKeeper import"],
+            }],
+        }, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(install_mod, "HANDOFFS_PATH", handoffs)
+    # Avoid hitting the real registry / data inventory for this main() run.
+    (repo / "data/research_framework/executor_registry.yaml").write_text(
+        yaml.safe_dump({"executors": {}}, allow_unicode=True), encoding="utf-8"
+    )
+    monkeypatch.setattr(install_mod, "REGISTRY_PATH",
+                          repo / "data/research_framework/executor_registry.yaml")
+    import sys
+    sys.argv = ["install_generated_executors.py"]
+    rc = install_mod.main()
+    assert rc == 0
+    doc = yaml.safe_load(handoffs.read_text(encoding="utf-8"))
+    task = doc["tasks"][0]
+    assert task["install_action"] == "overwritten_after_compliance_repair"
+    assert task["last_compliance_status"] == "passed"
+    assert task.get("installed_at"), task
+    assert task.get("repair_installed_at") == task.get("installed_at")
+    assert task.get("installed_sha256")
+    # Stale current-state fields moved into history.
+    assert "compliance_failed_at" not in task
+    assert "compliance_errors" not in task
+    assert task.get("previous_compliance_failed_at") == "2026-05-24T18:10:05+00:00"
+    assert isinstance(task.get("previous_compliance_errors"), list)

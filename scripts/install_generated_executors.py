@@ -194,10 +194,40 @@ def install_one(
             "sha256": source_hash[:16],
         }
 
+    # Compliance-repair overwrite: when a task carries compliance_failed_at,
+    # the destination is a known-bad noncompliant version that we explicitly
+    # asked Hermes to rewrite. The source above already passed
+    # validate_executor() — which includes the GateKeeper compliance check —
+    # so overwriting is safe and is in fact the only way to land the repair.
+    # Both conditions must be true: history says it was failed AND the new
+    # source is verified compliant by validate_executor above.
+    if target_exists and task.get("compliance_failed_at"):
+        if dry_run:
+            return {
+                "id": handoff_id,
+                "action": "would_overwrite_compliance_repair",
+                "source": str(source.relative_to(REPO_ROOT)),
+                "target": target_raw,
+                "source_sha256": source_hash[:16],
+                "previous_target_sha256": (target_hash or "")[:16],
+            }
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        return {
+            "id": handoff_id,
+            "action": "overwritten_after_compliance_repair",
+            "source": str(source.relative_to(REPO_ROOT)),
+            "target": target_raw,
+            "sha256": source_hash[:16],
+            "previous_target_sha256": (target_hash or "")[:16],
+            "overwrite_reason": "compliance_repair",
+        }
+
     # Never silently overwrite a destination that already exists with different
-    # content — that destination was almost certainly hand-edited (e.g., a bug
-    # fix or schema patch) and the generated_executor copy is the older Hermes
-    # draft. Re-installing it would clobber the human/Claude edit.
+    # content outside the repair flow — that destination was almost certainly
+    # hand-edited (e.g., a bug fix or schema patch) and the generated_executor
+    # copy is the older Hermes draft. Re-installing it would clobber the
+    # human/Claude edit.
     if target_exists:
         return {
             "id": handoff_id,
@@ -654,6 +684,24 @@ def main() -> int:
                 task["installed_sha256"] = outcome["sha256"]
                 task["installed_by"] = "install_generated_executors"
                 handoff_changed = True
+        elif action == "overwritten_after_compliance_repair" and not args.dry_run:
+            # Repair flow landed. Mark the install fields like a normal install,
+            # plus an explicit repair_installed_at, and shift the stale
+            # compliance fields into a previous_* history so audit can still
+            # see the run was once noncompliant.
+            installed_targets.add(outcome["target"])
+            task["installed_at"] = now
+            task["repair_installed_at"] = now
+            task["installed_source"] = outcome["source"]
+            task["installed_sha256"] = outcome["sha256"]
+            task["installed_by"] = "install_generated_executors"
+            task["install_action"] = "overwritten_after_compliance_repair"
+            task["last_compliance_status"] = "passed"
+            if task.get("compliance_failed_at"):
+                task["previous_compliance_failed_at"] = task.pop("compliance_failed_at")
+            if task.get("compliance_errors"):
+                task["previous_compliance_errors"] = task.pop("compliance_errors")
+            handoff_changed = True
         elif action == "noop":
             installed_targets.add(outcome["target"])
         elif action == "compliance_failed" and not args.dry_run:
@@ -695,6 +743,12 @@ def main() -> int:
             "noop": sum(1 for r in results if r.get("action") == "noop"),
             "skipped": sum(1 for r in results if r.get("action") == "skipped"),
             "compliance_failed": sum(1 for r in results if r.get("action") == "compliance_failed"),
+            "overwritten_after_compliance_repair": sum(
+                1 for r in results if r.get("action") == "overwritten_after_compliance_repair"
+            ),
+            "would_overwrite_compliance_repair": sum(
+                1 for r in results if r.get("action") == "would_overwrite_compliance_repair"
+            ),
         },
         "registry_drafts_flipped": registry_outcome.get("flipped", []),
         "registry_auto_registered": [r["key"] for r in auto_reg_outcome["registered"]],
