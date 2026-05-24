@@ -277,6 +277,31 @@ key_insights:
       - cost_on_reverse_rerun
       - full_filter_flip_probe
       - value_gap_correlation_diagnostic
+    cost_on_follow_up_result:
+      run_dir: data/cb_arb_value_gap_switch_reverse-probe-coston_20260524
+      completed_at: "2026-05-24T11:08:00+08:00"
+      cost_model_enabled: true
+      slippage_pct: 0.0015
+      market_impact_coeff: 0.001
+      market_impact_cap_pct: 0.02
+      train_excess_return: 0.966487
+      train_total_return: 1.238802
+      train_max_drawdown: -0.235789
+      train_win_rate: 0.5379
+      train_trade_count: 1740
+      test_excess_return: 0.303133
+      test_total_return: 0.655398
+      test_max_drawdown: -0.113253
+      test_win_rate: 0.5862
+      test_trade_count: 377
+      test_best_params:
+        max_hold_days: 180
+        min_gap_pct: 0.01
+        sell_gap_pct: 0.0
+        switch_hurdle_pct: 0.0
+      cost_bleed_test: "+0.381 (cost off) → +0.303 (cost on); 8pp loss, 81% of excess preserved"
+      swing_vs_forward_test: "+30.3% reverse cost-on vs -10.5% forward cost-on = 41pp swing from sort direction alone"
+      interpretation: "Reverse rule is no longer just a signal-side curiosity — it is a tradeable inversion candidate. Survives standard cost model with most of the excess intact."
 
 open_threads:
   - id: promote_absolute_value_gap_ranking_to_core
