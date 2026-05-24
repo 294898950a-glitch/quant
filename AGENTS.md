@@ -134,6 +134,47 @@ This split is enforced by tests in
 `test_repeated_draft_dedupes_to_noop`,
 `test_draft_with_terminal_package_status_is_suppressed`.
 
+Spot idle auto-start (2026-05-24):
+
+`scripts/spot_idle_start.py` is the symmetric counterpart to
+`scripts/spot_idle_shutdown.py`. The shutdown guard powers the spot
+off when idle for 15+ minutes with an empty queue; the start guard
+powers it back on when queued work appears.
+
+Trigger: spot Tencent state is `STOPPED` AND queue has at least one
+item in `{queued, running}`. Decision is journaled to
+`logs/spot_idle_start_state.json` on the sig VM so cooldowns and
+counters survive across cron ticks.
+
+Safety rails (all defaults, overridable via CLI flags):
+
+* `--queued-stable-minutes 2.0` — only start after queue has been
+  observed active for 2+ minutes; prevents racing the shutdown guard
+  when work has just landed.
+* `--stop-cooldown-minutes 10.0` — refuse to start if
+  `spot_idle_shutdown_state.json::status == shutdown_sent` was
+  written within 10 minutes; prevents yo-yo.
+* `--failed-start-backoff-minutes 30.0` — after a `start_failed`
+  attempt, refuse to retry for 30 minutes.
+* `--daily-cap 6` — refuse if today's start counter (UTC day) is
+  ≥ 6; prevents runaway cost.
+
+Crontab on sig (mirrors the shutdown line's cadence):
+
+```
+*/5 * * * * cd /root/projects/quant && source /root/.tencent_secrets/cvm.env \
+  && /usr/bin/python3 scripts/spot_idle_start.py \
+  >> logs/spot_idle_start.cron.log 2>&1 # QUANT_SPOT_IDLE_START
+```
+
+Tested in `framework/tests/test_spot_idle_start.py` (8 cases
+covering the no-queue path, unstable-window stamp, stop cooldown,
+failed-start backoff, daily cap, running-spot skip, all-gates-pass
+start, and probe-failure error path).
+
+This module does NOT queue experiments, ask an AI, or change
+strategy state — same boundary as the shutdown guard.
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live
