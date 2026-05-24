@@ -106,6 +106,34 @@ before this rule:
    evaluator does not write those files, which silently dropped probe
    evidence out of the recent-results digest that Hermes consumes.
 
+DRAFT-pending-capability acceptance (2026-05-24):
+
+`queue_ideation.py` distinguishes two kinds of DRAFT proposals:
+
+* DRAFT + valid `executor_tool_package` (status ∈
+  {`awaiting_hermes_executor_code`, `draft_tool_code`,
+  `draft_tool_code_compile_not_ready`, `draft_tool_design_pending_code`})
+  is treated as `accepted_pending_capability`. The run flows through
+  `find_pending_tool_draft` →
+  `scripts/hermes_executor_handoff_wakeup.sh` →
+  `scripts/hermes_executor_handoff_tick.py` to receive the drafted
+  executor code. Suppression is skipped. A persistent
+  `ideation_accept_marker.yaml` is written in the run dir; subsequent
+  ticks with the same `package_status` emit
+  `ideation_pending_capability_noop` (idempotent across ticks).
+* DRAFT without a valid pending package, REJECT, PROPOSAL_ONLY, or
+  malformed proposals continue to go through
+  `suppress_non_runnable_draft` and `ideation_non_runnable_suppressed`
+  as before.
+
+This split is enforced by tests in
+`framework/tests/test_auto_research_pipeline.py`:
+`test_draft_with_missing_capability_request_accepted_not_suppressed`,
+`test_invalid_draft_still_suppressed`,
+`test_runnable_ready_proposal_path_unchanged`,
+`test_repeated_draft_dedupes_to_noop`,
+`test_draft_with_terminal_package_status_is_suppressed`.
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live

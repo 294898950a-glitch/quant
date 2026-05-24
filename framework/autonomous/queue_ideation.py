@@ -17,6 +17,48 @@ import yaml
 
 
 EXCLUDE_STATUSES = {"DRAFT", "REJECT", "PROPOSAL_ONLY"}
+RETRYABLE_IDEATION_RESULTS = {
+    "ideation_not_runnable",
+    "ideation_timeout",
+    "executor_tool_response_invalid",
+}
+
+# Statuses inside executor_tool_package that mark a DRAFT proposal as a
+# valid pending-capability case: ideation_cycle has already invoked
+# request_executor_tool_code, the executor code is being drafted, and
+# hermes_executor_handoff_tick.py will pick it up via find_pending_tool_draft.
+# A DRAFT in any of these states must NOT be suppressed as non-runnable —
+# it is "accepted_pending_capability", not "skipped_non_runnable".
+PENDING_CAPABILITY_PACKAGE_STATUSES = {
+    "awaiting_hermes_executor_code",
+    "draft_tool_code",
+    "draft_tool_code_compile_not_ready",
+    "draft_tool_design_pending_code",
+}
+
+
+def _is_draft_pending_capability(payload: dict[str, Any]) -> bool:
+    """Detect "DRAFT + missing_capability_request" — a valid pending-capability proposal.
+
+    Distinguishes the "Hermes proposed something valid but no executor exists yet,
+    and ideation_cycle has already kicked off executor-code drafting via
+    request_executor_tool_code" case from genuine non-runnable garbage (malformed
+    proposals, REJECT, PROPOSAL_ONLY without any pending tool work).
+
+    Signal: payload.executor_tool_package.status is one of the
+    PENDING_CAPABILITY_PACKAGE_STATUSES. If ideation_cycle did not produce a
+    package (or it landed in a terminal error state), this returns False and
+    suppression proceeds as before.
+    """
+    if not isinstance(payload, dict):
+        return False
+    if str(payload.get("status") or "") != "DRAFT":
+        return False
+    package = payload.get("executor_tool_package")
+    if not isinstance(package, dict):
+        return False
+    status = str(package.get("status") or "")
+    return status in PENDING_CAPABILITY_PACKAGE_STATUSES
 
 
 class QueueIdeationService:
@@ -133,25 +175,44 @@ class QueueIdeationService:
             item = self.enqueue_ready_spec(state, payload)
             self.write_status("queued_ideation_spec", item)
             return "queued_ideation_spec"
+        if _is_draft_pending_capability(payload):
+            return self._accept_pending_capability(payload)
+        self.suppress_non_runnable_draft(payload, status)
         self.write_status("ideation_not_runnable", self._non_runnable_payload(status, payload))
         return "ideation_not_runnable"
 
-    def generate_until_actionable(self, state: dict[str, Any], *, max_attempts: int = 1) -> str:
+    def generate_until_actionable(self, state: dict[str, Any], *, max_attempts: int = 5) -> str:
         last_result = "ideation_not_runnable"
         attempts: list[str] = []
-        for _ in range(max_attempts):
+        for attempt_index in range(max_attempts):
             state = self.load_state()
             result = self.generate_next_spec_if_idle(state)
             attempts.append(result)
             last_result = result
-            if result != "ideation_not_runnable":
+            if result == "queued_ideation_spec":
                 break
+            if result not in RETRYABLE_IDEATION_RESULTS:
+                break
+            self.audit(
+                "ideation_retry",
+                {
+                    "attempt": attempt_index + 1,
+                    "max_attempts": max_attempts,
+                    "result": result,
+                    "reason": "candidate was not actionable; trying another direction in the same tick",
+                },
+            )
         if len(attempts) > 1:
+            self.audit("ideation_attempts", {"attempts": attempts, "final_result": last_result})
+        if attempts and last_result != "queued_ideation_spec" and all(
+            result in RETRYABLE_IDEATION_RESULTS for result in attempts
+        ):
             self.write_status(
-                last_result,
+                "ideation_attempts_exhausted",
                 {
                     "ideation_attempts": attempts,
-                    "note": "Processed multiple non-runnable drafts in one tick before stopping.",
+                    "max_attempts": max_attempts,
+                    "note": "No actionable candidate was produced in this tick; next tick will retry.",
                 },
             )
         return last_result
@@ -172,6 +233,9 @@ class QueueIdeationService:
                     "reason": payload.get("reason"),
                 },
             )
+            if _is_draft_pending_capability(payload):
+                return self._accept_pending_capability(payload)
+            self.suppress_non_runnable_draft(payload, payload_status)
             self.write_status("ideation_not_runnable", self._non_runnable_payload(payload_status, payload))
             return "ideation_not_runnable"
         if "executor_tool_code" in output or "returned empty content" in output:
@@ -190,6 +254,80 @@ class QueueIdeationService:
         self.log(f"ideation failed rc={returncode}: {output[-1000:]}")
         return "ideation_failed"
 
+    def _accept_pending_capability(self, payload: dict[str, Any]) -> str:
+        """Accept a DRAFT + missing_capability_request proposal as a valid pending draft.
+
+        Does NOT suppress. Does NOT touch executor_tool_request.status (it is
+        already in a pending-capability state set by ideation_cycle.request_executor_tool_code).
+        Records an audit event and writes a non-retryable status so the ideation
+        loop does not retry; hermes_executor_handoff_tick.py will drive the
+        executor-code drafting on its own cadence.
+
+        Dedupe: writes a persistent ``ideation_accept_marker.yaml`` in the run
+        directory on the first accept. Subsequent calls on the same run with
+        the same package_status see the marker and emit a noop event instead of
+        a fresh accept. The marker is the source of truth for "we have already
+        decided to accept this proposal-pending-capability" so that retries
+        across ticks are idempotent.
+        """
+        package = payload.get("executor_tool_package")
+        package_status = str(package.get("status") or "") if isinstance(package, dict) else ""
+        spec_path = payload.get("spec_path")
+        proposal_id = payload.get("proposal_id")
+        accept_payload = {
+            "proposal_id": proposal_id,
+            "spec_path": spec_path,
+            "package_status": package_status,
+            "reason": payload.get("reason"),
+            "note": (
+                "DRAFT proposal carries a valid executor_tool_request in a "
+                "pending-capability state; hermes_executor_handoff_tick.py will "
+                "draft the executor code on its own cadence."
+            ),
+        }
+        marker_path = self._accept_marker_path(spec_path)
+        if marker_path is not None and marker_path.exists():
+            try:
+                marker = yaml.safe_load(marker_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                marker = {}
+            if isinstance(marker, dict) and str(marker.get("package_status") or "") == package_status:
+                self.audit(
+                    "ideation_pending_capability_noop",
+                    {**accept_payload, "dedupe": "accept marker exists with same package_status"},
+                )
+                self.write_status("ideation_accepted_pending_capability", accept_payload)
+                return "ideation_accepted_pending_capability"
+        if marker_path is not None:
+            try:
+                marker_path.write_text(
+                    yaml.safe_dump(
+                        {
+                            "accepted_at": self.now_iso(),
+                            "proposal_id": proposal_id,
+                            "package_status": package_status,
+                            "reason": payload.get("reason"),
+                        },
+                        allow_unicode=True,
+                        sort_keys=False,
+                    ),
+                    encoding="utf-8",
+                )
+            except Exception:
+                pass
+        self.audit("ideation_accepted_pending_capability", accept_payload)
+        self.write_status("ideation_accepted_pending_capability", accept_payload)
+        return "ideation_accepted_pending_capability"
+
+    def _accept_marker_path(self, spec_path: Any) -> Path | None:
+        """Resolve the run dir's accept-marker path, or None if spec_path missing."""
+        if not spec_path:
+            return None
+        spec_p = Path(str(spec_path))
+        if not spec_p.is_absolute():
+            spec_p = self.repo_root / spec_p
+        return spec_p.parent / "ideation_accept_marker.yaml"
+
     @staticmethod
     def _non_runnable_payload(status: str, payload: dict[str, Any]) -> dict[str, Any]:
         return {
@@ -200,3 +338,57 @@ class QueueIdeationService:
             "reason": payload.get("reason"),
             "errors": payload.get("errors"),
         }
+
+    def suppress_non_runnable_draft(self, payload: dict[str, Any], status: str) -> None:
+        """Mark a generated non-runnable draft so this tick can move to a new idea.
+
+        DRAFT specs remain available as research artifacts, but they should not be
+        re-selected as the next pending tool task when the current automation loop
+        is trying to produce one runnable queue item.
+        """
+        spec_raw = payload.get("spec_path")
+        if not spec_raw:
+            return
+        spec_path = Path(str(spec_raw))
+        if not spec_path.is_absolute():
+            spec_path = self.repo_root / spec_path
+        if not spec_path.exists():
+            return
+        try:
+            spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+        except Exception:
+            return
+        if not isinstance(spec, dict) or str(spec.get("status") or "") != "DRAFT":
+            return
+        skip_payload = {
+            "status": "skipped_non_runnable",
+            "at": self.now_iso(),
+            "proposal_status": status,
+            "reason": payload.get("reason"),
+            "errors": payload.get("errors"),
+        }
+        spec["automation_skip"] = skip_payload
+        spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        request_path = spec_path.parent / "executor_tool_request.yaml"
+        if request_path.exists():
+            try:
+                request = yaml.safe_load(request_path.read_text(encoding="utf-8")) or {}
+            except Exception:
+                request = {}
+            if isinstance(request, dict):
+                request["status_before_automation_skip"] = request.get("status")
+                request["status"] = "automation_skipped_non_runnable"
+                request["automation_skip"] = skip_payload
+                request_path.write_text(
+                    yaml.safe_dump(request, allow_unicode=True, sort_keys=False),
+                    encoding="utf-8",
+                )
+        self.audit(
+            "ideation_non_runnable_suppressed",
+            {
+                "proposal_id": payload.get("proposal_id"),
+                "spec_path": self.rel(spec_path),
+                "status": status,
+                "reason": payload.get("reason"),
+            },
+        )

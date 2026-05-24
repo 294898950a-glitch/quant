@@ -6,6 +6,7 @@ import pytest
 import pandas as pd
 
 from scripts import auto_research_pipeline as pipeline
+from scripts.gatekeeper import GateKeeper
 from scripts import repair_data_quality
 from scripts import research_queue_runner
 from scripts import validate_data_quality
@@ -16,6 +17,7 @@ from framework.autonomous.queue_remote_execution import QueueRemoteExecutionServ
 from framework.autonomous.queue_remote_execution import _declared_path_to_repo_path
 from framework.autonomous.queue_remote_execution import pipeline_execution_failed
 from framework.autonomous.queue_remote_execution import should_sync_path_for_run
+from framework.autonomous.queue_ideation import QueueIdeationService
 
 
 def _remote_service(tmp_path):
@@ -30,6 +32,77 @@ def _remote_service(tmp_path):
         now_iso=lambda: "2026-05-21T00:00:00",
         issue_ticket=lambda purpose: {"path": "/tmp/ticket", "token": "token"},
     )
+
+
+def _ideation_service_for_test(tmp_path, *, state=None, statuses=None):
+    state_holder = {"state": state or {"enabled": True, "queue": []}, "statuses": statuses or []}
+    return QueueIdeationService(
+        repo_root=tmp_path,
+        load_state=lambda: state_holder["state"],
+        save_state=lambda new_state: state_holder.update(state=new_state),
+        write_status=lambda status, extra=None: state_holder["statuses"].append((status, extra)),
+        audit=lambda action, payload=None: None,
+        log=lambda message: None,
+        mark_history=lambda state, item, status, message: None,
+        rel=lambda path: str(path.resolve().relative_to(tmp_path)) if path.resolve().is_relative_to(tmp_path) else str(path),
+        now_iso=lambda: "2026-05-22T00:00:00",
+        ideation_env=lambda: {},
+        timeout_seconds=1,
+    )
+
+
+def test_ideation_retries_non_runnable_until_actionable(tmp_path, monkeypatch):
+    service = _ideation_service_for_test(tmp_path)
+    calls = []
+
+    def fake_generate_next_spec_if_idle(state):
+        calls.append(state)
+        return "ideation_not_runnable" if len(calls) == 1 else "queued_ideation_spec"
+
+    monkeypatch.setattr(service, "generate_next_spec_if_idle", fake_generate_next_spec_if_idle)
+
+    result = service.generate_until_actionable({"queue": []}, max_attempts=3)
+
+    assert result == "queued_ideation_spec"
+    assert len(calls) == 2
+
+
+def test_non_runnable_draft_is_suppressed_for_next_ideation_scan(tmp_path):
+    run_dir = tmp_path / "data" / "draft_run"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "status": "DRAFT",
+                "notes": "no strict executor match",
+                "proposal": {"proposal_id": "draft_run"},
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    request_path = run_dir / "executor_tool_request.yaml"
+    request_path.write_text(
+        yaml.safe_dump({"status": "awaiting_hermes_executor_code"}, allow_unicode=True),
+        encoding="utf-8",
+    )
+    service = _ideation_service_for_test(tmp_path)
+
+    service.suppress_non_runnable_draft(
+        {
+            "proposal_id": "draft_run",
+            "spec_path": str(spec_path),
+            "reason": "no strict executor match",
+        },
+        "DRAFT",
+    )
+
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    request = yaml.safe_load(request_path.read_text(encoding="utf-8"))
+    assert spec["automation_skip"]["status"] == "skipped_non_runnable"
+    assert request["status"] == "automation_skipped_non_runnable"
 
 
 def test_estimate_compute_metadata_is_record_only():
@@ -712,6 +785,212 @@ def test_repaired_data_rerun_stops_after_two_attempts(tmp_path):
     assert state["queue"][0]["failure_reason"].startswith("data repair rerun failed after prepared repair")
 
 
+def test_data_quality_block_records_signature(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_d"
+    run_dir.mkdir(parents=True)
+    script = tmp_path / "scripts" / "dummy_executor.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("def main():\n    return 0\n", encoding="utf-8")
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_d",
+                "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = {
+        "queue": [
+            {
+                "id": "run_d",
+                "status": "blocked",
+                "spec_path": "data/run_d/spec.yaml",
+                "block_reason": "data_quality_blocked: missing field",
+            }
+        ],
+        "history": [],
+    }
+
+    count = service.requeue_stale_data_quality_blocks(state, state["queue"])
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "blocked"
+    assert state["queue"][0]["data_quality_block_signature"]
+
+
+def test_data_quality_block_requeues_when_executor_inputs_change(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_d"
+    run_dir.mkdir(parents=True)
+    script = tmp_path / "scripts" / "dummy_executor.py"
+    script.parent.mkdir(parents=True)
+    script.write_text("def main():\n    return 0\n", encoding="utf-8")
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_d",
+                "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    state = {
+        "queue": [
+            {
+                "id": "run_d",
+                "status": "blocked",
+                "spec_path": "data/run_d/spec.yaml",
+                "block_reason": "data_quality_blocked: missing field",
+                "data_quality_block_signature": service.data_quality_block_signature(spec_path),
+            }
+        ],
+        "history": [],
+    }
+    script.write_text("def main():\n    return 1\n", encoding="utf-8")
+
+    count = service.requeue_stale_data_quality_blocks(state, state["queue"])
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "queued"
+    assert state["queue"][0]["requeue_reason"] == "data-quality inputs changed; re-run data-quality gate automatically"
+
+
+def test_post_run_gatekeeper_processes_only_current_run(tmp_path, monkeypatch):
+    calls = []
+    gate = GateKeeper(repo_root=tmp_path)
+
+    def fake_must_run(script, args, fail_msg):
+        calls.append((script, args, fail_msg))
+
+    monkeypatch.setattr(gate, "_must_run", fake_must_run)
+
+    gate.after_run_grid(tmp_path / "data" / "run_e")
+
+    assert ("auto_compute_l4_data.py", ["--run-dir", str(tmp_path / "data" / "run_e")], "L4 数据自动算失败, 检查 ranked.csv / trades.csv") in calls
+
+
+def test_pipeline_infra_failure_requeues_after_post_run_gate_failure(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_e"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_e",
+                "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    (run_dir / "vm_pipeline_stdout.log").write_text(
+        "auto_research_pipeline.py: FAIL: post-run GateKeeper check failed\n",
+        encoding="utf-8",
+    )
+    state = {
+        "queue": [
+                {
+                    "id": "run_e",
+                    "status": "failed",
+                    "spec_path": "data/run_e/spec.yaml",
+                    "failed_at": "2026-05-21T00:00:00",
+                    "failure_reason": "remote process exited but required artifacts are missing",
+                }
+        ],
+        "history": [],
+    }
+
+    count = service.requeue_stale_pipeline_failures(state, state["queue"])
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "queued"
+    assert state["queue"][0]["pipeline_failure_requeue_attempts"] == 1
+    assert spec["status"] == "READY"
+
+
+def test_old_pipeline_infra_failure_is_not_requeued_without_prior_signature(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_old"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump({"run_id": "run_old", "automation": {"command": ["python3", "scripts/dummy_executor.py"]}}),
+        encoding="utf-8",
+    )
+    (run_dir / "vm_pipeline_stdout.log").write_text(
+        "auto_research_pipeline.py: FAIL: post-run GateKeeper check failed\n",
+        encoding="utf-8",
+    )
+    state = {
+        "queue": [
+            {
+                "id": "run_old",
+                "status": "failed",
+                "spec_path": "data/run_old/spec.yaml",
+                "failed_at": "2026-05-20T00:00:00",
+                "failure_reason": "remote process exited but required artifacts are missing",
+            }
+        ],
+        "history": [],
+    }
+
+    count = service.requeue_stale_pipeline_failures(state, state["queue"])
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "failed"
+    assert state["queue"][0]["pipeline_failure_signature"]
+
+
+def test_execution_failure_requeues_when_executor_code_changed(tmp_path):
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_exec"
+    run_dir.mkdir(parents=True)
+    scripts_dir = tmp_path / "scripts"
+    scripts_dir.mkdir()
+    executor = scripts_dir / "dummy_executor.py"
+    executor.write_text("print('old')\n", encoding="utf-8")
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "run_id": "run_exec",
+                "status": "ARCHIVED",
+                "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+            }
+        ),
+        encoding="utf-8",
+    )
+    previous_sig = service.pipeline_failure_signature(spec_path)
+    executor.write_text("print('fixed')\n", encoding="utf-8")
+    (run_dir / "vm_pipeline_stdout.log").write_text("exit_code: 1\n", encoding="utf-8")
+    state = {
+        "queue": [
+            {
+                "id": "run_exec",
+                "status": "failed",
+                "spec_path": "data/run_exec/spec.yaml",
+                "failed_at": "2026-05-22T00:00:00",
+                "failure_reason": "remote pipeline exit_code=1",
+                "pipeline_failure_signature": previous_sig,
+            }
+        ],
+        "history": [],
+    }
+
+    count = service.requeue_stale_pipeline_failures(state, state["queue"])
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+
+    assert count == 1
+    assert state["queue"][0]["status"] == "queued"
+    assert state["queue"][0]["pipeline_failure_requeue_attempts"] == 1
+    assert spec["status"] == "READY"
+
+
 def test_runner_detects_failed_pipeline_even_when_old_artifacts_exist(tmp_path):
     run_dir = tmp_path / "run"
     run_dir.mkdir()
@@ -816,3 +1095,169 @@ def test_update_experiments_upserts(monkeypatch, tmp_path):
     rows = [row for row in data["experiments"] if row["id"] == "r1"]
     assert len(rows) == 1
     assert rows[0]["status"] == "rejected"
+
+
+# ---------------------------------------------------------------------------
+# DRAFT-pending-capability suppression bug fix (2026-05-24)
+# ---------------------------------------------------------------------------
+
+
+def _ideation_service_with_audit(tmp_path):
+    """Ideation service variant that captures audit events for assertions."""
+    audits: list[tuple[str, dict | None]] = []
+    statuses: list[tuple[str, dict | None]] = []
+    state_holder = {"state": {"enabled": True, "queue": []}}
+    service = QueueIdeationService(
+        repo_root=tmp_path,
+        load_state=lambda: state_holder["state"],
+        save_state=lambda new_state: state_holder.update(state=new_state),
+        write_status=lambda status, extra=None: statuses.append((status, extra)),
+        audit=lambda action, payload=None: audits.append((action, payload)),
+        log=lambda message: None,
+        mark_history=lambda state, item, status, message: None,
+        rel=lambda path: str(path.resolve().relative_to(tmp_path)) if path.resolve().is_relative_to(tmp_path) else str(path),
+        now_iso=lambda: "2026-05-24T15:30:00",
+        ideation_env=lambda: {},
+        timeout_seconds=1,
+    )
+    return service, audits, statuses, state_holder
+
+
+def _make_pending_capability_run(tmp_path, *, run_id="reverse_bond_floor_v1",
+                                  package_status="awaiting_hermes_executor_code"):
+    """Build a run dir mirroring what ideation_cycle produces when a DRAFT
+    proposal is generated with missing_capability_request."""
+    run_dir = tmp_path / "data" / run_id
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump(
+            {
+                "status": "DRAFT",
+                "notes": "missing registered capability",
+                "proposal": {"proposal_id": run_id},
+            },
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    request_path = run_dir / "executor_tool_request.yaml"
+    request_path.write_text(
+        yaml.safe_dump(
+            {"status": package_status, "tool_request_id": f"{run_id}_executor_v1"},
+            allow_unicode=True,
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    return run_dir, spec_path, request_path
+
+
+def test_draft_with_missing_capability_request_accepted_not_suppressed(tmp_path, monkeypatch):
+    """Test 1: DRAFT + missing_capability_request → accepted_pending_capability,
+    NOT suppressed. spec.yaml.automation_skip stays unset; executor_tool_request.yaml.status
+    stays in awaiting_hermes_executor_code so find_pending_tool_draft can pick it up."""
+    run_dir, spec_path, request_path = _make_pending_capability_run(tmp_path)
+    service, audits, statuses, _ = _ideation_service_with_audit(tmp_path)
+    payload = {
+        "status": "DRAFT",
+        "reason": "missing registered capability",
+        "proposal_id": "reverse_bond_floor_v1",
+        "spec_path": str(spec_path),
+        "executor_tool_package": {"status": "awaiting_hermes_executor_code"},
+    }
+    monkeypatch.setattr(
+        service,
+        "generate_next_spec_if_idle",
+        lambda state: (lambda: service._accept_pending_capability(payload))(),
+    )
+    result = service.generate_next_spec_if_idle({"queue": []})
+    assert result == "ideation_accepted_pending_capability"
+
+    # Suppression markers must NOT have been written.
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    assert "automation_skip" not in spec, (
+        "DRAFT with valid pending executor_tool_package must not be tagged "
+        "as automation_skip=skipped_non_runnable"
+    )
+    request = yaml.safe_load(request_path.read_text(encoding="utf-8"))
+    assert request["status"] == "awaiting_hermes_executor_code", (
+        "executor_tool_request.yaml.status must stay in its pending-capability "
+        "state so find_pending_tool_draft picks it up"
+    )
+    actions = {action for action, _ in audits}
+    assert "ideation_accepted_pending_capability" in actions
+    assert ("ideation_accepted_pending_capability", ) == tuple(s for s, _ in statuses)[-1:]
+
+
+def test_invalid_draft_still_suppressed(tmp_path):
+    """Test 2 (the critical regression guard): DRAFT WITHOUT a valid pending
+    executor_tool_package is genuine non-runnable garbage and MUST still be
+    suppressed. Otherwise the bug fix would also let malformed proposals through."""
+    run_dir, spec_path, _ = _make_pending_capability_run(
+        tmp_path,
+        run_id="garbage_draft",
+        package_status="invalid_tool_code_response",  # terminal failure
+    )
+    service, audits, statuses, _ = _ideation_service_with_audit(tmp_path)
+    payload_no_package = {
+        "status": "DRAFT",
+        "reason": "proposal schema invalid",
+        "proposal_id": "garbage_draft",
+        "spec_path": str(spec_path),
+        # no executor_tool_package at all
+    }
+    service.suppress_non_runnable_draft(payload_no_package, "DRAFT")
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    assert spec.get("automation_skip", {}).get("status") == "skipped_non_runnable"
+    suppressed = [a for a, _ in audits if a == "ideation_non_runnable_suppressed"]
+    assert suppressed, "non-runnable DRAFT without pending package must still be suppressed"
+
+
+def test_runnable_ready_proposal_path_unchanged(tmp_path):
+    """Test 3: READY proposal still goes through enqueue_ready_spec unchanged.
+    The bug fix only touches the DRAFT branch."""
+    from framework.autonomous.queue_ideation import _is_draft_pending_capability
+
+    ready_payload = {"status": "READY", "spec_path": "data/r1/spec.yaml"}
+    # READY proposals never trigger the pending-capability branch.
+    assert _is_draft_pending_capability(ready_payload) is False
+
+
+def test_repeated_draft_dedupes_to_noop(tmp_path):
+    """Test 4: same proposal_id offered twice → second call emits
+    ideation_pending_capability_noop, not a second fresh accept event."""
+    run_dir, spec_path, _ = _make_pending_capability_run(
+        tmp_path, run_id="duplicate_draft"
+    )
+    service, audits, statuses, _ = _ideation_service_with_audit(tmp_path)
+    payload = {
+        "status": "DRAFT",
+        "reason": "missing registered capability",
+        "proposal_id": "duplicate_draft",
+        "spec_path": str(spec_path),
+        "executor_tool_package": {"status": "awaiting_hermes_executor_code"},
+    }
+    # First call: fresh accept.
+    first = service._accept_pending_capability(payload)
+    # Second call: should be detected as already accepted and noop.
+    second = service._accept_pending_capability(payload)
+    assert first == "ideation_accepted_pending_capability"
+    assert second == "ideation_accepted_pending_capability"
+    actions = [a for a, _ in audits]
+    assert actions.count("ideation_accepted_pending_capability") == 1
+    assert actions.count("ideation_pending_capability_noop") == 1
+
+
+def test_draft_with_terminal_package_status_is_suppressed(tmp_path):
+    """Test 5: DRAFT + package with terminal failure status (e.g.
+    invalid_tool_code_response) is NOT pending-capability — it is a failed
+    attempt and should still be suppressed."""
+    from framework.autonomous.queue_ideation import _is_draft_pending_capability
+
+    payload = {
+        "status": "DRAFT",
+        "executor_tool_package": {"status": "invalid_tool_code_response"},
+    }
+    assert _is_draft_pending_capability(payload) is False
