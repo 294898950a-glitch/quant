@@ -323,3 +323,161 @@ def test_complete_task_auto_registers_from_completion_receipt(tmp_path: Path) ->
     assert done["status"] == "completed"
     package = yaml.safe_load(descriptor.read_text(encoding="utf-8"))
     assert package["status"] == "draft_tool_code"
+
+
+# ---------------------------------------------------------------------------
+# Pickable-status repair-flow tests (2026-05-25)
+#
+# After install_generated_executors flips a noncompliant task to
+# status="needs_compliance_repair", the handoff layer must pick it back up
+# and let Hermes re-claim it. These four tests pin down the exact contract:
+#
+#   1. needs_compliance_repair IS pickable (open_tasks + wake_once both see it,
+#      and claim_task succeeds and transitions it to "claimed")
+#   2. completed / installed are terminal and NOT pickable
+#   3. failed is terminal and NOT pickable
+#   4. stale claim recovery (the original "open" + STALE_CLAIM_MINUTES path)
+#      is unchanged
+# ---------------------------------------------------------------------------
+
+
+from framework.autonomous.hermes_executor_handoff import (  # noqa: E402
+    HANDOFF_PICKABLE_STATUSES,
+    open_tasks,
+)
+
+
+def test_needs_compliance_repair_is_pickable_open_tasks(tmp_path: Path) -> None:
+    """open_tasks must surface tasks whose install path flipped them to
+    needs_compliance_repair, not just status==open."""
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_a_executor_code",
+            "status": "needs_compliance_repair",
+            "compliance_errors": ["compliance_failed: missing GateKeeper import"],
+            "compliance_failed_at": "2026-05-25T00:00:00",
+            "target_script_path": "scripts/evaluate_a.py",
+            "run_dir": str(tmp_path / "data" / "task_a"),
+        },
+    )
+
+    picked = open_tasks(tmp_path)
+    assert len(picked) == 1
+    assert picked[0]["id"] == "task_a_executor_code"
+    assert picked[0]["status"] == "needs_compliance_repair"
+
+
+def test_needs_compliance_repair_is_pickable_wake_once_and_claim(tmp_path: Path) -> None:
+    """End-to-end: wake_once selects the repair task, then claim_task
+    transitions it from needs_compliance_repair → claimed."""
+    run_dir = tmp_path / "data" / "task_b"
+    run_dir.mkdir(parents=True)
+    descriptor = run_dir / "executor_tool_request.yaml"
+    descriptor.write_text(
+        yaml.safe_dump({"status": "needs_compliance_repair"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_b_executor_code",
+            "status": "needs_compliance_repair",
+            "compliance_errors": ["compliance_failed: missing GateKeeper import"],
+            "compliance_repair_request": str(run_dir / "generated_executor" / "compliance_repair_request.yaml"),
+            "target_script_path": "scripts/evaluate_b.py",
+            "run_dir": str(run_dir),
+            "descriptor_path": str(descriptor),
+        },
+    )
+
+    payload = wake_once(tmp_path)
+    assert payload["wakeAgent"] is True, (
+        f"wake_once must surface needs_compliance_repair tasks; got {payload}"
+    )
+    assert payload["reason"] == "open_hermes_executor_handoff"
+    assert any(t["id"] == "task_b_executor_code" for t in payload.get("tasks") or [])
+
+    claim = claim_task("task_b_executor_code", tmp_path, actor="hermes_repair_worker")
+    assert claim["status"] == "claimed"
+    # Persisted state should now show the task as claimed by the repair worker.
+    handoffs = yaml.safe_load(
+        (tmp_path / "data" / "research_framework" / "hermes_executor_handoffs.yaml").read_text(encoding="utf-8")
+    )
+    task = handoffs["tasks"][0]
+    assert task["status"] == "claimed"
+    assert task["claimed_by"] == "hermes_repair_worker"
+
+
+def test_completed_and_installed_are_not_pickable(tmp_path: Path) -> None:
+    """Terminal statuses (completed, installed) must NOT be re-picked.
+    Otherwise install_generated_executors would keep re-running successful
+    handoffs."""
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_c_executor_code",
+            "status": "completed",
+            "installed_at": "2026-05-24T07:35:01+00:00",
+            "target_script_path": "scripts/evaluate_c.py",
+        },
+    )
+    assert open_tasks(tmp_path) == []
+
+    # Sanity: claim_task on a completed task must refuse.
+    claim = claim_task("task_c_executor_code", tmp_path, actor="hermes")
+    assert claim["status"] == "not_claimable"
+
+
+def test_failed_is_not_pickable(tmp_path: Path) -> None:
+    """Terminal failure must NOT be re-picked. Only an explicit repair
+    status (e.g. needs_compliance_repair) should make a task pickable again."""
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_d_executor_code",
+            "status": "failed",
+            "target_script_path": "scripts/evaluate_d.py",
+        },
+    )
+    assert open_tasks(tmp_path) == []
+    claim = claim_task("task_d_executor_code", tmp_path, actor="hermes")
+    assert claim["status"] == "not_claimable"
+
+
+def test_stale_claim_recovery_unchanged(tmp_path: Path) -> None:
+    """The original stale-claim → open recovery path must still work after
+    the pickable-status refactor. A claimed task whose claimed_at is older
+    than STALE_CLAIM_MINUTES should be surfaced by open_tasks AND by
+    wake_once (which also reopens it)."""
+    long_ago = (datetime.now() - timedelta(minutes=60)).isoformat(timespec="seconds")
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_e_executor_code",
+            "status": "claimed",
+            "claimed_at": long_ago,
+            "claimed_by": "hermes",
+            "target_script_path": "scripts/evaluate_e.py",
+        },
+    )
+
+    picked = open_tasks(tmp_path)
+    assert len(picked) == 1 and picked[0]["id"] == "task_e_executor_code"
+
+    payload = wake_once(tmp_path)
+    assert payload["wakeAgent"] is True
+    # wake_once reopens the stale claim — task status should now be "open".
+    handoffs = yaml.safe_load(
+        (tmp_path / "data" / "research_framework" / "hermes_executor_handoffs.yaml").read_text(encoding="utf-8")
+    )
+    task = handoffs["tasks"][0]
+    assert task["status"] == "open"
+    assert "stale_claim_reopened_at" in task
+
+
+def test_handoff_pickable_statuses_set_is_explicit(tmp_path: Path) -> None:
+    """Sanity guard: the set itself must contain exactly the documented
+    pickable statuses. Adding a new repair status means editing this set;
+    this test exists so the change is visible in code review."""
+    assert HANDOFF_PICKABLE_STATUSES == {"open", "needs_compliance_repair"}

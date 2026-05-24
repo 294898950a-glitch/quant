@@ -27,6 +27,15 @@ FORBIDDEN_ACTIONS = [
     "Do not promote, archive, or mark any strategy live.",
 ]
 STALE_CLAIM_MINUTES = 10
+# Statuses that hermes_executor_handoff is allowed to claim and process.
+# Adding a new repair status (e.g. needs_generation_repair, needs_interface_repair)
+# means extending this set, not patching open_tasks() at every call site.
+# Keep this list in sync with the install / validate paths that flip tasks
+# into these statuses.
+HANDOFF_PICKABLE_STATUSES = {
+    "open",
+    "needs_compliance_repair",
+}
 REQUIRED_EXECUTOR_FUNCTIONS = {"main", "declare_data_requirements"}
 REQUIRED_EXECUTOR_ARTIFACTS = {"summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml", "adoption_pass"}
 FORBIDDEN_EXECUTOR_MARKERS = {"todo", "placeholder", "pseudocode", "demo-only"}
@@ -154,12 +163,25 @@ def _is_stale_claim(task: dict[str, Any], *, now_dt: datetime | None = None) -> 
 
 
 def open_tasks(repo_root: Path = REPO_ROOT) -> list[dict[str, Any]]:
+    """Return tasks that hermes_executor_handoff should process this tick.
+
+    A task is pickable if either:
+      * its status is in HANDOFF_PICKABLE_STATUSES (e.g. "open", or a
+        repair status flipped by install_generated_executors), OR
+      * it is a stale claim (a previous handoff was claimed but never
+        finished within STALE_CLAIM_MINUTES).
+
+    Terminal statuses (completed / installed / failed / etc.) are NOT
+    pickable. Repair flow expects install to flip the task into one of
+    the explicit repair statuses before this picker sees it.
+    """
     doc = _load_yaml(_handoffs_path(repo_root), default={"tasks": []})
     now_dt = datetime.now()
     return [
         task
         for task in _tasks(doc)
-        if str(task.get("status") or "") == "open" or _is_stale_claim(task, now_dt=now_dt)
+        if str(task.get("status") or "") in HANDOFF_PICKABLE_STATUSES
+        or _is_stale_claim(task, now_dt=now_dt)
     ]
 
 
@@ -228,7 +250,7 @@ def wake_once(repo_root: Path = REPO_ROOT, *, limit: int = 1) -> dict[str, Any]:
                     "Hermes claimed the handoff but did not complete it before the stale-claim timeout."
                 )
             status = "open"
-        if status != "open":
+        if status not in HANDOFF_PICKABLE_STATUSES:
             continue
         task["last_wakeup_at"] = now
         task["wakeup_count"] = int(task.get("wakeup_count") or 0) + 1
@@ -260,9 +282,10 @@ def claim_task(task_id: str, repo_root: Path = REPO_ROOT, *, actor: str = "herme
         if str(task.get("id") or "") != task_id:
             continue
         status = str(task.get("status") or "")
-        if status not in {"open", "claimed"}:
+        claimable = HANDOFF_PICKABLE_STATUSES | {"claimed"}
+        if status not in claimable:
             return {"status": "not_claimable", "task_id": task_id, "current_status": status}
-        if status == "open":
+        if status in HANDOFF_PICKABLE_STATUSES:
             task["status"] = "claimed"
             task["claimed_at"] = now
             task["claimed_by"] = actor

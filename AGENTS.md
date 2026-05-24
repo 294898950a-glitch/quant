@@ -226,6 +226,50 @@ flagged as `compliance_failed`, repair_request marker is written,
 DRAFT spec routes through compile correctly, READY specs are not
 touched, compliant install completes).
 
+Handoff pickable statuses (2026-05-25):
+
+`hermes_executor_handoff.HANDOFF_PICKABLE_STATUSES` is the explicit
+set of task statuses that `open_tasks()`, `wake_once()`, and
+`claim_task()` will surface as work. Today it contains:
+
+```
+{"open", "needs_compliance_repair"}
+```
+
+When install_generated_executors flips a noncompliant task from
+`completed` to `needs_compliance_repair`, the handoff layer must
+re-pick it so Hermes can rewrite the executor with the missing
+`GateKeeper` import. Hardcoding `status == "open"` at every call
+site was the original bug — repair tasks were generated but never
+consumed, breaking the closed loop. New repair statuses (e.g.
+`needs_generation_repair`, `needs_interface_repair`) should be added
+to this constant, not patched at each call site.
+
+`claim_task` flips `needs_compliance_repair → claimed` exactly like
+`open → claimed`; `finalize_task_if_valid` then accepts the claimed
+task on completion. The state machine flow is:
+
+```
+needs_compliance_repair  ──claim_task──▶  claimed
+                                                ──complete_task──▶  finalize ──▶ completed
+                                                                                    │
+                                                                                    ▼
+                                                                       install_generated_executors
+                                                                          (re-runs compliance check)
+                                                                                    │
+                                              ┌─────────────────────────────────────┘
+                                              ▼
+                          if still noncompliant: back to needs_compliance_repair
+                          if compliant:          spec_compiler recompile → READY → queued
+```
+
+Pinned by `framework/tests/test_hermes_executor_handoff.py` (5 new
+cases plus the existing stale-claim recovery test): needs_compliance_repair
+is pickable by open_tasks + wake_once + claim_task; completed and
+installed are NOT pickable; failed is NOT pickable; stale-claim
+recovery is unchanged; the constant set is asserted explicitly so
+adding a new status forces a code-review change.
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live
