@@ -20,6 +20,9 @@ try:
     from framework.autonomous.framework_change_recorder import record_framework_change
     from framework.autonomous.paths import ResearchPaths
     from framework.autonomous.prompt_contracts import prompt_contract_for_role
+    from framework.autonomous.research_delta_gate import (
+        evaluate as evaluate_research_delta,
+    )
     from framework.autonomous.spec_compiler import compile as compile_proposal
     from framework.autonomous.strategy_ideator import propose
     from framework.autonomous.verification_tool import EvidenceToolkit
@@ -33,6 +36,7 @@ except ModuleNotFoundError:  # importlib-based tests may load files directly
     from framework_change_recorder import record_framework_change  # type: ignore
     from paths import ResearchPaths  # type: ignore
     from prompt_contracts import prompt_contract_for_role  # type: ignore
+    from research_delta_gate import evaluate as evaluate_research_delta  # type: ignore
     from spec_compiler import compile as compile_proposal  # type: ignore
     from strategy_ideator import propose  # type: ignore
     from verification_tool import EvidenceToolkit  # type: ignore
@@ -237,6 +241,26 @@ class IdeationCycle:
             },
         )
 
+        # Research Delta Gate (Phase 1 V1) — judge whether this proposal
+        # carries enough novelty over history to justify compile + queue.
+        # The gate is a pure function over (proposal, digest, insights,
+        # queue_state); persistence of the decision is the caller's job.
+        delta_decision = evaluate_research_delta(
+            proposal,
+            recent_digest=digest,
+            research_insights=research_insights,
+            queue_state=queue_state,
+        )
+        proposal["research_delta_gate"] = {
+            "action": delta_decision.action,
+            "reason": delta_decision.reason,
+            "evidence": delta_decision.evidence,
+        }
+        # Persist the gate verdict back into the proposal artifact so
+        # downstream readers (review_memory, audits, Hermes' next ideation
+        # context) can see why this proposal was advanced / watched / skipped.
+        self.store.write_yaml(proposal_path, proposal)
+
         payload: dict[str, Any] = {
             "proposal_path": str(proposal_path),
             "proposal_id": proposal_id,
@@ -248,9 +272,21 @@ class IdeationCycle:
             "rewrite_last_errors": [],
             "pre_ideation_evidence_count": len(pre_ideation_evidence),
             "proposal_framework_change_event_hash": proposal_event_hash,
+            "research_delta_gate_action": delta_decision.action,
+            "research_delta_gate_reason": delta_decision.reason,
+            "research_delta_gate_evidence": delta_decision.evidence,
         }
         if dry_run:
             payload["status"] = "PROPOSAL_ONLY"
+            return payload
+
+        # Skip / watch are terminal for this cycle — neither compiles nor
+        # enqueues. The proposal artifact already records why.
+        if delta_decision.action == "skip":
+            payload["status"] = "SKIPPED_BY_DELTA_GATE"
+            return payload
+        if delta_decision.action == "watch":
+            payload["status"] = "WATCHED_BY_DELTA_GATE"
             return payload
 
         result = compile_proposal(

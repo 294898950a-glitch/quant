@@ -311,6 +311,67 @@ flow + still-noncompliant source is blocked at the validate_executor
 gate (not the overwrite branch); main() cleans the stale compliance
 fields and writes the repair_installed_at audit trail.
 
+Research Delta Gate (Phase 1 V1, 2026-05-25):
+
+After the auto-research execution chain was confirmed closed, the
+next risk was Hermes being able to propose anything it wants
+without judgement. The Research Delta Gate is a small pure-function
+module that runs between proposal generation and spec compilation
+and decides whether the new proposal carries real research delta
+over history.
+
+`framework/autonomous/research_delta_gate.evaluate(proposal, *,
+recent_digest, research_insights, queue_state)` returns a
+`DeltaDecision(action, reason, evidence)` where `action` is exactly
+one of:
+
+* `advance` — flow continues into compile + queue as before.
+* `skip`    — duplicate of a settled prior run with the same family
+              and capability_ids (and no new critical-insight cited),
+              OR family marked closed in suggested_closed_families
+              (with no new critical-insight cited). The proposal is
+              kept on disk for audit, but the cycle returns
+              `SKIPPED_BY_DELTA_GATE` and the spec compiler is NOT
+              invoked.
+* `watch`   — the shape matches a prior run but the proposal cites a
+              new critical insight (hold for review instead of
+              silently re-running), OR the queue has saturated and
+              new advances are throttled. Returns
+              `WATCHED_BY_DELTA_GATE`; the spec compiler is NOT
+              invoked.
+
+The merge (`B_merge`) and pivot (`C_pivot`) actions are explicitly
+out of scope for V1.
+
+Tuning knobs live as module-level constants:
+
+* `CLOSED_FAMILY_REJECT_THRESHOLD` (default 2): a family must have
+  this many rejects in suggested_closed_families before the gate
+  treats it as closed.
+* `QUEUE_SATURATION_DEPTH` (default 5): when the live queue holds
+  this many queued/running items, brand-new advances are downgraded
+  to `watch` to keep the queue bounded.
+
+The decision is written back to the proposal artifact under the
+`research_delta_gate` key so downstream readers (review_memory,
+Hermes' next ideation context, audits) can see why a proposal was
+advanced / watched / skipped without re-deriving the call.
+
+`queue_ideation.generate_next_spec_if_idle` now recognises the two
+new terminal statuses and routes them through dedicated audit /
+status events (`ideation_skipped_by_delta_gate` /
+`ideation_watched_by_delta_gate`). Crucially these statuses do NOT
+go through `suppress_non_runnable_draft` — a delta-gate decision is
+a legitimate research-judgement output, not malformed garbage. They
+are also NOT in `RETRYABLE_IDEATION_RESULTS`; the loop does not
+retry on them.
+
+Pinned by `framework/tests/test_research_delta_gate.py` (18 cases
+covering the contract, the five user-level acceptance criteria
+including human-readable reasons, edge cases for adopted prior runs
+and below-threshold closed families, and robustness against missing
+inputs).
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live

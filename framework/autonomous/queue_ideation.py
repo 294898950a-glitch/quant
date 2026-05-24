@@ -175,6 +175,29 @@ class QueueIdeationService:
             item = self.enqueue_ready_spec(state, payload)
             self.write_status("queued_ideation_spec", item)
             return "queued_ideation_spec"
+        # Research Delta Gate (Phase 1 V1) — these statuses mean the
+        # ideation cycle deliberately decided not to compile/enqueue. They
+        # are NOT non-runnable garbage and must not be suppressed.
+        if status == "SKIPPED_BY_DELTA_GATE":
+            gate_payload = {
+                "proposal_id": payload.get("proposal_id"),
+                "proposal_path": payload.get("proposal_path"),
+                "reason": payload.get("research_delta_gate_reason"),
+                "evidence": payload.get("research_delta_gate_evidence"),
+            }
+            self.audit("ideation_skipped_by_delta_gate", gate_payload)
+            self.write_status("ideation_skipped_by_delta_gate", gate_payload)
+            return "ideation_skipped_by_delta_gate"
+        if status == "WATCHED_BY_DELTA_GATE":
+            gate_payload = {
+                "proposal_id": payload.get("proposal_id"),
+                "proposal_path": payload.get("proposal_path"),
+                "reason": payload.get("research_delta_gate_reason"),
+                "evidence": payload.get("research_delta_gate_evidence"),
+            }
+            self.audit("ideation_watched_by_delta_gate", gate_payload)
+            self.write_status("ideation_watched_by_delta_gate", gate_payload)
+            return "ideation_watched_by_delta_gate"
         if _is_draft_pending_capability(payload):
             return self._accept_pending_capability(payload)
         self.suppress_non_runnable_draft(payload, status)
