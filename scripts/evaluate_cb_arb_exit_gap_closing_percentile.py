@@ -22,6 +22,22 @@ import pandas as pd
 import yaml
 
 
+# yaml.safe_dump cannot represent numpy scalars; register fallbacks once so
+# pandas-derived metrics dicts survive the report write.
+def _yaml_repr_np_float(dumper, data):
+    return dumper.represent_float(float(data))
+
+
+def _yaml_repr_np_int(dumper, data):
+    return dumper.represent_int(int(data))
+
+
+yaml.SafeDumper.add_representer(np.floating, _yaml_repr_np_float)
+yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)
+yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)
+yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)
+
+
 # ---------------------------------------------------------------------------
 # Path resolution
 # ---------------------------------------------------------------------------
