@@ -56,5 +56,13 @@ class ResearchPaths:
         return self.research_framework_dir / "ai_prompt_contracts.yaml"
 
     @property
+    def data_inventory(self) -> Path:
+        return self.research_framework_dir / "data_inventory.yaml"
+
+    @property
     def research_queue(self) -> Path:
         return self.research_framework_dir / "research_queue.yaml"
+
+    @property
+    def research_insights(self) -> Path:
+        return self.research_framework_dir / "research_insights.yaml"

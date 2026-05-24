@@ -1,0 +1,11 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_full-flip-probe_20260524
+diagnostic_date: '2026-05-24'
+diagnostic_by: claude
+verdict_referenced: reject
+summary: full_flip_value_gap on cb_arb_value_gap_switch. Test excess=-0.352265, max_dd=0.0,
+  trades=0, cost_model_enabled=False.
+verdict_rationale: Probe is degenerate — no trades were generated. The candidate set
+  under this probe's filter/sort combination is empty; the probe does not yield actionable
+  evidence about the underlying signal.
+errors: []

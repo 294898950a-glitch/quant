@@ -13,6 +13,7 @@ import yaml
 try:
     from framework.autonomous.artifacts import ArtifactStore
     from framework.autonomous.ai_provider_adapter import RegisteredProviderAdapter
+    from framework.autonomous.data_inventory import compact_data_inventory
     from framework.autonomous.evidence_tool_registry import EvidenceToolRegistry
     from framework.autonomous.executor_registry import capability_catalog
     from framework.autonomous.executor_registry import validate_registry_schema
@@ -25,6 +26,7 @@ try:
 except ModuleNotFoundError:  # importlib-based tests may load files directly
     from artifacts import ArtifactStore  # type: ignore
     from ai_provider_adapter import RegisteredProviderAdapter  # type: ignore
+    from data_inventory import compact_data_inventory  # type: ignore
     from evidence_tool_registry import EvidenceToolRegistry  # type: ignore
     from executor_registry import capability_catalog  # type: ignore
     from executor_registry import validate_registry_schema  # type: ignore
@@ -104,7 +106,9 @@ class IdeationCycle:
         current = self.store.read_yaml(self.paths.current, default={})
         digest = self.store.read_yaml(digest_path or self.paths.recent_results_digest)
         registry = self.store.read_yaml(registry_path or self.paths.executor_registry)
+        data_inventory = self.store.read_yaml(self.paths.data_inventory, default={})
         queue_state = self.store.read_yaml(self.paths.research_queue, default={})
+        research_insights = self.store.read_yaml(self.paths.research_insights, default={})
         tool_registry_store = EvidenceToolRegistry(tool_registry_path or self.paths.evidence_tool_registry)
         tool_registry = tool_registry_store.load()
         pending = find_pending_tool_draft(Path(output_root or self.paths.data_root), self.store)
@@ -168,7 +172,14 @@ class IdeationCycle:
         cap_menu = capability_menu(registry)
         pre_ideation_evidence = collect_pre_ideation_evidence(digest)
 
-        instruction = proposal_instruction(closed_tags, digest, cap_menu, current)
+        instruction = proposal_instruction(
+            closed_tags,
+            digest,
+            cap_menu,
+            current,
+            data_inventory=compact_data_inventory(data_inventory),
+            research_insights=research_insights,
+        )
         instruction["forced_prompt_contract"] = prompt_contract_for_role(
             "strategy_ideation",
             repo_root=self.paths.repo_root,
@@ -191,7 +202,21 @@ class IdeationCycle:
         proposal["rewrite_rounds_used"] = 0
         proposal["rewrite_last_errors"] = []
         proposal_id = str(proposal.get("proposal_id") or "auto_strategy_proposal").replace(" ", "_")
-        run_dir = Path(output_root or self.paths.data_root) / proposal_id
+        output_base = Path(output_root or self.paths.data_root)
+        run_dir = output_base / proposal_id
+        if run_dir.exists():
+            base_id = proposal_id
+            for index in range(1, 100):
+                candidate_id = f"{base_id}_{index}"
+                candidate_dir = output_base / candidate_id
+                if not candidate_dir.exists():
+                    proposal_id = candidate_id
+                    proposal["proposal_id"] = candidate_id
+                    proposal["proposal_id_deduped_from"] = base_id
+                    run_dir = candidate_dir
+                    break
+            else:
+                raise RuntimeError(f"unable to allocate unique proposal directory for {base_id}")
         proposal_path = run_dir / "proposal.yaml"
         proposal["proposal_path"] = str(proposal_path)
         self.store.write_yaml(proposal_path, proposal)
@@ -372,6 +397,9 @@ def find_pending_tool_draft(output_root: Path, store: ArtifactStore) -> dict[str
         except Exception:
             continue
         if spec.get("status") != "DRAFT":
+            continue
+        automation_skip = spec.get("automation_skip")
+        if isinstance(automation_skip, dict) and automation_skip.get("status") == "skipped_non_runnable":
             continue
         if spec.get("notes") not in {"no strict executor match", "missing registered capability"}:
             continue
@@ -1388,25 +1416,86 @@ def capability_menu(registry: dict[str, Any]) -> dict[str, Any]:
     return menu
 
 
+def _critical_insights(research_insights: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """Filter research_insights.yaml::key_insights to critical-priority entries.
+
+    Critical insights are evidence-backed findings that should bias future
+    ideation. We pass them into the prompt so Hermes sees them alongside
+    closed_tags and recent_digest, not as a command to follow but as
+    evidence to reason about (see "三问" hard_rule).
+    """
+    if not isinstance(research_insights, dict):
+        return []
+    key_insights = research_insights.get("key_insights")
+    if not isinstance(key_insights, list):
+        return []
+    out: list[dict[str, Any]] = []
+    for item in key_insights:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("priority", "")).lower() == "critical":
+            out.append(item)
+    return out
+
+
+def _repeated_reject_families(digest: dict[str, Any] | None) -> list[str]:
+    """Family tags rejected 2+ times in recent runs.
+
+    Used to trigger the 三问 (signal-invalid / direction-reversed /
+    execution-wrong) clause in the ideation prompt.
+    """
+    if not isinstance(digest, dict):
+        return []
+    suggested = digest.get("suggested_closed_families")
+    out: list[str] = []
+    if isinstance(suggested, list):
+        for entry in suggested:
+            if not isinstance(entry, dict):
+                continue
+            tag = entry.get("tag")
+            count = entry.get("reject_count")
+            if isinstance(tag, str) and isinstance(count, (int, float)) and count >= 2:
+                out.append(tag)
+    return out
+
+
 def proposal_instruction(
     closed_tags: dict[str, Any],
     digest: dict[str, Any],
     cap_menu: dict[str, Any],
     current: dict[str, Any] | None = None,
+    data_inventory: dict[str, Any] | None = None,
+    research_insights: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     active_strategy_id = current_main_strategy_id(current or {}) or "unknown"
+    critical_insights = _critical_insights(research_insights)
+    repeated_rejects = _repeated_reject_families(digest)
+    hard_rules = [
+        "Return only the object. No markdown fences, no explanation.",
+        "Select capability_ids only from capability_menu. Do not hand-write capability names.",
+        "Use capability_menu to understand each id, available executors, and required data.",
+        "Use data_inventory only to choose realistic required_data paths; do not treat it as a data-quality approval.",
+        "Fill required_data_fields as a mapping from each required_data path to the exact columns needed, using only columns visible in data_inventory or executor requirements.",
+        "If no capability id fits the idea, do not invent one; include missing_capability_request and expect DRAFT.",
+        "Do not use any capability whose resolved mechanic is listed in closed_tags.",
+        "If the idea requires an unimplemented executor, still propose it; compiler will mark DRAFT.",
+        "If you need a new evidence tool, first review available_evidence_tools and explain why existing tools are insufficient. New tools must be registered before use.",
+        "Do not write files. Do not run tests. Do not change current strategy.",
+        "Read every entry in active_critical_insights before choosing a direction. These are high-priority evidence findings; your source_insight or why_not_repeated_failure field must explicitly reference any active_critical_insight whose decision_use applies to the family you propose. Do not silently ignore them.",
+    ]
+    if repeated_rejects:
+        hard_rules.append(
+            "repeated_reject_families lists family tags that have failed 2+ recent runs. "
+            "Before proposing the next variant in any of these families, your hypothesis "
+            "field must explicitly answer three questions: (1) is the underlying signal "
+            "invalid? (2) is the direction reversed (e.g. the rank order is anti-alpha)? "
+            "(3) is only the execution condition wrong? Choose one explanation and justify "
+            "it from evidence. You are not required to switch direction, but you are required "
+            "to consider whether the failure is signal-side, direction-side, or execution-side."
+        )
     return {
         "task": "Generate exactly one new strategy proposal as a YAML or JSON object.",
-        "hard_rules": [
-            "Return only the object. No markdown fences, no explanation.",
-            "Select capability_ids only from capability_menu. Do not hand-write capability names.",
-            "Use capability_menu to understand each id, available executors, and required data.",
-            "If no capability id fits the idea, do not invent one; include missing_capability_request and expect DRAFT.",
-            "Do not use any capability whose resolved mechanic is listed in closed_tags.",
-            "If the idea requires an unimplemented executor, still propose it; compiler will mark DRAFT.",
-            "If you need a new evidence tool, first review available_evidence_tools and explain why existing tools are insufficient. New tools must be registered before use.",
-            "Do not write files. Do not run tests. Do not change current strategy.",
-        ],
+        "hard_rules": hard_rules,
         "required_fields": [
             "proposal_id",
             "strategy_id",
@@ -1417,6 +1506,7 @@ def proposal_instruction(
             "capability_ids",
             "required_executor",
             "required_data",
+            "required_data_fields",
             "test_design",
             "success_criteria",
             "falsifiers",
@@ -1430,7 +1520,10 @@ def proposal_instruction(
         "closed_tags": closed_tags,
         "allowed_capability_ids": sorted(cap_menu),
         "capability_menu": cap_menu,
+        "data_inventory": data_inventory or {"available": False},
         "recent_digest": digest,
+        "active_critical_insights": critical_insights,
+        "repeated_reject_families": repeated_rejects,
     }
 
 

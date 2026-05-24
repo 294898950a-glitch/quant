@@ -74,6 +74,38 @@ the next idle VM has work waiting. To force the older serial behavior on a
 particular run, set `state["parallel_dispatch"] = false` in
 `research_queue.yaml`.
 
+Ideation evidence-injection rule (2026-05-24):
+
+The strategy ideation prompt receives three signals that did not exist
+before this rule:
+
+1. `active_critical_insights` — every entry in
+   `research_insights.yaml::key_insights` whose `priority` is `critical`
+   is forwarded into the ideator's `insights` payload. The prompt
+   instructs Hermes to read each one and reference any whose
+   `decision_use` applies to the proposed family. This carries
+   high-priority evidence findings (e.g.
+   `value_gap_rank_is_anti_alpha_2026_05_24`) into the decision
+   surface instead of leaving them as offline research memory.
+2. `repeated_reject_families` — family tags with 2+ recent rejections
+   are surfaced separately. When this list is non-empty, the prompt
+   appends a hard rule requiring the new hypothesis to answer three
+   questions before proposing the next neighbor-variant: is the
+   underlying signal invalid, is the direction reversed, or is only the
+   execution condition wrong. Hermes is not forced to switch direction;
+   it is forced to choose and justify one explanation. The goal is to
+   bring the reverse-direction hypothesis into the decision context,
+   not to mandate the answer.
+3. Probe-class evaluators that wrap the base strategy (currently
+   `evaluate_cb_arb_reverse_probe.py` and
+   `evaluate_cb_arb_full_flip_probe.py`) must call
+   `scripts/probe_report_synth.py::write_probe_artifacts` after the
+   wrapped `main()` returns so the run produces framework-schema
+   `report.yaml` + `diagnostic.yaml` and enters review_memory normally.
+   Previously such runs were mis-classified `failed` because the base
+   evaluator does not write those files, which silently dropped probe
+   evidence out of the recent-results digest that Hermes consumes.
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live

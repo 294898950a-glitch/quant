@@ -230,3 +230,4 @@ ideation_provenance:
   compiler_decision: READY
   compiler_reason: all guarded checks passed
   dropped_unmatched_required_data: []
+updated_at: '2026-05-24T01:44:22Z'

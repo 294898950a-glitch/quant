@@ -1,0 +1,7 @@
+patched_behavior: _add_value_gap_amounts() and read_parquet() of daily ranks return
+  value_gap_amount * -1; > 0 filter now picks originally-negative gaps; descending
+  sort picks most-negative-original first.
+predecessor: data/cb_arb_value_gap_switch_reverse-probe_20260524
+probe_type: full_flip_value_gap
+purpose: Strong-form anti-alpha test — buy the most over-priced bonds (originally
+  value_gap_amount < 0).

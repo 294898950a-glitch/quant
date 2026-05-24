@@ -1,0 +1,43 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+reviewer: claude
+ack_at: '2026-05-24T05:22:24+00:00'
+overall_decision: mini-spec-retry
+overall_pass: false
+overall_reason: Probe shows positive test_excess=0.303. Evidence for the intervention;
+  requires follow-up (cost robustness, confounder diagnostic) before any promotion.
+q1_floor_binding:
+  description: Probe is evidence-only; q1 hard-floor binding is not applicable.
+  answer: not_applicable (probe class)
+  computed_data: {}
+  computed_at: '2026-05-24T05:22:24+00:00'
+  pass: true
+  applicable: false
+q2_selection_score:
+  description: Probe is evidence-only; q2 selection score is not applicable.
+  answer: not_applicable (probe class)
+  computed_data: {}
+  computed_at: '2026-05-24T05:22:24+00:00'
+  pass: true
+  applicable: false
+q3_baseline_alignment:
+  description: Probe is evidence-only; q3 baseline alignment is not applicable.
+  answer: not_applicable (probe class)
+  computed_data: {}
+  computed_at: '2026-05-24T05:22:24+00:00'
+  pass: true
+  applicable: false
+q4_monotonic:
+  description: Probe is evidence-only; q4 monotonicity is not applicable.
+  answer: not_applicable (probe class)
+  computed_data: {}
+  computed_at: '2026-05-24T05:22:24+00:00'
+  pass: true
+  applicable: false
+q5_trade_overlap:
+  description: Probe is evidence-only; q5 trade overlap is not applicable.
+  answer: not_applicable (probe class)
+  computed_data: {}
+  computed_at: '2026-05-24T05:22:24+00:00'
+  pass: true
+  applicable: false

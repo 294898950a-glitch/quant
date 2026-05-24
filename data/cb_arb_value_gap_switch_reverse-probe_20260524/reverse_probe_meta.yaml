@@ -1,0 +1,6 @@
+limitation: candidate filter value_gap_amount > 0 unchanged; picks least under-priced,
+  not most over-priced
+patched_behavior: sort_values('value_gap_amount') flipped to ascending=True
+probe_type: reverse_rank_value_gap
+purpose: Disambiguate whether value_gap signal is real mispricing vs negative-drift
+  universe vs anti-alpha.

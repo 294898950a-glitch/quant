@@ -1,0 +1,10 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+diagnostic_date: '2026-05-24'
+diagnostic_by: claude
+verdict_referenced: reject
+summary: 'moneyness entry filter v1_7 (manual_unblock requeue): forward-direction
+  variant, rejected per anti-alpha hypothesis (see research_insights.yaml::value_gap_rank_is_anti_alpha_2026_05_24).'
+verdict_rationale: l4_ack.overall_decision=reject; this variant tests a forward-direction
+  filter on a signal now classified anti-informative.
+errors: []

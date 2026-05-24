@@ -129,6 +129,16 @@ def main() -> int:
             ),
             encoding="utf-8",
         )
+        # Synthesise framework-schema report.yaml + diagnostic.yaml so the
+        # run flows into review_memory; base evaluator only writes
+        # summary.json + l4_ack.yaml.
+        try:
+            sys.path.insert(0, str(REPO_ROOT / "scripts"))
+            from probe_report_synth import write_probe_artifacts  # noqa: E402
+
+            write_probe_artifacts(args.output_dir, probe_type="reverse_rank_value_gap")
+        except Exception as exc:  # pragma: no cover - best-effort
+            print(f"[reverse_probe] report synth skipped: {exc}", flush=True)
     return rc
 
 

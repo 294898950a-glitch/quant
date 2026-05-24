@@ -1,0 +1,62 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+date: '2026-05-24'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: mini-spec-retry
+three_exits_section:
+  adoption_pass: false
+  l6_decision_from_review: mini-spec-retry
+  selected_params_summary: probe_type=reverse_rank_value_gap_cost_on; test_best=excess
+    0.303133 dd -0.113253 trades 377
+  evaluator: reverse_rank_value_gap_cost_on
+  review_reason: Probe shows positive test_excess=0.303. Evidence for the intervention;
+    requires follow-up (cost robustness, confounder diagnostic) before any promotion.
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- 'cb_arb_value_gap_switch_reverse-probe-coston_20260524: mini-spec-retry — Probe
+  shows positive test_excess=0.303. Evidence for the intervention; requires follow-up
+  (cost robustness, confounder d'
+learnings:
+- reverse_rank_value_gap_cost_on produced complete summary.json with test_excess=0.303133
+  (cost_model_enabled=True). report.yaml synthesised by scripts/probe_report_synth.py
+  so the run enters review_memory.
+follow_up_actions:
+- Evidence-only — no promotion. See research_insights.yaml::value_gap_rank_is_anti_alpha_2026_05_24
+  for context.
+status: COMPLETE
+generated_by: scripts/probe_report_synth.py
+generated_at: '2026-05-24T05:22:24+00:00'
+evaluator_report:
+  probe_type: reverse_rank_value_gap_cost_on
+  cost_model_enabled: true
+  train_best:
+    candidate: '{"max_hold_days": 90.0, "min_gap_pct": 0.01, "sell_gap_pct": 0.0,
+      "stop_gap_ratio_floor": 0.0, "switch_hurdle_pct": 0.02}'
+    min_gap_pct: 0.01
+    sell_gap_pct: 0.0
+    switch_hurdle_pct: 0.02
+    max_hold_days: 90.0
+    stop_gap_ratio_floor: 0.0
+    total_return: 1.238802
+    excess_return: 0.966487
+    max_drawdown: -0.235789
+    win_rate: 0.5379
+    total_trades: 1740
+    n_days: 1456
+    score: 0.90754
+  test_best:
+    candidate: '{"max_hold_days": 180.0, "min_gap_pct": 0.01, "sell_gap_pct": 0.0,
+      "stop_gap_ratio_floor": 0.0, "switch_hurdle_pct": 0.0}'
+    min_gap_pct: 0.01
+    sell_gap_pct: 0.0
+    switch_hurdle_pct: 0.0
+    max_hold_days: 180.0
+    stop_gap_ratio_floor: 0.0
+    stop_signal_threshold: 999.0
+    total_return: 0.655398
+    excess_return: 0.303133
+    max_drawdown: -0.113253
+    win_rate: 0.5862
+    total_trades: 377
+    n_days: 323
+    score: 0.27482

@@ -254,3 +254,8 @@ allowlist:
     probe, single run, no parameter grid.
   added_at: '2026-05-24'
   added_by: claude
+- script: scripts/evaluate_cb_arb_moneyness_entry_filter_v2.py
+  reason: Hermes-generated grid evaluator v2 with prior-day shift fix; same family
+    as v1 (which IS gatekeeper-wrapped). Wraps the same value_gap_switch base.
+  added_at: '2026-05-24'
+  added_by: claude

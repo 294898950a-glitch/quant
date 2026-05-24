@@ -1,0 +1,19 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+spec_path: data/cb_arb_value_gap_switch_reverse-probe-coston_20260524/spec.yaml
+validated_at: '2026-05-24T13:21:09'
+summary_sha256: 9f79523698cfb2b638812fd3e1187271cd61d9e69002a8145faf77beaba2a152
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- 'cb_daily 缺少推荐字段: cb_over_rate, pct_chg（非必需，执行器可能自行推导或跳过相关逻辑）'
+- 'cb_call 缺少推荐字段: call_type（非必需，不影响运行）'
+fix_plan: []
+decision_reason: 四个必需数据文件全部存在且可读，训练和测试日期区间完全被行情数据覆盖（cb_daily 至 20260508，stk_daily_qfq
+  至 20260508），executor_requirements 未定义 required_columns 和 required_column_quality，无硬性字段级阻断条件，推荐字段缺失不影响核心执行路径。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: dc67980e01dd6713
