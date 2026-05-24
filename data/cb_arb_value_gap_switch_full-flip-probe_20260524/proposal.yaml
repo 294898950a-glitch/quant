@@ -1,0 +1,86 @@
+proposal_id: cb_arb_value_gap_switch_full-flip-probe_20260524
+strategy_id: cb_arb_value_gap_switch
+family: meta_validation_probe
+hypothesis: |
+  The 2026-05-24 reverse-rank probe (cost off) showed +148% train / +38%
+  test excess by ASCENDING the sort over the same > 0 candidate set. That
+  rules out "universe drifts negative" and "signal real but costs eat
+  alpha", and supports "value_gap formula is anti-informative".
+  But the > 0 filter was unchanged, so the probe actually picked
+  near-fair-value bonds (smallest positive gap), not over-priced bonds.
+  This probe closes that gap: negate value_gap_amount, so the same > 0
+  filter and the same descending sort instead select MOST OVER-PRICED
+  bonds (originally value_gap_amount < 0). If forward loses, reverse-sort
+  wins, AND this full-flip wins, the formula is fully inverted relative
+  to the exploitable structure in the data.
+source_insight: |
+  value_gap_rank_is_anti_alpha_2026_05_24 (research_insights.yaml). The
+  ideator direction_bias prefers full_filter_flip_probe as the second
+  follow-up after cost_on_reverse_rerun.
+expected_improvement: |
+  This is a meta probe, not an alpha optimization. Expected outcome by
+  case:
+   - full-flip excess > reverse-rank excess → over-priced bonds beat
+     near-fair, strong anti-alpha confirmed (formula is fully inverted)
+   - full-flip excess ≈ reverse-rank excess → both inverted picks win
+     similarly; the discriminating axis isn't gap-sign but distance-from
+     -fair, suggesting value_gap_amount measures roughly the right thing
+     but the direction interpretation is wrong
+   - full-flip excess negative → universe of negative-gap bonds is
+     genuinely worse; the reverse-rank win was structural to the > 0
+     subset only
+capability_ids:
+- C002
+required_executor: evaluate_cb_arb_full_flip_probe
+required_data:
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+falsifiers:
+  train: &id001
+  - full-flip train excess negative AND reverse-rank train excess positive
+    (case 3 above; finding restricted to > 0 subset)
+  - full-flip train trade_count < 50 (negative-gap subset too thin to
+    interpret)
+  validate: *id001
+  test: *id001
+test_design:
+  split: |
+    train 2019-01-01 to 2024-12-31; holdout 2020 (stress year); sealed test
+    2025-01-01 to 2026-05-08. Same split as canonical strategy.
+  variants: |
+    Single run, no parameter grid. The interventions are: (1)
+    _add_value_gap_amounts() output value_gap_amount is multiplied by -1;
+    (2) pd.read_parquet of cached daily_value_gap_amounts also negates the
+    column on load. The > 0 candidate filter and the descending sort in
+    the base evaluator remain unchanged.
+  data_root: data/cb_arb_concurrent_supervised_20260511_094500
+success_criteria:
+  primary: |
+    Quantify full_flip_cost_off excess vs forward (-0.03) and reverse-rank
+    (+0.381 test cost off). The three-way comparison disambiguates whether
+    the anti-alpha is signed (over-priced beats under-priced) or absolute
+    (closer-to-fair beats farther-from-fair).
+  secondary: |
+    Trade count (negative-gap subset is unknown size); per-year drawdown;
+    win_rate.
+risk: |
+  Low. Read-only on truth. Uses negation hook on already-cached parquet
+  values, base evaluator code unchanged. No promotion, no current.yaml
+  change, no live signal emitted.
+why_not_repeated_failure: |
+  This is the third meta-probe in a deliberately short disambiguation
+  sequence (cost-off reverse → cost-on reverse → full-flip). It does
+  not retrace previously-failed forward-direction families.
+implementation_assumption: |
+  Negating value_gap_amount after the base evaluator computes it is
+  equivalent to swapping the input signal sign convention. Base evaluator
+  uses `value_gap_amount > 0` filter and descending sort; on negated
+  values that becomes select-over-priced and most-over-priced-first.
+  Assumes no other consumer of value_gap_amount in base relies on its
+  original sign (verified by inspection — only filter + sort + score
+  reference the column).
+related_prior_runs:
+- cb_arb_value_gap_switch_reverse-probe_20260524
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524

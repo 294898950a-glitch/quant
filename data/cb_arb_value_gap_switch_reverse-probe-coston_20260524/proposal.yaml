@@ -1,0 +1,75 @@
+proposal_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+strategy_id: cb_arb_value_gap_switch
+family: meta_validation_probe
+hypothesis: |
+  The first reverse-probe (cost OFF, 2026-05-24) produced train excess +148%,
+  test excess +38%, win_rate 60-65% on the same > 0 candidate set as the
+  forward strategy — strong evidence value_gap is anti-informative. The open
+  question is tradeability: does the +38% test excess survive the project's
+  standard cost model (slippage 0.0015, market_impact_coeff 0.001,
+  market_impact_cap 0.02, holding_cost 0)?
+source_insight: |
+  value_gap_rank_is_anti_alpha_2026_05_24 (research_insights.yaml). The
+  cost-off finding rules out hypotheses (a) signal-real-but-costs-eat-alpha
+  and (b) universe-drifts-negative. Cost-on rerun is the highest-priority
+  follow-up because it directly decides whether the inverted rule is a
+  candidate for live trading or only a research artifact.
+expected_improvement: |
+  If cost_on excess remains > 0 on test, this becomes a candidate for
+  promotion (subject to full-flip probe and confounder diagnostic). If
+  cost_on excess flips negative, the reverse signal is real but
+  uneconomical — useful as a research finding but not a strategy.
+capability_ids:
+- C002
+required_executor: evaluate_cb_arb_reverse_probe_coston
+required_data:
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+falsifiers:
+  train: &id001
+  - reverse_cost_on train excess < 0 (signal alive in train but unprofitable after costs)
+  - reverse_cost_on train excess < reverse_cost_off train excess - 0.20 (>20pp cost bleed indicates rule is over-trading)
+  validate: *id001
+  test: *id001
+test_design:
+  split: |
+    train 2019-01-01 to 2024-12-31; holdout 2020 (stress year); sealed test
+    2025-01-01 to 2026-05-08. Same as canonical strategy and the cost-off
+    reverse probe.
+  variants: |
+    Same single-run probe as the cost-off variant. The only intervention is
+    enabling the standard cost model (--cost-model-enabled). All other
+    parameters, candidate filter, exit logic, and sort-direction patch are
+    identical to evaluate_cb_arb_reverse_probe.py.
+  data_root: data/cb_arb_concurrent_supervised_20260511_094500
+success_criteria:
+  primary: |
+    Quantify reverse_cost_on cumulative excess vs forward cost_on -0.1047
+    and reverse_cost_off cumulative excess (this run's predecessor) +0.381
+    on test. The gap (reverse_cost_off - reverse_cost_on) measures the
+    actual cost bleed; the absolute level decides tradeability.
+  secondary: |
+    Per-year max drawdown under cost-on; trade count under cost-on (cost
+    model may shrink trades by holding-cost screening); preserve win_rate.
+risk: |
+  Low. Read-only on truth. Uses same monkey-patched evaluator as cost-off
+  reverse probe. No promotion, no current.yaml change, no live signal
+  emitted by this run. Strictly a follow-up tradeability test.
+why_not_repeated_failure: |
+  This is the second meta-probe in a deliberately short sequence (cost-off
+  → cost-on → full-flip). The cost-off result has already cleared the
+  noise/anti-alpha disambiguation. This run does not retrace previously-
+  failed forward-direction families.
+implementation_assumption: |
+  evaluate_cb_arb_reverse_probe.py forwards unknown CLI args via sys.argv
+  to the base value_gap_switch evaluator's main(), so --cost-model-enabled
+  passes through. The sort_values monkey-patch on 'value_gap_amount'
+  remains the only behavioral change vs the base evaluator. Candidate
+  filter value_gap_amount > 0 is still NOT flipped (that is the v2
+  full-flip probe's job).
+related_prior_runs:
+- cb_arb_value_gap_switch_reverse-probe_20260524
+- cb_arb-main-yaml-current-cost-on-20260516
+- cb_arb-value-gap-switch-medium-signal-cost-on-20260516

@@ -1827,3 +1827,177 @@ executors:
     manually_registered: true
     registered_at: '2026-05-23T23:01:36+00:00'
     registered_by: user_meta_probe_request
+
+  evaluate_cb_arb_reverse_probe_coston:
+    id: evaluate_cb_arb_reverse_probe_coston
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: meta_validation_probe
+    script_path: scripts/evaluate_cb_arb_reverse_probe.py
+    owner: claude
+    description: Reverse-rank probe with the standard cost model ENABLED. Tradeability
+      test for the +38% cost-off test excess from the first reverse probe — does it
+      survive slippage + market impact?
+    can_test:
+    - close_to_bond_floor_threshold
+    can_test_capability_ids:
+    - C002
+    cannot_test:
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_exit_rule
+    - new_valuation_formula
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C005
+    - C009
+    - C003
+    - C008
+    - C007
+    - C006
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_warehouse/cb_basic.parquet
+    - path: data/cb_warehouse/cb_daily.parquet
+    - path: data/cb_warehouse/cb_call.parquet
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_reverse_probe.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --cost-model-enabled
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    - reverse_probe_meta.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 60
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    manually_registered: true
+    registered_at: '2026-05-24T10:05:00+08:00'
+    registered_by: claude_after_reverse_probe_finding
+
+  evaluate_cb_arb_full_flip_probe:
+    id: evaluate_cb_arb_full_flip_probe
+    version: 1
+    status: implemented
+    strategy_id: cb_arb_value_gap_switch
+    family: meta_validation_probe
+    script_path: scripts/evaluate_cb_arb_full_flip_probe.py
+    owner: claude
+    description: Strong-form anti-alpha test — negates value_gap_amount so the
+      base evaluator's > 0 filter selects originally-negative (over-priced)
+      bonds and the descending sort picks most-over-priced first. Closes the
+      interpretation gap left by reverse-rank-only probe.
+    can_test:
+    - close_to_bond_floor_threshold
+    can_test_capability_ids:
+    - C002
+    cannot_test:
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_exit_rule
+    - new_valuation_formula
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C005
+    - C009
+    - C003
+    - C008
+    - C007
+    - C006
+    - C010
+    - C004
+    - C001
+    required_data:
+    - path: data/cb_warehouse/cb_basic.parquet
+    - path: data/cb_warehouse/cb_daily.parquet
+    - path: data/cb_warehouse/cb_call.parquet
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_full_flip_probe.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20190101'
+      train_end: '20241231'
+      test_start: '20250101'
+      test_end: '20260508'
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    - full_flip_probe_meta.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 60
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    manually_registered: true
+    registered_at: '2026-05-24T10:15:00+08:00'
+    registered_by: claude_after_reverse_probe_finding

@@ -1,0 +1,286 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+date: '2026-05-24'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'The first reverse-probe (cost OFF, 2026-05-24) produced train excess
+  +148%,
+
+  test excess +38%, win_rate 60-65% on the same > 0 candidate set as the
+
+  forward strategy — strong evidence value_gap is anti-informative. The open
+
+  question is tradeability: does the +38% test excess survive the project''s
+
+  standard cost model (slippage 0.0015, market_impact_coeff 0.001,
+
+  market_impact_cap 0.02, holding_cost 0)?
+
+  '
+source_insight: 'value_gap_rank_is_anti_alpha_2026_05_24 (research_insights.yaml).
+  The
+
+  cost-off finding rules out hypotheses (a) signal-real-but-costs-eat-alpha
+
+  and (b) universe-drifts-negative. Cost-on rerun is the highest-priority
+
+  follow-up because it directly decides whether the inverted rule is a
+
+  candidate for live trading or only a research artifact.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - close_to_bond_floor_threshold
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C002
+mechanics:
+- close_to_bond_floor_threshold
+new_data_sources:
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/cb_daily.parquet
+- path: data/cb_warehouse/cb_call.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  primary: 'Quantify reverse_cost_on cumulative excess vs forward cost_on -0.1047
+
+    and reverse_cost_off cumulative excess (this run''s predecessor) +0.381
+
+    on test. The gap (reverse_cost_off - reverse_cost_on) measures the
+
+    actual cost bleed; the absolute level decides tradeability.
+
+    '
+  secondary: 'Per-year max drawdown under cost-on; trade count under cost-on (cost
+
+    model may shrink trades by holding-cost screening); preserve win_rate.
+
+    '
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: READY
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+  strategy_id: cb_arb_value_gap_switch
+  family: meta_validation_probe
+  hypothesis: 'The first reverse-probe (cost OFF, 2026-05-24) produced train excess
+    +148%,
+
+    test excess +38%, win_rate 60-65% on the same > 0 candidate set as the
+
+    forward strategy — strong evidence value_gap is anti-informative. The open
+
+    question is tradeability: does the +38% test excess survive the project''s
+
+    standard cost model (slippage 0.0015, market_impact_coeff 0.001,
+
+    market_impact_cap 0.02, holding_cost 0)?
+
+    '
+  source_insight: 'value_gap_rank_is_anti_alpha_2026_05_24 (research_insights.yaml).
+    The
+
+    cost-off finding rules out hypotheses (a) signal-real-but-costs-eat-alpha
+
+    and (b) universe-drifts-negative. Cost-on rerun is the highest-priority
+
+    follow-up because it directly decides whether the inverted rule is a
+
+    candidate for live trading or only a research artifact.
+
+    '
+  expected_improvement: 'If cost_on excess remains > 0 on test, this becomes a candidate
+    for
+
+    promotion (subject to full-flip probe and confounder diagnostic). If
+
+    cost_on excess flips negative, the reverse signal is real but
+
+    uneconomical — useful as a research finding but not a strategy.
+
+    '
+  capability_ids:
+  - C002
+  required_executor: evaluate_cb_arb_reverse_probe_coston
+  required_data:
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/cb_daily.parquet
+  - path: data/cb_warehouse/cb_call.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  falsifiers:
+    train:
+    - reverse_cost_on train excess < 0 (signal alive in train but unprofitable after
+      costs)
+    - reverse_cost_on train excess < reverse_cost_off train excess - 0.20 (>20pp cost
+      bleed indicates rule is over-trading)
+    validate:
+    - reverse_cost_on train excess < 0 (signal alive in train but unprofitable after
+      costs)
+    - reverse_cost_on train excess < reverse_cost_off train excess - 0.20 (>20pp cost
+      bleed indicates rule is over-trading)
+    test:
+    - reverse_cost_on train excess < 0 (signal alive in train but unprofitable after
+      costs)
+    - reverse_cost_on train excess < reverse_cost_off train excess - 0.20 (>20pp cost
+      bleed indicates rule is over-trading)
+  test_design:
+    split: 'train 2019-01-01 to 2024-12-31; holdout 2020 (stress year); sealed test
+
+      2025-01-01 to 2026-05-08. Same as canonical strategy and the cost-off
+
+      reverse probe.
+
+      '
+    variants: 'Same single-run probe as the cost-off variant. The only intervention
+      is
+
+      enabling the standard cost model (--cost-model-enabled). All other
+
+      parameters, candidate filter, exit logic, and sort-direction patch are
+
+      identical to evaluate_cb_arb_reverse_probe.py.
+
+      '
+    data_root: data/cb_arb_concurrent_supervised_20260511_094500
+  success_criteria:
+    primary: 'Quantify reverse_cost_on cumulative excess vs forward cost_on -0.1047
+
+      and reverse_cost_off cumulative excess (this run''s predecessor) +0.381
+
+      on test. The gap (reverse_cost_off - reverse_cost_on) measures the
+
+      actual cost bleed; the absolute level decides tradeability.
+
+      '
+    secondary: 'Per-year max drawdown under cost-on; trade count under cost-on (cost
+
+      model may shrink trades by holding-cost screening); preserve win_rate.
+
+      '
+  risk: 'Low. Read-only on truth. Uses same monkey-patched evaluator as cost-off
+
+    reverse probe. No promotion, no current.yaml change, no live signal
+
+    emitted by this run. Strictly a follow-up tradeability test.
+
+    '
+  why_not_repeated_failure: 'This is the second meta-probe in a deliberately short
+    sequence (cost-off
+
+    → cost-on → full-flip). The cost-off result has already cleared the
+
+    noise/anti-alpha disambiguation. This run does not retrace previously-
+
+    failed forward-direction families.
+
+    '
+  implementation_assumption: 'evaluate_cb_arb_reverse_probe.py forwards unknown CLI
+    args via sys.argv
+
+    to the base value_gap_switch evaluator''s main(), so --cost-model-enabled
+
+    passes through. The sort_values monkey-patch on ''value_gap_amount''
+
+    remains the only behavioral change vs the base evaluator. Candidate
+
+    filter value_gap_amount > 0 is still NOT flipped (that is the v2
+
+    full-flip probe''s job).
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_reverse-probe_20260524
+  - cb_arb-main-yaml-current-cost-on-20260516
+  - cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+  mechanics:
+  - close_to_bond_floor_threshold
+executor_id: evaluate_cb_arb_reverse_probe_coston
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_reverse_probe.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+- --cost-model-enabled
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_reverse-probe-coston_20260524
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_reverse_probe.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_reverse-probe-coston_20260524
+  - --cost-model-enabled
+  sync_paths:
+  - scripts/evaluate_cb_arb_reverse_probe.py
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: null
+  prompt_path: null
+  proposal_path: null
+  response_hash: null
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data: []

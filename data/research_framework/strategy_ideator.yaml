@@ -49,6 +49,20 @@ hard_limits:
   - "如果想法没有现成执行器，第一次对话生成 DRAFT spec；后续由固定流程先要求工具设计和登记信息，设计通过后再要求草稿评测工具代码。"
   - "不能为了匹配现有执行器反复重写同一个题目。"
   - "输出必须是 YAML 对象，不能有 Markdown 解释。"
+  - "value_gap_rank_is_anti_alpha_2026_05_24 是 critical insight: 同一池子 ascending 排序赢, descending (生产规则) 输 cost-off。新方向应优先 reverse-direction 变体, 直到 forward 的 anti-alpha 被反证。不要硬禁 forward 但不应是默认起点。"
+
+direction_bias:
+  active_insight: value_gap_rank_is_anti_alpha_2026_05_24
+  preferred_directions:
+    - cost_on_reverse_rerun            # tradeability test (highest)
+    - full_filter_flip_probe           # value_gap < 0 universe, strong-form anti-alpha
+    - value_gap_correlation_diagnostic # find the confounder behind anti-alpha
+    - reverse_direction_family_sweeps  # exit / sizing / regime applied to reverse-rank base
+  deprioritized_directions:
+    - forward_only_variants_of_already_rejected_families  # 5+ already queued; saturated
+  notes:
+    - "已排队的正向变体 (5 个 moneyness) 当作 anti-alpha 独立印证, 不强行干掉。新提议应自觉切到 reverse 方向。"
+    - "Cost-on reverse 出来前不要做大动作 (策略反转, current.yaml 提升等)。"
 
 forbidden_families:
   - global_option_entry_gate

@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-05-19T18:31:00+08:00"
+updated_at: "2026-05-24T10:00:00+08:00"
 authority: machine
 source_migration:
   legacy_markdown_removed: true
@@ -230,6 +230,54 @@ key_insights:
       structural_pattern: "Same as position_sizing and other rejected families — no variant beats baseline on train; any test improvement comes at the cost of train degradation (~6pp excess swap)"
     decision_use: "Close the rolling PnL feedback direction. Do not accept any more option-pnl-feedback specs from the Claude ideation pipeline. Add to forbidden_families. Escalate to user for a genuinely new mechanism direction."
 
+  - id: value_gap_rank_is_anti_alpha_2026_05_24
+    priority: critical
+    summary: "Reverse-rank probe shows that within the value_gap_amount>0 candidate set, sorting ASCENDING (least-positive first) wins large where DESCENDING (most-positive first, the production rule) loses. Same universe, same entry/exit logic, only sort direction changed. Three competing hypotheses collapse to one: the value_gap formula is anti-informative under its current monotonicity assumption."
+    facts:
+      probe_run_dir: data/cb_arb_value_gap_switch_reverse-probe_20260524
+      probe_script: scripts/evaluate_cb_arb_reverse_probe.py
+      cost_model_enabled: false
+      forward_baseline_test_excess_cost_off_approx: -0.03
+      reverse_train_excess_return: 1.482063
+      reverse_train_total_return: 1.754378
+      reverse_train_max_drawdown: -0.185122
+      reverse_train_win_rate: 0.5959
+      reverse_train_trade_count: 1710
+      reverse_test_excess_return: 0.380822
+      reverse_test_total_return: 0.733087
+      reverse_test_max_drawdown: -0.112613
+      reverse_test_win_rate: 0.6458
+      reverse_test_trade_count: 367
+      reverse_test_best_params:
+        max_hold_days: 180
+        min_gap_pct: 0.01
+        sell_gap_pct: 0.0
+        switch_hurdle_pct: 0.01
+      filter_unchanged: "value_gap_amount > 0 filter was NOT flipped; this probe selects nearest-to-zero positive gaps, not negative gaps"
+      hypotheses_ruled_out:
+        - "(a) signal real, costs eat alpha — dead because forward also loses cost-off"
+        - "(b) universe drifts negative — dead because reverse makes 148% train cost-off"
+      hypothesis_supported: "(c) value_gap formula is anti-informative under current monotonicity assumption"
+      likely_confounders_to_investigate:
+        - "issuer credit distress masquerading as undervaluation"
+        - "short-term negative momentum (gap widens because selling continues)"
+        - "liquidity (high-gap CBs illiquid, entry/exit asymmetric)"
+        - "formula misses conversion features (call protection, dilution)"
+    decision_use: |
+      Ideator (Hermes) should bias new variants toward REVERSE-direction tests until forward-direction
+      anti-alpha is overturned. Acceptable next directions, by priority:
+        1. cost-on rerun of reverse-rank probe (tradeability test — highest priority)
+        2. full-flip probe (value_gap_amount<0 candidates, strong-form anti-alpha test)
+        3. correlation diagnostic between value_gap_amount and {credit, days-to-call, moneyness, 60d vol, momentum}
+        4. reverse-direction variants applied to families that previously failed in forward (e.g. exit rule sweeps, position sizing) — to see if those families were rejected only because they were stacked on an anti-alpha base
+      Forward-direction variants remain orthogonal evidence but are not the default new direction.
+      No truth promotion, no current.yaml change, no live deployment until cost-on reverse confirms
+      tradeability AND a confounder is identified or ruled out.
+    follow_ups:
+      - cost_on_reverse_rerun
+      - full_filter_flip_probe
+      - value_gap_correlation_diagnostic
+
 open_threads:
   - id: promote_absolute_value_gap_ranking_to_core
     priority: high
@@ -327,3 +375,4 @@ open_threads:
     completion_artifacts:
       - scripts/auto_research_pipeline.py
       - framework/tests/test_train_period_falsifiers.py
+

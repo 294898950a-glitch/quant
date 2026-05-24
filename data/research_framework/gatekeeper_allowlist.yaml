@@ -249,3 +249,8 @@ allowlist:
     needed (meta probe, single run, no parameter grid).
   added_at: '2026-05-24'
   added_by: claude
+- script: scripts/evaluate_cb_arb_full_flip_probe.py
+  reason: Sign-flips value_gap_amount to convert > 0 filter into < 0 selector; meta
+    probe, single run, no parameter grid.
+  added_at: '2026-05-24'
+  added_by: claude
