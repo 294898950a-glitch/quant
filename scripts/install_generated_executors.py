@@ -95,6 +95,14 @@ def resolve_source(task: dict[str, Any]) -> Path | None:
     return None
 
 
+# GateKeeper compliance string — mirrors framework_preflight's
+# validate_gatekeeper_compliance.py and the handoff-time check in
+# framework/autonomous/hermes_executor_handoff.REQUIRED_GATEKEEPER_IMPORT.
+# Kept inline rather than imported to keep this script standalone for the
+# `*/5` cron.
+REQUIRED_GATEKEEPER_IMPORT = "from scripts.gatekeeper import GateKeeper"
+
+
 def validate_executor(path: Path) -> list[str]:
     errors: list[str] = []
     try:
@@ -113,6 +121,23 @@ def validate_executor(path: Path) -> list[str]:
         errors.append("missing main()")
     if not callable(getattr(module, "declare_data_requirements", None)):
         errors.append("missing declare_data_requirements()")
+    # Compliance gate: the generated executor must import GateKeeper. This
+    # mirrors framework_preflight.validate_gatekeeper_compliance.py and the
+    # handoff-time check in hermes_executor_handoff._validate_generated_executor.
+    # Failing this here is a "compliance_failed" outcome: the source is NOT
+    # copied to scripts/, the run dir gets a repair_request marker, and the
+    # handoff task is held open for Hermes to repair on its next tick.
+    try:
+        source_text = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        errors.append(f"could not read source for compliance check: {exc}")
+        return errors
+    if REQUIRED_GATEKEEPER_IMPORT not in source_text:
+        errors.append(
+            f"compliance_failed: missing '{REQUIRED_GATEKEEPER_IMPORT}' "
+            "(framework_preflight requires every grid-style executor to "
+            "import GateKeeper and call its lifecycle methods)"
+        )
     return errors
 
 
@@ -133,6 +158,21 @@ def install_one(
 
     validation_errors = validate_executor(source)
     if validation_errors:
+        compliance_failed = any(
+            err.startswith("compliance_failed:") for err in validation_errors
+        )
+        if compliance_failed:
+            # Do NOT copy to scripts/. Mark the run dir + handoff task with a
+            # repair_request so Hermes' next handoff tick can rewrite.
+            repair_marker = _write_repair_request(task, source, validation_errors, dry_run=dry_run)
+            return {
+                "id": handoff_id,
+                "action": "compliance_failed",
+                "reason": "executor must be GateKeeper-compliant before install",
+                "errors": validation_errors,
+                "source": str(source.relative_to(REPO_ROOT)),
+                "repair_request": repair_marker,
+            }
         return {
             "id": handoff_id,
             "action": "skipped",
@@ -191,6 +231,155 @@ def install_one(
         "target": target_raw,
         "sha256": source_hash[:16],
     }
+
+
+def _write_repair_request(
+    task: dict[str, Any], source: Path, errors: list[str], *, dry_run: bool
+) -> str:
+    """Mark a compliance-failed generated executor for Hermes repair.
+
+    Writes ``compliance_repair_request.yaml`` next to the failed generated
+    executor with the validator errors and the expected fix. The handoff
+    task is NOT marked completed/installed; the run dir flags the repair
+    so the next handoff_tick can see and re-claim it.
+    """
+    handoff_id = str(task.get("id") or "")
+    run_dir_raw = str(task.get("run_dir") or "")
+    if not run_dir_raw:
+        return ""
+    run_dir = Path(run_dir_raw)
+    if not run_dir.is_absolute():
+        run_dir = REPO_ROOT / run_dir
+    marker_path = source.parent / "compliance_repair_request.yaml"
+    payload = {
+        "schema_version": 1,
+        "handoff_id": handoff_id,
+        "source": str(source.relative_to(REPO_ROOT)),
+        "compliance_errors": errors,
+        "required_fix": (
+            "Add 'from scripts.gatekeeper import GateKeeper' to the generated "
+            "executor and call the GateKeeper lifecycle methods "
+            "(before_run_grid / after_run_grid). See "
+            "scripts/evaluate_cb_arb_exit_gap_closing_percentile.py and "
+            "scripts/evaluate_cb_arb_iv_percentile_exit.py for the canonical "
+            "pattern. Do not request manual allowlist; the install path will "
+            "remain blocked until the import is in place."
+        ),
+        "noted_at": now_iso(),
+        "dry_run": dry_run,
+    }
+    if dry_run:
+        return str(marker_path.relative_to(REPO_ROOT))
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text(
+        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    return str(marker_path.relative_to(REPO_ROOT))
+
+
+def recompile_drafts_after_install(
+    installed_targets: set[str], *, dry_run: bool
+) -> dict[str, Any]:
+    """For each newly-installed executor, find DRAFT specs whose
+    required_executor / required_script_path matches it, and re-run
+    spec_compiler.compile. If compile succeeds → spec is overwritten with
+    the now-READY version (spec_compiler writes the file itself via the
+    output_dir argument). If compile still returns DRAFT/REJECT → leave
+    the spec as it is and surface the reason in the audit log.
+
+    Does NOT manually flip status; the compile call is the single source
+    of truth for whether a spec is runnable.
+    """
+    result: dict[str, Any] = {"recompiled": [], "skipped": [], "blocked": []}
+    if not installed_targets:
+        return result
+    try:
+        sys.path.insert(0, str(REPO_ROOT))
+        from framework.autonomous.spec_compiler import compile as compile_proposal  # noqa: E402
+    except Exception as exc:
+        result["error"] = f"cannot import spec_compiler: {exc}"
+        return result
+    registry = load_yaml(REGISTRY_PATH) if REGISTRY_PATH.exists() else {}
+    closed_path = REPO_ROOT / "data" / "research_framework" / "closed_tags.yaml"
+    closed_tags: dict[str, Any] = {}
+    if closed_path.exists():
+        ct = load_yaml(closed_path)
+        if isinstance(ct, dict):
+            closed_tags = ct.get("closed_tags") if isinstance(ct.get("closed_tags"), dict) else ct
+    # Build an index: script_path -> executor entry id, so we can match
+    # spec.required_executor (which is the executor id) back to a script
+    # path that was just installed.
+    executors = (registry.get("executors") or {}) if isinstance(registry, dict) else {}
+    script_to_executor_id: dict[str, str] = {}
+    for ex_id, ex in executors.items():
+        if isinstance(ex, dict):
+            sp = ex.get("script_path")
+            if isinstance(sp, str):
+                script_to_executor_id[sp] = ex_id
+    just_installed_executor_ids = {
+        script_to_executor_id.get(t) for t in installed_targets if t in script_to_executor_id
+    }
+    # Scan data/ for DRAFT specs whose required_executor is in this set.
+    data_root = REPO_ROOT / "data"
+    if not data_root.exists():
+        return result
+    for spec_path in data_root.glob("*/spec.yaml"):
+        try:
+            spec_data = load_yaml(spec_path)
+        except Exception as exc:
+            result["skipped"].append({"spec": str(spec_path.relative_to(REPO_ROOT)),
+                                      "reason": f"yaml load failed: {exc}"})
+            continue
+        if str(spec_data.get("status") or "") != "DRAFT":
+            continue
+        required_executor = str(spec_data.get("required_executor") or "")
+        if required_executor not in just_installed_executor_ids:
+            continue
+        # Reconstruct the proposal payload spec_compiler expects.
+        proposal_path = spec_path.parent / "proposal.yaml"
+        if not proposal_path.exists():
+            result["skipped"].append({"spec": str(spec_path.relative_to(REPO_ROOT)),
+                                      "reason": "missing proposal.yaml"})
+            continue
+        try:
+            proposal = load_yaml(proposal_path)
+        except Exception as exc:
+            result["skipped"].append({"spec": str(spec_path.relative_to(REPO_ROOT)),
+                                      "reason": f"proposal yaml load failed: {exc}"})
+            continue
+        if dry_run:
+            result["recompiled"].append({
+                "spec": str(spec_path.relative_to(REPO_ROOT)),
+                "action": "would_recompile",
+            })
+            continue
+        try:
+            outcome = compile_proposal(
+                proposal=proposal,
+                registry=registry,
+                closed_tags=closed_tags,
+                recent_proposals=[],
+                output_dir=spec_path.parent,
+            )
+        except Exception as exc:
+            result["skipped"].append({"spec": str(spec_path.relative_to(REPO_ROOT)),
+                                      "reason": f"compile raised: {type(exc).__name__}: {exc}"})
+            continue
+        if outcome.status == "READY":
+            result["recompiled"].append({
+                "spec": str(spec_path.relative_to(REPO_ROOT)),
+                "new_status": "READY",
+            })
+        else:
+            # Surfaces "still DRAFT / REJECT" as a blocked entry so the run
+            # is visible in the install summary but not silently absorbed.
+            result["blocked"].append({
+                "spec": str(spec_path.relative_to(REPO_ROOT)),
+                "compile_status": outcome.status,
+                "reason": outcome.reason,
+            })
+    return result
 
 
 def flip_registry_drafts(installed_targets: set[str], *, dry_run: bool) -> dict[str, Any]:
@@ -467,6 +656,20 @@ def main() -> int:
                 handoff_changed = True
         elif action == "noop":
             installed_targets.add(outcome["target"])
+        elif action == "compliance_failed" and not args.dry_run:
+            # Task was marked completed by Hermes but the generated executor
+            # fails compliance — flip the task back to needs_compliance_repair
+            # so the handoff path knows Hermes still has work to do.
+            task["status"] = "needs_compliance_repair"
+            task["compliance_errors"] = outcome.get("errors") or []
+            task["compliance_repair_request"] = outcome.get("repair_request") or ""
+            task["compliance_failed_at"] = now
+            # Clear installed_* fields since this code did not pass the gate.
+            task.pop("installed_at", None)
+            task.pop("installed_source", None)
+            task.pop("installed_sha256", None)
+            task.pop("installed_by", None)
+            handoff_changed = True
 
     if handoff_changed and not args.dry_run:
         doc["updated_at"] = now
@@ -477,6 +680,12 @@ def main() -> int:
     completed_tasks = [t for t in tasks if isinstance(t, dict) and str(t.get("status") or "") == "completed"]
     auto_reg_outcome = auto_register_new_executors(completed_tasks, dry_run=args.dry_run)
 
+    # After install + registry flip + auto-register, the registry now reflects
+    # the just-installed executors. Re-run spec_compiler on any DRAFT spec
+    # whose required_executor is one of them, so DRAFT → READY transitions
+    # happen automatically without anyone manually flipping spec.status.
+    recompile_outcome = recompile_drafts_after_install(installed_targets, dry_run=args.dry_run)
+
     summary = {
         "timestamp": now,
         "dry_run": args.dry_run,
@@ -485,10 +694,14 @@ def main() -> int:
             "would_install": sum(1 for r in results if r.get("action") == "would_install"),
             "noop": sum(1 for r in results if r.get("action") == "noop"),
             "skipped": sum(1 for r in results if r.get("action") == "skipped"),
+            "compliance_failed": sum(1 for r in results if r.get("action") == "compliance_failed"),
         },
         "registry_drafts_flipped": registry_outcome.get("flipped", []),
         "registry_auto_registered": [r["key"] for r in auto_reg_outcome["registered"]],
         "registry_auto_skipped": auto_reg_outcome["skipped"],
+        "spec_recompiled_to_ready": recompile_outcome.get("recompiled", []),
+        "spec_recompile_blocked": recompile_outcome.get("blocked", []),
+        "spec_recompile_skipped": recompile_outcome.get("skipped", []),
         "results": results,
     }
     print(yaml.safe_dump(summary, allow_unicode=True, sort_keys=False))

@@ -30,6 +30,11 @@ STALE_CLAIM_MINUTES = 10
 REQUIRED_EXECUTOR_FUNCTIONS = {"main", "declare_data_requirements"}
 REQUIRED_EXECUTOR_ARTIFACTS = {"summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml", "adoption_pass"}
 FORBIDDEN_EXECUTOR_MARKERS = {"todo", "placeholder", "pseudocode", "demo-only"}
+# GateKeeper compliance: every grid-style executor must import GateKeeper
+# from scripts.gatekeeper. This is enforced by validate_gatekeeper_compliance.py
+# at preflight; the handoff path must also enforce it so Hermes does not
+# generate code that passes handoff-time checks but fails preflight later.
+REQUIRED_GATEKEEPER_IMPORT = "from scripts.gatekeeper import GateKeeper"
 COMPLETION_RECEIPT_NAME = "executor_completion.yaml"
 REQUIRED_RECEIPT_CHECKS = {
     "compile_passed",
@@ -41,6 +46,7 @@ REQUIRED_RECEIPT_CHECKS = {
     "writes_l4_ack_yaml",
     "writes_diagnostic_yaml",
     "no_forbidden_markers",
+    "imports_gatekeeper",
 }
 ACTIVE_QUEUE_ITEM_STATUSES = {"queued", "running", "artifacts_synced", "review_pending"}
 ACTIVE_RUNNER_STATUSES = {
@@ -178,6 +184,19 @@ def _boundary_for_task(task: dict[str, Any]) -> dict[str, Any]:
         "completion_is_not_execution": (
             "After code and completion receipt are written, stop. The quant internal cron will validate and run the next step."
         ),
+        "required_imports": [REQUIRED_GATEKEEPER_IMPORT],
+        "required_imports_reason": (
+            "framework_preflight.validate_gatekeeper_compliance requires every "
+            "grid-style evaluator to import GateKeeper from scripts.gatekeeper "
+            "and call its lifecycle methods (before_run_grid / after_run_grid / "
+            "etc). Look at scripts/evaluate_cb_arb_exit_gap_closing_percentile.py "
+            "or scripts/evaluate_cb_arb_iv_percentile_exit.py for the expected "
+            "shape. Missing this import will block install — the script will be "
+            "rejected as generated_noncompliant and you will be asked to repair "
+            "it. Do not assume the executor will be added to the allowlist; that "
+            "is a manual exception and not the default install path."
+        ),
+        "required_receipt_checks": sorted(REQUIRED_RECEIPT_CHECKS),
     }
 
 
@@ -290,6 +309,34 @@ def complete_task(task_id: str, repo_root: Path = REPO_ROOT, *, actor: str = "he
     return {"status": "missing", "task_id": task_id}
 
 
+def cancel_task(
+    task_id: str,
+    repo_root: Path = REPO_ROOT,
+    *,
+    actor: str = "codex",
+    reason: str = "cancelled",
+) -> dict[str, Any]:
+    path = _handoffs_path(repo_root)
+    doc = _load_yaml(path, default={"schema_version": 1, "tasks": []})
+    tasks = _tasks(doc)
+    now = _now()
+    for task in tasks:
+        if str(task.get("id") or "") != task_id:
+            continue
+        status = str(task.get("status") or "")
+        if status in {"completed", "cancelled"}:
+            return {"status": status, "task_id": task_id, "reason": task.get("cancel_reason")}
+        task["status"] = "cancelled"
+        task["cancelled_at"] = now
+        task["cancelled_by"] = actor
+        task["cancel_reason"] = reason
+        doc["updated_at"] = now
+        doc["tasks"] = tasks
+        _write_yaml(path, doc)
+        return {"status": "cancelled", "task_id": task_id, "reason": reason}
+    return {"status": "missing", "task_id": task_id}
+
+
 def _generated_executor_path(task: dict[str, Any], repo_root: Path) -> Path | None:
     run_dir = Path(str(task.get("run_dir") or ""))
     if not run_dir.is_absolute():
@@ -365,6 +412,17 @@ def _validate_generated_executor(script_path: Path) -> list[str]:
     missing_artifacts = sorted(item for item in REQUIRED_EXECUTOR_ARTIFACTS if item not in source)
     if missing_artifacts:
         errors.append(f"missing required artifact markers: {', '.join(missing_artifacts)}")
+    # GateKeeper compliance: framework_preflight requires every grid-style
+    # executor to either import scripts.gatekeeper.GateKeeper or be listed in
+    # gatekeeper_allowlist.yaml. Handoff-time validation enforces the import
+    # so we never install code that the global preflight will reject.
+    if REQUIRED_GATEKEEPER_IMPORT not in source:
+        errors.append(
+            "missing GateKeeper import "
+            f"(handoff requires '{REQUIRED_GATEKEEPER_IMPORT}' — see "
+            "scripts/gatekeeper.py and other evaluate_cb_arb_* scripts for the "
+            "expected before_run_grid / after_run_grid pattern)"
+        )
     try:
         py_compile.compile(str(script_path), doraise=True)
     except py_compile.PyCompileError as exc:
@@ -488,6 +546,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--repo-root", default=str(REPO_ROOT))
     parser.add_argument("--claim")
     parser.add_argument("--complete")
+    parser.add_argument("--cancel")
+    parser.add_argument("--reason", default="cancelled")
     parser.add_argument("--finalize")
     parser.add_argument("--finalize-claimed", action="store_true")
     parser.add_argument("--actor", default="hermes")
@@ -499,6 +559,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
     if args.complete:
         print(json.dumps(complete_task(args.complete, repo_root, actor=args.actor), ensure_ascii=False, sort_keys=True))
+        return 0
+    if args.cancel:
+        print(
+            json.dumps(
+                cancel_task(args.cancel, repo_root, actor=args.actor, reason=args.reason),
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+        )
         return 0
     if args.finalize:
         print(

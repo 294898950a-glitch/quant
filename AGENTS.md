@@ -175,6 +175,57 @@ start, and probe-failure error path).
 This module does NOT queue experiments, ask an AI, or change
 strategy state — same boundary as the shutdown guard.
 
+Install-and-recompile + Hermes executor compliance gate (2026-05-25):
+
+`scripts/install_generated_executors.py` is the cron path that copies
+Hermes-generated executor code from each run dir's
+`generated_executor/<name>.py` into `scripts/<name>.py`. Two changes
+turn that path from "copy + register" into "copy + register +
+re-compile + compliance-gate":
+
+1. **Compliance gate (pre-install)** — `validate_executor()` now also
+   requires the generated source to contain
+   `from scripts.gatekeeper import GateKeeper`. Without it, the
+   install path returns `action: compliance_failed`, writes a
+   `compliance_repair_request.yaml` next to the generated executor,
+   and flips the handoff task from `status: completed` back to
+   `status: needs_compliance_repair`. The destination in `scripts/`
+   is NOT touched; the path will not be allowlisted by default. This
+   keeps "Hermes wrote bad code" inside the handoff repair loop
+   instead of leaking past install and tripping
+   `validate_gatekeeper_compliance.py` at preflight.
+
+2. **DRAFT → READY recompile (post-install)** —
+   `recompile_drafts_after_install()` runs after the install loop and
+   after `auto_register_new_executors`. For every just-installed
+   executor, it scans `data/*/spec.yaml` for any `status: DRAFT` spec
+   whose `required_executor` matches and re-runs
+   `spec_compiler.compile()` on the corresponding `proposal.yaml`.
+   The compiler is the single source of truth for the new status —
+   nothing manually rewrites `spec.status`. If compile returns READY,
+   the compiler rewrites `spec.yaml`. If it still returns DRAFT or
+   REJECT (e.g., closed-tag intersection), the result is surfaced as
+   `spec_recompile_blocked` in the install summary.
+
+The matching contract changes on the Hermes side
+(`framework/autonomous/hermes_executor_handoff.py`):
+
+* `REQUIRED_GATEKEEPER_IMPORT` constant added; the same import string
+  is also checked by `_validate_generated_executor()` at handoff
+  finalize time so receipt validation matches install-time validation.
+* `REQUIRED_RECEIPT_CHECKS` adds `imports_gatekeeper`. Hermes must
+  self-report this check passes; missing it fails finalize.
+* `_boundary_for_task()` now passes `required_imports` plus a
+  `required_imports_reason` paragraph and the full
+  `required_receipt_checks` list into Hermes's task envelope so the
+  contract is visible at write time, not discovered at install time.
+
+Tested in `framework/tests/test_install_compliance_recompile.py` (6
+cases: compliance pass returns clean errors, missing-GateKeeper is
+flagged as `compliance_failed`, repair_request marker is written,
+DRAFT spec routes through compile correctly, READY specs are not
+touched, compliant install completes).
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live

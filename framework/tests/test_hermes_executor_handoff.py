@@ -7,6 +7,7 @@ from pathlib import Path
 import yaml
 
 from framework.autonomous.hermes_executor_handoff import (
+    cancel_task,
     claim_task,
     complete_task,
     finalize_task_if_valid,
@@ -94,6 +95,28 @@ def test_wake_once_does_not_wake_hermes_when_quant_queue_is_active(tmp_path: Pat
     assert payload["active"]["item_id"] == "main_task"
 
 
+def test_cancel_task_removes_handoff_from_wake_queue(tmp_path: Path) -> None:
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "run_a_executor_code",
+            "status": "open",
+            "run_dir": str(tmp_path / "data" / "run_a"),
+            "descriptor_path": str(tmp_path / "data" / "run_a" / "executor_tool_request.yaml"),
+        },
+    )
+
+    result = cancel_task("run_a_executor_code", tmp_path, actor="test", reason="obsolete")
+    payload = wake_once(tmp_path)
+
+    assert result["status"] == "cancelled"
+    assert payload == {"wakeAgent": False, "reason": "no_open_hermes_executor_handoff"}
+    doc = yaml.safe_load(
+        (tmp_path / "data" / "research_framework" / "hermes_executor_handoffs.yaml").read_text(encoding="utf-8")
+    )
+    assert doc["tasks"][0]["cancel_reason"] == "obsolete"
+
+
 def test_claim_and_complete_require_registered_completion_receipt(tmp_path: Path) -> None:
     descriptor = tmp_path / "data" / "run_a" / "executor_tool_request.yaml"
     descriptor.parent.mkdir(parents=True)
@@ -140,6 +163,7 @@ def _write_valid_completion_receipt(run_dir: Path, handoff_id: str, generated_na
                     "writes_l4_ack_yaml": True,
                     "writes_diagnostic_yaml": True,
                     "no_forbidden_markers": True,
+                    "imports_gatekeeper": True,
                 },
             },
             sort_keys=False,
@@ -182,6 +206,8 @@ def test_finalize_task_if_valid_registers_completed_generated_executor(tmp_path:
     generated.write_text(
         "\n".join(
             [
+                "from scripts.gatekeeper import GateKeeper",
+                "",
                 "def declare_data_requirements(command, spec=None):",
                 "    return {'required_files': []}",
                 "",
@@ -228,6 +254,8 @@ def test_finalize_requires_completion_receipt(tmp_path: Path) -> None:
     generated.write_text(
         "\n".join(
             [
+                "from scripts.gatekeeper import GateKeeper",
+                "",
                 "def declare_data_requirements(command, spec=None):",
                 "    return {'required_files': []}",
                 "",
@@ -265,6 +293,8 @@ def test_complete_task_auto_registers_from_completion_receipt(tmp_path: Path) ->
     generated.write_text(
         "\n".join(
             [
+                "from scripts.gatekeeper import GateKeeper",
+                "",
                 "def declare_data_requirements(command, spec=None):",
                 "    return {'required_files': []}",
                 "",
