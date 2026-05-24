@@ -259,3 +259,8 @@ allowlist:
     as v1 (which IS gatekeeper-wrapped). Wraps the same value_gap_switch base.
   added_at: '2026-05-24'
   added_by: claude
+- script: scripts/evaluate_cb_arb_bond_floor_entry_filter_reverse.py
+  reason: Hermes-generated executor for reverse_bond_floor_entry_filter family (DRAFT
+    proposal awaiting executor code receipt via handoff).
+  added_at: '2026-05-24'
+  added_by: claude
