@@ -311,6 +311,57 @@ flow + still-noncompliant source is blocked at the validate_executor
 gate (not the overwrite branch); main() cleans the stale compliance
 fields and writes the repair_installed_at audit trail.
 
+Executor regeneration (2026-05-25):
+
+A second subcategory of "install has no source to read" needs the
+same self-healing treatment as the compliance repair flow above:
+when a previously-installed task loses its
+``generated_executor/<name>.py`` source on disk (e.g., the run dir
+was cleaned up but the install fingerprint and the target in
+``scripts/`` are still present), install gets stuck in
+"skipped: no generated_executor source found" forever and the
+upstream ideation cycle keeps reporting
+``ideation_pending_capability_noop`` against the same task.
+
+`install_one()` now distinguishes:
+
+* **New task, no source yet** (no ``installed_at``): keep returning
+  ``skipped`` as before; Hermes hasn't written code yet.
+* **Previously-installed task whose source was lost**
+  (``installed_at`` is set AND the target file in ``scripts/``
+  still exists): return
+  ``action: needs_executor_regeneration``, write
+  ``generated_executor/executor_regeneration_request.yaml``
+  describing what was lost (previous install fingerprint), and let
+  `main()` flip the task to ``status: needs_executor_regeneration``.
+
+The flip also moves ``installed_at`` / ``installed_source`` /
+``installed_sha256`` into ``previous_installed_*`` history fields,
+so the next install of the regenerated source lands as a fresh
+install (rather than tripping the "destination exists" guard).
+
+`hermes_executor_handoff.HANDOFF_PICKABLE_STATUSES` extends to
+``{"open", "needs_compliance_repair", "needs_executor_regeneration"}``,
+and `_boundary_for_task()` adds a ``regeneration_context`` block
+when the task is in this status so Hermes sees the source-loss
+reason, the previous install fingerprint, and the requirement to
+satisfy the spec + GateKeeper rules without trying to match the
+old source byte-for-byte.
+
+If the regenerated source still fails compliance, it flows into the
+existing ``compliance_failed → needs_compliance_repair`` loop
+already documented above. Hermes does the rewrite; install does not.
+
+Pinned by `framework/tests/test_install_compliance_recompile.py`
+(3 new cases) and `framework/tests/test_hermes_executor_handoff.py`
+(4 new cases): new task without source still returns plain skipped;
+previously-installed task with missing source returns
+needs_executor_regeneration + marker; main() flips status and
+preserves audit history; handoff layer picks up the new status,
+exposes the regeneration_context in the boundary, and allows
+claim_task to transition needs_executor_regeneration → claimed;
+normal open tasks do NOT pick up the regeneration_context.
+
 Research Delta Gate (Phase 1 V1, 2026-05-25):
 
 After the auto-research execution chain was confirmed closed, the

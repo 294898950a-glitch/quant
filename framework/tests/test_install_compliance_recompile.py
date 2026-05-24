@@ -394,3 +394,137 @@ def test_main_clears_stale_compliance_fields_after_repair_overwrite(tmp_path, mo
     assert "compliance_errors" not in task
     assert task.get("previous_compliance_failed_at") == "2026-05-24T18:10:05+00:00"
     assert isinstance(task.get("previous_compliance_errors"), list)
+
+
+# ---------------------------------------------------------------------------
+# Executor regeneration tests (2026-05-25 round 4)
+#
+# When a previously-installed task loses its generated_executor source on
+# disk (e.g., the run dir's generated_executor/ directory was cleaned up
+# manually), install_one used to fall into the generic
+# "skipped: no generated_executor source found" branch. That left the task
+# perpetually pending, blocking new ideation. The needs_executor_regeneration
+# branch routes the task back to the Hermes handoff layer so Hermes can
+# regenerate from spec + executor_tool_request, without anyone hand-writing
+# the source.
+#
+# Constraints on this branch:
+#   - Trigger ONLY when there is real evidence of prior install
+#     (installed_at present AND target still exists in scripts/). A brand-
+#     new task that simply has no generated_executor source yet must
+#     continue to follow the original "skipped: no source" path; flipping
+#     it to needs_executor_regeneration would break the normal new-task
+#     flow.
+# ---------------------------------------------------------------------------
+
+
+def test_no_source_for_new_task_still_returns_plain_skipped(tmp_path, monkeypatch):
+    """A new task that simply has not been installed yet AND has no
+    generated_executor source must keep the old skipped behaviour, not
+    silently get re-routed into the regeneration flow."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    run_dir = repo / "data/run_new"
+    run_dir.mkdir(parents=True)
+    # No generated_executor/ at all.
+    (repo / "scripts").mkdir()
+    task = {
+        "id": "task_new",
+        "target_script_path": "scripts/evaluate_new.py",
+        "run_dir": "data/run_new",
+        # No installed_at — this task has never been through install.
+    }
+    outcome = install_mod.install_one(task, dry_run=False)
+    assert outcome["action"] == "skipped"
+    assert "no generated_executor source" in outcome["reason"]
+
+
+def test_no_source_for_previously_installed_task_triggers_regeneration(tmp_path, monkeypatch):
+    """The reverse_bond_floor case: task was installed, target file
+    exists in scripts/, but the generated_executor source was deleted.
+    Must return action="needs_executor_regeneration" and write a
+    regeneration_request marker."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    run_dir = repo / "data/run_lost"
+    run_dir.mkdir(parents=True)
+    # No generated_executor/.
+    (repo / "scripts").mkdir()
+    # Target still exists in scripts/ from the previous install.
+    target = repo / "scripts/evaluate_lost.py"
+    target.write_text(
+        f"{GATEKEEPER_IMPORT}\n"
+        "def main():\n    return 0\n"
+        "def declare_data_requirements(*a, **k):\n    return {}\n",
+        encoding="utf-8",
+    )
+    task = {
+        "id": "task_lost",
+        "target_script_path": "scripts/evaluate_lost.py",
+        "run_dir": "data/run_lost",
+        "installed_at": "2026-05-24T07:35:01+00:00",
+        "installed_source": "data/run_lost/generated_executor/evaluate_lost.py",
+        "installed_sha256": "old_hash_16",
+    }
+    outcome = install_mod.install_one(task, dry_run=False)
+    assert outcome["action"] == "needs_executor_regeneration", outcome
+    assert outcome["installed_at"] == "2026-05-24T07:35:01+00:00"
+    marker = (run_dir / "generated_executor" / "executor_regeneration_request.yaml")
+    assert marker.exists()
+    payload = yaml.safe_load(marker.read_text(encoding="utf-8"))
+    assert payload["handoff_id"] == "task_lost"
+    assert payload["previous_installed_at"] == "2026-05-24T07:35:01+00:00"
+    assert "Regenerate" in payload["required_action"]
+    assert "GateKeeper" in payload["required_action"]
+
+
+def test_main_flips_task_to_needs_executor_regeneration(tmp_path, monkeypatch):
+    """Main() must flip the task's status to needs_executor_regeneration
+    and move the installed_* fields into previous_* history so the next
+    install of the regenerated source can land cleanly."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    handoffs = repo / "data/research_framework/hermes_executor_handoffs.yaml"
+    handoffs.parent.mkdir(parents=True)
+    run_dir = repo / "data/run_lost2"
+    run_dir.mkdir(parents=True)
+    (repo / "scripts").mkdir()
+    target = repo / "scripts/evaluate_lost2.py"
+    target.write_text(f"{GATEKEEPER_IMPORT}\n", encoding="utf-8")
+    handoffs.write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "tasks": [{
+                "id": "task_lost2",
+                "status": "completed",
+                "target_script_path": "scripts/evaluate_lost2.py",
+                "run_dir": "data/run_lost2",
+                "installed_at": "2026-05-24T07:35:01+00:00",
+                "installed_source": "data/run_lost2/generated_executor/evaluate_lost2.py",
+                "installed_sha256": "lost_hash",
+            }],
+        }, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(install_mod, "HANDOFFS_PATH", handoffs)
+    (repo / "data/research_framework/executor_registry.yaml").write_text(
+        yaml.safe_dump({"executors": {}}, allow_unicode=True), encoding="utf-8"
+    )
+    monkeypatch.setattr(install_mod, "REGISTRY_PATH",
+                          repo / "data/research_framework/executor_registry.yaml")
+    import sys
+    sys.argv = ["install_generated_executors.py"]
+    rc = install_mod.main()
+    assert rc == 0
+    doc = yaml.safe_load(handoffs.read_text(encoding="utf-8"))
+    task = doc["tasks"][0]
+    assert task["status"] == "needs_executor_regeneration"
+    assert task["source_lost_detected_at"]
+    assert task["regeneration_request"]
+    # Audit history preserved.
+    assert task["previous_installed_at"] == "2026-05-24T07:35:01+00:00"
+    assert task["previous_installed_sha256"] == "lost_hash"
+    # Stale current-state pointers cleared so the next install of the
+    # regenerated source sees a clean slate.
+    assert "installed_at" not in task
+    assert "installed_sha256" not in task

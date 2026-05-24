@@ -154,6 +154,37 @@ def install_one(
     target = REPO_ROOT / target_raw
     source = resolve_source(task)
     if source is None:
+        # Distinguish two subcategories of "no generated_executor source":
+        #
+        # 1. Task was previously installed (installed_at is set) AND the
+        #    target file still exists in scripts/. This means the source
+        #    was lost AFTER a successful install (e.g., the run dir's
+        #    generated_executor/ was cleaned up). The task is stuck — its
+        #    executor_tool_request keeps reporting awaiting_hermes_executor_code
+        #    or draft_tool_code, but install can never re-validate or replace
+        #    the noncompliant target because there is nothing to read.
+        #    Flip the task to needs_executor_regeneration so the handoff
+        #    layer can re-claim it and ask Hermes to rewrite from scratch.
+        #
+        # 2. Task was never installed (no installed_at). This is the normal
+        #    "Hermes hasn't written it yet" path — keep the old skipped
+        #    behaviour, the upstream Hermes flow will fill the directory.
+        installed_at = task.get("installed_at")
+        if installed_at and target.exists():
+            regeneration_marker = _write_regeneration_request(task, target, dry_run=dry_run)
+            return {
+                "id": handoff_id,
+                "action": "needs_executor_regeneration",
+                "reason": (
+                    "generated_executor source is missing for a previously-"
+                    "installed task; cannot re-validate or replace the target "
+                    "in scripts/ without it. Hermes must regenerate the "
+                    "executor from the original spec + executor_tool_request."
+                ),
+                "target": target_raw,
+                "installed_at": installed_at,
+                "regeneration_request": regeneration_marker,
+            }
         return {"id": handoff_id, "action": "skipped", "reason": "no generated_executor source found"}
 
     validation_errors = validate_executor(source)
@@ -261,6 +292,59 @@ def install_one(
         "target": target_raw,
         "sha256": source_hash[:16],
     }
+
+
+def _write_regeneration_request(
+    task: dict[str, Any], target: Path, *, dry_run: bool
+) -> str:
+    """Mark a task whose generated_executor source was lost after install
+    so the next handoff tick can re-claim it and ask Hermes to regenerate.
+
+    Writes ``executor_regeneration_request.yaml`` into the run dir's
+    ``generated_executor/`` directory (creating it if needed). The marker
+    captures the original install fingerprint so Hermes (and any auditor)
+    can see what was lost vs what is currently in scripts/.
+    """
+    handoff_id = str(task.get("id") or "")
+    run_dir_raw = str(task.get("run_dir") or "")
+    if not run_dir_raw:
+        return ""
+    run_dir = Path(run_dir_raw)
+    if not run_dir.is_absolute():
+        run_dir = REPO_ROOT / run_dir
+    marker_path = run_dir / "generated_executor" / "executor_regeneration_request.yaml"
+    target_sha256 = sha256_of(target) if target.exists() else ""
+    payload = {
+        "schema_version": 1,
+        "handoff_id": handoff_id,
+        "target_script_path": str(target.relative_to(REPO_ROOT)) if target.is_relative_to(REPO_ROOT) else str(target),
+        "current_target_sha256": target_sha256,
+        "previous_installed_source": task.get("installed_source"),
+        "previous_installed_sha256": task.get("installed_sha256"),
+        "previous_installed_at": task.get("installed_at"),
+        "required_action": (
+            "Regenerate the executor from the existing spec.yaml + "
+            "executor_tool_request.yaml in this run dir. The source file "
+            "under generated_executor/ was lost after the previous install; "
+            "the current target in scripts/ may not be the latest version. "
+            "Write a fresh executor that satisfies the original validation "
+            "requirements (main + declare_data_requirements + summary.json / "
+            "report.yaml / l4_ack.yaml / diagnostic.yaml output + GateKeeper "
+            "import). Once written, the standard handoff completion → "
+            "install validation → install overwrite (compliance repair flow) "
+            "path will re-land the executor."
+        ),
+        "noted_at": now_iso(),
+        "dry_run": dry_run,
+    }
+    if dry_run:
+        return str(marker_path.relative_to(REPO_ROOT)) if marker_path.is_relative_to(REPO_ROOT) else str(marker_path)
+    marker_path.parent.mkdir(parents=True, exist_ok=True)
+    marker_path.write_text(
+        yaml.safe_dump(payload, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    return str(marker_path.relative_to(REPO_ROOT))
 
 
 def _write_repair_request(
@@ -704,6 +788,25 @@ def main() -> int:
             handoff_changed = True
         elif action == "noop":
             installed_targets.add(outcome["target"])
+        elif action == "needs_executor_regeneration" and not args.dry_run:
+            # generated_executor source vanished after an earlier successful
+            # install. Flip the task into the regeneration repair flow.
+            # Keep previous install fingerprints around as audit history so
+            # the Hermes side knows what the target used to be.
+            task["status"] = "needs_executor_regeneration"
+            task["source_lost_detected_at"] = now
+            task["regeneration_request"] = outcome.get("regeneration_request") or ""
+            task["regeneration_reason"] = outcome.get("reason") or ""
+            # Move current "installed_*" pointers into a history bucket so the
+            # next install sees a clean slate when Hermes lands the rewrite,
+            # but preserves the audit trail.
+            if task.get("installed_at"):
+                task["previous_installed_at"] = task.pop("installed_at")
+            if task.get("installed_source"):
+                task["previous_installed_source"] = task.pop("installed_source")
+            if task.get("installed_sha256"):
+                task["previous_installed_sha256"] = task.pop("installed_sha256")
+            handoff_changed = True
         elif action == "compliance_failed" and not args.dry_run:
             # Task was marked completed by Hermes but the generated executor
             # fails compliance — flip the task back to needs_compliance_repair
@@ -748,6 +851,9 @@ def main() -> int:
             ),
             "would_overwrite_compliance_repair": sum(
                 1 for r in results if r.get("action") == "would_overwrite_compliance_repair"
+            ),
+            "needs_executor_regeneration": sum(
+                1 for r in results if r.get("action") == "needs_executor_regeneration"
             ),
         },
         "registry_drafts_flipped": registry_outcome.get("flipped", []),

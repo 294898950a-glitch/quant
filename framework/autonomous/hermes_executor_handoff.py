@@ -35,6 +35,7 @@ STALE_CLAIM_MINUTES = 10
 HANDOFF_PICKABLE_STATUSES = {
     "open",
     "needs_compliance_repair",
+    "needs_executor_regeneration",
 }
 REQUIRED_EXECUTOR_FUNCTIONS = {"main", "declare_data_requirements"}
 REQUIRED_EXECUTOR_ARTIFACTS = {"summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml", "adoption_pass"}
@@ -219,6 +220,31 @@ def _boundary_for_task(task: dict[str, Any]) -> dict[str, Any]:
             "is a manual exception and not the default install path."
         ),
         "required_receipt_checks": sorted(REQUIRED_RECEIPT_CHECKS),
+        **(
+            {
+                "regeneration_context": {
+                    "reason": (
+                        "This task's generated_executor source file was lost "
+                        "after a previous successful install. The target in "
+                        "scripts/ may not be the latest version. Regenerate "
+                        "the executor from scratch based on the spec.yaml + "
+                        "executor_tool_request.yaml in this run dir. The "
+                        "previous install fingerprint is recorded on the task "
+                        "as previous_installed_sha256 / previous_installed_source "
+                        "/ previous_installed_at for audit. You do NOT need to "
+                        "match the previous source byte-for-byte; you need to "
+                        "produce an executor that satisfies the spec and the "
+                        "current GateKeeper / receipt-check requirements."
+                    ),
+                    "request_marker": str(task.get("regeneration_request") or ""),
+                    "source_lost_detected_at": task.get("source_lost_detected_at"),
+                    "previous_installed_at": task.get("previous_installed_at"),
+                    "previous_installed_sha256": task.get("previous_installed_sha256"),
+                },
+            }
+            if str(task.get("status") or "") == "needs_executor_regeneration"
+            else {}
+        ),
     }
 
 

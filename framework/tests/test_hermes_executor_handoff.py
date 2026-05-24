@@ -479,5 +479,143 @@ def test_stale_claim_recovery_unchanged(tmp_path: Path) -> None:
 def test_handoff_pickable_statuses_set_is_explicit(tmp_path: Path) -> None:
     """Sanity guard: the set itself must contain exactly the documented
     pickable statuses. Adding a new repair status means editing this set;
-    this test exists so the change is visible in code review."""
-    assert HANDOFF_PICKABLE_STATUSES == {"open", "needs_compliance_repair"}
+    this test exists so the change is visible in code review.
+
+    Updated 2026-05-25 to include needs_executor_regeneration once the
+    source-lost recovery path landed."""
+    assert HANDOFF_PICKABLE_STATUSES == {
+        "open",
+        "needs_compliance_repair",
+        "needs_executor_regeneration",
+    }
+
+
+# ---------------------------------------------------------------------------
+# Executor regeneration handoff tests (2026-05-25 round 4)
+#
+# Adds needs_executor_regeneration to HANDOFF_PICKABLE_STATUSES. Mirrors the
+# needs_compliance_repair tests but for the "source file was lost" path.
+# ---------------------------------------------------------------------------
+
+
+def test_needs_executor_regeneration_is_pickable_open_tasks(tmp_path: Path) -> None:
+    """A task flipped by install_one to needs_executor_regeneration must
+    be visible to open_tasks()."""
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_regen_executor_code",
+            "status": "needs_executor_regeneration",
+            "source_lost_detected_at": "2026-05-25T08:00:00+00:00",
+            "regeneration_request": "data/run_x/generated_executor/executor_regeneration_request.yaml",
+            "previous_installed_at": "2026-05-24T07:35:01+00:00",
+            "previous_installed_sha256": "lost_hash",
+            "target_script_path": "scripts/evaluate_regen.py",
+            "run_dir": str(tmp_path / "data" / "task_regen"),
+        },
+    )
+    picked = open_tasks(tmp_path)
+    assert len(picked) == 1
+    assert picked[0]["id"] == "task_regen_executor_code"
+    assert picked[0]["status"] == "needs_executor_regeneration"
+
+
+def test_needs_executor_regeneration_wake_once_includes_regeneration_context(tmp_path: Path) -> None:
+    """wake_once must include a regeneration_context in the boundary so
+    Hermes can see the source was lost and how to recover."""
+    run_dir = tmp_path / "data" / "task_regen"
+    run_dir.mkdir(parents=True)
+    descriptor = run_dir / "executor_tool_request.yaml"
+    descriptor.write_text(
+        yaml.safe_dump({"status": "awaiting_hermes_executor_code"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_regen_executor_code",
+            "status": "needs_executor_regeneration",
+            "source_lost_detected_at": "2026-05-25T08:00:00+00:00",
+            "regeneration_request": "data/task_regen/generated_executor/executor_regeneration_request.yaml",
+            "previous_installed_at": "2026-05-24T07:35:01+00:00",
+            "previous_installed_sha256": "lost_hash",
+            "target_script_path": "scripts/evaluate_regen.py",
+            "run_dir": str(run_dir),
+            "descriptor_path": str(descriptor),
+        },
+    )
+
+    payload = wake_once(tmp_path)
+    assert payload["wakeAgent"] is True
+    task = payload["tasks"][0]
+    boundary = task["boundary"]
+    assert "regeneration_context" in boundary, (
+        "needs_executor_regeneration tasks must surface a regeneration_context "
+        f"in the boundary so Hermes sees the source-loss reason; got {sorted(boundary)}"
+    )
+    ctx = boundary["regeneration_context"]
+    assert "lost" in ctx["reason"].lower()
+    assert ctx["previous_installed_sha256"] == "lost_hash"
+
+
+def test_needs_executor_regeneration_can_be_claimed(tmp_path: Path) -> None:
+    """claim_task must transition needs_executor_regeneration → claimed
+    just like it does for open and needs_compliance_repair."""
+    run_dir = tmp_path / "data" / "task_regen2"
+    run_dir.mkdir(parents=True)
+    descriptor = run_dir / "executor_tool_request.yaml"
+    descriptor.write_text(
+        yaml.safe_dump({"status": "awaiting_hermes_executor_code"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_regen2_executor_code",
+            "status": "needs_executor_regeneration",
+            "source_lost_detected_at": "2026-05-25T08:00:00+00:00",
+            "regeneration_request": "data/task_regen2/generated_executor/executor_regeneration_request.yaml",
+            "target_script_path": "scripts/evaluate_regen2.py",
+            "run_dir": str(run_dir),
+            "descriptor_path": str(descriptor),
+        },
+    )
+    claim = claim_task("task_regen2_executor_code", tmp_path, actor="hermes_regen_worker")
+    assert claim["status"] == "claimed"
+
+
+def test_pickable_statuses_set_now_includes_regeneration(tmp_path: Path) -> None:
+    """Sanity guard: the constant set must contain the three documented
+    pickable statuses. Adding a new repair/regen status is a visible
+    change requiring a code review update."""
+    assert HANDOFF_PICKABLE_STATUSES == {
+        "open",
+        "needs_compliance_repair",
+        "needs_executor_regeneration",
+    }
+
+
+def test_normal_open_task_does_not_get_regeneration_context(tmp_path: Path) -> None:
+    """Regression guard: tasks that are NOT in needs_executor_regeneration
+    must NOT have regeneration_context in their boundary."""
+    run_dir = tmp_path / "data" / "task_normal"
+    run_dir.mkdir(parents=True)
+    descriptor = run_dir / "executor_tool_request.yaml"
+    descriptor.write_text(
+        yaml.safe_dump({"status": "awaiting_hermes_executor_code"}, sort_keys=False),
+        encoding="utf-8",
+    )
+    _write_handoff(
+        tmp_path,
+        {
+            "id": "task_normal_executor_code",
+            "status": "open",
+            "target_script_path": "scripts/evaluate_normal.py",
+            "run_dir": str(run_dir),
+            "descriptor_path": str(descriptor),
+        },
+    )
+    payload = wake_once(tmp_path)
+    assert payload["wakeAgent"] is True
+    boundary = payload["tasks"][0]["boundary"]
+    assert "regeneration_context" not in boundary
