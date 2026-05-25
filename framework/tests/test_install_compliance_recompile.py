@@ -528,3 +528,129 @@ def test_main_flips_task_to_needs_executor_regeneration(tmp_path, monkeypatch):
     # regenerated source sees a clean slate.
     assert "installed_at" not in task
     assert "installed_sha256" not in task
+
+
+# ---------------------------------------------------------------------------
+# Regeneration overwrite tests (2026-05-25 follow-up)
+# ---------------------------------------------------------------------------
+
+
+def test_regeneration_flow_overwrites_when_source_compliant(tmp_path, monkeypatch):
+    """After Hermes regenerates a lost executor, install must overwrite the
+    stale target in scripts/. Trigger condition: task carries
+    source_lost_detected_at AND the new source passes validate_executor."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    run_dir = repo / "data/run_regen"
+    run_dir.mkdir(parents=True)
+    src = run_dir / "generated_executor" / "executor.py"
+    _write_executor(src, with_gatekeeper=True)
+    (repo / "scripts").mkdir()
+    old_target = repo / "scripts/evaluate_regen.py"
+    old_target.write_text(
+        "# stale lost-source target\n"
+        f"{GATEKEEPER_IMPORT}\n"
+        "def main():\n    return 0\n"
+        "def declare_data_requirements(*a, **k):\n    return {}\n",
+        encoding="utf-8",
+    )
+    task = {
+        "id": "task_regen_executor_code",
+        "target_script_path": "scripts/evaluate_regen.py",
+        "run_dir": "data/run_regen",
+        "source_lost_detected_at": "2026-05-25T07:55:03+00:00",
+        "regeneration_request": "data/run_regen/generated_executor/executor_regeneration_request.yaml",
+        # No compliance_failed_at — this is a pure regeneration flow.
+    }
+    outcome = install_mod.install_one(task, dry_run=False)
+    assert outcome["action"] == "overwritten_after_executor_regeneration", outcome
+    assert outcome["overwrite_reason"] == "executor_regeneration"
+    after = old_target.read_text(encoding="utf-8")
+    assert "stale lost-source target" not in after
+    assert GATEKEEPER_IMPORT in after
+
+
+def test_regeneration_flow_noncompliant_source_still_blocked(tmp_path, monkeypatch):
+    """Even with source_lost_detected_at present, a still-noncompliant
+    regenerated source must NOT overwrite. validate_executor catches it
+    first and the result is compliance_failed."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    run_dir = repo / "data/run_regen_bad"
+    run_dir.mkdir(parents=True)
+    src = run_dir / "generated_executor" / "executor.py"
+    _write_executor(src, with_gatekeeper=False)  # missing GateKeeper
+    (repo / "scripts").mkdir()
+    (repo / "scripts/evaluate_regen_bad.py").write_text(
+        "# previous stale target\n", encoding="utf-8"
+    )
+    task = {
+        "id": "task_regen_bad_executor_code",
+        "target_script_path": "scripts/evaluate_regen_bad.py",
+        "run_dir": "data/run_regen_bad",
+        "source_lost_detected_at": "2026-05-25T07:55:03+00:00",
+    }
+    outcome = install_mod.install_one(task, dry_run=False)
+    assert outcome["action"] == "compliance_failed", outcome
+    # Target untouched.
+    after = (repo / "scripts/evaluate_regen_bad.py").read_text(encoding="utf-8")
+    assert "previous stale target" in after
+
+
+def test_main_clears_stale_regeneration_fields_after_overwrite(tmp_path, monkeypatch):
+    """Main() must flip the task to completed, write installed_* +
+    regeneration_installed_at, and move the source_lost / regeneration_*
+    fields into previous_* history."""
+    repo = tmp_path
+    monkeypatch.setattr(install_mod, "REPO_ROOT", repo)
+    handoffs = repo / "data/research_framework/hermes_executor_handoffs.yaml"
+    handoffs.parent.mkdir(parents=True)
+    run_dir = repo / "data/run_regen2"
+    run_dir.mkdir(parents=True)
+    src = run_dir / "generated_executor" / "executor.py"
+    _write_executor(src, with_gatekeeper=True)
+    (repo / "scripts").mkdir()
+    (repo / "scripts/evaluate_regen2.py").write_text(
+        "# stale target\n", encoding="utf-8"
+    )
+    handoffs.write_text(
+        yaml.safe_dump({
+            "schema_version": 1,
+            "tasks": [{
+                "id": "task_regen2_executor_code",
+                "status": "completed",
+                "target_script_path": "scripts/evaluate_regen2.py",
+                "run_dir": "data/run_regen2",
+                "source_lost_detected_at": "2026-05-25T07:55:03+00:00",
+                "regeneration_request": "data/run_regen2/generated_executor/executor_regeneration_request.yaml",
+                "regeneration_reason": "source was lost",
+                "previous_installed_at": "2026-05-24T07:35:01+00:00",
+                "previous_installed_sha256": "lost_hash",
+            }],
+        }, allow_unicode=True, sort_keys=False),
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(install_mod, "HANDOFFS_PATH", handoffs)
+    (repo / "data/research_framework/executor_registry.yaml").write_text(
+        yaml.safe_dump({"executors": {}}, allow_unicode=True), encoding="utf-8"
+    )
+    monkeypatch.setattr(install_mod, "REGISTRY_PATH",
+                          repo / "data/research_framework/executor_registry.yaml")
+    import sys
+    sys.argv = ["install_generated_executors.py"]
+    rc = install_mod.main()
+    assert rc == 0
+    doc = yaml.safe_load(handoffs.read_text(encoding="utf-8"))
+    task = doc["tasks"][0]
+    assert task["status"] == "completed"
+    assert task["install_action"] == "overwritten_after_executor_regeneration"
+    assert task["last_compliance_status"] == "passed"
+    assert task["installed_at"]
+    assert task.get("regeneration_installed_at") == task.get("installed_at")
+    assert task.get("installed_sha256")
+    # Stale current-state regeneration fields moved into history.
+    assert "source_lost_detected_at" not in task
+    assert "regeneration_request" not in task
+    assert task["previous_source_lost_detected_at"] == "2026-05-25T07:55:03+00:00"
+    # Pre-existing previous_installed_* preserved.
+    assert task["previous_installed_at"] == "2026-05-24T07:35:01+00:00"

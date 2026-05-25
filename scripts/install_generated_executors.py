@@ -225,18 +225,27 @@ def install_one(
             "sha256": source_hash[:16],
         }
 
-    # Compliance-repair overwrite: when a task carries compliance_failed_at,
-    # the destination is a known-bad noncompliant version that we explicitly
-    # asked Hermes to rewrite. The source above already passed
-    # validate_executor() — which includes the GateKeeper compliance check —
-    # so overwriting is safe and is in fact the only way to land the repair.
-    # Both conditions must be true: history says it was failed AND the new
-    # source is verified compliant by validate_executor above.
-    if target_exists and task.get("compliance_failed_at"):
+    # Repair-flow overwrite: when a task carries compliance_failed_at OR
+    # source_lost_detected_at, the destination is a known-bad / known-stale
+    # version that we explicitly asked Hermes to rewrite (compliance repair
+    # or executor regeneration after a lost source). The source above
+    # already passed validate_executor() — which includes the GateKeeper
+    # compliance check — so overwriting is safe and is in fact the only way
+    # to land the repair. Both conditions must be true: history says it
+    # needs replacement AND the new source is verified compliant.
+    repair_reason: str | None = None
+    if target_exists:
+        if task.get("compliance_failed_at"):
+            repair_reason = "compliance_repair"
+        elif task.get("source_lost_detected_at"):
+            repair_reason = "executor_regeneration"
+    if target_exists and repair_reason:
         if dry_run:
             return {
                 "id": handoff_id,
-                "action": "would_overwrite_compliance_repair",
+                "action": "would_overwrite_compliance_repair"
+                          if repair_reason == "compliance_repair"
+                          else "would_overwrite_executor_regeneration",
                 "source": str(source.relative_to(REPO_ROOT)),
                 "target": target_raw,
                 "source_sha256": source_hash[:16],
@@ -246,12 +255,14 @@ def install_one(
         shutil.copy2(source, target)
         return {
             "id": handoff_id,
-            "action": "overwritten_after_compliance_repair",
+            "action": "overwritten_after_compliance_repair"
+                      if repair_reason == "compliance_repair"
+                      else "overwritten_after_executor_regeneration",
             "source": str(source.relative_to(REPO_ROOT)),
             "target": target_raw,
             "sha256": source_hash[:16],
             "previous_target_sha256": (target_hash or "")[:16],
-            "overwrite_reason": "compliance_repair",
+            "overwrite_reason": repair_reason,
         }
 
     # Never silently overwrite a destination that already exists with different
@@ -774,6 +785,7 @@ def main() -> int:
             # compliance fields into a previous_* history so audit can still
             # see the run was once noncompliant.
             installed_targets.add(outcome["target"])
+            task["status"] = "completed"
             task["installed_at"] = now
             task["repair_installed_at"] = now
             task["installed_source"] = outcome["source"]
@@ -785,6 +797,29 @@ def main() -> int:
                 task["previous_compliance_failed_at"] = task.pop("compliance_failed_at")
             if task.get("compliance_errors"):
                 task["previous_compliance_errors"] = task.pop("compliance_errors")
+            handoff_changed = True
+        elif action == "overwritten_after_executor_regeneration" and not args.dry_run:
+            # Regeneration flow landed: Hermes wrote a fresh executor after
+            # the original source was lost, and validate_executor accepted it.
+            # Mark like a normal install, plus regeneration_installed_at, and
+            # move the source_lost_detected_at / regeneration_request fields
+            # into previous_* history so the audit trail keeps both the lost
+            # event and the recovery event.
+            installed_targets.add(outcome["target"])
+            task["status"] = "completed"
+            task["installed_at"] = now
+            task["regeneration_installed_at"] = now
+            task["installed_source"] = outcome["source"]
+            task["installed_sha256"] = outcome["sha256"]
+            task["installed_by"] = "install_generated_executors"
+            task["install_action"] = "overwritten_after_executor_regeneration"
+            task["last_compliance_status"] = "passed"
+            if task.get("source_lost_detected_at"):
+                task["previous_source_lost_detected_at"] = task.pop("source_lost_detected_at")
+            if task.get("regeneration_request"):
+                task["previous_regeneration_request"] = task.pop("regeneration_request")
+            if task.get("regeneration_reason"):
+                task["previous_regeneration_reason"] = task.pop("regeneration_reason")
             handoff_changed = True
         elif action == "noop":
             installed_targets.add(outcome["target"])
@@ -854,6 +889,9 @@ def main() -> int:
             ),
             "needs_executor_regeneration": sum(
                 1 for r in results if r.get("action") == "needs_executor_regeneration"
+            ),
+            "overwritten_after_executor_regeneration": sum(
+                1 for r in results if r.get("action") == "overwritten_after_executor_regeneration"
             ),
         },
         "registry_drafts_flipped": registry_outcome.get("flipped", []),
