@@ -1,0 +1,98 @@
+incident_id: 2026-05-25_path_import_bug_cluster
+title: Hermes-generated executors missing sys.path.insert(REPO_ROOT) — 13+ tasks
+  burned spot before detection
+opened_at: '2026-05-25T18:38:00Z'
+closed_at: '2026-05-25T19:50:00Z'  # user manually shut spot down
+severity: production
+category: infrastructure
+root_cause: |
+  Hermes-generated grid-style executors contained `from scripts.gatekeeper import
+  GateKeeper` (passes the install-time string compliance check) but did NOT
+  prepend REPO_ROOT to sys.path. The install validation ran inside the repo
+  cwd where sys.path already contained the repo root, so the import resolved
+  locally — but the spot pipeline launches the executor as a top-level
+  subprocess from `/home/ubuntu/...`, where the bare `from scripts.X import Y`
+  raises `ModuleNotFoundError: No module named 'scripts'`. Every Hermes-
+  generated executor in this family failed at module import on spot.
+
+detection_lag: |
+  The bug was first surfaced ~1 hour into the incident (v2 path bug report
+  was made and queued for user decision, but Codex/Claude continued
+  monitoring under /loop "monitor only" rules) and ran for ~6 hours of
+  passive monitoring before the user came online and issued the stop-the-
+  bleed mandate.
+
+burned_spot_runs:
+  total_tasks_affected: 13
+  total_path_bug_failed: 12  # not counting v1_5 which was interrupted, not confirmed
+  evaluators_involved:
+    - scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+    - scripts/evaluate_cb_arb_moneyness_entry_filter_v2.py  # original v2 path bug
+    - scripts/evaluate_cb_arb_valuation_formula.py
+  approximate_spot_minutes_wasted: 130
+
+remediation:
+  framework_fixes_2026_05_25:
+    - file: scripts/install_generated_executors.py
+      change: |
+        Added _check_import_reachability() — spawns a subprocess from /tmp
+        with PYTHONPATH cleared and re-imports the source, simulating the
+        spot environment. Failure surfaces as
+        `compliance_failed: import_unreachable: ...`, which routes the task
+        through the existing compliance_failed → needs_compliance_repair
+        → Hermes regeneration flow.
+    - file: framework/autonomous/infra_cluster_detector.py
+      change: |
+        New module. On every quant_internal_tick run, looks at the most
+        recent 5 failed/infra_failed tasks. If 2+ share the same root-cause
+        signature (Python error type + message, or infra_failure_type tag),
+        touches data/research_framework/orchestrator_paused.flag so the
+        next queue tick stops dispatching. Threshold is 2 per user mandate.
+    - file: data/research_framework/orchestrator_paused.flag
+      change: |
+        Manually touched 2026-05-25T18:38:00Z to halt the queue during
+        incident response.
+
+queue_cleanup:
+  approach: option_B (per user mandate 2026-05-25 evening) — remove path-bug
+    noise tasks from live queue but preserve data/* directories for
+    archaeology; keep v1_7 (HEAD-tracked) + credit_adjusted (research
+    direction worth re-running) with reclassify metadata.
+  removed_from_live_queue:
+    - cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_1
+    - cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_2
+    - cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_3
+    - cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_4
+    - cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_5  # the one v1_5 that ran when pause-flag race-condition'd
+    - cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_1
+    - cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_2
+    - cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_3
+    - cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_4
+    - cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_5
+    - cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_6
+    - cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_7
+  retained_in_live_queue:
+    - id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+      reason: already in HEAD-tracked queue before the incident; reclassified
+        in-place from queued → infra_failed with infra_failure_type tag.
+    - id: cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+      reason: Hermes' first self-driven "modify valuation formula" direction
+        (not yet another reverse entry-filter variant). Worth re-running
+        after the path gate is deployed. Marked
+        `should_rerun_after_infra_fix: true`.
+
+archaeology:
+  data_directories_preserved: yes  # all `data/<run_id>/` directories with
+    # spec/proposal/auto_pipeline.log retained on disk for postmortem
+    # access; they are simply no longer referenced from the live queue.
+  retrieval: |
+    `ls data/cb_arb_value_gap_switch_*volatility_position_scaling*` to
+    enumerate the path-bug attempts. Each has its own auto_pipeline.log
+    with the actual ModuleNotFoundError traceback.
+
+unpause_checklist:
+  - clean diff committed (this incident summary + minimal yaml + code fixes)
+  - confirm sig VM is running the install_generated_executors with the new
+    import_reachability gate (sig pulls or local rsync as needed)
+  - remove data/research_framework/orchestrator_paused.flag
+  - verify next quant_internal_tick logs `cluster_detector: ...` line

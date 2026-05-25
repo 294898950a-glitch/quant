@@ -1,6 +1,6 @@
 schema_version: 1
 enabled: true
-updated_at: '2026-05-24T01:09:08'
+updated_at: '2026-05-25T19:00:00'
 escalation:
   status: auto_resolved
   reason: all 10 autonomous research families exhausted (regime_classifier_variant
@@ -2460,7 +2460,7 @@ queue:
   pipeline_failure_signature_recorded_at: '2026-05-23T22:51:16'
 - id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
   family: moneyness_entry_filter
-  status: queued
+  status: infra_failed
   spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/spec.yaml
   process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
   sync_paths:
@@ -2490,6 +2490,54 @@ queue:
   recovered_vm_retry_at: '2026-05-24T00:34:39'
   manual_unblock_note: sig disabled, retry on spot
   stale_vm_avoidance_reset_at: '2026-05-24T01:09:08'
+  previous_status_before_infra_reclassify: queued
+  failure_category: infrastructure
+  infra_failure_type: path_unreachable_module_not_found
+  infra_reclassified_at: '2026-05-25T14:25:08+00:00'
+  infra_reclassify_reason: 'path bug: ModuleNotFoundError "No module named scripts"
+    — generated executor missing sys.path.insert(REPO_ROOT) boilerplate; not a strategy
+    failure. install_generated_executors now catches this at install time via import_reachability
+    gate (added 2026-05-25). 11 sibling tasks with identical signature were removed
+    from live queue during incident cleanup — see data/research_framework/incidents/2026-05-25_path_bug.yaml.'
+- id: cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+  family: valuation_formula_credit_adjust
+  status: infra_failed
+  spec_path: data/cb_arb_value_gap_switch_credit_adjusted_valuation_v1/spec.yaml
+  process_pattern: cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_valuation_formula.py
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  discovered_at: '2026-05-25T13:43:39'
+  source: project_owned_ideation
+  workflow_stage: running_remote
+  started_at: '2026-05-25T13:52:23'
+  remote_pid: '31689'
+  vm_id: guangzhou_spot
+  vm_host: ubuntu@106.55.255.129
+  remote_repo: /home/ubuntu/projects/quant
+  failed_at: '2026-05-25T14:00:27'
+  failure_reason: remote pipeline exit_code=1
+  pipeline_failure_signature: 05dcf10042324966238592d5aa0b4730cbfb015c63da94ab775808a25b82a123
+  pipeline_failure_signature_recorded_at: '2026-05-25T14:00:27'
+  previous_status_before_infra_reclassify: failed
+  failure_category: infrastructure
+  infra_failure_type: path_unreachable_module_not_found
+  infra_reclassified_at: '2026-05-25T10:46:30Z'
+  infra_reclassify_reason: 'path bug: ModuleNotFoundError "No module named scripts"
+    — generated executor missing sys.path.insert(REPO_ROOT) boilerplate; not a strategy
+    failure. install_generated_executors will now catch this at install time via import_reachability
+    gate (added 2026-05-25).'
+  should_rerun_after_infra_fix: true
+  rerun_note: Hermes self-driven 'modify valuation formula' direction — first framework
+    attempt to modify gap formula itself rather than add another entry filter. Preserve,
+    re-queue after path gate deployed.
 - id: cb_arb_value_gap_switch_reverse-probe_20260524
   family: meta_validation_probe
   status: queued

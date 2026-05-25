@@ -183,8 +183,35 @@ def run_once_under_lock() -> tuple[str, int, str]:
         return (run_kind, returncode, output)
 
 
+PAUSE_FLAG_PATH = REPO_ROOT / "data" / "research_framework" / "orchestrator_paused.flag"
+
+
+def _check_infra_cluster_pause() -> tuple[bool, str]:
+    """Run the infra cluster detector before dispatching the queue tick.
+
+    If the most recent failed tasks share the same root-cause signature
+    (user mandate 2026-05-25: 2 consecutive same-signature failures →
+    auto-pause), touch the orchestrator pause flag and surface the
+    decision. Returns (newly_paused, reason).
+    """
+    try:
+        from framework.autonomous import infra_cluster_detector
+    except Exception as exc:  # pragma: no cover — defensive
+        return False, f"cluster_detector_import_failed: {type(exc).__name__}: {exc}"
+    try:
+        state = load_yaml(QUEUE_STATE_PATH, {})
+        if not isinstance(state, dict):
+            return False, "queue state is not a mapping"
+        decision = infra_cluster_detector.evaluate(state, REPO_ROOT)
+    except Exception as exc:
+        return False, f"cluster_detector_evaluate_failed: {type(exc).__name__}: {exc}"
+    created = infra_cluster_detector.maybe_touch_pause_flag(decision, PAUSE_FLAG_PATH)
+    return created, str(decision.get("reason") or "")
+
+
 def main() -> int:
     before_status = load_json(STATUS_PATH, {})
+    cluster_paused, cluster_reason = _check_infra_cluster_pause()
     run_kind, returncode, output = run_once_under_lock()
     current = load_yaml(CURRENT_PATH, {})
     state = load_yaml(QUEUE_STATE_PATH, {})
@@ -203,6 +230,10 @@ def main() -> int:
     print(f"- action: {run_kind}")
     print(f"- returncode: {returncode}")
     print(f"- output: {output or '(empty)'}")
+    if cluster_paused:
+        print(f"- cluster_detector: NEWLY PAUSED — {cluster_reason}")
+    elif cluster_reason:
+        print(f"- cluster_detector: {cluster_reason}")
     print()
     print("## Loop Status")
     before = before_status.get("status", "unknown") if isinstance(before_status, dict) else "unknown"

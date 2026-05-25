@@ -138,7 +138,61 @@ def validate_executor(path: Path) -> list[str]:
             "(framework_preflight requires every grid-style executor to "
             "import GateKeeper and call its lifecycle methods)"
         )
+        return errors
+    # Import reachability gate: validate_executor above loaded the module from
+    # this process where sys.path includes REPO_ROOT (because install runs from
+    # the repo root). On spot the executor runs as a top-level subprocess from
+    # a different cwd; if the source does `from scripts.X import Y` without
+    # first inserting REPO_ROOT into sys.path, the import will resolve here
+    # but fail in production with ModuleNotFoundError. Re-run the import in a
+    # foreign-cwd subprocess with PYTHONPATH cleared so we catch that case at
+    # install time and route the task back to Hermes for repair.
+    reach_errors = _check_import_reachability(path)
+    if reach_errors:
+        errors.extend(reach_errors)
     return errors
+
+
+def _check_import_reachability(path: Path) -> list[str]:
+    """Spawn a subprocess from a foreign cwd to simulate the production
+    environment. Any ModuleNotFoundError on a `from scripts.X import Y` style
+    import is reported as a compliance failure (import_unreachable) so the
+    task flows through the existing compliance_failed → needs_compliance_repair
+    handoff path.
+    """
+    import subprocess
+    code = (
+        "import importlib.util, sys, traceback;"
+        f"spec = importlib.util.spec_from_file_location('check', r'{path}');"
+        "m = importlib.util.module_from_spec(spec);"
+        "sys.modules[spec.name] = m;"
+        "spec.loader.exec_module(m)"
+    )
+    env = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LC_ALL": "C"}
+    try:
+        result = subprocess.run(
+            [sys.executable, "-I", "-c", code],
+            cwd="/tmp",
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except Exception as exc:
+        return [f"compliance_failed: import_reachability_probe_failed: {type(exc).__name__}: {exc}"]
+    if result.returncode == 0:
+        return []
+    stderr = (result.stderr or "").strip()
+    stdout = (result.stdout or "").strip()
+    err_text = stderr or stdout or f"exit={result.returncode}"
+    last_line = err_text.splitlines()[-1] if err_text else "unknown"
+    return [
+        "compliance_failed: import_unreachable: "
+        f"{last_line} (executor must self-insert REPO_ROOT into sys.path "
+        "before `from scripts.X import Y`-style imports; install validated "
+        "from repo cwd but production runs from a foreign cwd)"
+    ]
 
 
 def install_one(

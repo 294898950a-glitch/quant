@@ -32,12 +32,33 @@ import scripts.install_generated_executors as install_mod
 
 GATEKEEPER_IMPORT = "from scripts.gatekeeper import GateKeeper"
 
+# Real repo root — needed so executors written by tests can successfully resolve
+# `from scripts.gatekeeper import GateKeeper` when validate_executor's
+# subprocess reachability probe runs them from a foreign cwd.
+_REAL_REPO_ROOT = Path(__file__).resolve().parents[2]
+
 
 def _write_executor(path: Path, *, with_gatekeeper: bool, with_main: bool = True,
-                     with_declare: bool = True) -> None:
+                     with_declare: bool = True, with_sys_path_fix: bool = True) -> None:
+    """Build a fake generated executor.
+
+    with_gatekeeper: whether to emit `from scripts.gatekeeper import GateKeeper`.
+    with_sys_path_fix: whether to prepend a sys.path.insert(REPO_ROOT) boilerplate
+        before the GateKeeper import. Default True so existing compliance tests
+        keep passing the new import_reachability gate. Set False to simulate the
+        path bug where Hermes wrote the import but forgot the path setup.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
     lines = ["#!/usr/bin/env python3"]
     if with_gatekeeper:
+        if with_sys_path_fix:
+            lines.extend([
+                "import sys",
+                "from pathlib import Path",
+                f"_REPO_ROOT = Path(r'{_REAL_REPO_ROOT}')",
+                "if str(_REPO_ROOT) not in sys.path:",
+                "    sys.path.insert(0, str(_REPO_ROOT))",
+            ])
         lines.append(GATEKEEPER_IMPORT)
     if with_main:
         lines.append("def main():\n    return 0\n")
@@ -59,6 +80,34 @@ def test_compliance_fail_missing_gatekeeper_is_flagged(tmp_path):
     errors = install_mod.validate_executor(src)
     assert any(e.startswith("compliance_failed:") for e in errors), (
         f"missing GateKeeper must surface compliance_failed, got {errors}"
+    )
+
+
+def test_compliance_fail_import_unreachable_when_sys_path_missing(tmp_path):
+    """The path bug: executor has the required GateKeeper import string but
+    forgot to prepend REPO_ROOT to sys.path. validate_executor passes the
+    string check from the repo cwd (sys.path already has it), but the
+    subprocess reachability probe runs from /tmp and must surface this as a
+    compliance failure so the task routes through the repair flow."""
+    src = tmp_path / "executor.py"
+    _write_executor(src, with_gatekeeper=True, with_sys_path_fix=False)
+    errors = install_mod.validate_executor(src)
+    assert any("import_unreachable" in e for e in errors), (
+        f"missing sys.path boilerplate must surface import_unreachable, got {errors}"
+    )
+    assert any(e.startswith("compliance_failed:") for e in errors), (
+        f"import_unreachable must be routed through compliance_failed, got {errors}"
+    )
+
+
+def test_compliance_pass_when_sys_path_fix_present(tmp_path):
+    """Reachability probe passes when the executor inserts REPO_ROOT into
+    sys.path before importing scripts.gatekeeper."""
+    src = tmp_path / "executor.py"
+    _write_executor(src, with_gatekeeper=True, with_sys_path_fix=True)
+    errors = install_mod.validate_executor(src)
+    assert errors == [], (
+        f"executor with sys.path fix should pass reachability, got {errors}"
     )
 
 

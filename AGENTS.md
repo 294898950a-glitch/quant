@@ -226,6 +226,74 @@ flagged as `compliance_failed`, repair_request marker is written,
 DRAFT spec routes through compile correctly, READY specs are not
 touched, compliant install completes).
 
+Import reachability gate (2026-05-25 evening, post-incident):
+
+The GateKeeper compliance check above is a *string* check on the source
+text. It is necessary but not sufficient — a generated executor can
+contain the right `from scripts.gatekeeper import GateKeeper` line and
+still fail at runtime if the source lacks the boilerplate that prepends
+`REPO_ROOT` to `sys.path` before that import. The install-time validator
+ran inside the repo cwd where `sys.path` already had the repo root, so
+the import resolved locally; spot ran the executor as a top-level
+subprocess from `/home/ubuntu/...` where the bare `scripts.X` package
+is unreachable. This produced 13 path-bug failures (production incident
+2026-05-25) before the gate was added — see
+`data/research_framework/incidents/2026-05-25_path_bug.yaml`.
+
+`validate_executor()` now calls `_check_import_reachability(path)` after
+the GateKeeper string check passes. The probe spawns a subprocess with
+`-I` (isolated mode), `cwd="/tmp"`, and a stripped environment so that
+`sys.path` no longer auto-resolves to the repo root. It re-imports the
+source via `importlib.util.spec_from_file_location`. Any
+`ModuleNotFoundError` (or other import-time error) is folded back as
+`compliance_failed: import_unreachable: ...`, which routes the task
+through the same compliance_failed → needs_compliance_repair → Hermes
+regeneration flow as the missing-GateKeeper case. No new task state is
+needed; the existing repair path absorbs the new failure category.
+
+Tested by 2 additional cases in
+`framework/tests/test_install_compliance_recompile.py`:
+`test_compliance_fail_import_unreachable_when_sys_path_missing` (executor
+has the GateKeeper import string but no `sys.path.insert` boilerplate →
+must surface `import_unreachable` under `compliance_failed`) and
+`test_compliance_pass_when_sys_path_fix_present` (boilerplate restored →
+reachability probe passes).
+
+Infra cluster detector + orchestrator pause flag (2026-05-25 evening):
+
+`framework/autonomous/infra_cluster_detector.py` runs once per
+`scripts/quant_internal_tick.py` invocation, before
+`research_queue_runner.py` is dispatched. It inspects the most recent
+five failed/infra_failed tasks (sorted by `failed_at` or
+`infra_reclassified_at`), normalizes each to a root-cause signature
+(`infra_failure_type` tag if present, otherwise the last `<Error>:
+<message>` line from the run's `auto_pipeline.log`, otherwise the
+queue item's `failure_reason`), and if two or more consecutive tasks
+share the same signature it touches
+`data/research_framework/orchestrator_paused.flag`.
+
+`research_queue_runner.py` already short-circuits the entire tick when
+that flag exists (it has done so since the file was introduced). The
+cluster detector therefore acts as an automatic-stop layer between
+"first repeat infra failure detected" and "next dispatch tick" — at
+most one extra task can land on spot before the queue freezes.
+
+Threshold is two consecutive same-signature failures (user mandate
+2026-05-25 post-incident); window is the most recent five. Both are
+module-level constants in `infra_cluster_detector` and can be tuned
+without changing the hook in `quant_internal_tick.main()`.
+
+`orchestrator_paused.flag` is gitignored (it is runtime state). To
+unpause: confirm the underlying defect is fixed and the fixes are
+deployed on every host that can read this repo (sig in particular,
+since `spot_idle_start.py` runs there), then delete the flag.
+
+Tested in `framework/tests/test_infra_cluster_detector.py` (10 cases
+covering empty/single/two-same/two-different signature inputs,
+window truncation, infra_failure_type vs traceback precedence,
+non-failed status exclusion, and the three flag-touch branches:
+write/skip-existing/skip-when-should-not-pause).
+
 Handoff pickable statuses (2026-05-25):
 
 `hermes_executor_handoff.HANDOFF_PICKABLE_STATUSES` is the explicit
