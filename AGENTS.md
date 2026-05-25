@@ -614,6 +614,58 @@ including human-readable reasons, edge cases for adopted prior runs
 and below-threshold closed families, and robustness against missing
 inputs).
 
+Research Delta Gate reject-chain defence (2026-05-26):
+
+The third post-incident unpause produced a new Hermes-ideated task
+(`volatility_position_scaling_reverse_v1_8`) that still cited
+`value_gap_rank_is_anti_alpha_2026_05_24` as authority for a
+reverse-base variant, even though three downstream reverse-base
+follow-ups had been rejected by review the day before. The
+`suggested_closed_families` digest field did not catch it because the
+path-bug failures never landed a review and therefore never raised
+the family's reject_count there. The gate needed evidence outside the
+digest.
+
+Two complementary changes close the gap:
+
+1. `_critical_insight_ids` now skips insights flagged
+   `do_not_use_as_default_direction: true` OR whose ``status`` starts
+   with `deprecated` or `weakened`. A proposal that cites only such
+   an insight no longer counts as citing a current critical insight —
+   so the existing "skip unless cites_critical" rules trigger
+   correctly when an insight has been retroactively disproven.
+
+2. New Rule 1b: `_insight_closed_families` reads every insight's
+   `follow_up_review_results.closed_families` list and indexes
+   family_name → closing_insight_id. Any proposal whose `family`
+   appears in that index is skipped unless it cites a *different*
+   still-active critical insight that would overturn the reject
+   chain. The skip reason and evidence both name the closing
+   insight so the audit trail points at the specific piece of
+   research memory that closed the direction.
+
+When an insight's follow-up reviews converge on a "this whole
+direction is closed" conclusion, the operator must (a) flip the
+insight's `priority` to `deprecated` OR add
+`do_not_use_as_default_direction: true` AND a `status` like
+`weakened_by_follow_up_rejects_<date>`, and (b) populate
+`follow_up_review_results.closed_families` with the specific family
+names to ban (and any adjacent families that rest on the same
+disproven premise). The gate handles the rest.
+
+Tested in `framework/tests/test_research_delta_gate.py` with 5
+additional cases (now 23 total):
+- closed-family insight skips a matching proposal when no fresh
+  critical insight is cited
+- a different fresh critical insight unlocks the same family
+- citing only the deprecated insight does NOT unlock anything
+- families outside the closed list are unaffected
+- evidence dict carries both insight_closed_family and closing_insight
+
+End-to-end verified against the real `v1_8` proposal and the
+deprecated `value_gap_rank_is_anti_alpha_2026_05_24` insight: gate
+returns skip with the closing-insight name in the reason.
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live

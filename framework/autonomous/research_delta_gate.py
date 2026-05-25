@@ -102,6 +102,17 @@ def _capability_set(proposal: dict[str, Any]) -> tuple[str, ...]:
 
 
 def _critical_insight_ids(research_insights: dict[str, Any] | None) -> set[str]:
+    """Return ids of currently-active critical insights.
+
+    "Active" means the insight is tagged priority: critical AND has NOT
+    been marked deprecated / weakened by follow-up review. The latter is
+    surfaced via either a ``do_not_use_as_default_direction: true`` flag
+    or a ``status`` field whose value starts with "deprecated" or
+    "weakened" (e.g. "weakened_by_follow_up_rejects_2026_05_25").
+    Insights demoted from critical to deprecated by post-review evidence
+    no longer count as evidence that justifies re-opening a closed
+    family (2026-05-26 mandate).
+    """
     if not isinstance(research_insights, dict):
         return set()
     out: set[str] = set()
@@ -110,9 +121,49 @@ def _critical_insight_ids(research_insights: dict[str, Any] | None) -> set[str]:
             continue
         if str(item.get("priority", "")).lower() != "critical":
             continue
+        if item.get("do_not_use_as_default_direction"):
+            continue
+        status_val = str(item.get("status", "")).lower()
+        if status_val.startswith("deprecated") or status_val.startswith("weakened"):
+            continue
         rid = item.get("id")
         if isinstance(rid, str) and rid:
             out.add(rid)
+    return out
+
+
+def _insight_closed_families(research_insights: dict[str, Any] | None) -> dict[str, str]:
+    """Collect family → insight_id mapping from every insight's
+    ``follow_up_review_results.closed_families`` list.
+
+    This is the reject-chain defence (2026-05-26 mandate). When an
+    insight's follow-up reviews converge on "the family this insight
+    was driving is not viable", the insight gets a ``closed_families``
+    list naming the specific families (and adjacent families that rest
+    on the same disproven premise). A proposal whose family appears in
+    any of these lists is treated as already-closed unless the proposal
+    cites a *different* still-active critical insight.
+
+    Returns a dict mapping family_name to the insight id that closed
+    it, so the skip reason can name the evidence.
+    """
+    out: dict[str, str] = {}
+    if not isinstance(research_insights, dict):
+        return out
+    for item in research_insights.get("key_insights") or []:
+        if not isinstance(item, dict):
+            continue
+        followup = item.get("follow_up_review_results")
+        if not isinstance(followup, dict):
+            continue
+        closed = followup.get("closed_families")
+        if not isinstance(closed, list):
+            continue
+        insight_id = str(item.get("id") or "")
+        for family in closed:
+            family_str = str(family or "").strip()
+            if family_str and family_str not in out:
+                out[family_str] = insight_id
     return out
 
 
@@ -216,6 +267,35 @@ def evaluate(
             ),
             evidence={
                 "closed_family": family,
+                "queue_depth": queue_depth,
+            },
+        )
+
+    # Rule 1b (2026-05-26 mandate) — family is in an insight-recorded
+    # reject chain. When an insight's follow_up_review_results lists
+    # ``closed_families`` (the family that drove this insight has been
+    # disproven by N+ post-review rejects on related variants), any
+    # new proposal in that family must cite a DIFFERENT, still-active
+    # critical insight to be allowed through. Citing the deprecated
+    # insight itself does not count — ``_critical_insight_ids`` already
+    # filters out deprecated/weakened insights, so ``cites_critical``
+    # will be False when the proposal only references the closed-by-
+    # follow-up insight.
+    insight_closed = _insight_closed_families(research_insights)
+    if family and family in insight_closed and not cites_critical:
+        closing_insight = insight_closed[family]
+        return DeltaDecision(
+            action="skip",
+            reason=(
+                f"family {family!r} appears in the closed_families list of "
+                f"insight {closing_insight!r} (its follow-up reviews "
+                "rejected the direction); the proposal does not cite a "
+                "different, still-active critical insight that would "
+                "overturn the reject chain."
+            ),
+            evidence={
+                "insight_closed_family": family,
+                "closing_insight": closing_insight,
                 "queue_depth": queue_depth,
             },
         )

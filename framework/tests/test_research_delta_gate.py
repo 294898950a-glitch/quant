@@ -55,12 +55,36 @@ def _digest(*, recent_runs=None, closed_families=None):
     }
 
 
-def _insights(*, critical=None, others=None):
+def _insights(*, critical=None, others=None, deprecated_with_closed_families=None):
+    """Build a research_insights-style dict.
+
+    deprecated_with_closed_families: list of (insight_id, [family, ...]) tuples.
+        Each insight is emitted as priority=critical but with
+        do_not_use_as_default_direction=true and a
+        follow_up_review_results.closed_families list — i.e. the 2026-05-26
+        mandate "this insight has been disproven by follow-up reviews,
+        these families are now closed".
+    """
     items = []
     for cid in critical or []:
         items.append({"id": cid, "priority": "critical"})
     for oid in others or []:
         items.append({"id": oid, "priority": "medium"})
+    for entry in deprecated_with_closed_families or []:
+        if isinstance(entry, tuple) and len(entry) == 2:
+            iid, fams = entry
+        else:
+            iid = entry["id"]
+            fams = entry["closed_families"]
+        items.append({
+            "id": iid,
+            "priority": "critical",
+            "do_not_use_as_default_direction": True,
+            "status": "weakened_by_follow_up_rejects_test",
+            "follow_up_review_results": {
+                "closed_families": list(fams),
+            },
+        })
     return {"key_insights": items}
 
 
@@ -304,6 +328,112 @@ def test_every_decision_has_human_readable_reason(scenario):
 # ---------------------------------------------------------------------------
 # Robustness — bad/empty inputs do not crash
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Acceptance: 2026-05-26 mandate — reject-chain defence
+# Family is in an insight's follow_up_review_results.closed_families
+# ---------------------------------------------------------------------------
+
+
+def test_insight_closed_family_skips_when_no_active_critical_insight():
+    """The v1_8 scenario: a deprecated insight has been augmented with
+    closed_families that name the family the proposal carries. The
+    proposal cites only the deprecated insight (its priority is still
+    'critical' on disk but it has do_not_use_as_default_direction=true
+    AND status starts with 'weakened/deprecated'), so the gate must
+    treat it as not citing a current critical insight and skip."""
+    insights = _insights(
+        deprecated_with_closed_families=[
+            ("disproven_insight_2026_05_24",
+             ["reverse_moneyness_entry_filter",
+              "volatility_position_scaling_reverse"]),
+        ],
+    )
+    proposal = _proposal(
+        family="volatility_position_scaling_reverse",
+        capability_ids=["C001"],
+        source_insight="disproven_insight_2026_05_24 — citing the original probe",
+    )
+    decision = evaluate(proposal, research_insights=insights)
+    assert decision.action == "skip"
+    assert "disproven_insight_2026_05_24" in decision.reason
+    assert decision.evidence["insight_closed_family"] == "volatility_position_scaling_reverse"
+    assert decision.evidence["closing_insight"] == "disproven_insight_2026_05_24"
+
+
+def test_insight_closed_family_allows_when_proposal_cites_fresh_critical():
+    """If a proposal in a closed family also cites a *different*,
+    still-active critical insight, the gate must allow it through —
+    fresh evidence is what re-opens a closed direction."""
+    insights = _insights(
+        critical=["fresh_critical_2026_06_01"],
+        deprecated_with_closed_families=[
+            ("disproven_insight",
+             ["volatility_position_scaling_reverse"]),
+        ],
+    )
+    proposal = _proposal(
+        family="volatility_position_scaling_reverse",
+        capability_ids=["C001"],
+        source_insight="fresh_critical_2026_06_01 — new mechanism diagnostic",
+    )
+    decision = evaluate(proposal, research_insights=insights)
+    assert decision.action == "advance"
+    assert "fresh_critical_2026_06_01" in decision.reason
+
+
+def test_critical_insight_marked_deprecated_does_not_count_as_evidence():
+    """Citing an insight that has been demoted to deprecated /
+    do_not_use_as_default_direction must not unlock anything. The
+    proposal-cites-critical check used by Rules 1, 1b, and 2 must
+    treat deprecated insights as if they did not exist."""
+    insights = _insights(
+        deprecated_with_closed_families=[
+            ("disproven_insight",
+             ["volatility_position_scaling_reverse"]),
+        ],
+    )
+    proposal = _proposal(
+        family="volatility_position_scaling_reverse",
+        capability_ids=["C001"],
+        source_insight="disproven_insight",
+    )
+    decision = evaluate(proposal, research_insights=insights)
+    assert decision.action == "skip"
+
+
+def test_insight_closed_family_does_not_affect_other_families():
+    """A proposal whose family is NOT in any closed_families list
+    behaves normally (advance, given no other gates fire)."""
+    insights = _insights(
+        deprecated_with_closed_families=[
+            ("disproven_insight",
+             ["reverse_moneyness_entry_filter"]),
+        ],
+    )
+    proposal = _proposal(
+        family="completely_unrelated_family",
+        capability_ids=["C099"],
+    )
+    decision = evaluate(proposal, research_insights=insights)
+    assert decision.action == "advance"
+
+
+def test_insight_closed_family_records_evidence_for_audit():
+    """Audit pointers must include the family + closing_insight id so
+    a reader can reproduce the skip decision."""
+    insights = _insights(
+        deprecated_with_closed_families=[
+            ("disproven_x",
+             ["family_a", "family_b"]),
+        ],
+    )
+    proposal = _proposal(family="family_b")
+    decision = evaluate(proposal, research_insights=insights)
+    assert decision.action == "skip"
+    assert decision.evidence["insight_closed_family"] == "family_b"
+    assert decision.evidence["closing_insight"] == "disproven_x"
 
 
 def test_empty_history_advances_by_default():

@@ -231,8 +231,10 @@ key_insights:
     decision_use: "Close the rolling PnL feedback direction. Do not accept any more option-pnl-feedback specs from the Claude ideation pipeline. Add to forbidden_families. Escalate to user for a genuinely new mechanism direction."
 
   - id: value_gap_rank_is_anti_alpha_2026_05_24
-    priority: critical
-    summary: "Reverse-rank probe shows that within the value_gap_amount>0 candidate set, sorting ASCENDING (least-positive first) wins large where DESCENDING (most-positive first, the production rule) loses. Same universe, same entry/exit logic, only sort direction changed. Three competing hypotheses collapse to one: the value_gap formula is anti-informative under its current monotonicity assumption."
+    priority: deprecated
+    status: weakened_by_follow_up_rejects_2026_05_25
+    do_not_use_as_default_direction: true
+    summary: "Reverse-rank probe shows that within the value_gap_amount>0 candidate set, sorting ASCENDING (least-positive first) wins large where DESCENDING (most-positive first, the production rule) loses. Same universe, same entry/exit logic, only sort direction changed. Three competing hypotheses collapse to one: the value_gap formula is anti-informative under its current monotonicity assumption. NOTE 2026-05-26: this summary describes the original probe finding; three downstream reverse-base variants ran on 2026-05-25 and all three were rejected by review, see follow_up_review_results below."
     facts:
       probe_run_dir: data/cb_arb_value_gap_switch_reverse-probe_20260524
       probe_script: scripts/evaluate_cb_arb_reverse_probe.py
@@ -264,15 +266,24 @@ key_insights:
         - "liquidity (high-gap CBs illiquid, entry/exit asymmetric)"
         - "formula misses conversion features (call protection, dilution)"
     decision_use: |
-      Ideator (Hermes) should bias new variants toward REVERSE-direction tests until forward-direction
-      anti-alpha is overturned. Acceptable next directions, by priority:
-        1. cost-on rerun of reverse-rank probe (tradeability test — highest priority)
-        2. full-flip probe (value_gap_amount<0 candidates, strong-form anti-alpha test)
-        3. correlation diagnostic between value_gap_amount and {credit, days-to-call, moneyness, 60d vol, momentum}
-        4. reverse-direction variants applied to families that previously failed in forward (e.g. exit rule sweeps, position sizing) — to see if those families were rejected only because they were stacked on an anti-alpha base
-      Forward-direction variants remain orthogonal evidence but are not the default new direction.
-      No truth promotion, no current.yaml change, no live deployment until cost-on reverse confirms
-      tradeability AND a confounder is identified or ruled out.
+      DEPRECATED 2026-05-26 — DO NOT use as default new direction. Three reverse-base
+      follow-up variants (exit_duration_adaptive_reverse, reverse_moneyness_entry_filter_v1_1,
+      reverse_bond_floor_entry_filter_v2) were tested on 2026-05-25 and all three were
+      rejected by review. The review chain specifically concluded that the
+      value_gap_amount signal is structurally broken even on the reverse base, not just
+      that the forward direction is anti-alpha. See follow_up_review_results below.
+
+      Ideator (Hermes) must NOT cite this insight as evidence for new reverse-base
+      entry-filter or position-scaling variants. Acceptable uses going forward:
+        - investigating WHY the +30.3% test cost-on result did not survive any downstream
+          extension (mechanism diagnostic, not new strategy candidate)
+        - modifications to the valuation formula itself (e.g. credit-adjusted, term-
+          structure-aware) that change the formula, not just stack a filter / scale
+          on the existing one
+      Reverse-direction entry-filter or scaling variants on the same value_gap_amount
+      base are CLOSED until new evidence overturns the reject chain.
+
+      No truth promotion, no current.yaml change, no live deployment.
     follow_ups:
       - cost_on_reverse_rerun
       - full_filter_flip_probe
@@ -302,6 +313,50 @@ key_insights:
       cost_bleed_test: "+0.381 (cost off) → +0.303 (cost on); 8pp loss, 81% of excess preserved"
       swing_vs_forward_test: "+30.3% reverse cost-on vs -10.5% forward cost-on = 41pp swing from sort direction alone"
       interpretation: "Reverse rule is no longer just a signal-side curiosity — it is a tradeable inversion candidate. Survives standard cost model with most of the excess intact."
+      interpretation_disputed_by: "follow_up_review_results below: three downstream variants on the same reverse base were rejected. The +30.3% bare-reverse number did not generalize to any extension; reviewers now interpret it as a statistical artifact rather than a tradeable signal."
+    follow_up_review_results:
+      summary: "Three reverse-base follow-up variants were tested on 2026-05-25 and all three were rejected by review. The reject chain converges on 'the value_gap_amount signal is structurally broken on the reverse base too' — i.e. the original +30.3% reverse cost-on result was not a tradeable inversion, it was a statistical anomaly that did not survive any downstream extension."
+      rejects:
+        - run_id: cb_arb_value_gap_switch_reverse_moneyness_entry_filter_v1_1
+          family: reverse_moneyness_entry_filter
+          review_verdict: failed_mechanical_thresholds
+          review_status_code: 2
+          dominant_reason: "gap signal is directionally broken: even on the reverse base, entering low-gap CBs leads to gap widening, suggesting the value_gap_amount metric itself is not mean-reverting"
+        - run_id: cb_arb_value_gap_switch_exit_duration_adaptive_reverse_20260525
+          family: exit_duration_adaptive_reverse
+          review_verdict: failed_mechanical_thresholds
+          review_status_code: 2
+          dominant_reason: "the exit rule is structurally coupled to the forward sort and cannot be ported to the reverse base — 64 grid combos produced zero excess return and massive negative PnL"
+        - run_id: cb_arb_value_gap_switch_reverse_bond_floor_entry_filter_v2
+          family: reverse_bond_floor_entry_filter
+          review_verdict: failed_mechanical_thresholds
+          review_status_code: 2
+          dominant_reason: "near-bond-floor CBs with large positive gaps are not mispriced — the gap formula itself appears to be the root problem, not the entry filter"
+      # Research Delta Gate reads this list (2026-05-26) and skips
+      # proposals whose `family` matches any entry — unless the proposal
+      # cites a NEW (still active, non-deprecated) critical insight that
+      # would overturn the reject chain. Listed both the 3 rejected
+      # families and adjacent reverse-base families because they all
+      # rest on the same disproven premise.
+      closed_families:
+        - reverse_moneyness_entry_filter
+        - exit_duration_adaptive_reverse
+        - reverse_bond_floor_entry_filter
+        - volatility_position_scaling_reverse
+        - reverse_volatility_position_scaling
+        - reverse_volatility_scaling
+      next_research_direction_recommended_by_reviews:
+        - "Abandon bond-floor entry filter for value_gap family"
+        - "Investigate gap formula itself (credit-adjusted, term-structure-aware) rather than stacking more filters"
+        - "Cement forward-base as the only viable direction within the existing formula"
+      ideator_directive_2026_05_26: |
+        Stop ideating reverse-base entry-filter / position-scaling variants on this
+        insight. The reverse +30% cost-on number is now treated as disputed: it failed
+        to extend to ANY downstream variant. New ideation should pursue either
+        (1) mechanism diagnostics that explain the +30% itself, or (2) modifications
+        to the value_gap formula. Research Delta Gate has been augmented (2026-05-26)
+        to skip same-family proposals when the family has accumulated >= N rejects
+        without an overturning insight.
 
 open_threads:
   - id: promote_absolute_value_gap_ranking_to_core
