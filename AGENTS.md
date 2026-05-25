@@ -294,6 +294,55 @@ window truncation, infra_failure_type vs traceback precedence,
 non-failed status exclusion, and the three flag-touch branches:
 write/skip-existing/skip-when-should-not-pause).
 
+Cluster detector recovery awareness (2026-05-26):
+
+The first cluster detector design (one day prior) counted all
+historical failed/infra_failed tasks in the queue against the
+consecutive-signature threshold. The first unpause after the
+2026-05-25 path-bug incident immediately re-tripped the detector
+because the two reclassified historical infra_failed tasks
+(`moneyness_entry_filter_v1_7` + `credit_adjusted_valuation_v1`)
+still carried the same `infra_failure_type` signature. Protection
+mechanism worked, but the judgment criterion was too coarse.
+
+`infra_cluster_detector.evaluate()` now accepts
+`recovery_armed_at` (ISO-8601 string). Tasks whose failed_at /
+infra_reclassified_at predates that cutoff are filtered out before
+consecutive counting. A default rolling
+`DEFAULT_LOOKBACK_MINUTES = 60` provides a fallback when no
+`recovery_armed_at` is set, so even a freshly deployed detector
+will never wake up on ancient corpses. The effective cutoff is
+`max(recovery_armed_at, now - lookback)`, surfaced as
+`cutoff_source` in the decision and in the pause flag body.
+
+State is tracked in
+`data/research_framework/cluster_detector_state.json`:
+
+```json
+{
+  "recovery_armed_at": "2026-05-26T00:05:21+00:00",
+  "armed_by": "<who_unpaused>",
+  "notes": "..."
+}
+```
+
+`mark_recovery_armed()` writes the stamp; `load_recovery_armed_at()`
+reads it; `scripts/quant_internal_tick.py` passes the loaded value
+into `evaluate()`. When unpausing after an incident, the operator
+should both delete `orchestrator_paused.flag` AND call
+`mark_recovery_armed()` so the detector sees a fresh starting
+point. (A future helper script can bundle the two actions; for now
+both are manual.)
+
+Tested in `framework/tests/test_infra_cluster_detector.py` with
+8 additional cases on top of the original 10:
+- historical infra_failed pre-recovery do not trigger pause
+- new post-recovery failures with same signature do trigger pause
+- different post-recovery signatures do not merge into a cluster
+- rolling lookback window excludes ancient corpses without recovery
+- pause flag body surfaces "post-recovery" / "cutoff_source"
+- state file round-trip (write, read missing, read malformed)
+
 Handoff pickable statuses (2026-05-25):
 
 `hermes_executor_handoff.HANDOFF_PICKABLE_STATUSES` is the explicit

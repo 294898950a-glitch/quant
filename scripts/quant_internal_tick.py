@@ -184,6 +184,9 @@ def run_once_under_lock() -> tuple[str, int, str]:
 
 
 PAUSE_FLAG_PATH = REPO_ROOT / "data" / "research_framework" / "orchestrator_paused.flag"
+CLUSTER_DETECTOR_STATE_PATH = (
+    REPO_ROOT / "data" / "research_framework" / "cluster_detector_state.json"
+)
 
 
 def _check_infra_cluster_pause() -> tuple[bool, str]:
@@ -192,7 +195,10 @@ def _check_infra_cluster_pause() -> tuple[bool, str]:
     If the most recent failed tasks share the same root-cause signature
     (user mandate 2026-05-25: 2 consecutive same-signature failures →
     auto-pause), touch the orchestrator pause flag and surface the
-    decision. Returns (newly_paused, reason).
+    decision. Honors recovery_armed_at from the cluster detector state
+    file so historical infra_failed corpses do not retrigger pause
+    immediately after a recovery unpause (mandate 2026-05-26).
+    Returns (newly_paused, reason).
     """
     try:
         from framework.autonomous import infra_cluster_detector
@@ -202,7 +208,14 @@ def _check_infra_cluster_pause() -> tuple[bool, str]:
         state = load_yaml(QUEUE_STATE_PATH, {})
         if not isinstance(state, dict):
             return False, "queue state is not a mapping"
-        decision = infra_cluster_detector.evaluate(state, REPO_ROOT)
+        recovery_armed_at = infra_cluster_detector.load_recovery_armed_at(
+            CLUSTER_DETECTOR_STATE_PATH
+        )
+        decision = infra_cluster_detector.evaluate(
+            state,
+            REPO_ROOT,
+            recovery_armed_at=recovery_armed_at,
+        )
     except Exception as exc:
         return False, f"cluster_detector_evaluate_failed: {type(exc).__name__}: {exc}"
     created = infra_cluster_detector.maybe_touch_pause_flag(decision, PAUSE_FLAG_PATH)
