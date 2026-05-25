@@ -666,6 +666,80 @@ End-to-end verified against the real `v1_8` proposal and the
 deprecated `value_gap_rank_is_anti_alpha_2026_05_24` insight: gate
 returns skip with the closing-insight name in the reason.
 
+Ideation pre-injection of skip evidence + cooldown (2026-05-26):
+
+The reject-chain defence above is a post-hoc filter: it stops bad
+proposals from reaching the queue, but the ideation API call has
+already been spent generating them. After the fourth post-incident
+unpause, two cron ticks both ideated reverse-base variants and both
+were SKIPPED_BY_DELTA_GATE — wasted API spend, identical reasoning.
+Mandate (2026-05-26 step 1+2+3): pre-inject the gate's verdict into
+Hermes' prompt before it ideates.
+
+`framework/autonomous/ideation_policy_state.py` (new) is the ledger.
+It records every SKIPPED_BY_DELTA_GATE event under
+`data/research_framework/ideation_policy_state.json`, bounded to the
+most recent ``MAX_RECENT_SKIPS = 20`` entries::
+
+    {
+      "schema_version": 1,
+      "updated_at": "...",
+      "recent_skips": [
+        {"ts": "...", "proposal_id": "...", "family": "...",
+         "closing_insight": "...", "reason": "..."},
+        ...
+      ]
+    }
+
+Two derived views over `recent_skips`:
+
+- `cooldown_families(state)` — any family that appears at least
+  ``COOLDOWN_THRESHOLD = 2`` times across the last
+  ``COOLDOWN_WINDOW = 5`` skips. These are families where Hermes has
+  already failed to absorb the gate's feedback; the prompt now
+  explicitly forbids more variants in them.
+- `recent_skip_summary(state, n=3)` — the latest ``n`` skip records,
+  reformatted to a minimal `{ts, proposal_id, family, closing_insight,
+  reason}` dict suitable for direct prompt inclusion.
+
+`framework/autonomous/ideation_cycle.py` consumes both:
+
+- `_critical_insights` now matches `research_delta_gate._critical_insight_ids` —
+  insights flagged `do_not_use_as_default_direction` or whose ``status``
+  starts with `deprecated` / `weakened` are filtered out of the
+  `active_critical_insights` field. Hermes no longer sees the demoted
+  `value_gap_rank_is_anti_alpha_2026_05_24` as authority.
+- New `_closed_families_from_insights` aggregates every insight's
+  `follow_up_review_results.closed_families` into a flat
+  `[{family, closed_by_insight}, ...]` list shown to Hermes as
+  `closed_families_from_insights` (the out-of-band ban list).
+- `proposal_instruction` accepts a new `ideation_policy_state` kwarg
+  and emits three new prompt fields when populated:
+  `closed_families_from_insights`, `cooldown_families`,
+  `recent_gate_skip_summary`. Each field carries a matching hard_rule
+  that names the field by name so Hermes knows what to do with it.
+
+When `ideation_cycle.IdeationCycle.run()` records a
+SKIPPED_BY_DELTA_GATE outcome, it now also calls
+`ideation_policy_state.record_skip()` with the gate's decision —
+proposal_id, family (preferring `insight_closed_family` from
+evidence), closing_insight, and reason. The next ideation cycle
+loads the updated state via `paths.ideation_policy_state` and
+the prompt naturally reflects the latest closure.
+
+Tested in:
+- `framework/tests/test_ideation_policy_state.py` (12 cases:
+  missing/malformed state, append + trim, single skip below
+  threshold, two-same-family triggers cooldown, two-different no
+  trigger, window-tail semantics, summary count + ordering +
+  required fields, human-readable JSON layout).
+- `framework/tests/test_ideation_proposal_instruction.py` (7 cases:
+  deprecated-status filtering in `_critical_insights`, multi-
+  insight aggregation in `_closed_families_from_insights`, prompt
+  carries each new field + matching hard_rule, hard_rules do NOT
+  appear when the corresponding evidence is empty so the prompt
+  does not accumulate noise).
+
 Current snapshot as of 2026-05-22 13:00 Asia/Shanghai.
 This snapshot was checked against `current.yaml`, `research_queue.yaml`,
 `ai_providers.yaml`, `data_inventory.yaml`, the latest run reviews, and live

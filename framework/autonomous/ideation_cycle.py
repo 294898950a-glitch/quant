@@ -175,6 +175,10 @@ class IdeationCycle:
         closed_tags = closed_tags_from_runtime(digest=digest, config=config, queue_state=queue_state)
         cap_menu = capability_menu(registry)
         pre_ideation_evidence = collect_pre_ideation_evidence(digest)
+        # Load ideation policy state (recent gate skips + derived cooldown).
+        # Read-only here; record_skip is called after the gate decision.
+        from framework.autonomous import ideation_policy_state as _ips_mod
+        policy_state = _ips_mod.load_state(self.paths.ideation_policy_state)
 
         instruction = proposal_instruction(
             closed_tags,
@@ -183,6 +187,7 @@ class IdeationCycle:
             current,
             data_inventory=compact_data_inventory(data_inventory),
             research_insights=research_insights,
+            ideation_policy_state=policy_state,
         )
         instruction["forced_prompt_contract"] = prompt_contract_for_role(
             "strategy_ideation",
@@ -284,6 +289,27 @@ class IdeationCycle:
         # enqueues. The proposal artifact already records why.
         if delta_decision.action == "skip":
             payload["status"] = "SKIPPED_BY_DELTA_GATE"
+            # Record the skip so subsequent ideation cycles see what was
+            # rejected and the policy state derives cooldown_families
+            # (mandate 2026-05-26: pre-injection of skip evidence + cooldown).
+            try:
+                from framework.autonomous import ideation_policy_state as _ips_mod
+                ev = delta_decision.evidence or {}
+                _ips_mod.record_skip(
+                    self.paths.ideation_policy_state,
+                    proposal_id=proposal_id,
+                    family=str(
+                        ev.get("insight_closed_family")
+                        or ev.get("closed_family")
+                        or ev.get("family")
+                        or proposal.get("family")
+                        or ""
+                    ),
+                    closing_insight=str(ev.get("closing_insight") or ""),
+                    reason=delta_decision.reason or "",
+                )
+            except Exception:  # pragma: no cover — never fail ideation on policy bookkeeping
+                pass
             return payload
         if delta_decision.action == "watch":
             payload["status"] = "WATCHED_BY_DELTA_GATE"
@@ -1453,12 +1479,21 @@ def capability_menu(registry: dict[str, Any]) -> dict[str, Any]:
 
 
 def _critical_insights(research_insights: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Filter research_insights.yaml::key_insights to critical-priority entries.
+    """Filter research_insights.yaml::key_insights to critical-priority entries
+    that are STILL ACTIVE.
 
     Critical insights are evidence-backed findings that should bias future
     ideation. We pass them into the prompt so Hermes sees them alongside
     closed_tags and recent_digest, not as a command to follow but as
     evidence to reason about (see "三问" hard_rule).
+
+    Mirrors research_delta_gate._critical_insight_ids: an insight that has
+    been demoted via ``do_not_use_as_default_direction: true`` or whose
+    ``status`` starts with ``deprecated`` / ``weakened`` is filtered out
+    here too, so Hermes does not see it as authority for a new variant.
+    The deprecated insight remains in research_insights.yaml on disk
+    (for audit and reject-chain history), it just no longer enters the
+    ideation prompt.
     """
     if not isinstance(research_insights, dict):
         return []
@@ -1469,8 +1504,44 @@ def _critical_insights(research_insights: dict[str, Any] | None) -> list[dict[st
     for item in key_insights:
         if not isinstance(item, dict):
             continue
-        if str(item.get("priority", "")).lower() == "critical":
-            out.append(item)
+        if str(item.get("priority", "")).lower() != "critical":
+            continue
+        if item.get("do_not_use_as_default_direction"):
+            continue
+        status_val = str(item.get("status", "")).lower()
+        if status_val.startswith("deprecated") or status_val.startswith("weakened"):
+            continue
+        out.append(item)
+    return out
+
+
+def _closed_families_from_insights(
+    research_insights: dict[str, Any] | None,
+) -> list[dict[str, str]]:
+    """Aggregate every insight's ``follow_up_review_results.closed_families``
+    list into a flat list of {family, closing_insight} records.
+
+    Mandate 2026-05-26 step 1 (out-of-band closed family list pre-injected
+    into the ideator prompt, so Hermes does not re-propose closed families
+    in the first place — the gate's job is to catch what slips through).
+    """
+    out: list[dict[str, str]] = []
+    if not isinstance(research_insights, dict):
+        return out
+    for item in research_insights.get("key_insights") or []:
+        if not isinstance(item, dict):
+            continue
+        followup = item.get("follow_up_review_results")
+        if not isinstance(followup, dict):
+            continue
+        closed = followup.get("closed_families")
+        if not isinstance(closed, list):
+            continue
+        insight_id = str(item.get("id") or "")
+        for family in closed:
+            fam = str(family or "").strip()
+            if fam:
+                out.append({"family": fam, "closed_by_insight": insight_id})
     return out
 
 
@@ -1502,10 +1573,19 @@ def proposal_instruction(
     current: dict[str, Any] | None = None,
     data_inventory: dict[str, Any] | None = None,
     research_insights: dict[str, Any] | None = None,
+    ideation_policy_state: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     active_strategy_id = current_main_strategy_id(current or {}) or "unknown"
     critical_insights = _critical_insights(research_insights)
     repeated_rejects = _repeated_reject_families(digest)
+    closed_families_from_insights = _closed_families_from_insights(research_insights)
+    # Pre-injected policy state (cooldown families + last few skips) so
+    # Hermes sees what the gate just rejected and avoids re-proposing
+    # the same families.
+    policy_state = ideation_policy_state or {}
+    from framework.autonomous import ideation_policy_state as _ips_mod
+    cooldown_families = _ips_mod.cooldown_families(policy_state)
+    recent_skip_summary = _ips_mod.recent_skip_summary(policy_state)
     hard_rules = [
         "Return only the object. No markdown fences, no explanation.",
         "Select capability_ids only from capability_menu. Do not hand-write capability names.",
@@ -1528,6 +1608,33 @@ def proposal_instruction(
             "(3) is only the execution condition wrong? Choose one explanation and justify "
             "it from evidence. You are not required to switch direction, but you are required "
             "to consider whether the failure is signal-side, direction-side, or execution-side."
+        )
+    if closed_families_from_insights:
+        hard_rules.append(
+            "closed_families_from_insights lists family tags that follow-up reviews have "
+            "rejected — the closing_insight named for each family has been demoted to "
+            "do_not_use_as_default_direction. DO NOT propose new variants in these families "
+            "unless your proposal cites a DIFFERENT, still-active critical insight (one that "
+            "is present in active_critical_insights) that would overturn the closure. "
+            "Proposals in closed families that only cite the demoted insight will be "
+            "auto-skipped by the Research Delta Gate and will not enter the queue."
+        )
+    if cooldown_families:
+        hard_rules.append(
+            "cooldown_families lists family tags that have been auto-skipped by the gate at "
+            "least twice in the last few ideation cycles. The system has already concluded "
+            "that you keep re-proposing these directions without new evidence. DO NOT propose "
+            "another variant in any cooldown family. Pick a different family (e.g. a "
+            "valuation-formula modification, or an entirely different mechanic) or, if the "
+            "queue is currently idle, return a pending_capability_request for a fresh "
+            "capability that opens a new family."
+        )
+    if recent_skip_summary:
+        hard_rules.append(
+            "recent_gate_skip_summary records the most recent proposals that the Research "
+            "Delta Gate skipped before they reached the queue. Each entry names the family "
+            "and the closing_insight that disqualified it. Read these entries before "
+            "choosing your next family — they are direct feedback on what was just rejected."
         )
     return {
         "task": "Generate exactly one new strategy proposal as a YAML or JSON object.",
@@ -1560,6 +1667,9 @@ def proposal_instruction(
         "recent_digest": digest,
         "active_critical_insights": critical_insights,
         "repeated_reject_families": repeated_rejects,
+        "closed_families_from_insights": closed_families_from_insights,
+        "cooldown_families": cooldown_families,
+        "recent_gate_skip_summary": recent_skip_summary,
     }
 
 

@@ -66,3 +66,7 @@ class ResearchPaths:
     @property
     def research_insights(self) -> Path:
         return self.research_framework_dir / "research_insights.yaml"
+
+    @property
+    def ideation_policy_state(self) -> Path:
+        return self.research_framework_dir / "ideation_policy_state.json"
