@@ -343,6 +343,80 @@ Tested in `framework/tests/test_infra_cluster_detector.py` with
 - pause flag body surfaces "post-recovery" / "cutoff_source"
 - state file round-trip (write, read missing, read malformed)
 
+requeue_stale_pipeline_failures freshness guards (2026-05-26):
+
+`framework/autonomous/queue_remote_execution.QueueRemoteExecutionService.
+requeue_stale_pipeline_failures()` is the auto-requeue path that
+resurrects failed tasks when a tracked framework file SHA changes
+(executor source, pipeline driver, gatekeeper, run_recorder, etc.).
+The signal is "the code that produced the failure is no longer the
+code that exists on disk, so it deserves a fresh try". This is too
+loose by itself — any commit that touches one of the tracked files,
+including the install-time gates added during the 2026-05-25 incident
+response, also changes the SHA, which flooded the queue with 4
+historical path-bug tasks on the first post-unpause tick of
+2026-05-26. Two guards now sit in front of the requeue:
+
+1. **infrastructure classification skip** — if the task carries
+   `failure_category: "infrastructure"` OR `infra_failure_type: ...`,
+   requeue refuses to touch it. The path-bug class specifically
+   requires Hermes to regenerate the executor through the new
+   `import_reachability` gate; that route runs through
+   `install_generated_executors`, not through requeue.
+
+2. **age cutoff** — `REQUEUE_FRESHNESS_HOURS = 24` (class constant).
+   Failed tasks older than the cutoff are not auto-resurrected even
+   when the SHA-change check fires. Older corpses require explicit
+   operator action, which keeps unrelated framework commits from
+   reviving long-dead tasks. Unparseable `failed_at` is treated
+   conservatively (skipped).
+
+Both guards apply BEFORE the existing first-time-signature stamping,
+so a task that fails the guards never enters the signature ledger
+and cannot accumulate state that would later make it appear "newly
+deserving of a rerun". Tested in
+`framework/tests/test_auto_research_pipeline.py` with 3 new cases
+(`test_requeue_skips_task_tagged_infrastructure_failure`,
+`test_requeue_skips_task_with_infra_failure_type`,
+`test_requeue_skips_task_older_than_freshness_window`).
+
+spot_idle_start respects orchestrator pause flag (2026-05-26):
+
+`scripts/spot_idle_start.py` runs on the Singapore sig VM and used to
+auto-start spot whenever the queue had `queued`/`running` tasks. The
+wsl-side pause flag (`data/research_framework/orchestrator_paused.flag`)
+only stopped the dispatcher — it did not propagate to sig. During the
+2026-05-26 incident response this produced the "queue frozen but spot
+empty-spinning" deadlock: pause flag held on wsl, queue still had
+queued tasks, sig saw active queue and started spot, but wsl refused
+to dispatch.
+
+Two corresponding changes close the loop:
+
+1. `scripts/sync_queue_to_sig.sh` (cron `*/15` on wsl) now also
+   synchronizes the pause flag. If the flag exists locally it is
+   rsync'd to sig next to the queue file; if it is absent locally
+   the sync explicitly removes any stale copy on sig so a fresh
+   recovery propagates correctly.
+
+2. `scripts/spot_idle_start.py` checks for the synced pause flag
+   alongside the queue file as gate 0 — before the queue-active,
+   stable-window, cooldown, backoff, daily-cap, and probe gates.
+   When the flag is present, the script writes
+   `last_status: orchestrator_paused`, resets `queued_since` so the
+   stable-window timer starts fresh on the next unpause, and exits
+   0 without touching the spot.
+
+Tested in `framework/tests/test_spot_idle_start.py` with one new
+case (`test_pause_flag_blocks_start_even_with_active_queue`) on top
+of the existing 8 cases.
+
+Recovery operator obligation update: when unpausing, the operator
+must (1) delete `orchestrator_paused.flag` locally, (2) call
+`mark_recovery_armed()` to write `cluster_detector_state.json`, and
+(3) trigger `scripts/sync_queue_to_sig.sh` so the flag deletion
+propagates to sig and the next spot_idle_start tick sees no pause.
+
 Handoff pickable statuses (2026-05-25):
 
 `hermes_executor_handoff.HANDOFF_PICKABLE_STATUSES` is the explicit

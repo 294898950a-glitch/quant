@@ -84,6 +84,30 @@ def _read_state(path: Path) -> dict:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def test_pause_flag_blocks_start_even_with_active_queue(tmp_path):
+    """Mandate 2026-05-26: when orchestrator_paused.flag sits next to
+    research_queue.yaml, spot_idle_start must refuse to start spot even
+    if the queue still has queued tasks. The dispatcher (wsl) is paused;
+    starting spot here causes the deadlock observed during incident
+    response (spot up + nobody dispatching = empty spin)."""
+    queue = tmp_path / "q.yaml"
+    state = tmp_path / "s.json"
+    _write_queue(queue, queued=["r1", "r2"])  # active queue
+    # Pause flag lives next to the queue file on sig (synced by
+    # scripts/sync_queue_to_sig.sh).
+    flag = queue.parent / "orchestrator_paused.flag"
+    flag.write_text("paused_by: test\n", encoding="utf-8")
+
+    r = _run(state, queue, spot_state="STOPPED")
+    assert r.returncode == 0
+    assert "orchestrator_paused" in r.stdout
+    saved = _read_state(state)
+    assert saved.get("last_status") == "orchestrator_paused"
+    # queued_since must be reset so the stable-window timer starts
+    # fresh on the next unpause.
+    assert saved.get("queued_since") is None
+
+
 def test_no_queue_writes_no_queue_and_returns_zero(tmp_path):
     queue = tmp_path / "q.yaml"
     state = tmp_path / "s.json"

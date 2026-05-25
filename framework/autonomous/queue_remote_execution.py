@@ -17,6 +17,7 @@ from typing import Any, Callable
 import yaml
 
 from framework.autonomous.executor_requirements import declared_requirements_for_spec
+from framework.autonomous.executor_requirements import executor_script_from_spec
 
 
 STALE_VM_AVOID_AFTER = timedelta(minutes=30)
@@ -647,6 +648,290 @@ class QueueRemoteExecutionService:
                 return hashlib.sha256(report_path.read_bytes()).hexdigest()
         return hashlib.sha256(yaml.safe_dump(repair, sort_keys=True).encode("utf-8")).hexdigest()
 
+    def data_quality_block_signature(self, spec_path: Path) -> str:
+        """Fingerprint the local inputs that control the data-quality decision."""
+        payload: dict[str, Any] = {"spec_path": self.rel(spec_path), "files": []}
+        tracked_paths = [
+            spec_path,
+            self.repo_root / "scripts" / "validate_data_quality.py",
+            self.repo_root / "framework" / "autonomous" / "executor_requirements.py",
+            self.repo_root / "data" / "research_framework" / "status_code_maps.yaml",
+        ]
+        try:
+            spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+            if isinstance(spec, dict):
+                script = executor_script_from_spec(spec)
+                if script:
+                    tracked_paths.append(self.repo_root / script)
+                requirements = declared_requirements_for_spec(spec_path)
+                for entry in requirements.get("required_files") or []:
+                    if not isinstance(entry, dict) or not entry.get("path"):
+                        continue
+                    path = _declared_path_to_repo_path(self.repo_root, str(entry["path"]))
+                    stat = path.stat() if path.exists() else None
+                    payload.setdefault("required_data", []).append(
+                        {
+                            "path": self.rel(path),
+                            "exists": path.exists(),
+                            "size": stat.st_size if stat else None,
+                            "mtime_ns": stat.st_mtime_ns if stat else None,
+                        }
+                    )
+        except Exception as exc:
+            payload["requirements_error"] = f"{type(exc).__name__}: {exc}"
+
+        seen: set[str] = set()
+        for path in tracked_paths:
+            rel_path = self.rel(path)
+            if rel_path in seen:
+                continue
+            seen.add(rel_path)
+            if not path.exists():
+                payload["files"].append({"path": rel_path, "exists": False})
+                continue
+            payload["files"].append(
+                {
+                    "path": rel_path,
+                    "exists": True,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+            )
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+    def requeue_stale_data_quality_blocks(self, state: dict[str, Any], queue: list[Any]) -> int:
+        changed = 0
+        for item in queue:
+            if not isinstance(item, dict) or str(item.get("status") or "") != "blocked":
+                continue
+            reason = str(item.get("block_reason") or "")
+            if not reason.startswith("data_quality_blocked:"):
+                continue
+            spec_raw = item.get("spec_path")
+            if not isinstance(spec_raw, str) or not spec_raw:
+                continue
+            spec_path = Path(spec_raw)
+            if not spec_path.is_absolute():
+                spec_path = self.repo_root / spec_path
+            if not spec_path.exists():
+                continue
+            current_sig = self.data_quality_block_signature(spec_path)
+            previous_sig = item.get("data_quality_block_signature")
+            if previous_sig == current_sig:
+                continue
+            if previous_sig is None:
+                item["data_quality_block_signature"] = current_sig
+                item["data_quality_block_signature_recorded_at"] = self.now_iso()
+                changed += 1
+                continue
+
+            previous_status = str(item.get("status") or "")
+            item["status"] = "queued"
+            item["requeued_at"] = self.now_iso()
+            item["requeue_reason"] = "data-quality inputs changed; re-run data-quality gate automatically"
+            item["previous_status_before_data_quality_recheck"] = previous_status
+            item["previous_data_quality_block_signature"] = previous_sig
+            item["data_quality_block_signature"] = current_sig
+            item["data_quality_recheck_attempts"] = int(item.get("data_quality_recheck_attempts") or 0) + 1
+            for key in ("blocked_at", "block_reason", "remote_pid", "avoid_vm_ids"):
+                item.pop(key, None)
+            self.mark_history(state, item, "queued", item["requeue_reason"])
+            self.audit(
+                "data_quality_recheck_requeue",
+                {
+                    "item_id": item.get("id"),
+                    "spec_path": self.rel(spec_path),
+                    "previous_status": previous_status,
+                    "attempts": item["data_quality_recheck_attempts"],
+                },
+            )
+            changed += 1
+        if changed:
+            state["queue"] = queue
+            self.save_state(state)
+        return changed
+
+    def pipeline_failure_signature(self, spec_path: Path) -> str:
+        spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(spec, dict):
+            spec = {}
+        tracked_paths = [
+            spec_path,
+            self.repo_root / "scripts" / "auto_research_pipeline.py",
+            self.repo_root / "scripts" / "gatekeeper.py",
+            self.repo_root / "scripts" / "auto_compute_l4_data.py",
+            self.repo_root / "scripts" / "validate_run_manifest.py",
+            self.repo_root / "framework" / "autonomous" / "run_recorder.py",
+        ]
+        script = executor_script_from_spec(spec)
+        if script:
+            tracked_paths.append(self.repo_root / script)
+        payload: dict[str, Any] = {"spec_path": self.rel(spec_path), "files": []}
+        seen: set[str] = set()
+        for path in tracked_paths:
+            rel_path = self.rel(path)
+            if rel_path in seen:
+                continue
+            seen.add(rel_path)
+            if not path.exists():
+                payload["files"].append({"path": rel_path, "exists": False})
+                continue
+            payload["files"].append(
+                {
+                    "path": rel_path,
+                    "exists": True,
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                }
+            )
+        return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()
+
+    # Maximum age (in hours) of a failed task that requeue_stale_pipeline_failures
+    # is willing to auto-resurrect. Anything older requires explicit operator
+    # action — auto-requeue based on "tracked framework file SHA changed" is too
+    # weak a signal once a task has been dead for more than this window.
+    # Mandate (2026-05-26): introduced to plug the post-incident requeue gap
+    # where any framework commit could otherwise pull all historical failures
+    # back into the queue.
+    REQUEUE_FRESHNESS_HOURS = 24
+
+    def requeue_stale_pipeline_failures(self, state: dict[str, Any], queue: list[Any]) -> int:
+        changed = 0
+        for item in queue:
+            if not isinstance(item, dict) or str(item.get("status") or "") != "failed":
+                continue
+            reason = str(item.get("failure_reason") or "")
+            if reason not in {
+                "remote process exited but required artifacts are missing",
+            } and not reason.startswith("remote pipeline exit_code="):
+                continue
+            # Guard 1: never auto-requeue tasks already classified as
+            # infrastructure failures (path bug, runtime crash from missing
+            # boilerplate, etc). The fact that the tracked framework file
+            # SHA changed is not evidence that the underlying executor
+            # defect has been fixed — the path-bug class specifically
+            # requires Hermes to regenerate the executor through the new
+            # import_reachability gate, and that path runs through
+            # install_generated_executors, not through requeue.
+            if str(item.get("failure_category") or "") == "infrastructure":
+                continue
+            if str(item.get("infra_failure_type") or ""):
+                continue
+            # Guard 2: age cutoff. Even if the failure isn't formally
+            # tagged as infrastructure, an old corpse coming back to life
+            # because some unrelated framework file changed SHA is exactly
+            # what triggered the 2026-05-26 incident loop. Require recent
+            # failure to be eligible for auto-requeue.
+            failed_at_str = item.get("failed_at")
+            if isinstance(failed_at_str, str) and failed_at_str:
+                try:
+                    failed_dt = datetime.fromisoformat(failed_at_str)
+                    now_dt = datetime.fromisoformat(self.now_iso())
+                    if (now_dt - failed_dt) > timedelta(hours=self.REQUEUE_FRESHNESS_HOURS):
+                        continue
+                except ValueError:
+                    # Unparseable timestamp — be conservative and skip the
+                    # auto-requeue rather than risk reviving a stale task.
+                    continue
+            spec_raw = item.get("spec_path")
+            if not isinstance(spec_raw, str) or not spec_raw:
+                continue
+            spec_path = Path(spec_raw)
+            if not spec_path.is_absolute():
+                spec_path = self.repo_root / spec_path
+            if not spec_path.exists():
+                continue
+            run_dir = spec_path.parent
+            vm_log = run_dir / "vm_pipeline_stdout.log"
+            vm_log_text = vm_log.read_text(encoding="utf-8", errors="replace") if vm_log.exists() else ""
+            post_run_infra_failure = "post-run GateKeeper check failed" in vm_log_text
+            current_sig = self.pipeline_failure_signature(spec_path)
+            previous_sig = item.get("pipeline_failure_signature")
+            if previous_sig is None:
+                recent_failure = False
+                failed_at = item.get("failed_at")
+                if isinstance(failed_at, str) and failed_at:
+                    try:
+                        failed_dt = datetime.fromisoformat(failed_at)
+                        now_dt = datetime.fromisoformat(self.now_iso())
+                        recent_failure = (now_dt - failed_dt) <= timedelta(hours=2)
+                    except ValueError:
+                        recent_failure = False
+                if not post_run_infra_failure or not recent_failure:
+                    item["pipeline_failure_signature"] = current_sig
+                    item["pipeline_failure_signature_recorded_at"] = self.now_iso()
+                    changed += 1
+                    continue
+            if not post_run_infra_failure:
+                if previous_sig == current_sig:
+                    continue
+                if previous_sig is not None and int(item.get("pipeline_failure_requeue_attempts") or 0) < 1:
+                    previous_status = str(item.get("status") or "")
+                    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+                    if isinstance(spec, dict):
+                        item["previous_spec_status_before_pipeline_requeue"] = spec.get("status")
+                        spec["status"] = "READY"
+                        spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+                    item["status"] = "queued"
+                    item["requeued_at"] = self.now_iso()
+                    item["requeue_reason"] = "executor or pipeline code changed after execution failure; rerun same task automatically"
+                    item["previous_status_before_pipeline_requeue"] = previous_status
+                    item["previous_pipeline_failure_signature"] = previous_sig
+                    item["pipeline_failure_signature"] = current_sig
+                    item["pipeline_failure_requeue_attempts"] = int(item.get("pipeline_failure_requeue_attempts") or 0) + 1
+                    for key in ("failed_at", "failure_reason", "remote_pid", "avoid_vm_ids"):
+                        item.pop(key, None)
+                    self.mark_history(state, item, "queued", item["requeue_reason"])
+                    self.audit(
+                        "pipeline_failure_requeue",
+                        {
+                            "item_id": item.get("id"),
+                            "spec_path": self.rel(spec_path),
+                            "previous_status": previous_status,
+                            "attempts": item["pipeline_failure_requeue_attempts"],
+                        },
+                    )
+                    changed += 1
+                    continue
+                item["pipeline_failure_signature"] = current_sig
+                item["pipeline_failure_signature_recorded_at"] = self.now_iso()
+                changed += 1
+                continue
+
+            if previous_sig == current_sig and not post_run_infra_failure:
+                continue
+            if int(item.get("pipeline_failure_requeue_attempts") or 0) >= 1 and previous_sig == current_sig:
+                continue
+
+            previous_status = str(item.get("status") or "")
+            spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+            if isinstance(spec, dict):
+                item["previous_spec_status_before_pipeline_requeue"] = spec.get("status")
+                spec["status"] = "READY"
+                spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+            item["status"] = "queued"
+            item["requeued_at"] = self.now_iso()
+            item["requeue_reason"] = "pipeline infra changed or post-run gate failed; rerun same task automatically"
+            item["previous_status_before_pipeline_requeue"] = previous_status
+            item["previous_pipeline_failure_signature"] = previous_sig
+            item["pipeline_failure_signature"] = current_sig
+            item["pipeline_failure_requeue_attempts"] = int(item.get("pipeline_failure_requeue_attempts") or 0) + 1
+            for key in ("failed_at", "failure_reason", "remote_pid", "avoid_vm_ids"):
+                item.pop(key, None)
+            self.mark_history(state, item, "queued", item["requeue_reason"])
+            self.audit(
+                "pipeline_failure_requeue",
+                {
+                    "item_id": item.get("id"),
+                    "spec_path": self.rel(spec_path),
+                    "previous_status": previous_status,
+                    "attempts": item["pipeline_failure_requeue_attempts"],
+                },
+            )
+            changed += 1
+        if changed:
+            state["queue"] = queue
+            self.save_state(state)
+        return changed
+
     def requeue_repaired_data_items(self, state: dict[str, Any], queue: list[Any]) -> int:
         changed = 0
         for item in queue:
@@ -815,6 +1100,8 @@ class QueueRemoteExecutionService:
                     item["status"] = "failed"
                     item["failed_at"] = self.now_iso()
                     item["failure_reason"] = execution_failure
+                    item["pipeline_failure_signature"] = self.pipeline_failure_signature(spec_path)
+                    item["pipeline_failure_signature_recorded_at"] = self.now_iso()
                     self.mark_history(state, item, "failed", item["failure_reason"])
                     changed += 1
                     continue
@@ -829,6 +1116,8 @@ class QueueRemoteExecutionService:
                     item["status"] = "failed"
                     item["failed_at"] = self.now_iso()
                     item["failure_reason"] = "remote process exited but required artifacts are missing"
+                    item["pipeline_failure_signature"] = self.pipeline_failure_signature(spec_path)
+                    item["pipeline_failure_signature_recorded_at"] = self.now_iso()
                     self.mark_history(state, item, "failed", item["failure_reason"])
                     changed += 1
             except Exception as exc:
@@ -983,6 +1272,8 @@ class QueueRemoteExecutionService:
                     item["status"] = "blocked"
                     item["blocked_at"] = self.now_iso()
                     item["block_reason"] = f"data_quality_blocked: {exc}"
+                    item["data_quality_block_signature"] = self.data_quality_block_signature(spec_path)
+                    item["data_quality_block_signature_recorded_at"] = self.now_iso()
                     self.mark_history(state, item, "blocked", item["block_reason"])
                     self.save_state(state)
                     self.write_status(

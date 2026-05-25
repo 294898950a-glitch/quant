@@ -946,6 +946,108 @@ def test_old_pipeline_infra_failure_is_not_requeued_without_prior_signature(tmp_
     assert state["queue"][0]["pipeline_failure_signature"]
 
 
+def test_requeue_skips_task_tagged_infrastructure_failure(tmp_path):
+    """Mandate 2026-05-26: requeue must not pull back tasks whose
+    failure_category is 'infrastructure'. The fact that some tracked
+    framework file changed SHA is not evidence the underlying executor
+    defect has been fixed."""
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_infra"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump({
+            "run_id": "run_infra",
+            "status": "ARCHIVED",
+            "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+        }),
+        encoding="utf-8",
+    )
+    state = {
+        "queue": [
+            {
+                "id": "run_infra",
+                "status": "failed",
+                "spec_path": "data/run_infra/spec.yaml",
+                "failed_at": "2026-05-21T00:00:00",
+                "failure_reason": "remote pipeline exit_code=1",
+                "failure_category": "infrastructure",
+            }
+        ],
+        "history": [],
+    }
+    count = service.requeue_stale_pipeline_failures(state, state["queue"])
+    assert count == 0
+    assert state["queue"][0]["status"] == "failed"
+
+
+def test_requeue_skips_task_with_infra_failure_type(tmp_path):
+    """Mandate 2026-05-26: requeue must not pull back tasks tagged with
+    an infra_failure_type (e.g. path_unreachable_module_not_found)."""
+    service = _remote_service(tmp_path)
+    run_dir = tmp_path / "data" / "run_pathbug"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump({
+            "run_id": "run_pathbug",
+            "status": "ARCHIVED",
+            "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+        }),
+        encoding="utf-8",
+    )
+    state = {
+        "queue": [
+            {
+                "id": "run_pathbug",
+                "status": "failed",
+                "spec_path": "data/run_pathbug/spec.yaml",
+                "failed_at": "2026-05-21T00:00:00",
+                "failure_reason": "remote pipeline exit_code=1",
+                "infra_failure_type": "path_unreachable_module_not_found",
+            }
+        ],
+        "history": [],
+    }
+    count = service.requeue_stale_pipeline_failures(state, state["queue"])
+    assert count == 0
+    assert state["queue"][0]["status"] == "failed"
+
+
+def test_requeue_skips_task_older_than_freshness_window(tmp_path):
+    """Mandate 2026-05-26: age cutoff. A failed task older than
+    REQUEUE_FRESHNESS_HOURS must not be auto-resurrected even if
+    framework file SHAs changed and no explicit infra tag is set."""
+    service = _remote_service(tmp_path)  # mocks now_iso to 2026-05-21T00:00:00
+    run_dir = tmp_path / "data" / "run_old"
+    run_dir.mkdir(parents=True)
+    spec_path = run_dir / "spec.yaml"
+    spec_path.write_text(
+        yaml.safe_dump({
+            "run_id": "run_old",
+            "status": "ARCHIVED",
+            "automation": {"command": ["python3", "scripts/dummy_executor.py"]},
+        }),
+        encoding="utf-8",
+    )
+    # failed 5 days before "now" — well past the 24h freshness window
+    state = {
+        "queue": [
+            {
+                "id": "run_old",
+                "status": "failed",
+                "spec_path": "data/run_old/spec.yaml",
+                "failed_at": "2026-05-16T00:00:00",
+                "failure_reason": "remote pipeline exit_code=1",
+            }
+        ],
+        "history": [],
+    }
+    count = service.requeue_stale_pipeline_failures(state, state["queue"])
+    assert count == 0
+    assert state["queue"][0]["status"] == "failed"
+
+
 def test_execution_failure_requeues_when_executor_code_changed(tmp_path):
     service = _remote_service(tmp_path)
     run_dir = tmp_path / "data" / "run_exec"

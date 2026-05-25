@@ -1,6 +1,6 @@
 schema_version: 1
 enabled: true
-updated_at: '2026-05-25T19:00:00'
+updated_at: '2026-05-26T00:30:11'
 escalation:
   status: auto_resolved
   reason: all 10 autonomous research families exhausted (regime_classifier_variant
@@ -2069,7 +2069,7 @@ queue:
   completed_at: '2026-05-23T03:10:52'
 - id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
   family: exit_rule_nonparametric
-  status: running
+  status: failed
   spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
   process_pattern: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
   sync_paths:
@@ -2096,6 +2096,14 @@ queue:
   remote_repo: /home/ubuntu/projects/quant
   manual_requeue_note: spot now up; force run on spot (2026-05-23T20:29:19+08:00)
   stale_vm_avoidance_reset_at: '2026-05-23T20:30:07'
+  completed_at: '2026-05-24T10:35:08+08:00'
+  failure_reason: 'manually killed 2026-05-24T10:35:08+08:00: rerun re-confirms test_dd
+    ~-250M (absolute floor fail); spot freed for higher-priority reverse-direction
+    probes per value_gap_rank_is_anti_alpha_2026_05_24 insight'
+  stale_state_reconciled_at: '2026-05-25T15:40:44+00:00'
+  stale_state_reconcile_note: 'sync from cron-tracked state: HEAD recorded status=running
+    but cron updated to status=failed between HEAD commit and incident cleanup. Reconciled
+    during recovery pre-unpause check.'
 - id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
   family: regime_adaptive_exit
   status: complete
@@ -2138,7 +2146,7 @@ queue:
   completed_at: '2026-05-23T22:19:03'
 - id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
   family: entry_filter_moneyness
-  status: failed
+  status: blocked
   spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1/spec.yaml
   process_pattern: cb_arb_value_gap_switch_moneyness-entry-filter_v1
   sync_paths:
@@ -2164,17 +2172,31 @@ queue:
   source: project_owned_ideation
   workflow_stage: running_remote
   started_at: '2026-05-23T21:08:56'
-  remote_pid: '1195349'
   vm_id: singapore_sig
   vm_host: root@100.91.245.108
   remote_repo: /root/projects/quant
-  failed_at: '2026-05-23T21:09:14'
-  failure_reason: remote pipeline exit_code=1
-  pipeline_failure_signature: 9f4efec8d307c18a7ff8a3f568c6faf6805f8394a66449bdddfc0b93a7daa1aa
+  pipeline_failure_signature: 22ffd96ec756756f9da43f94b71045f68149a5dd464faa69f7d4abff9e636dab
   pipeline_failure_signature_recorded_at: '2026-05-23T21:09:14'
+  previous_spec_status_before_pipeline_requeue: COMPLETE
+  requeued_at: '2026-05-26T00:30:10'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: 9f4efec8d307c18a7ff8a3f568c6faf6805f8394a66449bdddfc0b93a7daa1aa
+  pipeline_failure_requeue_attempts: 1
+  previous_status_before_incident_hold: queued
+  block_reason: awaiting_executor_reinstall_with_import_gate
+  blocked_at: '2026-05-25T16:57:07+00:00'
+  hold_note: Auto-requeued by requeue_stale_pipeline_failures at the first post-recovery
+    tick (2026-05-26 00:30). These are NOT new strategy failures and NOT new infra
+    failures — they are historical path-bug tasks (same family as the 13 infra_failed
+    tasks from incident 2026-05-25) that were stale-requeued because their failure_reason
+    matched the requeue trigger pattern. Their executor still has the path bug (sys.path.insert
+    missing). Held until the executor is re-installed through the new import_reachability
+    gate. See data/research_framework/incidents/2026-05-25_path_bug.yaml.
 - id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
   family: moneyness_entry_filter
-  status: failed
+  status: blocked
   spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/spec.yaml
   process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
   sync_paths:
@@ -2200,14 +2222,28 @@ queue:
   source: project_owned_ideation
   workflow_stage: running_remote
   started_at: '2026-05-23T21:18:50'
-  remote_pid: '1198243'
   vm_id: singapore_sig
   vm_host: root@100.91.245.108
   remote_repo: /root/projects/quant
-  failed_at: '2026-05-23T21:21:17'
-  failure_reason: remote pipeline exit_code=1
-  pipeline_failure_signature: 81faef4dbaae8218f6a948624832617f62a212eaa2801e06a4a19a52ec7f2741
+  pipeline_failure_signature: 18c220dabfd45e7eed2262758633af93a3a74565aea39e378997460801e3d950
   pipeline_failure_signature_recorded_at: '2026-05-23T21:21:17'
+  previous_spec_status_before_pipeline_requeue: COMPLETE
+  requeued_at: '2026-05-26T00:30:11'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: 81faef4dbaae8218f6a948624832617f62a212eaa2801e06a4a19a52ec7f2741
+  pipeline_failure_requeue_attempts: 1
+  previous_status_before_incident_hold: queued
+  block_reason: awaiting_executor_reinstall_with_import_gate
+  blocked_at: '2026-05-25T16:57:07+00:00'
+  hold_note: Auto-requeued by requeue_stale_pipeline_failures at the first post-recovery
+    tick (2026-05-26 00:30). These are NOT new strategy failures and NOT new infra
+    failures — they are historical path-bug tasks (same family as the 13 infra_failed
+    tasks from incident 2026-05-25) that were stale-requeued because their failure_reason
+    matched the requeue trigger pattern. Their executor still has the path bug (sys.path.insert
+    missing). Held until the executor is re-installed through the new import_reachability
+    gate. See data/research_framework/incidents/2026-05-25_path_bug.yaml.
 - id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
   family: regime_adaptive_exit
   status: complete
@@ -2250,7 +2286,7 @@ queue:
   completed_at: '2026-05-23T22:24:54'
 - id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
   family: moneyness_entry_filter
-  status: failed
+  status: blocked
   spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/spec.yaml
   process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
   sync_paths:
@@ -2276,14 +2312,28 @@ queue:
   source: project_owned_ideation
   workflow_stage: running_remote
   started_at: '2026-05-23T21:34:10'
-  remote_pid: '1202894'
   vm_id: singapore_sig
   vm_host: root@100.91.245.108
   remote_repo: /root/projects/quant
-  failed_at: '2026-05-23T21:36:42'
-  failure_reason: remote pipeline exit_code=1
-  pipeline_failure_signature: 6a07dba57809dc30b4b12bec84f0006365b55b5c3e2f5a1e7c8f7b82dbda9f70
+  pipeline_failure_signature: 60f9ed1c4dd025c913aed9ee0a17f1fe996a29f91ead7f8d85eef6fced6fedb2
   pipeline_failure_signature_recorded_at: '2026-05-23T21:36:42'
+  previous_spec_status_before_pipeline_requeue: COMPLETE
+  requeued_at: '2026-05-26T00:30:11'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: 6a07dba57809dc30b4b12bec84f0006365b55b5c3e2f5a1e7c8f7b82dbda9f70
+  pipeline_failure_requeue_attempts: 1
+  previous_status_before_incident_hold: queued
+  block_reason: awaiting_executor_reinstall_with_import_gate
+  blocked_at: '2026-05-25T16:57:07+00:00'
+  hold_note: Auto-requeued by requeue_stale_pipeline_failures at the first post-recovery
+    tick (2026-05-26 00:30). These are NOT new strategy failures and NOT new infra
+    failures — they are historical path-bug tasks (same family as the 13 infra_failed
+    tasks from incident 2026-05-25) that were stale-requeued because their failure_reason
+    matched the requeue trigger pattern. Their executor still has the path bug (sys.path.insert
+    missing). Held until the executor is re-installed through the new import_reachability
+    gate. See data/research_framework/incidents/2026-05-25_path_bug.yaml.
 - id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
   family: regime_adaptive_exit
   status: complete
@@ -2326,7 +2376,7 @@ queue:
   completed_at: '2026-05-23T22:30:48'
 - id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
   family: entry_filter
-  status: failed
+  status: blocked
   spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_5/spec.yaml
   process_pattern: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
   sync_paths:
@@ -2352,14 +2402,28 @@ queue:
   source: project_owned_ideation
   workflow_stage: running_remote
   started_at: '2026-05-23T21:52:12'
-  remote_pid: '1208218'
   vm_id: singapore_sig
   vm_host: root@100.91.245.108
   remote_repo: /root/projects/quant
-  failed_at: '2026-05-23T21:54:15'
-  failure_reason: remote pipeline exit_code=1
-  pipeline_failure_signature: 59e38cc6f36d7adcf77911816fabfc629245ced91815c59cafc5bd20d42d8e11
+  pipeline_failure_signature: 2e9b34f7615e96da31bdea0b6616a50f39e0788c834f548f9e12fd99b191f7d9
   pipeline_failure_signature_recorded_at: '2026-05-23T21:54:15'
+  previous_spec_status_before_pipeline_requeue: COMPLETE
+  requeued_at: '2026-05-26T00:30:11'
+  requeue_reason: executor or pipeline code changed after execution failure; rerun
+    same task automatically
+  previous_status_before_pipeline_requeue: failed
+  previous_pipeline_failure_signature: 59e38cc6f36d7adcf77911816fabfc629245ced91815c59cafc5bd20d42d8e11
+  pipeline_failure_requeue_attempts: 1
+  previous_status_before_incident_hold: queued
+  block_reason: awaiting_executor_reinstall_with_import_gate
+  blocked_at: '2026-05-25T16:57:07+00:00'
+  hold_note: Auto-requeued by requeue_stale_pipeline_failures at the first post-recovery
+    tick (2026-05-26 00:30). These are NOT new strategy failures and NOT new infra
+    failures — they are historical path-bug tasks (same family as the 13 infra_failed
+    tasks from incident 2026-05-25) that were stale-requeued because their failure_reason
+    matched the requeue trigger pattern. Their executor still has the path bug (sys.path.insert
+    missing). Held until the executor is re-installed through the new import_reachability
+    gate. See data/research_framework/incidents/2026-05-25_path_bug.yaml.
 - id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
   family: regime_adaptive_exit
   status: complete
@@ -2540,7 +2604,7 @@ queue:
     re-queue after path gate deployed.
 - id: cb_arb_value_gap_switch_reverse-probe_20260524
   family: meta_validation_probe
-  status: queued
+  status: complete
   spec_path: data/cb_arb_value_gap_switch_reverse-probe_20260524/spec.yaml
   process_pattern: cb_arb_value_gap_switch_reverse-probe_20260524
   sync_paths:
@@ -2561,6 +2625,11 @@ queue:
   discovered_at: '2026-05-24T07:03:04'
   source: user_manual_meta_probe
   workflow_stage: spec_validated
+  completed_at: '2026-05-24T14:40:53'
+  stale_state_reconciled_at: '2026-05-25T15:40:44+00:00'
+  stale_state_reconcile_note: 'sync from cron-tracked state: HEAD recorded status=queued
+    but cron updated to status=complete between HEAD commit and incident cleanup.
+    Reconciled during recovery pre-unpause check.'
 history:
 - id: cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411
   spec_path: data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/spec.yaml
@@ -6296,6 +6365,38 @@ history:
   at: '2026-05-24T01:09:08'
   vm_id: null
   vm_host: null
+- id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-26T00:30:10'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-26T00:30:11'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-26T00:30:11'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
+- id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_5/spec.yaml
+  status: queued
+  message: executor or pipeline code changed after execution failure; rerun same task
+    automatically
+  at: '2026-05-26T00:30:11'
+  vm_id: singapore_sig
+  vm_host: root@100.91.245.108
 vm_hosts:
 - id: guangzhou_spot
   host: ubuntu@106.55.255.129

@@ -264,6 +264,31 @@ def main() -> int:
         queue_state = {}
     state = load_json(args.state_path, {})
 
+    # 0. Orchestrator pause flag (incident-response gate). When the
+    # orchestrator is paused on the dispatcher side (wsl), no task will
+    # be launched on spot even if the queue still contains queued items.
+    # Starting spot in that situation produces the "queue frozen but
+    # spot empty-spinning" deadlock observed during the 2026-05-26
+    # incident response. The pause flag is shipped to sig by
+    # scripts/sync_queue_to_sig.sh.
+    pause_flag = args.queue_path.parent / "orchestrator_paused.flag"
+    if pause_flag.exists():
+        state["queued_since"] = None
+        state["last_status"] = "orchestrator_paused"
+        state["updated_at"] = now_iso()
+        save_json(args.state_path, state)
+        print(
+            json.dumps(
+                {
+                    "status": "orchestrator_paused",
+                    "pause_flag": str(pause_flag),
+                    "ts": now_iso(),
+                },
+                ensure_ascii=False,
+            )
+        )
+        return 0
+
     # 1. Is there work waiting?
     if not quant_queue_active(queue_state):
         state["queued_since"] = None
