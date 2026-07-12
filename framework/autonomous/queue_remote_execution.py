@@ -10,6 +10,7 @@ import re
 import shlex
 import subprocess
 import sys
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Callable
@@ -18,12 +19,17 @@ import yaml
 
 from framework.autonomous.executor_requirements import declared_requirements_for_spec
 from framework.autonomous.executor_requirements import executor_script_from_spec
+from framework.autonomous.execution_envelope import write_request
+from framework.autonomous.execution_result_ledger import ResultRejected, claim_result
+from framework.autonomous.execution_adapters import SigSpotExecutionAdapter
+from framework.autonomous import run_recorder
 
 
 STALE_VM_AVOID_AFTER = timedelta(minutes=30)
 SYNC_COMMAND_TIMEOUT_SECONDS = 180
 SSH_COMMAND_TIMEOUT_SECONDS = 120
 LARGE_DATA_SUFFIXES = {".parquet", ".feather", ".h5", ".hdf", ".pkl"}
+RESULT_LEDGER_PATH = Path("data/research_framework/execution_result_ledger.jsonl")
 
 
 class DataQualityBlocked(RuntimeError):
@@ -241,6 +247,8 @@ class QueueRemoteExecutionService:
                 configs.append(config)
         if configs:
             return configs
+        if not state.get("vm_host"):
+            return []
         return [
             {
                 "id": str(state.get("vm_id") or state.get("vm_host") or "default"),
@@ -277,7 +285,13 @@ class QueueRemoteExecutionService:
             raise ValueError("spec.compute_estimate must be dict")
         spot_minutes = float(compute.get("spot_minutes", 0) or 0)
         local_minutes = float(compute.get("local_minutes", 0) or 0)
-        if spot_minutes <= 0 or local_minutes > 0:
+        target = str(spec.get("execution_target") or "sig_spot")
+        if target not in {"sig_spot", "hzpc"}:
+            raise ValueError(f"unsupported execution_target: {target}")
+        if target == "hzpc":
+            if local_minutes <= 0 or spot_minutes > 0:
+                raise ValueError("hzpc requires local_minutes > 0 and spot_minutes = 0")
+        elif spot_minutes <= 0 or local_minutes > 0:
             raise ValueError("option loop requires spot_minutes > 0 and local_minutes = 0")
         if str(spec.get("status")) != "READY":
             raise ValueError(f"spec.status must be READY, got {spec.get('status')!r}")
@@ -480,6 +494,9 @@ class QueueRemoteExecutionService:
         paths.extend(state.get("default_sync_paths") or [])
         paths.extend(item.get("sync_paths") or [])
         paths.append(self.rel(spec_path))
+        request_path = spec_path.parent / "execution_request.yaml"
+        if request_path.exists():
+            paths.append(self.rel(request_path))
         spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
         if isinstance(spec, dict):
             automation = spec.get("automation") if isinstance(spec.get("automation"), dict) else {}
@@ -619,27 +636,28 @@ class QueueRemoteExecutionService:
 
     def start_remote_pipeline(self, state: dict[str, Any], item: dict[str, Any], spec_path: Path, vm: dict[str, Any]) -> str:
         vm_host = str(vm["host"])
-        remote_repo = str(vm["remote_repo"])
-        run_dir = spec_path.parent
-        remote_run_dir = f"{remote_repo}/{self.rel(run_dir)}"
-        remote_spec = f"{remote_repo}/{self.rel(spec_path)}"
-        # Prefer venv python (which has the required packages — pandas, pyarrow,
-        # scipy, etc.); fall back to system python3 only if no venv exists.
-        # Without this, auto_research_pipeline.py runs under /usr/bin/python3
-        # which lacks pandas/pyarrow and bails out before the evaluator starts.
-        cmd = (
-            f"cd {shlex.quote(remote_repo)} && "
-            f"mkdir -p {shlex.quote(remote_run_dir)} && "
-            f'PY=.venv/bin/python; [ -x "$PY" ] || PY=python3; '
-            f"(nohup $PY scripts/auto_research_pipeline.py {shlex.quote(self.rel(spec_path))} --quiet "
-            f"> {shlex.quote(remote_run_dir + '/vm_pipeline_stdout.log')} 2>&1 < /dev/null & "
-            f"echo $!)"
-        )
-        pid = self.ssh_vm(vm, cmd).strip().splitlines()[-1].strip()
-        if not pid:
-            raise RuntimeError(f"remote pipeline did not return pid for {remote_spec}")
+        adapter = SigSpotExecutionAdapter(repo_root=self.repo_root, rel=self.rel, ssh_vm=self.ssh_vm, vm=vm)
+        handle = adapter.submit(spec_path.parent / "execution_request.yaml")
+        pid = handle.remote_handle
         self.log(f"started remote pipeline pid={pid} task={item.get('id') or spec_path.parent.name} vm={vm_host}")
         return pid
+
+    def set_controller_terminal_spec_status(self, spec_path: Path, spec: dict[str, Any], outcome: str) -> str:
+        """Apply a claimed compute result's terminal state on the controller.
+
+        Compute nodes may write artifacts but never mutate spec.yaml.  The
+        durable result claim happens immediately before this method, so replayed
+        or stale envelopes cannot repeat this controller-owned state transition.
+        """
+        status = "ARCHIVED" if outcome == "abandoned" else "COMPLETE"
+        spec["status"] = status
+        spec["updated_at"] = self.now_iso()
+        spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+        self.audit(
+            "controller_spec_terminal_status",
+            {"spec_path": self.rel(spec_path), "status": status, "outcome": outcome},
+        )
+        return status
 
     def data_quality_repair_signature(self, spec_path: Path, repair: dict[str, Any]) -> str:
         if self._data_quality_repair_signature_cb is not None:
@@ -1111,11 +1129,77 @@ class QueueRemoteExecutionService:
                     changed += 1
                     continue
                 if self.required_artifacts_present(spec, run_dir):
-                    item["workflow_stage"] = "artifacts_synced"
-                    self.mark_history(state, item, "artifacts_synced", "remote run artifacts synced")
-                    item["status"] = "review_pending"
-                    item["review_pending_at"] = self.now_iso()
-                    self.mark_history(state, item, "review_pending", "remote artifacts synced; waiting for review_memory")
+                    result_path = run_dir / "execution_result.yaml"
+                    if item.get("request_nonce"):
+                        if not result_path.exists():
+                            raise ResultRejected("remote run missing execution_result.yaml")
+                        result = yaml.safe_load(result_path.read_text(encoding="utf-8")) or {}
+                        if not isinstance(result, dict):
+                            raise ResultRejected("execution_result.yaml must be a mapping")
+                        try:
+                            claimed, reason = claim_result(
+                                self.repo_root / RESULT_LEDGER_PATH,
+                                queue_item=item,
+                                envelope=result,
+                                actor="queue_remote_execution",
+                            )
+                        except ResultRejected as exc:
+                            self.audit(
+                                "execution_result_noop",
+                                {"item_id": item.get("id"), "reason": str(exc), "result_path": self.rel(result_path)},
+                            )
+                            continue
+                        if not claimed and reason != "duplicate_result":
+                            self.audit("execution_result_noop", {"item_id": item.get("id"), "reason": reason})
+                            continue
+                        if not claimed:
+                            # A previous tick may have appended the ledger row
+                            # then died before persisting review_pending. Re-drive
+                            # the idempotent controller transition instead of
+                            # stranding the queue item at running forever.
+                            self.audit(
+                                "execution_result_recovered_duplicate",
+                                {"item_id": item.get("id"), "result_path": self.rel(result_path)},
+                            )
+                    else:
+                        self.audit("execution_result_legacy_accept", {"item_id": item.get("id"), "reason": "pre-envelope running item"})
+                    try:
+                        if item.get("request_nonce"):
+                            item["controller_spec_status"] = self.set_controller_terminal_spec_status(
+                                spec_path,
+                                spec,
+                                str(result.get("outcome") or "unknown"),
+                            )
+                        if self.repo_root.resolve() == run_recorder.REPO_ROOT.resolve():
+                            record = run_recorder.backfill_run_record(
+                                spec=spec,
+                                spec_path=spec_path,
+                                output_dir=run_dir,
+                                reason="controller recorded artifacts after accepting a remote execution result envelope",
+                                actor="queue_remote_execution",
+                                evidence_paths=[self.rel(run_dir), self.rel(result_path) if result_path.exists() else self.rel(run_dir)],
+                            )
+                            item["run_manifest_path"] = self.rel(record["manifest_path"])
+                        item["workflow_stage"] = "artifacts_synced"
+                        self.mark_history(state, item, "artifacts_synced", "remote run artifacts synced")
+                        item["status"] = "review_pending"
+                        item["review_pending_at"] = self.now_iso()
+                        self.mark_history(state, item, "review_pending", "remote artifacts synced; waiting for review_memory")
+                        # Persist a claimed result's queue transition immediately.
+                        # If this process dies before this write, the duplicate
+                        # path above reconciles it on the next tick.
+                        state["queue"] = queue
+                        self.save_state(state)
+                    except Exception as exc:
+                        # The ledger claim and possibly spec terminal status are
+                        # durable. Never destructively demote a valid claimed
+                        # result; leave it running so duplicate-result recovery
+                        # retries this controller bookkeeping next tick.
+                        self.audit(
+                            "execution_result_bookkeeping_retry",
+                            {"item_id": item.get("id"), "error": f"{type(exc).__name__}: {exc}"},
+                        )
+                        continue
                     changed += 1
                 else:
                     item["status"] = "failed"
@@ -1215,6 +1299,34 @@ class QueueRemoteExecutionService:
             spec_path = Path(spec_raw)
             if not spec_path.is_absolute():
                 spec_path = self.repo_root / spec_path
+            try:
+                dispatch_spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+            except Exception as exc:
+                item["status"] = "failed"
+                item["failed_at"] = self.now_iso()
+                item["failure_reason"] = f"unable to read spec before dispatch: {type(exc).__name__}: {exc}"
+                self.mark_history(state, item, "failed", item["failure_reason"])
+                self.save_state(state)
+                return "failed_unreadable_spec"
+            target = str(dispatch_spec.get("execution_target") or "sig_spot") if isinstance(dispatch_spec, dict) else "sig_spot"
+            if target not in {"sig_spot", "hzpc"}:
+                item["status"] = "blocked"
+                item["blocked_at"] = self.now_iso()
+                item["block_reason"] = f"unsupported execution_target: {target}"
+                self.mark_history(state, item, "blocked", item["block_reason"])
+                self.audit("execution_target_blocked", {"item_id": item.get("id"), "execution_target": target})
+                self.save_state(state)
+                self.write_status("blocked_execution_target", {"item_id": item.get("id"), "execution_target": target})
+                return "blocked_execution_target"
+            if target == "hzpc":
+                item["status"] = "blocked"
+                item["blocked_at"] = self.now_iso()
+                item["block_reason"] = "execution_target hzpc is not dispatchable until an hzpc adapter is installed"
+                self.mark_history(state, item, "blocked", item["block_reason"])
+                self.audit("execution_target_blocked", {"item_id": item.get("id"), "execution_target": target})
+                self.save_state(state)
+                self.write_status("blocked_execution_target", {"item_id": item.get("id"), "execution_target": target})
+                return "blocked_execution_target"
             vm = self.choose_vm_for_item(available_vms, item)
             if vm is None:
                 skipped_unavoided.append(
@@ -1231,6 +1343,10 @@ class QueueRemoteExecutionService:
             try:
                 self.audit("compile", {"item_id": item.get("id"), "spec_path": self.rel(spec_path)})
                 self.validate_spec(spec_path)
+                item.setdefault("request_nonce", uuid.uuid4().hex)
+                spec_data = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+                target = str(spec_data.get("execution_target") or "sig_spot") if isinstance(spec_data, dict) else "sig_spot"
+                write_request(spec_path, queue_item=item, executor_id=target)
                 item["workflow_stage"] = "spec_validated"
                 self.write_status(
                     "syncing_to_vm",

@@ -78,10 +78,8 @@ forbidden_families:
 - stop_source_stress
 - regime_classifier_variant
 rules:
-- Local machine only schedules and monitors; cb_arb backtests must execute on VM/spot
-  host.
-- Every queued run must have a READY spec.yaml with spot_minutes > 0 and local_minutes
-  = 0.
+- "Local machine only schedules and monitors. Every cb_arb backtest must explicitly select execution_target: sig_spot or execution_target: hzpc."
+- "sig_spot requires spot_minutes > 0 and local_minutes = 0; hzpc requires local_minutes > 0 and spot_minutes = 0."
 - If queue is empty and no protected user decision is required, the project-owned
   ideation flow may generate one candidate through the registered provider.
 - Do not promote current.yaml or baseline_registry from this loop.

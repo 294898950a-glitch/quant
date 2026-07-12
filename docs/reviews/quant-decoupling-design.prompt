@@ -1,0 +1,18 @@
+You are the reviewer of record for a consequential Quant architecture decoupling.
+
+Review these exact artifacts in the current repository:
+- AGENTS.md
+- docs/quant-decoupling-design.md
+- docs/quant-distributed-network.architecture.json
+- framework/autonomous/queue_remote_execution.py
+- scripts/quant_internal_tick.py
+
+The proposed change is a staged refactor: MacBook becomes the sole controller and YAML-state authority; hzpc becomes a compute-only node; SIG/Spot remains an existing elastic execution adapter. The current YAML state semantics, automation-ticket boundary, strategy-truth protections, and SIG/Spot compatibility must be preserved. No credentials may enter task/result packages, and a disconnected or replaying compute node must never duplicate state transitions. The revised plan explicitly defines versioned request/result YAML envelopes, controller-only result application, adapter ownership under the existing runner node, and an old-controller-before-new-controller cutover.
+
+Hunt specifically for: hidden coupling in the current modules, state-ownership violations, migration hazards, missing idempotency or failure handling, unsafe deployment assumptions, and unnecessary abstraction. Do not modify files or run commands. Return an explicit final verdict in this form:
+
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list (or none)
+REQUIRED_TESTS: numbered list
+SIMPLIFICATIONS: numbered list
+RATIONALE: concise paragraph

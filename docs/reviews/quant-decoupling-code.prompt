@@ -1,0 +1,21 @@
+You are the reviewer of record for the current Quant decoupling implementation.
+
+Review the working-tree diff and these exact files:
+- scripts/quant_internal_tick.py
+- scripts/run_quant_internal_tick.sh
+- scripts/hermes_executor_handoff_wakeup.sh
+- framework/autonomous/execution_result_ledger.py
+- framework/autonomous/execution_adapters/base.py
+- framework/autonomous/queue_remote_execution.py
+- scripts/research_sanity_checker.py
+- data/research_framework/protocol_rules.yaml
+- data/research_framework/research_queue.yaml
+- the new tests under framework/tests/test_execution_*.py and test_quant_*.py
+
+Invariants: MacBook will be the sole controller and YAML-state writer; compute adapters must not receive state writers or controller tickets; result replays must be rejected/nooped through run_id + nonce + prior status + durable ledger; SIG/Spot behavior must remain compatible; hzpc must only be selected explicitly and may use local_minutes > 0; old WSL and MacBook controllers must not race.
+
+Look for real implementation gaps, regressions, missing tests, unsafe partial migrations, and over-engineering. Do not edit files or run commands. End exactly with:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+REQUIRED_TESTS: numbered list or none
+RATIONALE: concise paragraph

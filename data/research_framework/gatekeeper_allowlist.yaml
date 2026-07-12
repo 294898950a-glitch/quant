@@ -281,3 +281,9 @@ allowlist:
   added_at: '2026-05-25'
   added_by: claude_pending_hermes_repair
   pending_repair_handoff_id: cb_arb_value_gap_switch_reverse-volatility-scaling_v1_executor_code
+- script: scripts/evaluate_cb_arb_moneyness_entry_filter_reverse.py
+  reason: 'Pending compliance repair (2026-07-12): GateKeeper shadowed by None assignment;
+    same family as other reverse entry filters pending Hermes rewrite.'
+  added_at: '2026-07-12'
+  added_by: claude
+  pending_repair_handoff_id: cb_arb_value_gap_switch_reverse_moneyness_entry_filter_v1_executor_code

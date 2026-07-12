@@ -213,13 +213,27 @@ def _requires_spot_compute(spec: dict[str, Any]) -> bool:
 
 
 def check_compute_placement_declared(spec: dict[str, Any]) -> list[Issue]:
-    """cb_arb run/evaluate/search jobs must be declared as spot, never local."""
+    """Compute budgets are validated against the explicit execution target."""
     issues = []
     compute = spec.get("compute_estimate") or {}
     if not isinstance(compute, dict) or not _requires_spot_compute(spec):
         return issues
     spot_minutes = float(compute.get("spot_minutes", 0) or 0)
     local_minutes = float(compute.get("local_minutes", 0) or 0)
+    target = str(spec.get("execution_target") or "sig_spot")
+    if target not in {"sig_spot", "hzpc"}:
+        issues.append(Issue(
+            "fatal", "unsupported_execution_target",
+            f"execution_target={target!r} 不受支持; 只允许 sig_spot 或 hzpc",
+        ))
+        return issues
+    if target == "hzpc":
+        if local_minutes <= 0 or spot_minutes > 0:
+            issues.append(Issue(
+                "fatal", "hzpc_requires_local_compute",
+                "hzpc 任务必须声明 compute_estimate.local_minutes > 0 且 spot_minutes = 0",
+            ))
+        return issues
     if spot_minutes <= 0:
         issues.append(Issue(
             "fatal", "cb_arb_backtest_requires_spot_minutes",

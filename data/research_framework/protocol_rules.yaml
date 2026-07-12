@@ -100,7 +100,7 @@ rules:
 
   - id: R10
     name: compute_placement
-    summary: "Heavy backtests, cb_arb run/evaluate/search jobs, and any run with spot_minutes > 0 must execute on an allowed VM/spot host, not on the local workstation."
+    summary: "Heavy backtests must execute on an explicit approved target: sig_spot for spot_minutes > 0, or hzpc for local_minutes > 0."
     enforced_by:
       - scripts/auto_research_pipeline.py
       - scripts/research_sanity_checker.py
@@ -108,9 +108,17 @@ rules:
       - VM-0-9-opencloudos
       - VM-0-4-ubuntu
       - VM-16-16-ubuntu
+      - hzpc
     local_workstation_allowed_for:
       - dry_run
       - no_execute_classification
       - lightweight_validation
+    execution_targets:
+      sig_spot:
+        requires_spot_minutes: true
+        permits_local_minutes: false
+      hzpc:
+        requires_local_minutes: true
+        permits_spot_minutes: false
     wait_for_user_when:
       - required_spot_host_unavailable

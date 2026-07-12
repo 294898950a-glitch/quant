@@ -1,0 +1,182 @@
+You are the final adversarial reviewer for the last repair to Quant's controller / compute result settlement.
+
+Review only the artifacts below. Do not run commands or inspect the filesystem. Treat your verdict as authoritative.
+
+Goal of this repair:
+- malformed controller metadata must not crash the controller tick;
+- a crash after durable ledger claim must reconcile a running item rather than leave it stuck;
+- post-claim bookkeeping failure must never demote a valid terminal result to failed; it must retry safely on the next tick;
+- terminal spec status must be written on the controller after a claimed result;
+- unknown execution targets must be rejected instead of falling back to sig_spot.
+
+Changed files:
+- framework/autonomous/controller_owner.py
+- framework/autonomous/queue_remote_execution.py
+- scripts/research_sanity_checker.py
+- framework/tests/test_execution_boundary_regressions.py
+- framework/tests/test_quant_internal_tick_controller.py
+- framework/tests/test_execution_target_validation.py
+
+Relevant code excerpts:
+
+`framework/autonomous/controller_owner.py`
+```py
+def owner_allows(*, current_path: Path, local_host: str | None = None) -> tuple[bool, str]:
+    if not current_path.exists():
+        return True, "controller metadata absent; legacy controller allowed"
+    try:
+        current = yaml.safe_load(current_path.read_text(encoding="utf-8")) or {}
+    except (OSError, yaml.YAMLError) as exc:
+        return False, f"controller metadata unreadable; controller denied: {type(exc).__name__}"
+    controller = current.get("controller") if isinstance(current, dict) else None
+    if not isinstance(controller, dict) or not controller.get("owner_host"):
+        return True, "controller metadata absent; legacy controller allowed"
+    owner = str(controller["owner_host"])
+    local = local_host or os.environ.get("QUANT_CONTROLLER_HOST") or os.uname().nodename
+    if local == owner:
+        return True, f"controller owner matched: {owner}"
+    return False, f"controller owner mismatch: local={local} owner={owner}"
+```
+
+`framework/autonomous/queue_remote_execution.py`
+```py
+def validate_spec(self, spec_path: Path) -> dict[str, Any]:
+    ...
+    target = str(spec.get("execution_target") or "sig_spot")
+    if target not in {"sig_spot", "hzpc"}:
+        raise ValueError(f"unsupported execution_target: {target}")
+    if target == "hzpc":
+        if local_minutes <= 0 or spot_minutes > 0:
+            raise ValueError("hzpc requires local_minutes > 0 and spot_minutes = 0")
+    elif spot_minutes <= 0 or local_minutes > 0:
+        raise ValueError("option loop requires spot_minutes > 0 and local_minutes = 0")
+```
+
+```py
+if self.required_artifacts_present(spec, run_dir):
+    result_path = run_dir / "execution_result.yaml"
+    if item.get("request_nonce"):
+        if not result_path.exists():
+            raise ResultRejected("remote run missing execution_result.yaml")
+        result = yaml.safe_load(result_path.read_text(encoding="utf-8")) or {}
+        if not isinstance(result, dict):
+            raise ResultRejected("execution_result.yaml must be a mapping")
+        try:
+            claimed, reason = claim_result(...)
+        except ResultRejected as exc:
+            self.audit("execution_result_noop", {...})
+            continue
+        if not claimed and reason != "duplicate_result":
+            self.audit("execution_result_noop", {...})
+            continue
+        if not claimed:
+            self.audit("execution_result_recovered_duplicate", {...})
+    else:
+        self.audit("execution_result_legacy_accept", {...})
+    try:
+        if item.get("request_nonce"):
+            item["controller_spec_status"] = self.set_controller_terminal_spec_status(
+                spec_path, spec, str(result.get("outcome") or "unknown")
+            )
+        if self.repo_root.resolve() == run_recorder.REPO_ROOT.resolve():
+            record = run_recorder.backfill_run_record(...)
+            item["run_manifest_path"] = self.rel(record["manifest_path"])
+        item["workflow_stage"] = "artifacts_synced"
+        item["status"] = "review_pending"
+        item["review_pending_at"] = self.now_iso()
+        state["queue"] = queue
+        self.save_state(state)
+    except Exception as exc:
+        self.audit("execution_result_bookkeeping_retry", {...})
+        continue
+```
+
+```py
+def set_controller_terminal_spec_status(self, spec_path: Path, spec: dict[str, Any], outcome: str) -> str:
+    status = "ARCHIVED" if outcome == "abandoned" else "COMPLETE"
+    spec["status"] = status
+    spec["updated_at"] = self.now_iso()
+    spec_path.write_text(yaml.safe_dump(spec, allow_unicode=True, sort_keys=False), encoding="utf-8")
+    self.audit("controller_spec_terminal_status", {"spec_path": self.rel(spec_path), "status": status, "outcome": outcome})
+    return status
+```
+
+```py
+spec_path = Path(spec_raw)
+if not spec_path.is_absolute():
+    spec_path = self.repo_root / spec_path
+try:
+    dispatch_spec = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+except Exception as exc:
+    item["status"] = "failed"
+    ...
+    return "failed_unreadable_spec"
+target = str(dispatch_spec.get("execution_target") or "sig_spot") if isinstance(dispatch_spec, dict) else "sig_spot"
+if target not in {"sig_spot", "hzpc"}:
+    item["status"] = "blocked"
+    ...
+    return "blocked_execution_target"
+if target == "hzpc":
+    item["status"] = "blocked"
+    item["block_reason"] = "execution_target hzpc is not dispatchable until an hzpc adapter is installed"
+    ...
+    return "blocked_execution_target"
+...
+item.setdefault("request_nonce", uuid.uuid4().hex)
+spec_data = yaml.safe_load(spec_path.read_text(encoding="utf-8")) or {}
+target = str(spec_data.get("execution_target") or "sig_spot") if isinstance(spec_data, dict) else "sig_spot"
+write_request(spec_path, queue_item=item, executor_id=target)
+```
+
+`scripts/research_sanity_checker.py`
+```py
+def check_compute_placement_declared(spec: dict[str, Any]) -> list[Issue]:
+    compute = spec.get("compute_estimate") or {}
+    if not isinstance(compute, dict) or not _requires_spot_compute(spec):
+        return issues
+    spot_minutes = float(compute.get("spot_minutes", 0) or 0)
+    local_minutes = float(compute.get("local_minutes", 0) or 0)
+    target = str(spec.get("execution_target") or "sig_spot")
+    if target not in {"sig_spot", "hzpc"}:
+        issues.append(Issue("fatal", "unsupported_execution_target", ...))
+        return issues
+    if target == "hzpc":
+        if local_minutes <= 0 or spot_minutes > 0:
+            issues.append(Issue("fatal", "hzpc_requires_local_compute", ...))
+        return issues
+    if spot_minutes <= 0:
+        issues.append(Issue("fatal", "cb_arb_backtest_requires_spot_minutes", ...))
+    if local_minutes > 0:
+        issues.append(Issue("fatal", "cb_arb_backtest_forbids_local_minutes", ...))
+    return issues
+```
+
+Tests added / updated:
+- `framework/tests/test_execution_boundary_regressions.py`
+  - asserts a claimed result moves to `review_pending`
+  - asserts `spec.yaml` becomes `COMPLETE`
+  - asserts a replayed duplicate after a simulated crash is reconciled
+  - asserts a bookkeeping exception only produces `execution_result_bookkeeping_retry` and does not demote the item to failed
+- `framework/tests/test_quant_internal_tick_controller.py`
+  - asserts malformed `current.yaml` returns `allowed=False` without crashing
+- `framework/tests/test_execution_target_validation.py`
+  - asserts `hzpc` accepts explicit local compute
+  - asserts mixed or empty budgets are rejected
+  - asserts unknown targets are rejected instead of falling back to sig_spot
+
+Verification already run on the reviewed artifact:
+- `pytest -q framework/tests/test_execution_boundary_regressions.py framework/tests/test_execution_result_ledger.py framework/tests/test_execution_target_validation.py framework/tests/test_quant_internal_tick_controller.py framework/tests/test_auto_research_pipeline.py framework/tests/test_execution_adapter_boundary.py framework/tests/test_execution_envelope.py framework/tests/test_quant_entrypoint_paths.py framework/tests/test_automation_bugs_2026_05_18.py::test_research_queue_completion_requires_review_and_digest`
+  - result: `66 passed in 12.16s`
+- `python3 -m py_compile framework/autonomous/queue_remote_execution.py scripts/research_sanity_checker.py scripts/quant_internal_tick.py scripts/controller_owner_gate.py`
+- `git diff --check`
+
+Review standard:
+- look for real bugs, missing tests, or contract violations;
+- decide whether the current code actually satisfies the three blockers above;
+- return one explicit verdict only.
+
+Reply exactly in this structure:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+REQUIRED_TESTS: numbered list or none
+RATIONALE: concise paragraph

@@ -1,0 +1,35 @@
+You are the reviewer of record for the current Quant controller/compute decoupling implementation. This is consequential multi-module state-flow work. Review the current working-tree diff and exact files below. Do not modify files. You may read files and run focused tests only if needed.
+
+Files under review:
+- AGENTS.md
+- scripts/quant_internal_tick.py
+- scripts/controller_owner_gate.py
+- scripts/run_quant_internal_tick.sh
+- scripts/hermes_executor_handoff_wakeup.sh
+- scripts/auto_research_pipeline.py
+- framework/autonomous/controller_owner.py
+- framework/autonomous/execution_envelope.py
+- framework/autonomous/execution_result_ledger.py
+- framework/autonomous/execution_adapters/base.py
+- framework/autonomous/execution_adapters/sig_spot.py
+- framework/autonomous/queue_remote_execution.py
+- scripts/research_sanity_checker.py
+- data/research_framework/protocol_rules.yaml
+- data/research_framework/research_queue.yaml
+- new focused tests: framework/tests/test_execution_*.py and test_quant_*.py
+
+Required invariants:
+1. During the planned cron-registry-managed cutover, MacBook is the sole controller/YAML state writer; a stale WSL host must safely noop for both the internal tick and Hermes handoff wakeup.
+2. Compute adapters receive no queue state writer, ticket, or credentials. SIG/Spot compute produces a versioned result envelope; only the controller claims it using run_id + request_nonce + expected prior status plus durable ledger semantics. Duplicates and stale results must noop rather than destructively fail state.
+3. A remote SIG/Spot execution must still start correctly and produce the envelope required by settlement. Controller-side state recording must occur after a valid claim, not on the compute node.
+4. hzpc is explicit-only and must never fall through to SIG/Spot dispatch without an actual hzpc adapter.
+5. Existing in-progress pre-envelope items must have a defined non-destructive compatibility behavior.
+6. No deployment, cron change, automatic promotion, or trading is in scope.
+
+Hunt for real bugs, race conditions, unsafe partial migration, broken command construction, incorrect ownership enforcement, durable-ledger failures, missing verification, and needless complexity. Distinguish blockers from optional hardening.
+
+End exactly with:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+REQUIRED_TESTS: numbered list or none
+RATIONALE: concise paragraph

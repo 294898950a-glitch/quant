@@ -1,0 +1,24 @@
+You are the final adversarial reviewer. Review only this last repair to Quant's
+controller/compute result settlement. Read these files and tests:
+
+- framework/autonomous/queue_remote_execution.py
+- framework/autonomous/controller_owner.py
+- scripts/research_sanity_checker.py
+- framework/tests/test_execution_boundary_regressions.py
+- framework/tests/test_quant_internal_tick_controller.py
+- framework/tests/test_execution_target_validation.py
+
+Prior Claude blockers were:
+1. malformed current.yaml must not crash the controller tick;
+2. a crash after durable ledger claim must reconcile a running item rather than
+   leave it stuck; and
+3. post-claim bookkeeping failure must never demote a valid terminal result to
+   failed; it must retry safely on the next tick.
+
+Verify the current code satisfies these, including terminal spec status and
+unknown execution-target rejection. Do not run commands or edit files. Reply
+concisely and end exactly:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+REQUIRED_TESTS: numbered list or none
+RATIONALE: concise paragraph

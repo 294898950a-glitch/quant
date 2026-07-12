@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_ROOT="/home/jay/projects/quant"
+REPO_ROOT="${QUANT_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 LOCK_PATH="$REPO_ROOT/logs/hermes_executor_handoff_wakeup.lock"
 LOG_PATH="$REPO_ROOT/logs/hermes_executor_handoff_wakeup.log"
 GATE_OUTPUT="$REPO_ROOT/logs/hermes_executor_handoff_gate.out"
-HERMES_BIN="/home/jay/.local/bin/hermes"
+HERMES_BIN="${HERMES_BIN:-$HOME/.local/bin/hermes}"
 HERMES_TIMEOUT_SECONDS="${HERMES_TIMEOUT_SECONDS:-900}"
 
 mkdir -p "$REPO_ROOT/logs"
@@ -16,6 +16,9 @@ if ! flock -n 9; then
 fi
 
 cd "$REPO_ROOT"
+if ! python3 scripts/controller_owner_gate.py --repo-root "$REPO_ROOT" --action hermes_executor_handoff_owner_noop >> "$LOG_PATH" 2>&1; then
+  exit 0
+fi
 python3 scripts/hermes_executor_handoff_tick.py > "$GATE_OUTPUT"
 
 if ! grep -q "HERMES_QUANT_EXECUTOR_HANDOFF" "$GATE_OUTPUT"; then

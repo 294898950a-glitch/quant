@@ -1,0 +1,42 @@
+{
+  "schema_version": 1,
+  "diagram_type": "architecture",
+  "meta": {
+    "title": "Quant 分布式运行网络",
+    "subtitle": "MacBook 控制面 + hzpc 计算节点 + SIG / Spot 弹性执行池",
+    "output": "quant-distributed-network.html",
+    "viewBox": [1300, 780]
+  },
+  "components": [
+    { "id": "github", "type": "external", "label": "GitHub", "sublabel": "quant.git", "pos": [70, 80], "size": [130, 60] },
+    { "id": "mac_repo", "type": "backend", "label": "MacBook 主控", "sublabel": "/Users/chen/projects/quant", "pos": [110, 300], "size": [170, 68], "tag": "唯一调度入口" },
+    { "id": "mac_state", "type": "database", "label": "研究状态", "sublabel": "data/ + logs/", "pos": [330, 210], "size": [150, 62], "tag": "事实真源" },
+    { "id": "mac_scheduler", "type": "messagebus", "label": "调度与队列", "sublabel": "quant_internal_tick", "pos": [330, 330], "size": [150, 62] },
+    { "id": "mac_secrets", "type": "security", "label": "本机凭证", "sublabel": "env / SSH key", "pos": [330, 450], "size": [150, 62], "tag": "不跨机同步" },
+    { "id": "hzpc", "type": "backend", "label": "hzpc 计算节点", "sublabel": "WSL · CPU / RTX 3060 Ti", "pos": [620, 300], "size": [180, 68], "tag": "只跑获准任务" },
+    { "id": "hzpc_scratch", "type": "database", "label": "本地工作区", "sublabel": "输入快照 / 中间产物", "pos": [620, 440], "size": [180, 62], "tag": "可重建" },
+    { "id": "sig", "type": "cloud", "label": "SIG 协调节点", "sublabel": "/root/projects/quant", "pos": [920, 210], "size": [170, 62], "tag": "远端队列桥接" },
+    { "id": "spot", "type": "cloud", "label": "Tencent Spot", "sublabel": "按需批量执行", "pos": [1120, 210], "size": [140, 62], "tag": "可弹性回收" },
+    { "id": "providers", "type": "external", "label": "外部服务", "sublabel": "数据源 / API / PyPI", "pos": [920, 500], "size": [170, 62] }
+  ],
+  "boundaries": [
+    { "kind": "security-group", "label": "Tailscale 私有网络", "wraps": ["mac_repo", "mac_state", "mac_scheduler", "mac_secrets", "hzpc", "hzpc_scratch"], "pad": 42 },
+    { "kind": "region", "label": "远端执行域", "wraps": ["sig", "spot"], "pad": 34 }
+  ],
+  "connections": [
+    { "from": "github", "to": "mac_repo", "label": "git pull / push", "variant": "default", "fromSide": "bottom", "toSide": "top", "route": "orthogonal-v", "labelDx": -40 },
+    { "from": "mac_repo", "to": "mac_state", "variant": "emphasis", "fromSide": "right", "toSide": "left", "route": "orthogonal-h" },
+    { "from": "mac_scheduler", "to": "hzpc", "label": "任务描述 + 输入快照", "variant": "emphasis", "fromSide": "right", "toSide": "left", "route": "straight", "labelDy": -18 },
+    { "from": "hzpc", "to": "mac_scheduler", "label": "结果包回传", "variant": "dashed", "fromSide": "left", "toSide": "right", "route": "orthogonal-v", "labelDy": 32 },
+    { "from": "hzpc", "to": "hzpc_scratch", "variant": "default", "fromSide": "bottom", "toSide": "top", "route": "straight" },
+    { "from": "mac_scheduler", "to": "sig", "label": "队列镜像", "variant": "dashed", "fromSide": "right", "toSide": "left", "route": "orthogonal-h", "labelDy": -44 },
+    { "from": "sig", "to": "spot", "variant": "emphasis", "fromSide": "right", "toSide": "left", "route": "straight" },
+    { "from": "providers", "to": "hzpc", "label": "HTTPS", "variant": "security", "fromSide": "left", "toSide": "bottom", "route": "orthogonal-h", "labelDy": 34 },
+    { "from": "providers", "to": "sig", "label": "HTTPS", "variant": "security", "fromSide": "top", "toSide": "bottom", "route": "straight", "labelDx": 36 }
+  ],
+  "cards": [
+    { "dot": "cyan", "title": "控制面", "items": ["MacBook 是唯一队列、研究状态与审计真源", "所有任务从主控生成可复现输入快照"] },
+    { "dot": "emerald", "title": "计算面", "items": ["hzpc 仅运行获准的 CPU / GPU 计算", "SIG / Spot 仅用于远端弹性批量执行"] },
+    { "dot": "rose", "title": "安全与恢复", "items": ["Tailscale + SSH；凭证每机本地保存", "执行节点只回传结果，不改策略真相或队列"] }
+  ]
+}

@@ -805,6 +805,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
     if not spec_path.is_absolute():
         spec_path = REPO_ROOT / spec_path
     spec = read_yaml(spec_path)
+    compute_node_mode = os.environ.get("QUANT_COMPUTE_NODE", "").strip() == "1"
     original_status = str(spec.get("status") or "")
     ensure_runnable_status(spec, args.allow_archived)
     output_dir = output_dir_from_spec(spec, spec_path)
@@ -829,7 +830,8 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
     if not args.no_execute:
         gate = GateKeeper(quiet=args.quiet)
         gate.before_run_grid(spec_path)
-        set_spec_status(spec_path, "RUNNING", dry_run=False)
+        if not compute_node_mode:
+            set_spec_status(spec_path, "RUNNING", dry_run=False)
         start_at = now_iso()
         log_path = output_dir / "auto_pipeline.log"
         exit_code = run_command(command or [], log_path, dry_run=False)
@@ -847,7 +849,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
             actor="auto_research_pipeline",
             evidence_paths=[rel(output_dir)],
             compute_metadata=compute_metadata,
-            dry_run=False,
+            dry_run=compute_node_mode,
         )
     else:
         record = run_recorder.record_executed_run(
@@ -860,11 +862,11 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
             exit_code=exit_code,
             compute_metadata=compute_metadata,
             data_quality_decision=data_quality_decision,
-            dry_run=False,
+            dry_run=compute_node_mode,
         )
     verdict = record["verdict"]
     manifest_path = record["manifest_path"]
-    if not args.no_execute or original_status in SPEC_STATUSES_RUNNABLE:
+    if not compute_node_mode and (not args.no_execute or original_status in SPEC_STATUSES_RUNNABLE):
         final_status = "ARCHIVED" if verdict.get("status") == "abandoned" else "COMPLETE"
         set_spec_status(spec_path, final_status, dry_run=False)
 
@@ -875,7 +877,7 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         except GateKeeperError:
             raise PipelineError("post-run GateKeeper check failed") from None
 
-    return {
+    result = {
         "dry_run": False,
         "spec": rel(spec_path),
         "output_dir": rel(output_dir),
@@ -886,6 +888,26 @@ def run_pipeline(args: argparse.Namespace) -> dict[str, Any]:
         "verdict": {k: v for k, v in verdict.items() if k != "summary"},
         "manifest": rel(manifest_path),
     }
+    if compute_node_mode:
+        request_path = spec_path.parent / "execution_request.yaml"
+        request = read_yaml(request_path) if request_path.exists() else {}
+        nonce = str(request.get("request_nonce") or "") if isinstance(request, dict) else ""
+        if not nonce:
+            raise PipelineError("compute node requires execution_request.yaml with request_nonce")
+        execution_result = {
+            "schema_version": 1,
+            "run_id": str(spec.get("run_id") or spec_path.parent.name),
+            "request_nonce": nonce,
+            "expected_prior_status": "running",
+            "outcome": str(verdict.get("status") or "unknown"),
+            "artifact_sha256": artifact_tree_hash(output_dir),
+            "exit_code": exit_code,
+            "started_at": start_at,
+            "finished_at": end_at,
+        }
+        write_yaml(spec_path.parent / "execution_result.yaml", execution_result)
+        result["compute_node_mode"] = True
+    return result
 
 
 def build_parser() -> argparse.ArgumentParser:

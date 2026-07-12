@@ -18,13 +18,14 @@ from zoneinfo import ZoneInfo
 
 import yaml
 
-REPO_ROOT = Path("/home/jay/projects/quant")
+REPO_ROOT = Path(os.environ.get("QUANT_REPO_ROOT") or Path(__file__).resolve().parents[1]).resolve()
 SCRIPT_DIR = REPO_ROOT / "scripts"
 for path in (REPO_ROOT, SCRIPT_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
 from framework.autonomous.workflow_state import queue_counts
+from framework.autonomous.controller_owner import audit_noop, owner_allows
 from quant_access_guard import INTERNAL_CRON_ISSUER, issue_ticket
 
 
@@ -33,8 +34,10 @@ QUEUE_STATE_PATH = REPO_ROOT / "data" / "research_framework" / "research_queue.y
 STATUS_PATH = REPO_ROOT / "logs" / "research_queue_status.json"
 LOCK_PATH = REPO_ROOT / "logs" / "quant_internal_tick.lock"
 TICK_LOG_PATH = REPO_ROOT / "logs" / "quant_internal_tick.log"
-BRIDGE_CODEX_OUTBOX = Path("/mnt/c/Users/陈教授/Desktop/ai/projects/quant/codex/outbox.md")
-BRIDGE_STATE = Path("/mnt/c/Users/陈教授/Desktop/ai/projects/quant/state.md")
+CONTROLLER_AUDIT_PATH = REPO_ROOT / "data" / "research_framework" / "orchestrator_log.jsonl"
+BRIDGE_ROOT = os.environ.get("QUANT_CODEX_BRIDGE_PATH", "").strip()
+BRIDGE_CODEX_OUTBOX = Path(BRIDGE_ROOT) / "codex" / "outbox.md" if BRIDGE_ROOT else None
+BRIDGE_STATE = Path(BRIDGE_ROOT) / "state.md" if BRIDGE_ROOT else None
 TZ = ZoneInfo("Asia/Shanghai")
 RUNNER_TIMEOUT_SECONDS = 30 * 60
 
@@ -99,7 +102,7 @@ def recent_queue(state: dict, limit: int = 6) -> list[str]:
 
 
 def append_bridge_status(*, run_kind: str, returncode: int, output: str, state: dict, status: dict, counts: dict[str, int]) -> None:
-    if not BRIDGE_CODEX_OUTBOX.parent.exists():
+    if BRIDGE_CODEX_OUTBOX is None or BRIDGE_STATE is None or not BRIDGE_CODEX_OUTBOX.parent.exists():
         return
     after_status = status.get("status", "unknown") if isinstance(status, dict) else "unknown"
     lines = [
@@ -127,6 +130,8 @@ def append_bridge_status(*, run_kind: str, returncode: int, output: str, state: 
     lines.append("")
     message = "\n".join(lines)
     for path in (BRIDGE_CODEX_OUTBOX, BRIDGE_STATE):
+        if path is None:
+            continue
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
             with path.open("a", encoding="utf-8") as fh:
@@ -183,6 +188,20 @@ def run_once_under_lock() -> tuple[str, int, str]:
         return (run_kind, returncode, output)
 
 
+def controller_owner_allows_tick() -> tuple[bool, str]:
+    """Fence a stale controller before it can issue an automation ticket.
+
+    The active controller is declared in current.yaml during a drained,
+    cron-registry-managed cutover. Missing metadata preserves the existing WSL
+    deployment until the migration writes an explicit controller block.
+    """
+    return owner_allows(current_path=CURRENT_PATH)
+
+
+def audit_controller_noop(reason: str) -> None:
+    audit_noop(audit_path=CONTROLLER_AUDIT_PATH, reason=reason)
+
+
 PAUSE_FLAG_PATH = REPO_ROOT / "data" / "research_framework" / "orchestrator_paused.flag"
 CLUSTER_DETECTOR_STATE_PATH = (
     REPO_ROOT / "data" / "research_framework" / "cluster_detector_state.json"
@@ -224,8 +243,14 @@ def _check_infra_cluster_pause() -> tuple[bool, str]:
 
 def main() -> int:
     before_status = load_json(STATUS_PATH, {})
-    cluster_paused, cluster_reason = _check_infra_cluster_pause()
-    run_kind, returncode, output = run_once_under_lock()
+    allowed, controller_reason = controller_owner_allows_tick()
+    if allowed:
+        cluster_paused, cluster_reason = _check_infra_cluster_pause()
+        run_kind, returncode, output = run_once_under_lock()
+    else:
+        cluster_paused, cluster_reason = False, controller_reason
+        run_kind, returncode, output = "skipped_controller_owner", 0, controller_reason
+        audit_controller_noop(controller_reason)
     current = load_yaml(CURRENT_PATH, {})
     state = load_yaml(QUEUE_STATE_PATH, {})
     status = load_json(STATUS_PATH, {})
@@ -243,6 +268,7 @@ def main() -> int:
     print(f"- action: {run_kind}")
     print(f"- returncode: {returncode}")
     print(f"- output: {output or '(empty)'}")
+    print(f"- controller_gate: {controller_reason}")
     if cluster_paused:
         print(f"- cluster_detector: NEWLY PAUSED — {cluster_reason}")
     elif cluster_reason:
