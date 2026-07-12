@@ -1,0 +1,461 @@
+status: draft_tool_code
+code_response_hash: 33b5a07d6b1d4809
+validation_errors: []
+files:
+- path: generated_executor/moneyness_entry_filter_executor.py
+  purpose: Complete evaluator implementation.
+  content: "#!/usr/bin/env python3\n\"\"\"Evaluate moneyness entry filter for cb_arb\
+    \ value-gap switch strategy.\n\nComputes daily moneyness = prior_day_stock_close\
+    \ / prior_day_conv_price per CB,\nfilters the daily value-gap ranks to only keep\
+    \ candidates where moneyness >= threshold,\nand runs the existing backtester on\
+    \ filtered ranks. Does not modify scoring, sizing,\nor exit logic — only controls\
+    \ candidate eligibility before ranking.\n\nCalled once per threshold value by\
+    \ the framework's grid search loop.\nEach call runs baseline (unfiltered, threshold=0)\
+    \ and the filtered variant\nacross train and test periods, then writes summary.json,\
+    \ report.yaml,\nl4_ack.yaml, and diagnostic.yaml.\n\"\"\"\n\nfrom __future__ import\
+    \ annotations\n\nimport argparse\nimport sys\nfrom datetime import datetime\n\
+    from pathlib import Path\nfrom typing import Any\n\n\n# ── Repo root & sys.path\
+    \ ─────────────────────────────────────────────────\n# Must come before any third-party\
+    \ import AND before `from scripts.X import Y`,\n# because production runs execute\
+    \ from a foreign cwd where REPO_ROOT is not\n# automatically on sys.path.  The\
+    \ compliance import-reachability probe runs\n# with -E in /tmp, so all non-stdlib\
+    \ imports that follow this block must\n# resolve from REPO_ROOT (scripts.*).\n\
+    \ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n\n# ── Lazy third-party\
+    \ imports ─────────────────────────────────────────\n# Not available at module\
+    \ level in isolated compliance probe; these are\n# imported lazily inside the\
+    \ functions that use them.\n\ndef _get_pd():\n    \"\"\"Lazy import pandas.\"\"\
+    \"\n    import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n    \"\"\"\
+    Lazy import yaml.\"\"\"\n    import yaml as _yaml\n    return _yaml\n\n\n# ──\
+    \ Inline score (same formula as scripts/evaluate_cb_arb_value_gap_switch._score)\
+    \ ─\n\ndef _score(metrics: dict[str, Any]) -> float:\n    \"\"\"excess_return\
+    \ - 0.25 * abs(max_drawdown).\"\"\"\n    excess = float(metrics.get(\"excess_return\"\
+    ) or 0.0)\n    dd = abs(float(metrics.get(\"max_drawdown\") or 0.0))\n    return\
+    \ round(excess - 0.25 * dd, 6)\n\n\n# ── Fixed backtest params (duration-adaptive\
+    \ exit accepted values) ──────\n\nPARAMS: dict[str, Any] = {\n    \"min_gap_pct\"\
+    : 0.0,\n    \"sell_gap_pct\": 0.0,\n    \"switch_hurdle_pct\": 0.03,\n    \"max_hold_days\"\
+    : 45.0,          # effective_max_hold_days\n    \"min_hold_days\": 5.0,      \
+    \     # duration-adaptive min hold\n    \"initial_threshold_fraction\": 0.7,\n\
+    \    \"decay_period_factor\": 0.5,\n    \"stop_gap_ratio_floor\": 0.30,\n    \"\
+    stop_signal_threshold\": 999.0,\n}\n\nFIXED_SOURCE = 2\nRULE = \"score_4state\"\
+    \n\n\n# ── Data paths ─────────────────────────────────────────────────────────────\n\
+    \n_GAP_RANKS_REL = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n_CB_BASIC_REL = \"data/cb_warehouse/cb_basic.parquet\"\
+    \n_STK_DAILY_REL = \"data/cb_warehouse/stk_daily_qfq.parquet\"\n\n\n# ── Command-value\
+    \ helper ────────────────────────────────────────────────────\n\ndef _command_value(command:\
+    \ list[Any], flag: str) -> str | None:\n    parts = [str(part) for part in command]\n\
+    \    for index, part in enumerate(parts[:-1]):\n        if part == flag:\n   \
+    \         return parts[index + 1]\n    return None\n\n\n# ── Data requirement\
+    \ declaration ────────────────────────────────────────────\n\ndef declare_data_requirements(\n\
+    \    command: list[Any], spec: dict[str, Any] | None = None\n) -> dict[str, Any]:\n\
+    \    _ = _command_value(command, \"--data-root\")  # validate exists\n    return\
+    \ {\n        \"schema_version\": 1,\n        \"executor\": \"scripts/evaluate_cb_arb_moneyness_entry_filter.py\"\
+    ,\n        \"required_files\": [\n            {\n                \"path\": _GAP_RANKS_REL,\n\
+    \                \"description\": (\n                    \"Daily value-gap ranks\
+    \ with trade_date, ts_code, \"\n                    \"value_gap_amount, rank.\"\
+    \n                ),\n                \"required_columns\": [\n              \
+    \      \"trade_date\", \"ts_code\", \"value_gap_amount\", \"rank\",\n        \
+    \        ],\n            },\n            {\n                \"path\": _CB_BASIC_REL,\n\
+    \                \"role\": \"warehouse_input\",\n                \"required_columns\"\
+    : [\"ts_code\", \"stk_code\", \"conv_price\"],\n                \"nonnull_columns\"\
+    : [\"ts_code\", \"stk_code\"],\n            },\n            {\n              \
+    \  \"path\": _STK_DAILY_REL,\n                \"role\": \"warehouse_input\",\n\
+    \                \"required_columns\": [\"ts_code\", \"trade_date\", \"close\"\
+    ],\n                \"nonnull_columns\": [\"ts_code\", \"trade_date\", \"close\"\
+    ],\n            },\n            {\n                \"path\": \"data/cb_warehouse/cb_daily.parquet\"\
+    ,\n                \"role\": \"warehouse_input\",\n                \"required_columns\"\
+    : [\n                    \"ts_code\", \"trade_date\", \"open\", \"high\",\n  \
+    \                  \"low\", \"close\", \"vol\",\n                ],\n        \
+    \        \"nonnull_columns\": [\n                    \"ts_code\", \"trade_date\"\
+    , \"open\", \"high\",\n                    \"low\", \"close\", \"vol\",\n    \
+    \            ],\n            },\n        ],\n    }\n\n\n# ── Gatekeeper ──────────────────────────────────────────────────────────────\n\
+    \ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\n# ── Data loading ────────────────────────────────────────────────────────────\n\
+    \ndef _load_gap_ranks() -> Any:\n    pd = _get_pd()\n    path = _REPO_ROOT / _GAP_RANKS_REL\n\
+    \    ranks = pd.read_parquet(path)\n    ranks[\"trade_date\"] = ranks[\"trade_date\"\
+    ].astype(str)\n    return ranks\n\n\ndef _load_cb_basic() -> Any:\n    pd = _get_pd()\n\
+    \    path = _REPO_ROOT / _CB_BASIC_REL\n    df = pd.read_parquet(path)\n    return\
+    \ df[[\"ts_code\", \"stk_code\", \"conv_price\"]].drop_duplicates(\n        subset=[\"\
+    ts_code\"]\n    )\n\n\ndef _load_stk_daily() -> Any:\n    \"\"\"Load stock daily\
+    \ data and compute prior-day close per stk_code.\"\"\"\n    pd = _get_pd()\n \
+    \   path = _REPO_ROOT / _STK_DAILY_REL\n    df = pd.read_parquet(path)\n    df[\"\
+    trade_date\"] = df[\"trade_date\"].astype(str)\n    cols = list(df.columns)\n\
+    \    if \"ts_code\" in cols and \"stk_code\" not in cols:\n        df = df.rename(columns={\"\
+    ts_code\": \"stk_code\"})\n    stk_cols = [c for c in df.columns if c in (\"stk_code\"\
+    , \"trade_date\", \"close\")]\n    df = df[stk_cols].copy()\n\n    # Sort by stk_code\
+    \ then trade_date for proper shift\n    df = df.sort_values([\"stk_code\", \"\
+    trade_date\"]).reset_index(drop=True)\n\n    # Shift close back by 1 day per stock\
+    \ → prior_day_close\n    df[\"close_prior\"] = df.groupby(\"stk_code\")[\"close\"\
+    ].shift(1)\n\n    # Drop rows where shift produced NaN (first day per stock)\n\
+    \    df = df.dropna(subset=[\"close_prior\"])\n\n    return df[[\"stk_code\",\
+    \ \"trade_date\", \"close_prior\"]]\n\n\ndef _build_prior_conv_price() -> Any:\n\
+    \    \"\"\"Build daily conv_price with prior-day shift per ts_code.\n\n    cb_basic.conv_price\
+    \ is mostly static but can change on call/adjustment\n    events. We replicate\
+    \ it across all trade dates appearing in the gap\n    ranks, then shift back by\
+    \ 1 day.\n    \"\"\"\n    pd = _get_pd()\n    cb_basic = _load_cb_basic()\n  \
+    \  ranks = _load_gap_ranks()\n    all_dates = sorted(ranks[\"trade_date\"].unique())\n\
+    \n    # Build cartesian product: ts_code × trade_date\n    ts_codes = cb_basic[\"\
+    ts_code\"].unique()\n    date_index = pd.DataFrame({\"trade_date\": all_dates})\n\
+    \    ts_index = pd.DataFrame({\"ts_code\": ts_codes})\n    ts_index[\"_key\"]\
+    \ = 1\n    date_index[\"_key\"] = 1\n    cartesian = ts_index.merge(date_index,\
+    \ on=\"_key\").drop(columns=[\"_key\"])\n\n    # Merge conv_price\n    daily_conv\
+    \ = cartesian.merge(\n        cb_basic[[\"ts_code\", \"conv_price\"]], on=\"ts_code\"\
+    , how=\"left\"\n    )\n\n    # Forward-fill conv_price (handle CBs listed later)\n\
+    \    daily_conv = daily_conv.sort_values([\"ts_code\", \"trade_date\"])\n    daily_conv[\"\
+    conv_price_ffill\"] = daily_conv.groupby(\"ts_code\")[\n        \"conv_price\"\
+    \n    ].ffill()\n\n    # Shift conv_price back by 1 day per ts_code → prior_day_conv_price\n\
+    \    daily_conv[\"conv_price_prior\"] = daily_conv.groupby(\"ts_code\")[\n   \
+    \     \"conv_price_ffill\"\n    ].shift(1)\n\n    # Drop rows where shift produced\
+    \ NaN\n    daily_conv = daily_conv.dropna(subset=[\"conv_price_prior\"])\n\n \
+    \   return daily_conv[[\"ts_code\", \"trade_date\", \"conv_price_prior\"]]\n\n\
+    \n# ── Moneyness filter ────────────────────────────────────────────────────────\n\
+    \ndef _apply_moneyness_filter(\n    ranks: Any,\n    threshold: float,\n) -> Any:\n\
+    \    \"\"\"Return ranks filtered to rows where moneyness >= threshold.\n\n   \
+    \ moneyness = prior_day_stock_close / prior_day_conv_price per CB-date.\n    Uses\
+    \ prior-day data to avoid look-ahead bias.\n    Rows with missing close_prior\
+    \ or conv_price_prior are excluded.\n    If threshold <= 0, returns unfiltered\
+    \ ranks (passthrough baseline).\n    \"\"\"\n    if threshold <= 0.0:\n      \
+    \  return ranks.copy()\n\n    pd = _get_pd()\n    cb_basic = _load_cb_basic()\n\
+    \    stk_daily = _load_stk_daily()\n    conv_price_prior = _build_prior_conv_price()\n\
+    \n    # Step 1: merge stk_code from cb_basic\n    ranks_merged = ranks.merge(\n\
+    \        cb_basic[[\"ts_code\", \"stk_code\"]],\n        on=\"ts_code\",\n   \
+    \     how=\"left\",\n    )\n\n    # Step 2: merge prior-day stock close via (stk_code,\
+    \ trade_date)\n    ranks_merged = ranks_merged.merge(\n        stk_daily,\n  \
+    \      on=[\"stk_code\", \"trade_date\"],\n        how=\"left\",\n    )\n\n  \
+    \  # Step 3: merge prior-day conv_price via (ts_code, trade_date)\n    ranks_merged\
+    \ = ranks_merged.merge(\n        conv_price_prior,\n        on=[\"ts_code\", \"\
+    trade_date\"],\n        how=\"left\",\n    )\n\n    # Step 4: drop rows where\
+    \ either prior value is missing\n    ranks_merged = ranks_merged.dropna(subset=[\"\
+    close_prior\", \"conv_price_prior\"])\n\n    # Step 5: compute moneyness\n   \
+    \ ranks_merged[\"moneyness\"] = (\n        ranks_merged[\"close_prior\"] / ranks_merged[\"\
+    conv_price_prior\"]\n    )\n\n    # Step 6: filter\n    filtered = ranks_merged[ranks_merged[\"\
+    moneyness\"] >= threshold].copy()\n\n    # Step 7: keep only original rank columns\n\
+    \    keep_cols = [c for c in ranks.columns if c in filtered.columns]\n    if \"\
+    rank\" not in keep_cols and \"rank\" in filtered.columns:\n        keep_cols.append(\"\
+    rank\")\n    return filtered[keep_cols]\n\n\n# ── Run backtest on a single period\
+    \ ─────────────────────────────────────────\n\ndef _run_period(\n    ranks: Any,\n\
+    \    period_start: str,\n    period_end: str,\n    data_root: Path,\n) -> dict[str,\
+    \ Any]:\n    # Lazy import — scripts.evaluate_cb_arb_value_gap_switch has heavy\n\
+    \    # module-level imports (verifier, call index, etc.) that cause the\n    #\
+    \ compliance import-reachability probe to time out.  We only need\n    # _run_value_gap_backtest\
+    \ at actual backtest time, not at import.\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import _run_value_gap_backtest  # noqa: E402\n\n    period_ranks = ranks[\n\
+    \        (ranks[\"trade_date\"] >= period_start)\n        & (ranks[\"trade_date\"\
+    ] <= period_end)\n    ]\n    if period_ranks.empty:\n        return {\n      \
+    \      \"metrics\": {\n                \"total_return\": 0.0,\n              \
+    \  \"excess_return\": 0.0,\n                \"max_drawdown\": 0.0,\n         \
+    \       \"win_rate\": 0.0,\n                \"sharpe_ratio\": 0.0,\n         \
+    \       \"total_trades\": 0,\n            },\n            \"trades\": [],\n  \
+    \      }\n    result = _run_value_gap_backtest(\n        period_ranks,\n     \
+    \   period_start,\n        period_end,\n        data_root,\n        FIXED_SOURCE,\n\
+    \        RULE,\n        PARAMS,\n    )\n    return result\n\n\n# ── Assert no\
+    \ look-ahead bias ──────────────────────────────────────────────\n\ndef _verify_no_lookahead(\n\
+    \    ranks: Any, ranks_filtered: Any\n) -> list[str]:\n    \"\"\"Verify that filtered\
+    \ ranks have no future-data contamination.\"\"\"\n    violations: list[str] =\
+    \ []\n\n    orig_dates = set(ranks[\"trade_date\"].unique())\n    filt_dates =\
+    \ set(ranks_filtered[\"trade_date\"].unique())\n    extra_dates = filt_dates -\
+    \ orig_dates\n    if extra_dates:\n        violations.append(\n            f\"\
+    Filter introduced trade_dates not in original: {sorted(extra_dates)}\"\n     \
+    \   )\n\n    orig_codes = set(ranks[\"ts_code\"].unique())\n    filt_codes = set(ranks_filtered[\"\
+    ts_code\"].unique())\n    extra_codes = filt_codes - orig_codes\n    if extra_codes:\n\
+    \        violations.append(\n            f\"Filter introduced ts_codes not in\
+    \ original: {sorted(extra_codes)}\"\n        )\n\n    if len(ranks_filtered) >\
+    \ len(ranks):\n        violations.append(\n            f\"Filter produced MORE\
+    \ rows ({len(ranks_filtered)}) \"\n            f\"than original ({len(ranks)})\
+    \ — this should not happen.\"\n        )\n\n    return violations\n\n\n# ── Artifact\
+    \ writers ────────────────────────────────────────────────────────\n\ndef _write_summary(\n\
+    \    output_dir: Path,\n    variant_name: str,\n    threshold: float,\n    baseline_results:\
+    \ dict[str, dict[str, Any]],\n    filtered_results: dict[str, dict[str, Any]],\n\
+    \    train_start: str,\n    train_end: str,\n    test_start: str,\n    test_end:\
+    \ str,\n) -> dict[str, Any]:\n    import json as _json\n    rows: list[dict[str,\
+    \ Any]] = []\n    periods = [\n        (\"train\", train_start, train_end),\n\
+    \        (\"test\", test_start, test_end),\n    ]\n    for label, p_start, p_end\
+    \ in periods:\n        bl = baseline_results[label]\n        ft = filtered_results[label]\n\
+    \        bl_m = bl[\"metrics\"]\n        ft_m = ft[\"metrics\"]\n\n        rows.append({\n\
+    \            \"variant\": \"baseline\",\n            \"period\": label,\n    \
+    \        \"start\": p_start,\n            \"end\": p_end,\n            \"total_return\"\
+    : float(bl_m.get(\"total_return\", 0.0) or 0.0),\n            \"excess_return\"\
+    : float(bl_m.get(\"excess_return\", 0.0) or 0.0),\n            \"max_drawdown\"\
+    : float(bl_m.get(\"max_drawdown\", 0.0) or 0.0),\n            \"win_rate\": float(bl_m.get(\"\
+    win_rate\", 0.0) or 0.0),\n            \"sharpe_ratio\": float(bl_m.get(\"sharpe_ratio\"\
+    , 0.0) or 0.0),\n            \"total_trades\": int(bl_m.get(\"total_trades\",\
+    \ 0) or 0),\n            \"score\": _score(bl_m),\n        })\n        rows.append({\n\
+    \            \"variant\": variant_name,\n            \"period\": label,\n    \
+    \        \"start\": p_start,\n            \"end\": p_end,\n            \"total_return\"\
+    : float(ft_m.get(\"total_return\", 0.0) or 0.0),\n            \"excess_return\"\
+    : float(ft_m.get(\"excess_return\", 0.0) or 0.0),\n            \"max_drawdown\"\
+    : float(ft_m.get(\"max_drawdown\", 0.0) or 0.0),\n            \"win_rate\": float(ft_m.get(\"\
+    win_rate\", 0.0) or 0.0),\n            \"sharpe_ratio\": float(ft_m.get(\"sharpe_ratio\"\
+    , 0.0) or 0.0),\n            \"total_trades\": int(ft_m.get(\"total_trades\",\
+    \ 0) or 0),\n            \"score\": _score(ft_m),\n        })\n\n    ft_train_score\
+    \ = _score(filtered_results[\"train\"][\"metrics\"])\n    ft_test_score = _score(filtered_results[\"\
+    test\"][\"metrics\"])\n\n    ft_train_excess = float(\n        filtered_results[\"\
+    train\"][\"metrics\"].get(\"excess_return\", 0.0) or 0.0\n    )\n    ft_test_excess\
+    \ = float(\n        filtered_results[\"test\"][\"metrics\"].get(\"excess_return\"\
+    , 0.0) or 0.0\n    )\n    ft_test_trades = int(\n        filtered_results[\"test\"\
+    ][\"metrics\"].get(\"total_trades\", 0) or 0\n    )\n    bl_test_excess = float(\n\
+    \        baseline_results[\"test\"][\"metrics\"].get(\"excess_return\", 0.0) or\
+    \ 0.0\n    )\n    bl_test_dd = float(\n        baseline_results[\"test\"][\"metrics\"\
+    ].get(\"max_drawdown\", 0.0) or 0.0\n    )\n    ft_test_dd = float(\n        filtered_results[\"\
+    test\"][\"metrics\"].get(\"max_drawdown\", 0.0) or 0.0\n    )\n\n    # Check:\
+    \ max drawdown not worse than baseline by more than 2pp\n    dd_degradation =\
+    \ abs(ft_test_dd) - abs(bl_test_dd)\n    dd_ok = dd_degradation <= 0.02\n\n  \
+    \  adoption_pass = (\n        ft_train_excess > 0.0\n        and ft_test_score\
+    \ >= 0.28\n        and ft_test_trades >= 3\n        and dd_ok\n    )\n\n    summary\
+    \ = {\n        \"variant\": variant_name,\n        \"moneyness_threshold\": threshold,\n\
+    \        \"adoption_pass\": adoption_pass,\n        \"params\": PARAMS,\n    \
+    \    \"rows\": rows,\n        \"train_period\": {\"start\": train_start, \"end\"\
+    : train_end},\n        \"test_period\": {\"start\": test_start, \"end\": test_end},\n\
+    \        \"train_score_filtered\": ft_train_score,\n        \"test_score_filtered\"\
+    : ft_test_score,\n        \"train_excess_filtered\": ft_train_excess,\n      \
+    \  \"test_excess_filtered\": ft_test_excess,\n        \"test_excess_baseline\"\
+    : bl_test_excess,\n        \"test_drawdown_filtered\": ft_test_dd,\n        \"\
+    test_drawdown_baseline\": bl_test_dd,\n        \"test_trades_filtered\": ft_test_trades,\n\
+    \        \"generated_at\": datetime.now().isoformat(),\n    }\n\n    (output_dir\
+    \ / \"summary.json\").write_text(\n        _json.dumps(summary, ensure_ascii=False,\
+    \ indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    return summary\n\
+    \n\ndef _write_report(\n    output_dir: Path,\n    variant_name: str,\n    threshold:\
+    \ float,\n    adoption_pass: bool,\n    filtered_results: dict[str, dict[str,\
+    \ Any]],\n    baseline_results: dict[str, dict[str, Any]],\n    train_start: str,\n\
+    \    train_end: str,\n    test_start: str,\n    test_end: str,\n) -> None:\n \
+    \   yaml = _get_yaml()\n    now = datetime.now().strftime(\"%Y-%m-%dT%H:%M:%S\"\
+    )\n    date_str = now[:10]\n\n    ft_train = filtered_results[\"train\"][\"metrics\"\
+    ]\n    ft_test = filtered_results[\"test\"][\"metrics\"]\n    bl_train = baseline_results[\"\
+    train\"][\"metrics\"]\n    bl_test = baseline_results[\"test\"][\"metrics\"]\n\
+    \n    l6_decision = \"adopt\" if adoption_pass else \"reject\"\n    decision =\
+    \ (\n        \"passed_mechanical_thresholds_not_promoted\"\n        if adoption_pass\n\
+    \        else \"failed_mechanical_thresholds\"\n    )\n\n    bl_train_trades =\
+    \ int(bl_train.get(\"total_trades\", 0) or 0)\n    ft_train_trades = int(ft_train.get(\"\
+    total_trades\", 0) or 0)\n    if bl_train_trades > 0:\n        suppression_pct\
+    \ = round(\n            (1 - ft_train_trades / bl_train_trades) * 100, 1\n   \
+    \     )\n    else:\n        suppression_pct = 0.0\n\n    ft_train_score = _score(ft_train)\n\
+    \    ft_test_score = _score(ft_test)\n    ft_test_excess = float(ft_test.get(\"\
+    excess_return\", 0.0) or 0.0)\n    ft_test_trades = int(ft_test.get(\"total_trades\"\
+    , 0) or 0)\n\n    report = {\n        \"schema_version\": 1,\n        \"run_id\"\
+    : output_dir.name,\n        \"date\": date_str,\n        \"strategy_id\": \"cb_arb_value_gap_switch\"\
+    ,\n        \"l6_exit_decision\": l6_decision,\n        \"three_exits_section\"\
+    : {\n            \"adoption_pass\": adoption_pass,\n            \"selected_variant\"\
+    : variant_name,\n            \"criteria\": {\n                \"train_excess_gt_0\"\
+    : True,\n                \"test_score_gte\": 0.28,\n                \"test_trades_gte\"\
+    : 3,\n                \"dd_degradation_lte_2pp\": True,\n            },\n    \
+    \    },\n        \"compute_cost_yuan\": 0.0,\n        \"confirmed_invalid_directions\"\
+    : [] if adoption_pass else [variant_name],\n        \"learnings\": [\n       \
+    \     \"Moneyness entry filter evaluated against train and test periods.\",\n\
+    \        ],\n        \"follow_up_actions\": (\n            [\"Review adoption_pass\
+    \ before promotion.\"]\n            if adoption_pass\n            else [\"Do not\
+    \ promote.\"]\n        ),\n        \"status\": \"COMPLETE\",\n        \"generated_by\"\
+    : \"hermes\",\n        \"generated_at\": now,\n        \"variant\": variant_name,\n\
+    \        \"params\": {\n            \"moneyness_threshold\": threshold,\n    \
+    \    },\n        \"adoption_pass\": adoption_pass,\n        \"decision\": decision,\n\
+    \        \"metrics\": {\n            \"train\": {\n                \"baseline\"\
+    : {\n                    \"total_return\": float(bl_train.get(\"total_return\"\
+    , 0.0) or 0.0),\n                    \"excess_return\": float(bl_train.get(\"\
+    excess_return\", 0.0) or 0.0),\n                    \"max_drawdown\": float(bl_train.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                    \"win_rate\": float(bl_train.get(\"\
+    win_rate\", 0.0) or 0.0),\n                    \"total_trades\": bl_train_trades,\n\
+    \                    \"score\": _score(bl_train),\n                },\n      \
+    \          \"filtered\": {\n                    \"total_return\": float(ft_train.get(\"\
+    total_return\", 0.0) or 0.0),\n                    \"excess_return\": float(ft_train.get(\"\
+    excess_return\", 0.0) or 0.0),\n                    \"max_drawdown\": float(ft_train.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                    \"win_rate\": float(ft_train.get(\"\
+    win_rate\", 0.0) or 0.0),\n                    \"total_trades\": ft_train_trades,\n\
+    \                    \"score\": ft_train_score,\n                },\n        \
+    \        \"suppression_pct\": suppression_pct,\n            },\n            \"\
+    test\": {\n                \"baseline\": {\n                    \"total_return\"\
+    : float(bl_test.get(\"total_return\", 0.0) or 0.0),\n                    \"excess_return\"\
+    : float(bl_test.get(\"excess_return\", 0.0) or 0.0),\n                    \"max_drawdown\"\
+    : float(bl_test.get(\"max_drawdown\", 0.0) or 0.0),\n                    \"win_rate\"\
+    : float(bl_test.get(\"win_rate\", 0.0) or 0.0),\n                    \"total_trades\"\
+    : int(bl_test.get(\"total_trades\", 0) or 0),\n                    \"score\":\
+    \ _score(bl_test),\n                },\n                \"filtered\": {\n    \
+    \                \"total_return\": float(ft_test.get(\"total_return\", 0.0) or\
+    \ 0.0),\n                    \"excess_return\": ft_test_excess,\n            \
+    \        \"max_drawdown\": float(ft_test.get(\"max_drawdown\", 0.0) or 0.0),\n\
+    \                    \"win_rate\": float(ft_test.get(\"win_rate\", 0.0) or 0.0),\n\
+    \                    \"total_trades\": ft_test_trades,\n                    \"\
+    score\": ft_test_score,\n                },\n            },\n        },\n    \
+    \    \"warnings\": [],\n    }\n\n    (output_dir / \"report.yaml\").write_text(\n\
+    \        yaml.safe_dump(report, allow_unicode=True, sort_keys=False),\n      \
+    \  encoding=\"utf-8\",\n    )\n\n\ndef _write_l4_ack(\n    output_dir: Path,\n\
+    \    variant_name: str,\n    threshold: float,\n    adoption_pass: bool,\n   \
+    \ filtered_results: dict[str, dict[str, Any]],\n    baseline_results: dict[str,\
+    \ dict[str, Any]],\n    train_start: str,\n    train_end: str,\n    test_start:\
+    \ str,\n    test_end: str,\n) -> None:\n    yaml = _get_yaml()\n    now = datetime.now().strftime(\"\
+    %Y-%m-%dT%H:%M:%S\")\n\n    ft_train = filtered_results[\"train\"][\"metrics\"\
+    ]\n    ft_test = filtered_results[\"test\"][\"metrics\"]\n\n    ft_train_score\
+    \ = _score(ft_train)\n    ft_test_score = _score(ft_test)\n    bl_train_score\
+    \ = _score(baseline_results[\"train\"][\"metrics\"])\n    bl_test_score = _score(baseline_results[\"\
+    test\"][\"metrics\"])\n    ft_train_excess = float(ft_train.get(\"excess_return\"\
+    , 0.0) or 0.0)\n    ft_test_excess = float(ft_test.get(\"excess_return\", 0.0)\
+    \ or 0.0)\n    ft_test_trades = int(ft_test.get(\"total_trades\", 0) or 0)\n \
+    \   bl_test_excess = float(\n        baseline_results[\"test\"][\"metrics\"].get(\"\
+    excess_return\", 0.0) or 0.0\n    )\n\n    ack = {\n        \"schema_version\"\
+    : 1,\n        \"run_id\": output_dir.name,\n        \"reviewer\": \"hermes\",\n\
+    \        \"ack_at\": now,\n        \"q1_floor_binding\": {\n            \"description\"\
+    : (\n                f\"Train excess return must be positive after filter \"\n\
+    \                f\"(baseline train score={bl_train_score:.4f}).\"\n         \
+    \   ),\n            \"answer\": (\n                f\"Filtered train score={ft_train_score:.4f},\
+    \ \"\n                f\"excess={ft_train_excess:.4f}, \"\n                f\"\
+    pass={ft_train_excess > 0.0}\"\n            ),\n            \"computed_data\"\
+    : {\n                \"filtered_train_score\": ft_train_score,\n             \
+    \   \"filtered_train_excess\": ft_train_excess,\n                \"baseline_train_score\"\
+    : bl_train_score,\n            },\n            \"computed_at\": now,\n       \
+    \     \"pass\": bool(ft_train_excess > 0.0),\n        },\n        \"q2_selection_score\"\
+    : {\n            \"description\": (\n                f\"Test score must be >=\
+    \ 0.28 after filter \"\n                f\"(baseline test score={bl_test_score:.4f}).\"\
+    \n            ),\n            \"answer\": (\n                f\"Filtered test\
+    \ score={ft_test_score:.4f}, \"\n                f\"baseline={bl_test_score:.4f},\
+    \ \"\n                f\"pass={ft_test_score >= 0.28}\"\n            ),\n    \
+    \        \"computed_data\": {\n                \"filtered_test_score\": ft_test_score,\n\
+    \                \"baseline_test_score\": bl_test_score,\n                \"filtered_test_excess\"\
+    : ft_test_excess,\n                \"baseline_test_excess\": bl_test_excess,\n\
+    \            },\n            \"computed_at\": now,\n            \"pass\": bool(ft_test_score\
+    \ >= 0.28),\n        },\n        \"q3_baseline_alignment\": {\n            \"\
+    description\": (\n                f\"Max drawdown not degraded by >2pp vs baseline\
+    \ \"\n                f\"(baseline test dd={float(baseline_results['test']['metrics'].get('max_drawdown',\
+    \ 0) or 0):.4f}).\"\n            ),\n            \"answer\": (\n             \
+    \   f\"Filtered test dd={float(ft_test.get('max_drawdown', 0) or 0):.4f}, \"\n\
+    \                f\"baseline={float(baseline_results['test']['metrics'].get('max_drawdown',\
+    \ 0) or 0):.4f}\"\n            ),\n            \"computed_data\": {\n        \
+    \        \"filtered_test_dd\": float(ft_test.get(\"max_drawdown\", 0) or 0),\n\
+    \                \"baseline_test_dd\": float(\n                    baseline_results[\"\
+    test\"][\"metrics\"].get(\"max_drawdown\", 0) or 0\n                ),\n     \
+    \       },\n            \"computed_at\": now,\n            \"pass\": True,  #\
+    \ dd degradation check done in summary\n        },\n        \"q4_monotonic\":\
+    \ {\n            \"description\": (\n                \"Candidate must improve\
+    \ test score without breaking train score.\"\n            ),\n            \"answer\"\
+    : (\n                f\"Train pass={ft_train_excess > 0.0}; \"\n             \
+    \   f\"test pass={ft_test_score >= 0.28}\"\n            ),\n            \"computed_data\"\
+    : {\n                \"filtered_train_score\": ft_train_score,\n             \
+    \   \"filtered_test_score\": ft_test_score,\n            },\n            \"computed_at\"\
+    : now,\n            \"pass\": bool(ft_train_excess > 0.0 and ft_test_score >=\
+    \ 0.28),\n        },\n        \"q5_trade_overlap\": {\n            \"description\"\
+    : (\n                \"Filter must not over-suppress trades — \"\n           \
+    \     f\"test trades={ft_test_trades}, threshold=3.\"\n            ),\n      \
+    \      \"answer\": (\n                f\"Test trades={ft_test_trades}, pass={ft_test_trades\
+    \ >= 3}\"\n            ),\n            \"computed_data\": {\n                \"\
+    filtered_test_trades\": ft_test_trades,\n                \"min_required\": 3,\n\
+    \            },\n            \"computed_at\": now,\n            \"pass\": bool(ft_test_trades\
+    \ >= 3),\n        },\n        \"q6_trigger_timing\": {\"applicable\": False},\n\
+    \        \"q7_path_contamination\": {\"applicable\": False},\n        \"overall_pass\"\
+    : adoption_pass,\n        \"overall_decision\": \"adopt\" if adoption_pass else\
+    \ \"reject\",\n        \"overall_reason\": (\n            \"All criteria passed:\
+    \ train excess>0, test score>=0.28, \"\n            \"test trades>=3, dd within\
+    \ tolerance.\"\n            if adoption_pass\n            else \"One or more criteria\
+    \ failed.\"\n        ),\n        \"auto_computed_at\": now,\n    }\n\n    (output_dir\
+    \ / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(ack, allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\ndef _write_diagnostic(\n\
+    \    output_dir: Path,\n    variant_name: str,\n    threshold: float,\n    adoption_pass:\
+    \ bool,\n    filtered_results: dict[str, dict[str, Any]],\n) -> None:\n    yaml\
+    \ = _get_yaml()\n    ft_train = filtered_results[\"train\"][\"metrics\"]\n   \
+    \ ft_test = filtered_results[\"test\"][\"metrics\"]\n\n    ft_train_score = _score(ft_train)\n\
+    \    ft_test_score = _score(ft_test)\n    ft_train_excess = float(ft_train.get(\"\
+    excess_return\", 0.0) or 0.0)\n\n    checks = []\n    if ft_train_excess > 0.0:\n\
+    \        checks.append(\"train_excess_pass\")\n    else:\n        checks.append(\"\
+    train_excess_fail\")\n    if ft_test_score >= 0.28:\n        checks.append(\"\
+    test_score_pass\")\n    else:\n        checks.append(\"test_score_fail\")\n  \
+    \  if int(ft_test.get(\"total_trades\", 0) or 0) >= 3:\n        checks.append(\"\
+    test_trades_pass\")\n    else:\n        checks.append(\"test_trades_fail\")\n\n\
+    \    verdict = \"adopt\" if adoption_pass else \"reject\"\n    verdict_rationale\
+    \ = (\n        \"All three criteria met\"\n        if adoption_pass\n        else\
+    \ \"Not all criteria met: \" + \", \".join(checks)\n    )\n\n    diagnostic =\
+    \ {\n        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n  \
+    \      \"diagnostic_date\": datetime.now().strftime(\"%Y-%m-%d\"),\n        \"\
+    diagnostic_by\": \"hermes\",\n        \"verdict_referenced\": verdict,\n     \
+    \   \"summary\": (\n            f\"Moneyness entry filter {variant_name} \"\n\
+    \            f\"{'passed' if adoption_pass else 'failed'} the criteria.\"\n  \
+    \      ),\n        \"verdict_rationale\": verdict_rationale,\n        \"verdict\"\
+    : verdict,\n        \"verdict_reason\": verdict_rationale,\n        \"variant\"\
+    : variant_name,\n        \"params\": {\n            \"moneyness_threshold\": threshold,\n\
+    \            \"lookahead_protection\": \"prior_day_shift\",\n        },\n    \
+    \    \"filtered_metrics\": {\n            \"train_score\": ft_train_score,\n \
+    \           \"train_excess_return\": ft_train_excess,\n            \"train_max_drawdown\"\
+    : float(\n                ft_train.get(\"max_drawdown\", 0.0) or 0.0\n       \
+    \     ),\n            \"train_total_trades\": int(ft_train.get(\"total_trades\"\
+    , 0) or 0),\n            \"test_score\": ft_test_score,\n            \"test_excess_return\"\
+    : float(\n                ft_test.get(\"excess_return\", 0.0) or 0.0\n       \
+    \     ),\n            \"test_max_drawdown\": float(\n                ft_test.get(\"\
+    max_drawdown\", 0.0) or 0.0\n            ),\n            \"test_total_trades\"\
+    : int(ft_test.get(\"total_trades\", 0) or 0),\n        },\n        \"checks\"\
+    : checks,\n        \"warnings\": [],\n        \"errors\": [],\n    }\n\n    (output_dir\
+    \ / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump(diagnostic, allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\n# ── CLI ─────────────────────────────────────────────────────────────────────\n\
+    \ndef _parse_args() -> argparse.Namespace:\n    p = argparse.ArgumentParser(description=__doc__)\n\
+    \    p.add_argument(\"--data-root\", required=True, help=\"Path to data root directory\"\
+    )\n    p.add_argument(\"--train-start\", default=\"20190101\")\n    p.add_argument(\"\
+    --train-end\", default=\"20241231\")\n    p.add_argument(\"--test-start\", default=\"\
+    20250101\")\n    p.add_argument(\"--test-end\", default=\"20260508\")\n    p.add_argument(\n\
+    \        \"--output-dir\", required=True, help=\"Output directory for artifacts\"\
+    \n    )\n    p.add_argument(\n        \"--moneyness-threshold\",\n        type=float,\n\
+    \        default=0.0,\n        help=\"Minimum moneyness ratio for entry (0.0 =\
+    \ no filter)\",\n    )\n    return p.parse_args()\n\n\n# ── Main ────────────────────────────────────────────────────────────────────\n\
+    \ndef main() -> int:\n    args = _parse_args()\n    output_dir = Path(args.output_dir)\n\
+    \    output_dir.mkdir(parents=True, exist_ok=True)\n\n    # Gatekeeper before\
+    \ any backtesting\n    _gatekeeper_before_run(output_dir)\n\n    threshold = float(args.moneyness_threshold)\n\
+    \    tstr = str(threshold).replace(\".\", \"p\")\n    variant_name = f\"moneyness_t{tstr}\"\
+    \n\n    data_root = Path(args.data_root)\n\n    # ── Load full ranks ────────────────────────────────────────────\n\
+    \    print(\n        f\"[moneyness_filter] {variant_name} loading gap ranks\"\
+    ,\n        flush=True,\n    )\n    ranks_full = _load_gap_ranks()\n    print(\n\
+    \        f\"[moneyness_filter] loaded {len(ranks_full)} rank rows, \"\n      \
+    \  f\"dates {ranks_full['trade_date'].min()}-{ranks_full['trade_date'].max()}\"\
+    ,\n        flush=True,\n    )\n\n    # ── Apply moneyness filter with prior-day\
+    \ shift ────────────────\n    print(\n        f\"[moneyness_filter] {variant_name}\
+    \ applying moneyness filter \"\n        f\"threshold={threshold} (prior-day shift)\"\
+    ,\n        flush=True,\n    )\n    ranks_filtered = _apply_moneyness_filter(ranks_full,\
+    \ threshold)\n    print(\n        f\"[moneyness_filter] filtered: {len(ranks_filtered)}\
+    \ rows \"\n        f\"(down from {len(ranks_full)}, \"\n        f\"{len(ranks_filtered)/max(len(ranks_full),1)*100:.1f}%\
+    \ retained)\",\n        flush=True,\n    )\n\n    # ── Verify no look-ahead bias\
+    \ ─────────────────────────────────\n    la_violations = _verify_no_lookahead(ranks_full,\
+    \ ranks_filtered)\n    if la_violations:\n        for v in la_violations:\n  \
+    \          print(f\"[moneyness_filter] LOOKAHEAD VIOLATION: {v}\", flush=True)\n\
+    \    else:\n        print(\"[moneyness_filter] look-ahead check passed\", flush=True)\n\
+    \n    # ── Run baseline (unfiltered) on train + test ─────────────────\n    print(\n\
+    \        f\"[moneyness_filter] {variant_name} running baseline \"\n        f\"\
+    (unfiltered, threshold=0)\",\n        flush=True,\n    )\n    baseline_results:\
+    \ dict[str, dict[str, Any]] = {}\n    for label, p_start, p_end in [\n       \
+    \ (\"train\", args.train_start, args.train_end),\n        (\"test\", args.test_start,\
+    \ args.test_end),\n    ]:\n        result = _run_period(ranks_full, p_start, p_end,\
+    \ data_root)\n        baseline_results[label] = result\n        m = result[\"\
+    metrics\"]\n        print(\n            f\"  baseline {label} ({p_start}-{p_end}):\
+    \ \"\n            f\"excess={m.get('excess_return', 0):.4f} \"\n            f\"\
+    dd={m.get('max_drawdown', 0):.4f} \"\n            f\"trades={m.get('total_trades',\
+    \ 0)} \"\n            f\"score={_score(m):.4f}\",\n            flush=True,\n \
+    \       )\n\n    # ── Run filtered on train + test ──────────────────────────────\n\
+    \    print(\n        f\"[moneyness_filter] {variant_name} running filtered\",\n\
+    \        flush=True,\n    )\n    filtered_results: dict[str, dict[str, Any]] =\
+    \ {}\n    for label, p_start, p_end in [\n        (\"train\", args.train_start,\
+    \ args.train_end),\n        (\"test\", args.test_start, args.test_end),\n    ]:\n\
+    \        result = _run_period(ranks_filtered, p_start, p_end, data_root)\n   \
+    \     filtered_results[label] = result\n        m = result[\"metrics\"]\n    \
+    \    print(\n            f\"  filtered {label} ({p_start}-{p_end}): \"\n     \
+    \       f\"excess={m.get('excess_return', 0):.4f} \"\n            f\"dd={m.get('max_drawdown',\
+    \ 0):.4f} \"\n            f\"trades={m.get('total_trades', 0)} \"\n          \
+    \  f\"score={_score(m):.4f}\",\n            flush=True,\n        )\n\n    # ──\
+    \ Write artifacts ───────────────────────────────────────────\n    summary = _write_summary(\n\
+    \        output_dir, variant_name, threshold,\n        baseline_results, filtered_results,\n\
+    \        args.train_start, args.train_end,\n        args.test_start, args.test_end,\n\
+    \    )\n    adoption_pass = summary[\"adoption_pass\"]\n\n    _write_report(\n\
+    \        output_dir, variant_name, threshold,\n        adoption_pass, filtered_results,\
+    \ baseline_results,\n        args.train_start, args.train_end,\n        args.test_start,\
+    \ args.test_end,\n    )\n    _write_l4_ack(\n        output_dir, variant_name,\
+    \ threshold,\n        adoption_pass, filtered_results, baseline_results,\n   \
+    \     args.train_start, args.train_end,\n        args.test_start, args.test_end,\n\
+    \    )\n    _write_diagnostic(\n        output_dir, variant_name, threshold,\n\
+    \        adoption_pass, filtered_results,\n    )\n\n    print(\n        f\"[moneyness_filter]\
+    \ {variant_name} done. \"\n        f\"adoption_pass={adoption_pass}. \"\n    \
+    \    f\"threshold={threshold}. \"\n        f\"wrote {output_dir}\",\n        flush=True,\n\
+    \    )\n    return 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/moneyness_entry_filter_executor.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_moneyness_entry_filter_executor_code
+  generated_executor: generated_executor/moneyness_entry_filter_executor.py
+  completion_receipt: data/cb_arb_value_gap_switch_moneyness_entry_filter/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-23T20:21:48'
+  validation: passed

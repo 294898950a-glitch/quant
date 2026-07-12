@@ -73,9 +73,13 @@ def declared_requirements_for_spec(spec_path: Path) -> dict[str, Any]:
         if not isinstance(item, dict) or not item.get("path"):
             raise ValueError(f"executor {script_path} has invalid required_files item: {item!r}")
         normalized.append(dict(item))
-    return {
+    result: dict[str, Any] = {
         "schema_version": 1,
         "executor_script": script_path,
         "requirements_source": f"{script_path}::declare_data_requirements",
         "required_files": normalized,
     }
+    for key in ("generated_columns", "derived_columns"):
+        if requirements.get(key) is not None:
+            result[key] = requirements[key]
+    return result

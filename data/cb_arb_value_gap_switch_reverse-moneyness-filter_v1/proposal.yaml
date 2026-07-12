@@ -1,0 +1,152 @@
+proposal_id: cb_arb_value_gap_switch_reverse-moneyness-filter_v1
+strategy_id: cb_arb_value_gap_switch
+family: moneyness_entry_filter_reverse
+hypothesis: 'The moneyness entry filter (stock_close / conv_price >= threshold) failed
+  5 consecutive forward-direction runs not because the filter logic is invalid, but
+  because it was applied to an anti-informative value_gap_amount DESCENDING ranking.
+  The reverse-rank probe (2026-05-24) proved the sort direction, not the signal values,
+  is the root cause: same universe, same gates, ASCENDING sort produces +30.3% test
+  excess cost-on vs -10.5% forward. Applying moneyness filtering to the ASCENDING-sorted
+  candidate set should preserve real-mispricing trades while screening out deep-OTM
+  noise, delivering a compound improvement over either the bare reverse sort or the
+  forward moneyness filter alone.
+
+  '
+source_insight: value_gap_rank_is_anti_alpha_2026_05_24
+expected_improvement: 'Reverse-sort test excess (+30.3% cost-on) already outperforms
+  forward baseline (-10.5% cost-on) by 41pp. Adding moneyness filtering to the ASCENDING-sorted
+  candidate set should:
+
+  - Maintain or improve the +30.3% test excess by removing deep-OTM positions where
+  value-gap signal is most likely model noise
+
+  - Reduce max drawdown below the reverse probe''s -11.3% test drawdown by avoiding
+  illiquid deep-OTM CBs
+
+  - Increase win rate above the reverse probe''s 58.6% test win rate
+
+  '
+capability_ids:
+- C003
+required_executor: evaluate_cb_arb_moneyness_entry_filter_v2
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_call.parquet:
+  - ts_code
+  - call_date
+  - is_call
+test_design:
+  description: '1. Load daily_value_gap_amounts and filter value_gap_amount > 0 (unchanged
+    gate)
+
+    2. Sort candidates ASCENDING by value_gap_amount (reverse direction, per anti-alpha
+    evidence)
+
+    3. Apply moneyness filter: stock_close / conv_price >= threshold, grid-search
+    threshold from [0.5, 0.7, 0.85, 0.95, 1.0]
+
+    4. Use accepted duration-adaptive exit parameters (min_hold_days=5, initial_threshold_fraction=0.7,
+    decay_period_factor=0.5, effective_max_hold_days=45)
+
+    5. Standard cost model: slippage 0.15%, market impact coeff 0.001, cap 2%
+
+    6. Standard train/test split
+
+    7. Primary comparison: reverse+moneyness vs bare reverse probe cost-on
+
+    8. Secondary comparison: reverse+moneyness vs forward+moneyness to quantify sort-direction
+    contribution
+
+    '
+success_criteria:
+  criteria:
+  - test_excess_return_cost_on > 0.15
+  - test_max_drawdown <= 0.15
+  - test_sharpe > 0.5
+  - win_rate > 0.55
+falsifiers:
+  train: &id001
+  - test_excess_return_cost_on <= 0.10
+  - test_max_drawdown > 0.20
+  - any_threshold_test_excess < bare_reverse_test_excess
+  validate: *id001
+  test: *id001
+risk: 'The moneyness filter may remove too many candidates, reducing trade count and
+  increasing variance. If the reverse-sort signal is concentrated in deep-OTM CBs
+  (precisely what gets filtered), the filter could destroy the alpha rather than refine
+  it. The reverse probe''s test trade count of 377 is already modest; cutting further
+  could produce unreliable results.
+
+  '
+why_not_repeated_failure: 'moneyness_stock_to_conv_threshold family: 5 consecutive
+  failed_mechanical_thresholds rejections. Three-question analysis per repeated_reject_families
+  rule:
+
+  (1) Is the underlying signal invalid? The value_gap_amount ranking is anti-informative
+  under DESCENDING sort, proven by reverse-rank probe. The signal values themselves
+  are not proven invalid — when sorted ASCENDING, same signal produces +30.3% test
+  excess cost-on.
+
+  (2) Is the direction reversed? YES. Reverse-rank probe evidence: forward-sort test
+  excess = -10.5% cost-on, reverse-sort test excess = +30.3% cost-on. 41pp swing from
+  sort direction alone.
+
+  (3) Is only the execution condition wrong? No. Execution conditions (entry/exit
+  gates, hold durations, cost model) were identical between forward and reverse probes.
+  The differentiator is sort direction. Therefore the moneyness filter''s rejection
+  is a consequence of the anti-alpha ranking it was applied to, not an indictment
+  of the filter logic itself.
+
+  This is not a blind re-run of a rejected family. It tests whether the moneyness
+  filter works when applied to the correct (ASCENDING) sort direction.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+- cb_arb_value_gap_switch_reverse-probe_20260524
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+implementation_assumption: The evaluate_cb_arb_moneyness_entry_filter_v2 executor
+  must sort value_gap_amount ASCENDING before applying the moneyness filter. This
+  is a single-line change in the candidate ranking step (descending=False or sort_values
+  ascending). All other logic (value_gap_amount > 0 gate, exit rules, cost model,
+  train/test split) remains unchanged from the accepted reverse-probe-coston run.
+  If the executor does not accept a sort-direction parameter, a minor executor patch
+  or wrapper script will be needed.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 40ca4ae6b6984f47
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 40ca4ae6b6984f47
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_reverse-moneyness-filter_v1/proposal.yaml

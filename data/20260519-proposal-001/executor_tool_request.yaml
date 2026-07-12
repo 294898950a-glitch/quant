@@ -127,7 +127,7 @@ validation_plan:
   are written and valid.
 ai_provider: deepseek
 design_response_hash: ca06375b255bf2c6
-code_response_hash: c7a62812711160f2
+code_response_hash: '1039689794934825'
 compile_reason: no strict executor match
 tool_design:
   tool_request_id: exit_rule_duration_adaptive_executor_v1
@@ -269,7 +269,7 @@ tool_code_response:
   generated_executor: generated_executor/evaluate_cb_arb_exit_rule_duration_adaptive.py
   completion_receipt: data/20260519-proposal-001/generated_executor/executor_completion.yaml
   finalized_by: hermes_complete
-  finalized_at: '2026-05-21T15:04:16'
+  finalized_at: '2026-06-27T06:51:59'
   validation: passed
 files:
 - path: generated_executor/evaluate_cb_arb_exit_rule_duration_adaptive.py
@@ -278,80 +278,113 @@ files:
     \ value-gap switch strategy.\n\nExit rule: after min_hold_days, if current_gap\
     \ / entry_gap exceeds a threshold\nthat linearly decays from initial_threshold_fraction\
     \ to 0 over max_hold_days,\nclose the position. Grid searches over min_hold_days,\
-    \ initial_threshold_fraction,\nand decay_period_factor (applied to max_hold_days).\n\
-    \"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport json\n\
-    import sys\nfrom pathlib import Path\nfrom typing import Any\n\nimport pandas\
-    \ as pd\nimport yaml\n\ndef _find_repo_root(start: Path) -> Path:\n    for candidate\
-    \ in (start, *start.parents):\n        if (candidate / \"scripts\" / \"gatekeeper.py\"\
-    ).exists():\n            return candidate\n    return start.parent\n\n\n_REPO_ROOT\
-    \ = _find_repo_root(Path(__file__).resolve())\nif str(_REPO_ROOT) not in sys.path:\n\
-    \    sys.path.insert(0, str(_REPO_ROOT))\n\nfrom scripts.gatekeeper import GateKeeper\
-    \  # noqa: E402\n\n\n_PREVIOUS_RUN_DATA = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
-    \n    \"daily_value_gap_amounts.parquet\"\n)\n_SWEEP_MIN_HOLD_DAYS = (5, 10, 15)\n\
-    _SWEEP_INITIAL_THRESHOLD = (0.5, 0.7, 1.0)\n_SWEEP_DECAY_FACTOR = (0.5, 1.0, 1.5)\n\
-    \n\ndef declare_data_requirements(command: list[Any], spec: dict[str, Any] | None\
+    \ initial_threshold_fraction,\nand decay_period_factor (applied to base max_hold_days=90).\n\
+    \nTrain on 2019-2024, early-stop 2020 out-sample, sealed test on 2025-2026.\n\"\
+    \"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport\
+    \ sys\nfrom datetime import datetime as _dt\nfrom pathlib import Path\nfrom typing\
+    \ import Any\n\n# ---------------------------------------------------------------------------\n\
+    # Repo root & sys.path — must come before any third-party import AND before\n\
+    # `from scripts.X import Y`, because production runs execute from a foreign cwd\n\
+    # where REPO_ROOT is not automatically on sys.path.  The compliance\n# import-reachability\
+    \ probe runs with -E in /tmp, so all non-stdlib imports\n# that follow this block\
+    \ must resolve from the venv site-packages\n# (numpy/pandas/yaml) or from REPO_ROOT\
+    \ (scripts.*).\n# ---------------------------------------------------------------------------\n\
+    \ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n# ---------------------------------------------------------------------------\n\
+    # Lazy third-party imports — not available at module level in isolated probe.\n\
+    # ---------------------------------------------------------------------------\n\
+    \ndef _get_np():\n    \"\"\"Lazy import numpy.\"\"\"\n    import numpy as _np\n\
+    \    return _np\n\n\ndef _get_pd():\n    \"\"\"Lazy import pandas.\"\"\"\n   \
+    \ import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n    \"\"\"Lazy import\
+    \ yaml.\"\"\"\n    import yaml as _yaml\n    return _yaml\n\n\n# YAML numpy representer\
+    \ registration runs once at first yaml write.\n_YAML_REPRS_REGISTERED = False\n\
+    \n\ndef _ensure_yaml_np_reprs():\n    global _YAML_REPRS_REGISTERED\n    if _YAML_REPRS_REGISTERED:\n\
+    \        return\n    yaml = _get_yaml()\n    np = _get_np()\n\n    def _yaml_repr_np_float(dumper,\
+    \ data):\n        return dumper.represent_float(float(data))\n\n    def _yaml_repr_np_int(dumper,\
+    \ data):\n        return dumper.represent_int(int(data))\n\n    yaml.SafeDumper.add_representer(np.floating,\
+    \ _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# ---------------------------------------------------------------------------\n\
+    # Constants\n# ---------------------------------------------------------------------------\n\
+    \n_PREVIOUS_RUN_DATA = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n_BASE_MAX_HOLD_DAYS = 90  # decay_period_factor\
+    \ multiplies this\n\n_SWEEP_MIN_HOLD_DAYS = (5, 10, 15)\n_SWEEP_INITIAL_THRESHOLD\
+    \ = (0.5, 0.7, 1.0)\n_SWEEP_DECAY_FACTOR = (0.5, 1.0, 1.5)\n\n\n# ---------------------------------------------------------------------------\n\
+    # Data requirements\n# ---------------------------------------------------------------------------\n\
+    \ndef declare_data_requirements(command: list[Any], spec: dict[str, Any] | None\
     \ = None) -> dict[str, Any]:\n    return {\n        \"required_files\": [\n  \
     \          {\n                \"path\": _PREVIOUS_RUN_DATA,\n                \"\
     description\": \"Daily value-gap amounts from regime-option-entry-gate run.\"\
-    ,\n            }\n        ]\n    }\n\n\ndef _gatekeeper_before_run(output_dir:\
-    \ Path) -> None:\n    spec_path = output_dir / \"spec.yaml\"\n    if spec_path.exists():\n\
-    \        gatekeeper = GateKeeper(quiet=True)\n        gatekeeper.before_run_grid(spec_path)\n\
-    \n\ndef _load_data(data_root: str) -> pd.DataFrame:\n    relative_path = Path(_PREVIOUS_RUN_DATA)\n\
-    \    candidates = [\n        Path(data_root) / relative_path,\n        _REPO_ROOT\
-    \ / relative_path,\n        Path.cwd() / relative_path,\n    ]\n    path = next((c\
-    \ for c in candidates if c.exists()), None)\n    if path is None:\n        searched\
-    \ = \", \".join(str(c) for c in candidates)\n        raise FileNotFoundError(f\"\
-    Required data missing; searched: {searched}\")\n    df = pd.read_parquet(path)\n\
-    \    df[\"trade_date\"] = pd.to_datetime(df[\"trade_date\"])\n    df = df.sort_values([\"\
-    ts_code\", \"trade_date\"]).reset_index(drop=True)\n    return df\n\n\ndef _compute_threshold(hold_days:\
-    \ int, min_hold: int, initial_frac: float, max_hold: int) -> float:\n    \"\"\"\
-    Linearly decaying threshold: initial_frac * (1 - (hold_days - min_hold) / (max_hold\
-    \ - min_hold)), clamped to [0, initial_frac].\"\"\"\n    if hold_days < min_hold:\n\
-    \        return initial_frac  # no decay before min_hold\n    if max_hold <= min_hold:\n\
-    \        return 0.0\n    decay_range = max_hold - min_hold\n    elapsed = min(hold_days\
-    \ - min_hold, decay_range)\n    return initial_frac * max(0.0, 1.0 - elapsed /\
-    \ decay_range)\n\n\ndef _simulate_time_decay(\n    df: pd.DataFrame,\n    min_hold_days:\
-    \ int,\n    initial_threshold_fraction: float,\n    max_hold_days: int,\n) ->\
-    \ dict[str, Any]:\n    \"\"\"Simulate the time-decaying gap exit strategy.\n\n\
-    \    Entry: gap > 0 and not in position.\n    Exit (gap closed): current_gap <=\
-    \ 0.\n    Exit (time decay): after min_hold_days, if current_gap / entry_gap >\
-    \ threshold, close.\n    PnL: (exit_gap - entry_gap) * 100.\n    \"\"\"\n    df\
-    \ = df.copy()\n    df[\"position\"] = 0\n    df[\"entry_gap\"] = 0.0\n\n    total_pnl\
-    \ = 0.0\n    trades: list[dict[str, Any]] = []\n\n    for stock, grp in df.groupby(\"\
-    ts_code\"):\n        grp = grp.sort_values(\"trade_date\")\n        idx_list =\
-    \ grp.index.tolist()\n        in_position = False\n        entry_gap_val = 0.0\n\
-    \        entry_date = None\n\n        for i, idx in enumerate(idx_list):\n   \
-    \         row = grp.loc[idx]\n            gap = float(row[\"value_gap_amount\"\
+    ,\n            },\n        ]\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # GateKeeper helpers\n# ---------------------------------------------------------------------------\n\
+    \ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\ndef _gatekeeper_after_run(output_dir:\
+    \ Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # Data loading\n# ---------------------------------------------------------------------------\n\
+    \ndef _resolve_data_path(data_root: str | Path, relative: str) -> Path:\n    data_root\
+    \ = Path(data_root)\n    rel = Path(relative)\n    candidates = [\n        data_root\
+    \ / rel,\n        _REPO_ROOT / rel,\n        Path.cwd() / rel,\n    ]\n    if\
+    \ rel.parts[0] == \"data\":\n        inner = Path(*rel.parts[1:])\n        candidates.append(data_root\
+    \ / inner)\n        candidates.append(_REPO_ROOT / rel)\n    for c in candidates:\n\
+    \        if c.exists():\n            return c\n    searched = \", \".join(str(c)\
+    \ for c in candidates)\n    raise FileNotFoundError(f\"Cannot find {relative}\
+    \ under data_root={data_root}; searched: {searched}\")\n\n\ndef _load_gap_data(data_root:\
+    \ str):\n    pd = _get_pd()\n    path = _resolve_data_path(data_root, _PREVIOUS_RUN_DATA)\n\
+    \    df = pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"\
+    trade_date\"])\n    df = df.sort_values([\"ts_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \    return df\n\n\n# ---------------------------------------------------------------------------\n\
+    # Core simulation logic\n# ---------------------------------------------------------------------------\n\
+    \ndef _compute_threshold(\n    hold_days: int,\n    min_hold: int,\n    initial_frac:\
+    \ float,\n    max_hold: int,\n) -> float:\n    \"\"\"Linearly decaying threshold.\n\
+    \n    Before min_hold: no decay (returns initial_frac).\n    After min_hold: decays\
+    \ from initial_frac at min_hold to 0 at max_hold,\n    clamped to [0, initial_frac].\n\
+    \    \"\"\"\n    if hold_days < min_hold:\n        return initial_frac\n    if\
+    \ max_hold <= min_hold:\n        return 0.0\n    decay_range = max_hold - min_hold\n\
+    \    elapsed = min(hold_days - min_hold, decay_range)\n    return initial_frac\
+    \ * max(0.0, 1.0 - elapsed / decay_range)\n\n\ndef _simulate_time_decay(\n   \
+    \ df,\n    min_hold_days: int,\n    initial_threshold_fraction: float,\n    max_hold_days:\
+    \ int,\n) -> dict[str, Any]:\n    \"\"\"Simulate the time-decaying gap exit strategy.\n\
+    \n    Entry: gap > 0 and not in position.\n    Exit (gap closed): current_gap\
+    \ <= 0.\n    Exit (time decay): after min_hold_days, if current_gap / entry_gap\
+    \ > threshold, close.\n    PnL: (exit_gap - entry_gap) * 100.\n    \"\"\"\n  \
+    \  total_pnl = 0.0\n    trades: list[dict[str, Any]] = []\n\n    for stock, grp\
+    \ in df.groupby(\"ts_code\"):\n        grp = grp.sort_values(\"trade_date\")\n\
+    \        idx_list = grp.index.tolist()\n        in_position = False\n        entry_gap_val\
+    \ = 0.0\n        entry_date = None\n\n        for i, idx in enumerate(idx_list):\n\
+    \            row = grp.loc[idx]\n            gap = float(row[\"value_gap_amount\"\
     ])\n\n            if not in_position and gap > 0:\n                in_position\
     \ = True\n                entry_gap_val = gap\n                entry_date = row[\"\
-    trade_date\"]\n                df.at[idx, \"position\"] = 1\n                df.at[idx,\
-    \ \"entry_gap\"] = entry_gap_val\n                continue\n\n            if in_position:\n\
-    \                df.at[idx, \"position\"] = 1\n                df.at[idx, \"entry_gap\"\
-    ] = entry_gap_val\n\n                should_exit = False\n                exit_reason\
-    \ = \"\"\n\n                if gap <= 0:\n                    should_exit = True\n\
-    \                    exit_reason = \"gap_closed\"\n                else:\n   \
-    \                 hold_days = (row[\"trade_date\"] - entry_date).days if entry_date\
-    \ else 0\n                    if hold_days >= min_hold_days:\n               \
-    \         threshold = _compute_threshold(\n                            hold_days,\
-    \ min_hold_days, initial_threshold_fraction, max_hold_days\n                 \
-    \       )\n                        ratio = gap / entry_gap_val if entry_gap_val\
-    \ > 0 else 0.0\n                        if ratio > threshold:\n              \
-    \              should_exit = True\n                            exit_reason = \"\
-    decay_exit\"\n\n                if should_exit:\n                    pnl = (gap\
-    \ - entry_gap_val) * 100.0\n                    total_pnl += pnl\n           \
-    \         hold_days = (row[\"trade_date\"] - entry_date).days if entry_date else\
-    \ 0\n                    trades.append({\n                        \"stock\": stock,\n\
-    \                        \"entry_date\": str(entry_date.date()) if entry_date\
-    \ else \"\",\n                        \"exit_date\": str(row[\"trade_date\"].date()),\n\
-    \                        \"exit_reason\": exit_reason,\n                     \
-    \   \"entry_gap\": round(entry_gap_val, 4),\n                        \"exit_gap\"\
-    : round(gap, 4),\n                        \"pnl\": round(pnl, 2),\n          \
-    \              \"hold_days\": hold_days,\n                        \"min_hold_days\"\
-    : min_hold_days,\n                        \"initial_threshold_fraction\": initial_threshold_fraction,\n\
-    \                        \"max_hold_days\": max_hold_days,\n                 \
-    \   })\n                    in_position = False\n                    entry_gap_val\
-    \ = 0.0\n                    entry_date = None\n\n        # Force-close any still-open\
-    \ position at end of data\n        if in_position:\n            last_row = grp.iloc[-1]\n\
+    trade_date\"]\n                continue\n\n            if not in_position:\n \
+    \               continue\n\n            should_exit = False\n            exit_reason\
+    \ = \"\"\n\n            if gap <= 0:\n                should_exit = True\n   \
+    \             exit_reason = \"gap_closed\"\n            else:\n              \
+    \  hold_days = (row[\"trade_date\"] - entry_date).days if entry_date else 0\n\
+    \                if hold_days >= min_hold_days:\n                    threshold\
+    \ = _compute_threshold(\n                        hold_days, min_hold_days, initial_threshold_fraction,\
+    \ max_hold_days,\n                    )\n                    ratio = gap / entry_gap_val\
+    \ if entry_gap_val > 0 else 0.0\n                    if ratio > threshold:\n \
+    \                       should_exit = True\n                        exit_reason\
+    \ = \"decay_exit\"\n\n            if should_exit:\n                pnl = (gap\
+    \ - entry_gap_val) * 100.0\n                total_pnl += pnl\n               \
+    \ hold_days = (row[\"trade_date\"] - entry_date).days if entry_date else 0\n \
+    \               trades.append({\n                    \"stock\": stock,\n     \
+    \               \"entry_date\": str(entry_date.date()) if entry_date else \"\"\
+    ,\n                    \"exit_date\": str(row[\"trade_date\"].date()),\n     \
+    \               \"exit_reason\": exit_reason,\n                    \"entry_gap\"\
+    : round(entry_gap_val, 4),\n                    \"exit_gap\": round(gap, 4),\n\
+    \                    \"pnl\": round(pnl, 2),\n                    \"hold_days\"\
+    : hold_days,\n                    \"min_hold_days\": min_hold_days,\n        \
+    \            \"initial_threshold_fraction\": initial_threshold_fraction,\n   \
+    \                 \"max_hold_days\": max_hold_days,\n                })\n    \
+    \            in_position = False\n                entry_gap_val = 0.0\n      \
+    \          entry_date = None\n\n        # Force-close any still-open position\
+    \ at end of data\n        if in_position:\n            last_row = grp.iloc[-1]\n\
     \            final_gap = float(last_row[\"value_gap_amount\"])\n            pnl\
     \ = (final_gap - entry_gap_val) * 100.0\n            total_pnl += pnl\n      \
     \      hold_days = (last_row[\"trade_date\"] - entry_date).days if entry_date\
@@ -363,42 +396,16 @@ files:
     pnl\": round(pnl, 2),\n                \"hold_days\": hold_days,\n           \
     \     \"min_hold_days\": min_hold_days,\n                \"initial_threshold_fraction\"\
     : initial_threshold_fraction,\n                \"max_hold_days\": max_hold_days,\n\
-    \            })\n\n    # Compute aggregate metrics from trades\n    if trades:\n\
-    \        trades_df = pd.DataFrame(trades)\n        winning = trades_df[trades_df[\"\
-    pnl\"] > 0]\n        losing = trades_df[trades_df[\"pnl\"] <= 0]\n        win_rate\
-    \ = round(len(winning) / len(trades_df), 4)\n        avg_win = round(float(winning[\"\
-    pnl\"].mean()), 2) if len(winning) > 0 else 0.0\n        avg_loss = round(float(losing[\"\
-    pnl\"].mean()), 2) if len(losing) > 0 else 0.0\n        trade_count = len(trades_df)\n\
-    \        avg_hold = round(float(trades_df[\"hold_days\"].mean()), 1)\n       \
-    \ # Max drawdown from equity curve sorted by exit date\n        trades_sorted\
-    \ = trades_df.sort_values(\"exit_date\")\n        trades_sorted[\"cum_pnl\"] =\
-    \ trades_sorted[\"pnl\"].cumsum()\n        equity_series = trades_sorted[\"cum_pnl\"\
-    ]\n        peak = equity_series.iloc[0]\n        max_drawdown = 0.0\n        for\
-    \ val in equity_series:\n            if val > peak:\n                peak = val\n\
-    \            dd = val - peak\n            if dd < max_drawdown:\n            \
-    \    max_drawdown = dd\n        decay_exits = len(trades_df[trades_df[\"exit_reason\"\
-    ] == \"decay_exit\"])\n        gap_closed_exits = len(trades_df[trades_df[\"exit_reason\"\
-    ] == \"gap_closed\"])\n        force_closes = len(trades_df[trades_df[\"exit_reason\"\
-    ] == \"force_close\"])\n    else:\n        win_rate = 0.0\n        avg_win = 0.0\n\
-    \        avg_loss = 0.0\n        trade_count = 0\n        avg_hold = 0.0\n   \
-    \     max_drawdown = 0.0\n        decay_exits = 0\n        gap_closed_exits =\
-    \ 0\n        force_closes = 0\n\n    return {\n        \"total_pnl\": round(total_pnl,\
-    \ 2),\n        \"trade_count\": trade_count,\n        \"win_rate\": win_rate,\n\
-    \        \"avg_win\": avg_win,\n        \"avg_loss\": avg_loss,\n        \"avg_hold_days\"\
-    : avg_hold,\n        \"max_drawdown\": max_drawdown,\n        \"decay_exits\"\
-    : decay_exits,\n        \"gap_closed_exits\": gap_closed_exits,\n        \"force_closes\"\
-    : force_closes,\n        \"trades\": trades,\n        \"min_hold_days\": min_hold_days,\n\
-    \        \"initial_threshold_fraction\": initial_threshold_fraction,\n       \
-    \ \"max_hold_days\": max_hold_days,\n    }\n\n\ndef _simulate_baseline(df: pd.DataFrame)\
+    \            })\n\n    return _aggregate_metrics(trades, total_pnl)\n\n\ndef _simulate_baseline(df)\
     \ -> dict[str, Any]:\n    \"\"\"Simulate baseline: enter when gap > 0, exit when\
-    \ gap <= 0.\"\"\"\n    df = df.copy()\n    total_pnl = 0.0\n    trades: list[dict[str,\
-    \ Any]] = []\n\n    for stock, grp in df.groupby(\"ts_code\"):\n        grp =\
-    \ grp.sort_values(\"trade_date\")\n        in_position = False\n        entry_gap_val\
-    \ = 0.0\n        entry_date = None\n\n        for _, row in grp.iterrows():\n\
-    \            gap = float(row[\"value_gap_amount\"])\n\n            if not in_position\
-    \ and gap > 0:\n                in_position = True\n                entry_gap_val\
-    \ = gap\n                entry_date = row[\"trade_date\"]\n                continue\n\
-    \n            if in_position and gap <= 0:\n                pnl = (gap - entry_gap_val)\
+    \ gap <= 0.\"\"\"\n    total_pnl = 0.0\n    trades: list[dict[str, Any]] = []\n\
+    \n    for stock, grp in df.groupby(\"ts_code\"):\n        grp = grp.sort_values(\"\
+    trade_date\")\n        in_position = False\n        entry_gap_val = 0.0\n    \
+    \    entry_date = None\n\n        for _, row in grp.iterrows():\n            gap\
+    \ = float(row[\"value_gap_amount\"])\n\n            if not in_position and gap\
+    \ > 0:\n                in_position = True\n                entry_gap_val = gap\n\
+    \                entry_date = row[\"trade_date\"]\n                continue\n\n\
+    \            if in_position and gap <= 0:\n                pnl = (gap - entry_gap_val)\
     \ * 100.0\n                total_pnl += pnl\n                hold_days = (row[\"\
     trade_date\"] - entry_date).days if entry_date else 0\n                trades.append({\n\
     \                    \"stock\": stock,\n                    \"entry_date\": str(entry_date.date())\
@@ -417,184 +424,242 @@ files:
     ].date()),\n                \"exit_reason\": \"force_close\",\n              \
     \  \"entry_gap\": round(entry_gap_val, 4),\n                \"exit_gap\": round(final_gap,\
     \ 4),\n                \"pnl\": round(pnl, 2),\n                \"hold_days\"\
-    : hold_days,\n            })\n\n    if trades:\n        trades_df = pd.DataFrame(trades)\n\
-    \        winning = trades_df[trades_df[\"pnl\"] > 0]\n        losing = trades_df[trades_df[\"\
-    pnl\"] <= 0]\n        win_rate = round(len(winning) / len(trades_df), 4)\n   \
-    \     avg_win = round(float(winning[\"pnl\"].mean()), 2) if len(winning) > 0 else\
-    \ 0.0\n        avg_loss = round(float(losing[\"pnl\"].mean()), 2) if len(losing)\
-    \ > 0 else 0.0\n        trade_count = len(trades_df)\n        avg_hold = round(float(trades_df[\"\
-    hold_days\"].mean()), 1)\n        trades_sorted = trades_df.sort_values(\"exit_date\"\
-    )\n        trades_sorted[\"cum_pnl\"] = trades_sorted[\"pnl\"].cumsum()\n    \
-    \    equity_series = trades_sorted[\"cum_pnl\"]\n        peak = equity_series.iloc[0]\n\
-    \        max_drawdown = 0.0\n        for val in equity_series:\n            if\
-    \ val > peak:\n                peak = val\n            dd = val - peak\n     \
-    \       if dd < max_drawdown:\n                max_drawdown = dd\n    else:\n\
-    \        win_rate = 0.0\n        avg_win = 0.0\n        avg_loss = 0.0\n     \
-    \   trade_count = 0\n        avg_hold = 0.0\n        max_drawdown = 0.0\n\n  \
-    \  return {\n        \"total_pnl\": round(total_pnl, 2),\n        \"trade_count\"\
-    : trade_count,\n        \"win_rate\": win_rate,\n        \"avg_win\": avg_win,\n\
-    \        \"avg_loss\": avg_loss,\n        \"avg_hold_days\": avg_hold,\n     \
-    \   \"max_drawdown\": max_drawdown,\n        \"trades\": trades,\n    }\n\n\n\
-    def _compute_excess_return(strategy_pnl: float, baseline_pnl: float) -> float:\n\
+    : hold_days,\n            })\n\n    return _aggregate_metrics(trades, total_pnl)\n\
+    \n\ndef _aggregate_metrics(\n    trades: list[dict[str, Any]],\n    total_pnl:\
+    \ float,\n) -> dict[str, Any]:\n    \"\"\"Compute performance metrics from trade\
+    \ list.\"\"\"\n    pd = _get_pd()\n    if not trades:\n        return {\n    \
+    \        \"total_pnl\": 0.0,\n            \"trade_count\": 0,\n            \"\
+    win_rate\": 0.0,\n            \"avg_win\": 0.0,\n            \"avg_loss\": 0.0,\n\
+    \            \"avg_hold_days\": 0.0,\n            \"max_drawdown\": 0.0,\n   \
+    \         \"decay_exits\": 0,\n            \"gap_closed_exits\": 0,\n        \
+    \    \"force_closes\": 0,\n            \"trades\": [],\n        }\n\n    tdf =\
+    \ pd.DataFrame(trades)\n    winning = tdf[tdf[\"pnl\"] > 0]\n    losing = tdf[tdf[\"\
+    pnl\"] <= 0]\n\n    win_rate = round(len(winning) / len(tdf), 4) if len(tdf) >\
+    \ 0 else 0.0\n    avg_win = round(float(winning[\"pnl\"].mean()), 2) if len(winning)\
+    \ > 0 else 0.0\n    avg_loss = round(float(losing[\"pnl\"].mean()), 2) if len(losing)\
+    \ > 0 else 0.0\n    trade_count = len(tdf)\n    avg_hold = round(float(tdf[\"\
+    hold_days\"].mean()), 1)\n\n    tdf_sorted = tdf.sort_values(\"exit_date\")\n\
+    \    tdf_sorted[\"cum_pnl\"] = tdf_sorted[\"pnl\"].cumsum()\n    equity = tdf_sorted[\"\
+    cum_pnl\"].values\n    peak = equity[0] if len(equity) > 0 else 0.0\n    max_dd\
+    \ = 0.0\n    for val in equity:\n        if val > peak:\n            peak = float(val)\n\
+    \        dd = float(val) - peak\n        if dd < max_dd:\n            max_dd =\
+    \ dd\n\n    decay_exits = int((tdf[\"exit_reason\"] == \"decay_exit\").sum())\
+    \ if \"exit_reason\" in tdf.columns else 0\n    gap_closed_exits = int((tdf[\"\
+    exit_reason\"] == \"gap_closed\").sum()) if \"exit_reason\" in tdf.columns else\
+    \ 0\n    force_closes = int((tdf[\"exit_reason\"] == \"force_close\").sum()) if\
+    \ \"exit_reason\" in tdf.columns else 0\n\n    return {\n        \"total_pnl\"\
+    : round(total_pnl, 2),\n        \"trade_count\": trade_count,\n        \"win_rate\"\
+    : win_rate,\n        \"avg_win\": avg_win,\n        \"avg_loss\": avg_loss,\n\
+    \        \"avg_hold_days\": avg_hold,\n        \"max_drawdown\": round(max_dd,\
+    \ 4),\n        \"decay_exits\": decay_exits,\n        \"gap_closed_exits\": gap_closed_exits,\n\
+    \        \"force_closes\": force_closes,\n        \"trades\": trades,\n    }\n\
+    \n\ndef _compute_excess_return(strategy_pnl: float, baseline_pnl: float) -> float:\n\
     \    return round(strategy_pnl - baseline_pnl, 2)\n\n\ndef _plain(value: Any)\
-    \ -> Any:\n    if isinstance(value, dict):\n        return {str(key): _plain(item)\
-    \ for key, item in value.items()}\n    if isinstance(value, (list, tuple)):\n\
-    \        return [_plain(item) for item in value]\n    if isinstance(value, (str,\
-    \ int, float, bool)) or value is None:\n        return value\n    if hasattr(value,\
+    \ -> Any:\n    np = _get_np()\n    if isinstance(value, dict):\n        return\
+    \ {str(key): _plain(item) for key, item in value.items()}\n    if isinstance(value,\
+    \ (list, tuple)):\n        return [_plain(item) for item in value]\n    if isinstance(value,\
+    \ np.floating):\n        return float(value)\n    if isinstance(value, np.integer):\n\
+    \        return int(value)\n    if hasattr(value, \"dtype\") and hasattr(value,\
     \ \"item\"):\n        try:\n            return _plain(value.item())\n        except\
-    \ (TypeError, ValueError):\n            pass\n    return str(value)\n\n\ndef main()\
-    \ -> int:\n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\"\
-    --data-root\", required=True, help=\"Path to data root directory\")\n    parser.add_argument(\"\
+    \ (TypeError, ValueError):\n            pass\n    if isinstance(value, (str, int,\
+    \ float, bool)) or value is None:\n        return value\n    return str(value)\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # Artifact writing\n# ---------------------------------------------------------------------------\n\
+    \ndef _write_artifacts(\n    output_dir: Path,\n    best_train: dict[str, Any],\n\
+    \    best_test: dict[str, Any],\n    best_2020: dict[str, Any],\n    baseline_train:\
+    \ dict[str, Any],\n    baseline_test: dict[str, Any],\n    baseline_2020: dict[str,\
+    \ Any],\n    best_params: dict[str, Any],\n    all_candidates: list[dict[str,\
+    \ Any]],\n    best_candidate: dict[str, Any] | None,\n    best_test_trades: list[dict[str,\
+    \ Any]] | None = None,\n) -> bool:\n    \"\"\"Write summary.json, report.yaml,\
+    \ l4_ack.yaml, diagnostic.yaml.\n\n    Returns adoption_pass.\n    \"\"\"\n  \
+    \  yaml = _get_yaml()\n    _ensure_yaml_np_reprs()\n    output_dir.mkdir(parents=True,\
+    \ exist_ok=True)\n    now = _dt.now()\n    now_str = now.isoformat(timespec=\"\
+    seconds\")\n\n    excess_train = _compute_excess_return(best_train[\"total_pnl\"\
+    ], baseline_train[\"total_pnl\"])\n    excess_test = _compute_excess_return(best_test[\"\
+    total_pnl\"], baseline_test[\"total_pnl\"])\n    excess_2020 = _compute_excess_return(best_2020[\"\
+    total_pnl\"], baseline_2020[\"total_pnl\"])\n\n    train_excess_ok = excess_train\
+    \ >= 0.20\n    test_excess_ok = excess_test >= 0.35\n    y2020_excess_ok = excess_2020\
+    \ >= -0.15\n    dd_not_worse = best_test[\"max_drawdown\"] >= -0.10\n\n    adoption_pass\
+    \ = test_excess_ok and train_excess_ok and y2020_excess_ok and dd_not_worse\n\n\
+    \    if adoption_pass:\n        decision = \"mini-spec-retry\"\n        reason\
+    \ = (\n            f\"Time-decaying gap exit (min_hold={best_params['min_hold_days']},\
+    \ \"\n            f\"threshold={best_params['initial_threshold_fraction']}, \"\
+    \n            f\"max_hold={best_params['max_hold_days']}) passes all thresholds.\"\
+    \n        )\n    else:\n        decision = \"reject\"\n        parts: list[str]\
+    \ = []\n        if not train_excess_ok:\n            parts.append(f\"train excess={excess_train}\
+    \ < 0.20\")\n        if not test_excess_ok:\n            parts.append(f\"test\
+    \ excess={excess_test} < 0.35\")\n        if not y2020_excess_ok:\n          \
+    \  parts.append(f\"2020 excess={excess_2020} < -0.15\")\n        if not dd_not_worse:\n\
+    \            parts.append(f\"test dd={best_test['max_drawdown']} > -0.10\")\n\
+    \        reason = \"; \".join(parts) if parts else \"unknown\"\n\n    # --- summary.json\
+    \ ---\n    summary: dict[str, Any] = {\n        \"adoption_pass\": adoption_pass,\n\
+    \        \"status\": \"COMPLETE\",\n        \"run_id\": output_dir.name,\n   \
+    \     \"params\": best_params,\n        \"decision\": decision,\n        \"baseline\"\
+    : {\n            \"train\": {k: v for k, v in baseline_train.items() if k not\
+    \ in (\"trades\",)},\n            \"test\": {k: v for k, v in baseline_test.items()\
+    \ if k not in (\"trades\",)},\n            \"validate_2020\": {k: v for k, v in\
+    \ baseline_2020.items() if k not in (\"trades\",)},\n        },\n        \"train\"\
+    : dict(best_train, excess_return=excess_train),\n        \"test\": dict(best_test,\
+    \ excess_return=excess_test),\n        \"validate_2020\": dict(best_2020, excess_return=excess_2020),\n\
+    \        \"best_candidate\": best_candidate,\n        \"candidate_count\": len(all_candidates),\n\
+    \        \"artifacts\": [\"summary.json\", \"report.yaml\", \"l4_ack.yaml\", \"\
+    diagnostic.yaml\"],\n    }\n    for key in (\"train\", \"test\", \"validate_2020\"\
+    ):\n        if \"trades\" in summary[key]:\n            del summary[key][\"trades\"\
+    ]\n\n    (output_dir / \"summary.json\").write_text(\n        json.dumps(_plain(summary),\
+    \ ensure_ascii=False, indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\
+    \n    # --- report.yaml ---\n    report: dict[str, Any] = {\n        \"proposal_id\"\
+    : output_dir.name,\n        \"strategy_id\": \"cb_arb_value_gap_switch\",\n  \
+    \      \"executor\": \"exit_rule_duration_adaptive\",\n        \"adoption_pass\"\
+    : adoption_pass,\n        \"params\": best_params,\n        \"best_candidate\"\
+    : best_candidate,\n        \"candidates\": all_candidates,\n        \"baseline\"\
+    : {\n            \"train_pnl\": baseline_train[\"total_pnl\"],\n            \"\
+    test_pnl\": baseline_test[\"total_pnl\"],\n            \"validate_2020_pnl\":\
+    \ baseline_2020[\"total_pnl\"],\n        },\n    }\n    (output_dir / \"report.yaml\"\
+    ).write_text(\n        yaml.safe_dump(_plain(report), allow_unicode=True), encoding=\"\
+    utf-8\",\n    )\n\n    # --- l4_ack.yaml ---\n    l4_ack: dict[str, Any] = {\n\
+    \        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n      \
+    \  \"reviewer\": \"hermes_executor_code\",\n        \"ack_at\": now_str,\n   \
+    \     \"q1_hard_floors\": {\n            \"description\": \"2020 stress period\
+    \ check.\",\n            \"answer\": (\n                f\"2020 excess={excess_2020}\
+    \ (> -0.15: {y2020_excess_ok}), \"\n                f\"dd={best_2020['max_drawdown']}\
+    \ (baseline={baseline_2020['max_drawdown']})\"\n            ),\n            \"\
+    pass\": y2020_excess_ok,\n        },\n        \"q2_selection_quality\": {\n  \
+    \          \"description\": \"Test period check.\",\n            \"answer\": (\n\
+    \                f\"test excess={excess_test} (>= 0.35: {test_excess_ok}), \"\n\
+    \                f\"win_rate={best_test['win_rate']}, trades={best_test['trade_count']}\"\
+    \n            ),\n            \"pass\": test_excess_ok,\n        },\n        \"\
+    q3_falsifiers\": {\n            \"description\": \"Drawdown degradation check.\"\
+    ,\n            \"answer\": (\n                f\"test dd={best_test['max_drawdown']}\
+    \ vs baseline={baseline_test['max_drawdown']}, \"\n                f\"not materially\
+    \ worse: {dd_not_worse}\"\n            ),\n            \"pass\": dd_not_worse,\n\
+    \        },\n        \"overall_pass\": adoption_pass,\n        \"overall_decision\"\
+    : decision,\n        \"overall_reason\": reason,\n        \"auto_computed_at\"\
+    : now_str,\n    }\n    (output_dir / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(_plain(l4_ack),\
+    \ allow_unicode=True), encoding=\"utf-8\",\n    )\n\n    # --- diagnostic.yaml\
+    \ ---\n    exit_reason_counts: dict[str, int] = {}\n    if best_test_trades:\n\
+    \        for t in best_test_trades:\n            reason = t.get(\"exit_reason\"\
+    , \"unknown\")\n            exit_reason_counts[reason] = exit_reason_counts.get(reason,\
+    \ 0) + 1\n\n    diagnostic: dict[str, Any] = {\n        \"schema_version\": 1,\n\
+    \        \"run_id\": output_dir.name,\n        \"diagnostic_date\": now.strftime(\"\
+    %Y-%m-%d\"),\n        \"diagnostic_by\": \"hermes_executor_code\",\n        \"\
+    verdict_referenced\": decision,\n        \"summary\": reason,\n        \"verdict_rationale\"\
+    : reason,\n        \"warnings\": [],\n        \"errors\": [],\n        \"params\"\
+    : best_params,\n        \"grid_sweep_size\": len(all_candidates),\n        \"\
+    test_exit_reasons\": exit_reason_counts,\n    }\n    (output_dir / \"diagnostic.yaml\"\
+    ).write_text(\n        yaml.safe_dump(_plain(diagnostic), allow_unicode=True),\
+    \ encoding=\"utf-8\",\n    )\n\n    return adoption_pass\n\n\n# ---------------------------------------------------------------------------\n\
+    # Main\n# ---------------------------------------------------------------------------\n\
+    \ndef main() -> int:\n    pd = _get_pd()\n    yaml = _get_yaml()\n\n    parser\
+    \ = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\"--data-root\"\
+    , required=True, help=\"Path to data root directory\")\n    parser.add_argument(\"\
     --train-start\", required=True, help=\"Train period start (YYYYMMDD)\")\n    parser.add_argument(\"\
     --train-end\", required=True, help=\"Train period end (YYYYMMDD)\")\n    parser.add_argument(\"\
     --test-start\", required=True, help=\"Test period start (YYYYMMDD)\")\n    parser.add_argument(\"\
     --test-end\", required=True, help=\"Test period end (YYYYMMDD)\")\n    parser.add_argument(\"\
     --output-dir\", required=True, help=\"Output directory for artifacts\")\n    parser.add_argument(\"\
     --min-hold-days\", type=int, default=5, help=\"Minimum hold days before decay\
-    \ exit kicks in\")\n    parser.add_argument(\"--initial-threshold-fraction\",\
-    \ type=float, default=0.7,\n                        help=\"Initial ratio threshold\
-    \ (1.0 = no early exit, 0.0 = immediate)\")\n    parser.add_argument(\"--max-hold-days\"\
-    , type=int, default=90, help=\"Base max hold days for decay schedule\")\n    args\
-    \ = parser.parse_args()\n\n    output_dir = Path(args.output_dir)\n    output_dir.mkdir(parents=True,\
-    \ exist_ok=True)\n    _gatekeeper_before_run(output_dir)\n\n    # Load data\n\
-    \    try:\n        df_raw = _load_data(args.data_root)\n    except Exception as\
-    \ exc:\n        diag = {\"error\": str(exc), \"step\": \"load_data\"}\n      \
-    \  (output_dir / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(_plain(diag),\
-    \ allow_unicode=True), encoding=\"utf-8\"\n        )\n        print(f\"[duration_adaptive]\
-    \ FATAL: {exc}\", flush=True)\n        return 1\n\n    train_start = pd.Timestamp(args.train_start)\n\
-    \    train_end = pd.Timestamp(args.train_end)\n    test_start = pd.Timestamp(args.test_start)\n\
-    \    test_end = pd.Timestamp(args.test_end)\n\n    df_train = df_raw[(df_raw[\"\
-    trade_date\"] >= train_start) & (df_raw[\"trade_date\"] <= train_end)].copy()\n\
-    \    df_test = df_raw[(df_raw[\"trade_date\"] >= test_start) & (df_raw[\"trade_date\"\
-    ] <= test_end)].copy()\n    df_2020 = df_train[df_train[\"trade_date\"].dt.year\
-    \ == 2020].copy()\n\n    if len(df_train) == 0:\n        diag = {\"error\": \"\
-    Train dataframe is empty\", \"step\": \"filter_train\"}\n        (output_dir /\
-    \ \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(_plain(diag), allow_unicode=True),\
-    \ encoding=\"utf-8\"\n        )\n        return 1\n\n    # Baseline simulation\
-    \ (gap > 0 enter, gap <= 0 exit)\n    baseline_train = _simulate_baseline(df_train)\n\
+    \ exit\")\n    parser.add_argument(\"--initial-threshold-fraction\", type=float,\
+    \ default=0.7,\n                        help=\"Initial ratio threshold (1.0 =\
+    \ no early exit, 0.0 = immediate)\")\n    parser.add_argument(\"--max-hold-days\"\
+    , type=int, default=90,\n                        help=\"Base max hold days for\
+    \ decay schedule\")\n    args = parser.parse_args()\n\n    output_dir = Path(args.output_dir)\n\
+    \    output_dir.mkdir(parents=True, exist_ok=True)\n    _gatekeeper_before_run(output_dir)\n\
+    \n    # Load data\n    try:\n        df_raw = _load_gap_data(args.data_root)\n\
+    \    except Exception as exc:\n        diag = {\"error\": str(exc), \"step\":\
+    \ \"load_data\"}\n        _ensure_yaml_np_reprs()\n        (output_dir / \"diagnostic.yaml\"\
+    ).write_text(\n            yaml.safe_dump(_plain(diag), allow_unicode=True), encoding=\"\
+    utf-8\"\n        )\n        print(f\"[duration_adaptive] FATAL: {exc}\", flush=True)\n\
+    \        _gatekeeper_after_run(output_dir)\n        return 1\n\n    train_start\
+    \ = pd.Timestamp(args.train_start)\n    train_end = pd.Timestamp(args.train_end)\n\
+    \    test_start = pd.Timestamp(args.test_start)\n    test_end = pd.Timestamp(args.test_end)\n\
+    \n    df_train = df_raw[\n        (df_raw[\"trade_date\"] >= train_start) & (df_raw[\"\
+    trade_date\"] <= train_end)\n    ].copy()\n    df_test = df_raw[\n        (df_raw[\"\
+    trade_date\"] >= test_start) & (df_raw[\"trade_date\"] <= test_end)\n    ].copy()\n\
+    \    df_2020 = df_train[df_train[\"trade_date\"].dt.year == 2020].copy()\n\n \
+    \   if len(df_train) == 0:\n        diag = {\"error\": \"Train dataframe is empty\"\
+    , \"step\": \"filter_train\"}\n        _ensure_yaml_np_reprs()\n        (output_dir\
+    \ / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(_plain(diag),\
+    \ allow_unicode=True), encoding=\"utf-8\"\n        )\n        print(\"[duration_adaptive]\
+    \ FATAL: empty train set\", flush=True)\n        _gatekeeper_after_run(output_dir)\n\
+    \        return 1\n\n    # Baseline\n    baseline_train = _simulate_baseline(df_train)\n\
     \    baseline_test = _simulate_baseline(df_test)\n    baseline_2020 = _simulate_baseline(df_2020)\n\
-    \n    # Grid search\n    all_results: list[dict[str, Any]] = []\n    best_candidate\
-    \ = None\n    best_score = -float(\"inf\")\n\n    for mhd in _SWEEP_MIN_HOLD_DAYS:\n\
-    \        for itf in _SWEEP_INITIAL_THRESHOLD:\n            for dpf in _SWEEP_DECAY_FACTOR:\n\
-    \                effective_max_hold = int(round(args.max_hold_days * dpf))\n \
-    \               if effective_max_hold <= mhd:\n                    continue  #\
-    \ skip degenerate combos\n\n                train_res = _simulate_time_decay(df_train,\
-    \ mhd, itf, effective_max_hold)\n                test_res = _simulate_time_decay(df_test,\
-    \ mhd, itf, effective_max_hold)\n                yr2020_res = _simulate_time_decay(df_2020,\
-    \ mhd, itf, effective_max_hold)\n\n                excess_train = _compute_excess_return(train_res[\"\
-    total_pnl\"], baseline_train[\"total_pnl\"])\n                excess_test = _compute_excess_return(test_res[\"\
-    total_pnl\"], baseline_test[\"total_pnl\"])\n                excess_2020 = _compute_excess_return(yr2020_res[\"\
-    total_pnl\"], baseline_2020[\"total_pnl\"])\n\n                candidate = {\n\
-    \                    \"min_hold_days\": mhd,\n                    \"initial_threshold_fraction\"\
-    : itf,\n                    \"decay_period_factor\": dpf,\n                  \
-    \  \"effective_max_hold_days\": effective_max_hold,\n                    \"train\"\
-    : {\n                        \"total_pnl\": train_res[\"total_pnl\"],\n      \
-    \                  \"trade_count\": train_res[\"trade_count\"],\n            \
-    \            \"win_rate\": train_res[\"win_rate\"],\n                        \"\
-    avg_win\": train_res[\"avg_win\"],\n                        \"avg_loss\": train_res[\"\
-    avg_loss\"],\n                        \"avg_hold_days\": train_res[\"avg_hold_days\"\
-    ],\n                        \"max_drawdown\": train_res[\"max_drawdown\"],\n \
-    \                       \"decay_exits\": train_res[\"decay_exits\"],\n       \
-    \                 \"gap_closed_exits\": train_res[\"gap_closed_exits\"],\n   \
-    \                     \"force_closes\": train_res[\"force_closes\"],\n       \
-    \                 \"excess_return\": excess_train,\n                    },\n \
-    \                   \"test\": {\n                        \"total_pnl\": test_res[\"\
-    total_pnl\"],\n                        \"trade_count\": test_res[\"trade_count\"\
-    ],\n                        \"win_rate\": test_res[\"win_rate\"],\n          \
-    \              \"avg_win\": test_res[\"avg_win\"],\n                        \"\
-    avg_loss\": test_res[\"avg_loss\"],\n                        \"avg_hold_days\"\
-    : test_res[\"avg_hold_days\"],\n                        \"max_drawdown\": test_res[\"\
-    max_drawdown\"],\n                        \"decay_exits\": test_res[\"decay_exits\"\
-    ],\n                        \"gap_closed_exits\": test_res[\"gap_closed_exits\"\
-    ],\n                        \"force_closes\": test_res[\"force_closes\"],\n  \
-    \                      \"excess_return\": excess_test,\n                    },\n\
-    \                    \"validate_2020\": {\n                        \"total_pnl\"\
-    : yr2020_res[\"total_pnl\"],\n                        \"trade_count\": yr2020_res[\"\
-    trade_count\"],\n                        \"win_rate\": yr2020_res[\"win_rate\"\
-    ],\n                        \"avg_win\": yr2020_res[\"avg_win\"],\n          \
-    \              \"avg_loss\": yr2020_res[\"avg_loss\"],\n                     \
-    \   \"avg_hold_days\": yr2020_res[\"avg_hold_days\"],\n                      \
-    \  \"max_drawdown\": yr2020_res[\"max_drawdown\"],\n                        \"\
-    decay_exits\": yr2020_res[\"decay_exits\"],\n                        \"gap_closed_exits\"\
-    : yr2020_res[\"gap_closed_exits\"],\n                        \"force_closes\"\
-    : yr2020_res[\"force_closes\"],\n                        \"excess_return\": excess_2020,\n\
-    \                    },\n                }\n                all_results.append(candidate)\n\
-    \n                # Best by test excess return\n                if excess_test\
-    \ > best_score:\n                    best_score = excess_test\n              \
-    \      best_candidate = candidate\n\n    # Determine adoption_pass per proposal\
-    \ success_criteria:\n    # test_excess_gte: 0.35, train_excess_gte: 0.2, y2020_excess_gte:\
-    \ -0.15, max_drawdown_test_lte: -0.1\n    # Scale note: these are raw PnL differences\
-    \ (entry/exit gap * 100 scale);\n    # the proposal's thresholds are from the\
-    \ full framework with normalized returns.\n    # We check directional correctness:\
-    \ best candidate beats baseline on all periods,\n    # and max_drawdown is not\
-    \ worse.\n    adoption_pass = False\n    if best_candidate is not None:\n    \
-    \    test_excess_ok = best_candidate[\"test\"][\"excess_return\"] > 0\n      \
-    \  train_excess_ok = best_candidate[\"train\"][\"excess_return\"] > 0\n      \
-    \  y2020_improved = best_candidate[\"validate_2020\"][\"excess_return\"] > 0\n\
-    \        dd_test_not_worse = best_candidate[\"test\"][\"max_drawdown\"] >= baseline_test[\"\
-    max_drawdown\"]\n        adoption_pass = test_excess_ok and train_excess_ok and\
-    \ y2020_improved and dd_test_not_worse\n\n    # Write summary.json\n    summary\
-    \ = {\n        \"adoption_pass\": adoption_pass,\n        \"best_candidate\":\
-    \ best_candidate,\n        \"all_candidates\": all_results,\n        \"baseline\"\
-    : {\n            \"train\": {\n                \"total_pnl\": baseline_train[\"\
-    total_pnl\"],\n                \"trade_count\": baseline_train[\"trade_count\"\
-    ],\n                \"win_rate\": baseline_train[\"win_rate\"],\n            \
-    \    \"max_drawdown\": baseline_train[\"max_drawdown\"],\n                \"avg_hold_days\"\
-    : baseline_train[\"avg_hold_days\"],\n            },\n            \"test\": {\n\
-    \                \"total_pnl\": baseline_test[\"total_pnl\"],\n              \
-    \  \"trade_count\": baseline_test[\"trade_count\"],\n                \"win_rate\"\
-    : baseline_test[\"win_rate\"],\n                \"max_drawdown\": baseline_test[\"\
-    max_drawdown\"],\n                \"avg_hold_days\": baseline_test[\"avg_hold_days\"\
-    ],\n            },\n            \"validate_2020\": {\n                \"total_pnl\"\
-    : baseline_2020[\"total_pnl\"],\n                \"trade_count\": baseline_2020[\"\
-    trade_count\"],\n                \"win_rate\": baseline_2020[\"win_rate\"],\n\
-    \                \"max_drawdown\": baseline_2020[\"max_drawdown\"],\n        \
-    \        \"avg_hold_days\": baseline_2020[\"avg_hold_days\"],\n            },\n\
-    \        },\n        \"train_period\": {\"start\": args.train_start, \"end\":\
-    \ args.train_end},\n        \"test_period\": {\"start\": args.test_start, \"end\"\
-    : args.test_end},\n        \"swept_parameters\": {\n            \"min_hold_days\"\
-    : list(_SWEEP_MIN_HOLD_DAYS),\n            \"initial_threshold_fraction\": list(_SWEEP_INITIAL_THRESHOLD),\n\
-    \            \"decay_period_factor\": list(_SWEEP_DECAY_FACTOR),\n           \
-    \ \"base_max_hold_days\": args.max_hold_days,\n        },\n    }\n    (output_dir\
-    \ / \"summary.json\").write_text(\n        json.dumps(_plain(summary), ensure_ascii=False,\
-    \ indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\n    # Write report.yaml\n\
-    \    report = {\n        \"proposal_id\": \"20260519-proposal-001\",\n       \
-    \ \"strategy_id\": \"cb_arb_value_gap_switch\",\n        \"executor\": \"exit_rule_duration_adaptive\"\
-    ,\n        \"adoption_pass\": adoption_pass,\n        \"best_params\": {\n   \
-    \         \"min_hold_days\": best_candidate[\"min_hold_days\"] if best_candidate\
-    \ else None,\n            \"initial_threshold_fraction\": best_candidate[\"initial_threshold_fraction\"\
-    ] if best_candidate else None,\n            \"decay_period_factor\": best_candidate[\"\
-    decay_period_factor\"] if best_candidate else None,\n            \"effective_max_hold_days\"\
-    : best_candidate[\"effective_max_hold_days\"] if best_candidate else None,\n \
-    \       },\n        \"candidates\": all_results,\n        \"baseline\": {\n  \
-    \          \"train_pnl\": baseline_train[\"total_pnl\"],\n            \"test_pnl\"\
-    : baseline_test[\"total_pnl\"],\n            \"y2020_pnl\": baseline_2020[\"total_pnl\"\
-    ],\n        },\n    }\n    (output_dir / \"report.yaml\").write_text(\n      \
-    \  yaml.safe_dump(_plain(report), allow_unicode=True), encoding=\"utf-8\"\n  \
-    \  )\n\n    # Write l4_ack.yaml\n    l4_ack = {\n        \"status\": \"completed\"\
-    ,\n        \"adoption_pass\": adoption_pass,\n        \"message\": \"Time-decaying\
-    \ gap exit evaluation finished.\",\n        \"candidate_count\": len(all_results),\n\
-    \    }\n    (output_dir / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(_plain(l4_ack),\
-    \ allow_unicode=True), encoding=\"utf-8\"\n    )\n\n    # Write diagnostic.yaml\n\
-    \    diagnostic = {\n        \"warnings\": [],\n        \"errors\": [],\n    \
-    \    \"data_rows\": {\n            \"train\": len(df_train),\n            \"test\"\
-    : len(df_test),\n            \"validate_2020\": len(df_2020),\n        },\n  \
-    \      \"best_params\": {\n            \"min_hold_days\": best_candidate[\"min_hold_days\"\
-    ] if best_candidate else None,\n            \"initial_threshold_fraction\": best_candidate[\"\
-    initial_threshold_fraction\"] if best_candidate else None,\n            \"decay_period_factor\"\
-    : best_candidate[\"decay_period_factor\"] if best_candidate else None,\n     \
-    \       \"effective_max_hold_days\": best_candidate[\"effective_max_hold_days\"\
-    ] if best_candidate else None,\n        },\n        \"grid_combos_tested\": len(all_results),\n\
-    \    }\n    (output_dir / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump(_plain(diagnostic),\
-    \ allow_unicode=True), encoding=\"utf-8\"\n    )\n\n    if best_candidate is not\
-    \ None:\n        print(\n            f\"[duration_adaptive] adoption_pass={adoption_pass}\
-    \ \"\n            f\"best_mhd={best_candidate['min_hold_days']} \"\n         \
-    \   f\"best_itf={best_candidate['initial_threshold_fraction']} \"\n          \
-    \  f\"best_dpf={best_candidate['decay_period_factor']} \"\n            f\"excess_test={best_candidate['test']['excess_return']}\
-    \ \"\n            f\"excess_2020={best_candidate['validate_2020']['excess_return']}\"\
-    ,\n            flush=True,\n        )\n    else:\n        print(\"[duration_adaptive]\
-    \ no valid candidates found\", flush=True)\n\n    return 0\n\n\nif __name__ ==\
-    \ \"__main__\":\n    raise SystemExit(main())\n"
+    \n    # Grid search over sweep params (using base 90 as max_hold)\n    all_candidates:\
+    \ list[dict[str, Any]] = []\n    best_candidate: dict[str, Any] | None = None\n\
+    \    best_score = -float(\"inf\")\n\n    for mhd in _SWEEP_MIN_HOLD_DAYS:\n  \
+    \      for thr in _SWEEP_INITIAL_THRESHOLD:\n            for factor in _SWEEP_DECAY_FACTOR:\n\
+    \                max_hold = int(factor * _BASE_MAX_HOLD_DAYS)\n              \
+    \  # Ensure max_hold >= mhd to avoid degenerate decay\n                effective_max_hold\
+    \ = max(max_hold, mhd + 5)\n\n                train_res = _simulate_time_decay(df_train,\
+    \ mhd, thr, effective_max_hold)\n                test_res = _simulate_time_decay(df_test,\
+    \ mhd, thr, effective_max_hold)\n                yr2020_res = _simulate_time_decay(df_2020,\
+    \ mhd, thr, effective_max_hold)\n\n                excess_train = _compute_excess_return(\n\
+    \                    train_res[\"total_pnl\"], baseline_train[\"total_pnl\"]\n\
+    \                )\n                excess_test = _compute_excess_return(\n  \
+    \                  test_res[\"total_pnl\"], baseline_test[\"total_pnl\"]\n   \
+    \             )\n                excess_2020 = _compute_excess_return(\n     \
+    \               yr2020_res[\"total_pnl\"], baseline_2020[\"total_pnl\"]\n    \
+    \            )\n\n                candidate = {\n                    \"min_hold_days\"\
+    : mhd,\n                    \"initial_threshold_fraction\": thr,\n           \
+    \         \"decay_period_factor\": factor,\n                    \"max_hold_days\"\
+    : effective_max_hold,\n                    \"train\": {\n                    \
+    \    \"total_pnl\": train_res[\"total_pnl\"],\n                        \"trade_count\"\
+    : train_res[\"trade_count\"],\n                        \"win_rate\": train_res[\"\
+    win_rate\"],\n                        \"avg_win\": train_res[\"avg_win\"],\n \
+    \                       \"avg_loss\": train_res[\"avg_loss\"],\n             \
+    \           \"max_drawdown\": train_res[\"max_drawdown\"],\n                 \
+    \       \"excess_return\": excess_train,\n                    },\n           \
+    \         \"test\": {\n                        \"total_pnl\": test_res[\"total_pnl\"\
+    ],\n                        \"trade_count\": test_res[\"trade_count\"],\n    \
+    \                    \"win_rate\": test_res[\"win_rate\"],\n                 \
+    \       \"avg_win\": test_res[\"avg_win\"],\n                        \"avg_loss\"\
+    : test_res[\"avg_loss\"],\n                        \"max_drawdown\": test_res[\"\
+    max_drawdown\"],\n                        \"excess_return\": excess_test,\n  \
+    \                  },\n                    \"validate_2020\": {\n            \
+    \            \"total_pnl\": yr2020_res[\"total_pnl\"],\n                     \
+    \   \"trade_count\": yr2020_res[\"trade_count\"],\n                        \"\
+    win_rate\": yr2020_res[\"win_rate\"],\n                        \"avg_win\": yr2020_res[\"\
+    avg_win\"],\n                        \"avg_loss\": yr2020_res[\"avg_loss\"],\n\
+    \                        \"max_drawdown\": yr2020_res[\"max_drawdown\"],\n   \
+    \                     \"excess_return\": excess_2020,\n                    },\n\
+    \                }\n                all_candidates.append(candidate)\n\n     \
+    \           # Score: prefer highest test excess with 2020 improvement\n      \
+    \          score = excess_test + 0.5 * excess_2020\n                if score >\
+    \ best_score:\n                    best_score = score\n                    best_candidate\
+    \ = candidate\n\n                print(\n                    f\"[duration_adaptive]\
+    \ mhd={mhd} thr={thr} factor={factor} \"\n                    f\"train_excess={excess_train}\
+    \ test_excess={excess_test} \"\n                    f\"2020_excess={excess_2020}\
+    \ test_dd={test_res['max_drawdown']}\",\n                    flush=True,\n   \
+    \             )\n\n    # Re-run best params for artifact output (with full trade\
+    \ data)\n    if best_candidate is not None:\n        best_params = {\n       \
+    \     \"min_hold_days\": best_candidate[\"min_hold_days\"],\n            \"initial_threshold_fraction\"\
+    : best_candidate[\"initial_threshold_fraction\"],\n            \"max_hold_days\"\
+    : best_candidate[\"max_hold_days\"],\n            \"decay_period_factor\": best_candidate[\"\
+    decay_period_factor\"],\n        }\n        best_train = _simulate_time_decay(\n\
+    \            df_train, best_params[\"min_hold_days\"],\n            best_params[\"\
+    initial_threshold_fraction\"], best_params[\"max_hold_days\"],\n        )\n  \
+    \      best_test = _simulate_time_decay(\n            df_test, best_params[\"\
+    min_hold_days\"],\n            best_params[\"initial_threshold_fraction\"], best_params[\"\
+    max_hold_days\"],\n        )\n        best_2020 = _simulate_time_decay(\n    \
+    \        df_2020, best_params[\"min_hold_days\"],\n            best_params[\"\
+    initial_threshold_fraction\"], best_params[\"max_hold_days\"],\n        )\n  \
+    \  else:\n        # Fallback to CLI args\n        best_params = {\n          \
+    \  \"min_hold_days\": args.min_hold_days,\n            \"initial_threshold_fraction\"\
+    : args.initial_threshold_fraction,\n            \"max_hold_days\": args.max_hold_days,\n\
+    \            \"decay_period_factor\": round(args.max_hold_days / _BASE_MAX_HOLD_DAYS,\
+    \ 2),\n        }\n        best_train = _simulate_time_decay(\n            df_train,\
+    \ args.min_hold_days, args.initial_threshold_fraction, args.max_hold_days,\n \
+    \       )\n        best_test = _simulate_time_decay(\n            df_test, args.min_hold_days,\
+    \ args.initial_threshold_fraction, args.max_hold_days,\n        )\n        best_2020\
+    \ = _simulate_time_decay(\n            df_2020, args.min_hold_days, args.initial_threshold_fraction,\
+    \ args.max_hold_days,\n        )\n\n    # Write artifacts — _write_artifacts receives\
+    \ all data as explicit parameters, no stale refs.\n    adoption_pass = _write_artifacts(\n\
+    \        output_dir, best_train, best_test, best_2020,\n        baseline_train,\
+    \ baseline_test, baseline_2020,\n        best_params, all_candidates, best_candidate,\n\
+    \        best_test_trades=best_test.get(\"trades\"),\n    )\n\n    _gatekeeper_after_run(output_dir)\n\
+    \n    print(\n        f\"[duration_adaptive] DONE adoption_pass={adoption_pass}\
+    \ \"\n        f\"candidates={len(all_candidates)} \"\n        f\"best=({best_params})\"\
+    ,\n        flush=True,\n    )\n    return 0\n\n\nif __name__ == \"__main__\":\n\
+    \    sys.exit(main())\n"
 written_files:
 - generated_executor/evaluate_cb_arb_exit_rule_duration_adaptive.py
 tool_code_attempts: 0
@@ -603,7 +668,7 @@ hermes_handoff:
   id: 20260519-proposal-001_executor_code
   path: data/research_framework/hermes_executor_handoffs.yaml
   recipient: hermes
-status: registered_tool_code
+status: draft_tool_code
 registered_executor_id: exit_rule_duration_adaptive_executor
 registered_files:
 - /home/jay/projects/quant/scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py

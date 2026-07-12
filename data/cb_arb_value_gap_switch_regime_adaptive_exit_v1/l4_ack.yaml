@@ -1,0 +1,29 @@
+ack_at: '2026-05-27T01:48:42+00:00'
+adoption_pass: true
+candidate_count: 81
+message: Regime-adaptive exit evaluation finished.
+reviewer: hermes_executor_code
+run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1
+schema_version: 1
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-27T01:48:43.160222Z'
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-27T01:48:43.160236Z'
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-27T01:48:43.160239Z'
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-27T01:48:43.160241Z'
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-27T01:48:43.160242Z'
+auto_computed_at: '2026-05-27T01:48:43.160259Z'

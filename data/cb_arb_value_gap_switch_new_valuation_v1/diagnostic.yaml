@@ -1,0 +1,14 @@
+adoption_pass: false
+check_results:
+  drawdown_2020_not_worse: true
+  test_dd_not_worse: true
+  test_excess_improved: true
+  test_sharpe_ok: false
+  train_dd_not_worse: true
+data_rows:
+  refined_total: 736216
+  test: 138870
+  train: 543589
+  validate_2020: 64846
+errors: []
+warnings: []

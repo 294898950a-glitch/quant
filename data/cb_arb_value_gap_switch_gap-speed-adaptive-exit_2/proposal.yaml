@@ -1,0 +1,141 @@
+proposal_id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_duration_adaptive
+hypothesis: 'The duration-adaptive exit (min_hold_days=5, decaying threshold) is the
+  only exit variant that passed adoption, proving that time-decaying thresholds work
+  better than static exit rules. But it treats all positions uniformly regardless
+  of whether the gap is actually converging or diverging. By modulating the decay
+  rate of the exit threshold based on recent gap trajectory — slowing decay for converging
+  positions (be more patient) and accelerating decay for diverging positions (cut
+  faster) — the strategy should improve the win/loss ratio of exits and reduce the
+  7.47pp cost-on degradation. This adds a second signal dimension to a proven framework
+  without introducing new data sources or regime classification.
+
+  '
+source_insight: 'Duration-adaptive exit passed adoption (best params: min_hold_days=5,
+  initial_threshold_fraction=0.7, decay_period_factor=0.5, effective_max_hold_days=45).
+  Gap-trailing-exit, profit-take-exit, and pnl-adaptive-exit all failed. Market-drawdown
+  and contrarian-drawdown entry gates failed mechanical thresholds. The edge is in
+  exit timing, not entry filtering. The natural next step is refining the working
+  exit framework with a gap-convergence-speed dimension — rewarding positions that
+  are actively mean-reverting while punishing those that aren''t.
+
+  '
+expected_improvement: 'Reduce cost-on degradation from -7.47pp toward -5pp or better
+  by improving the ratio of profitable to unprofitable exits. Converging positions
+  get extended hold to capture full gap closure; diverging positions exit sooner before
+  the gap widens further. Target cumulative excess compound closer to zero.
+
+  '
+capability_ids:
+- C007
+required_executor: exit_rule_duration_adaptive_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  - entry_gap
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet:
+  - trade_date
+  - ts_code
+  - daily_pnl
+test_design:
+  approach: grid_search
+  tunable_parameters:
+  - min_hold_days:
+    - 3
+    - 5
+    - 7
+    - 10
+  - initial_threshold_fraction:
+    - 0.5
+    - 0.7
+    - 0.9
+  - decay_period_factor:
+    - 0.3
+    - 0.5
+    - 0.7
+  - gap_speed_lookback_days:
+    - 5
+    - 10
+    - 20
+  - convergence_slowdown_factor:
+    - 0.5
+    - 0.7
+    - 0.9
+  - divergence_acceleration_factor:
+    - 1.1
+    - 1.3
+    - 1.5
+  baseline: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+  split: time_series_cross_val
+  holdout_years:
+  - 2024
+  - 2025
+  metric: cumulative_excess_compound_oos
+  cost_mode: cost_on
+success_criteria:
+  criteria:
+  - cumulative_excess_compound_oos_gt_baseline
+  - cost_degradation_pp_improved_vs_baseline_neg_7_47pp
+  - any_single_year_drawdown_vs_benchmark_lt_15pct
+  - best_candidate_adoption_pass_eq_true
+falsifiers:
+  train: &id001
+  - cumulative_excess_compound_cross_year_lt_0
+  - cost_degradation_pp_worse_than_baseline
+  - all_candidates_adoption_pass_eq_false
+  - best_candidate_max_drawdown_worse_than_baseline
+  validate: *id001
+  test: *id001
+risk: 'Medium. Gap-speed lookback introduces a lag parameter that may add noise in
+  choppy markets. If gap trajectories are mean-reverting at multiple frequencies,
+  a short lookback could trigger false divergence signals, causing premature exits.
+  Mitigated by grid search over lookback windows and asymmetric factors (slowdown
+  < 1.0, acceleration > 1.0) so the base behavior is conservative.
+
+  '
+why_not_repeated_failure: 'Not a repeat of gap-trailing-exit (static ratio threshold,
+  no time decay — failed). Not a repeat of profit-take-exit (partial exit at fixed
+  fraction, no decay — failed). Not a repeat of pnl-adaptive-exit (uses PnL feedback,
+  which couples gap speed with a closed direction). This extends the working duration-adaptive
+  exit by adding gap-convergence speed as a modulator of the decay rate — a fundamentally
+  different mechanic where the exit threshold still decays over time but the decay
+  rate adapts to whether the position is converging or diverging. No prior exit experiment
+  combined time-decay with gap-speed modulation.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_gap-trailing-exit
+- cb_arb_value_gap_switch_profit-take-exit_2026-05-22
+implementation_assumption: 'Extends exit_rule_duration_adaptive_executor with gap-speed
+  modulation: compute rolling N-day gap change normalized by entry_gap, then multiply
+  base decay rate by convergence_slowdown_factor (if gap is shrinking) or divergence_acceleration_factor
+  (if gap is widening). If the existing executor cannot be extended, a new executor
+  variant is needed — compiler should mark DRAFT accordingly.'
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 79f3df860badb75b
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 79f3df860badb75b
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_gap-speed-adaptive-exit
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/proposal.yaml

@@ -160,6 +160,7 @@ def _check_import_reachability(path: Path) -> list[str]:
     task flows through the existing compliance_failed → needs_compliance_repair
     handoff path.
     """
+    import os as _os
     import subprocess
     code = (
         "import importlib.util, sys, traceback;"
@@ -168,10 +169,19 @@ def _check_import_reachability(path: Path) -> list[str]:
         "sys.modules[spec.name] = m;"
         "spec.loader.exec_module(m)"
     )
-    env = {"PATH": "/usr/bin:/bin", "HOME": "/tmp", "LC_ALL": "C"}
+    # Use -E (ignore PYTHON* env vars) instead of -I (which also uses -s,
+    # disabling user site-packages where pandas is installed). Inherit HOME
+    # from the parent so user site-packages remain reachable. The cwd=/tmp
+    # and stripped env still prevent the repo root from leaking into
+    # sys.path — the executor must self-insert REPO_ROOT.
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "HOME": _os.environ.get("HOME", "/tmp"),
+        "LC_ALL": "C",
+    }
     try:
         result = subprocess.run(
-            [sys.executable, "-I", "-c", code],
+            [sys.executable, "-E", "-c", code],
             cwd="/tmp",
             env=env,
             capture_output=True,

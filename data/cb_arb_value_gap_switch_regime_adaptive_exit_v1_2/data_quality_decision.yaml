@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+spec_path: data/cb_arb_value_gap_switch_regime_adaptive_exit_v1_2/spec.yaml
+validated_at: '2026-05-23T22:28:50'
+summary_sha256: a0d5c4be41d32bce3438b4f7aded3383ba21b59cf34f34fe638fa33351fe1146
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- train_start=20190101 但主数据最早日期为 20190102（元旦休市，非交易日，属正常）
+- test_end=20260508 与主数据及股票行情最大日期完全一致，无冗余缓冲，若后续追加新交易日需更新数据
+fix_plan: []
+decision_reason: 全部必需文件存在且可读，训练/测试日期均被行情覆盖，输入列提示字段 regime 和 trade_date 均在实际列中，最小值行数和日期范围均满足，无阻断问题
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 6487f5cd7332e7f7

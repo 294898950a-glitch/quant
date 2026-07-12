@@ -1,0 +1,49 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+reviewer: codex
+ack_at: '2026-05-24T12:49:33'
+q1_floor_binding:
+  description: '2020 stress repair: filtered score must exceed -0.10 (baseline -0.1839).'
+  answer: Filtered 2020 score=-0.1839 (baseline=-0.1839), pass=False
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-24T04:49:33.772522Z'
+  pass: false
+q2_selection_score:
+  description: Train score must exceed 0.10 after filter (baseline -0.1537).
+  answer: Filtered train score=-0.1537 (baseline=-0.1537), pass=False
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-24T04:49:33.772532Z'
+  pass: false
+q3_baseline_alignment:
+  description: Validate score must remain >= 0.28 after filter (baseline 0.3002).
+  answer: Filtered validate score=0.3002 (baseline=0.3002), pass=True
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-24T04:49:33.772535Z'
+  pass: true
+q4_monotonic:
+  description: Candidate must improve 2020 stress score without breaking train score.
+  answer: 2020 pass=False; train pass=False
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-24T04:49:33.772536Z'
+  pass: false
+q5_trade_overlap:
+  description: Filter must not over-suppress train trades.
+  answer: Train trade count remains within the evaluated suppression guard.
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-24T04:49:33.772538Z'
+  pass: true
+q6_trigger_timing:
+  applicable: false
+q7_path_contamination:
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: One or more fixed period criteria failed.
+auto_computed_at: '2026-05-24T04:49:33.772551Z'
+normalized_at: '2026-05-24T05:15:50+00:00'
+normalized_by: normalize_report_schema

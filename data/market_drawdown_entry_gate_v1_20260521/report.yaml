@@ -1,0 +1,76 @@
+schema_version: 1
+run_id: market_drawdown_entry_gate_v1_20260521
+date: '2026-05-22'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  adoption_pass: false
+  selected_variant: gate_n20_t0p12_buf0
+  criteria:
+    stress_2020_score_gt: -0.1
+    train_score_gt: 0.1
+    validate_score_gte: 0.28
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- gate_n20_t0p12_buf0
+learnings:
+- Market drawdown entry gate was evaluated against train, 2020 stress, and validate
+  periods.
+follow_up_actions:
+- review why the market drawdown gate failed one or more fixed criteria
+status: COMPLETE
+generated_by: codex
+generated_at: '2026-05-22T04:09:47'
+variant: gate_n20_t0p12_buf0
+params:
+  N: 20
+  threshold: 0.12
+  buffer_days: 0
+adoption_pass: false
+decision: failed_mechanical_thresholds
+metrics:
+  train:
+    baseline:
+      total_return: 0.450977
+      excess_return: 0.178662
+      max_drawdown: -0.295256
+      win_rate: 0.4848
+      total_trades: 988
+      score: 0.104848
+    gated:
+      total_return: 0.370559
+      excess_return: 0.098245
+      max_drawdown: -0.296944
+      win_rate: 0.4926
+      total_trades: 1009
+      score: 0.024009
+    suppression_pct: -2.1
+  stress_2020:
+    baseline:
+      total_return: -0.082493
+      excess_return: -0.18666
+      max_drawdown: -0.173984
+      win_rate: 0.3158
+      score: -0.230156
+    gated:
+      total_return: -0.08307
+      excess_return: -0.187236
+      max_drawdown: -0.174465
+      win_rate: 0.3158
+      score: -0.230852
+  validate:
+    baseline:
+      total_return: 0.817948
+      excess_return: 0.465683
+      max_drawdown: -0.097527
+      win_rate: 0.684
+      total_trades: 212
+      score: 0.441301
+    gated:
+      total_return: 0.817948
+      excess_return: 0.465683
+      max_drawdown: -0.097527
+      win_rate: 0.684
+      total_trades: 212
+      score: 0.441301
+warnings: []

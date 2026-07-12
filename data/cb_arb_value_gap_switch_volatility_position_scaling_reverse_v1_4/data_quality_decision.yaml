@@ -1,0 +1,22 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_4
+spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_4/spec.yaml
+validated_at: '2026-05-25T16:40:35'
+summary_sha256: 8a468baa27649d7851601a4e163d550acfdf88cb9a2cf21552dd14a01996eece
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- daily_value_gap_amounts.parquet 最早日期为 20190102，训练期从 20180101 开始，第一年（2018）无 value_gap
+  数据覆盖，实际有效训练期约 4 年
+- cb_basic.parquet 中 list_date 有 1 行空值（共 1012 行），该债券无法参与日期筛选
+- cb_basic.parquet 中 delist_date 有 338 行空值，与 executor 声明的 nonnull_columns 不一致，但未退市债券空值是正常行为
+- executor_input_column_hints 引用了 atr 字段，但所有输入文件均不包含该字段；若执行器不是运行时计算 atr 则可能报错
+fix_plan: []
+decision_reason: 全部 9 个必需文件存在且可读，所有 required_columns 均存在于对应文件中，行情数据完整覆盖训练和测试期，唯一实质缺口是
+  value_gap 数据比训练期晚一年起步但不影响实验可执行性
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: e2b9f228cde2ae92

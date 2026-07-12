@@ -1,0 +1,59 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  artifacts_hash: 858f71f58accdbc2
+interpretation:
+  review_status_code: 2
+  result_summary: 按市场波动状态动态调整退出阈值的方案在两个周期中超额收益均为-1.0，与静态基线完全相同，零改善且绝对收益严重为负。
+  main_reason: 政策自适应退出改进幅度为零（train和test的超额收益均与基线持平于-1.0），且绝对收益深度为负，未通过任何硬性门槛。
+  failure_causes:
+  - 状态自适应退出未产生任何超额改善，政策与基线表现完全一致
+  - train和test的绝对超额收益均为-1.0，策略在盈亏意义上无效
+  - adoption_pass为false，硬性门槛中至少超额复合测试和回撤测试未通过
+  next_research_directions:
+  - direction: 回归单状态退出并优化阈值参数空间
+    why: 政策自适应在本次实验中未带来增量价值，先用单状态退出的最佳参数确认基线盈利能力后再考虑条件化
+    priority_code: 1
+    priority: high
+  - direction: 排查entry信号质量
+    why: 绝对超额为-1.0表明信号本身可能在选债或入场时机上存在问题，在继续优化退出前应先验证entry的有效性
+    priority_code: 1
+    priority: high
+  - direction: 更细粒度的波动率分层
+    why: 当前二值分类（高/低波动）可能过于粗糙，无法捕捉退出时机的微妙差异；若entry信号经确认有效，可尝试3-5档波动率分层
+    priority_code: 3
+    priority: low
+  evidence_gaps:
+  - 无法确认-1.0是真实超额值还是数据缺失/计算失败的哨兵值
+  - 缺少按年份拆分的超额收益明细，无法定位哪些年份拖累了整体表现
+  - 缺少Sharpe比率或信息比率，仅有超额和回撤不足以全面评估风险调整后收益
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 8c3d4b94a9d5e950
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

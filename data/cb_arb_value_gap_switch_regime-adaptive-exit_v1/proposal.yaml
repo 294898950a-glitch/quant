@@ -1,0 +1,155 @@
+proposal_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+strategy_id: cb_arb_value_gap_switch
+family: regime_adaptive_exit
+hypothesis: 'The duration-adaptive exit accepted on 2026-05-22 uses a single fixed
+  decay schedule (initial_threshold_fraction=0.7, decay_period_factor=0.5) regardless
+  of market conditions. In high-volatility or trending-down regimes, gaps close faster
+  and a single schedule may exit too early (leaving money) or too late (allowing gaps
+  to re-widen). Conditioning the decay parameters — specifically initial_threshold_fraction
+  and decay_period_factor — on a daily market regime classifier derived from CSI 300
+  returns and volatility will improve cumulative excess by matching exit patience
+  to the prevailing environment. Regime classification uses rolling CSI 300 return
+  and realized volatility to assign each day to one of 2-3 discrete regimes, then
+  each regime gets its own decay parameter pair. Entry, ranking, and sizing logic
+  remain untouched.
+
+  '
+source_insight: 'The accepted duration-adaptive exit proves that time-decaying gap
+  thresholds work better than static exits. But a single decay curve cannot be optimal
+  across all market conditions. Gap closing dynamics differ systematically by regime:
+  during calm uptrends gaps close slowly (need patience), during volatile selloffs
+  gaps close rapidly or re-widen unpredictably (need tighter thresholds). A regime-conditional
+  decay curve should capture this interaction.
+
+  '
+expected_improvement: 'Cumulative excess compound should improve by at least 2-3 percentage
+  points versus the non-conditional duration-adaptive baseline, driven by fewer premature
+  exits in calm regimes and fewer over-held positions in stressed regimes. Max drawdown
+  should not increase materially versus the baseline.
+
+  '
+capability_ids:
+- C005
+required_executor: evaluate_cb_arb_regime_adaptive_exit
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - entry_gap
+  - current_gap
+  - position_active
+  - buy_amount
+  data/cb_warehouse/csi300_daily.parquet:
+  - trade_date
+  - close
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - list_date
+  - delist_date
+  - maturity_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+test_design:
+  grid_search_over:
+    regime_lookback_days:
+    - 20
+    - 60
+    - 120
+    num_regimes:
+    - 2
+    - 3
+    regime_definitions:
+    - regime_metric: rolling_return
+      thresholds: percentile_based
+    - regime_metric: rolling_realized_vol
+      thresholds: percentile_based
+    per_regime_params:
+      initial_threshold_fraction:
+      - 0.5
+      - 0.6
+      - 0.7
+      - 0.8
+      - 0.9
+      decay_period_factor:
+      - 0.3
+      - 0.5
+      - 0.7
+      - 1.0
+    min_hold_days:
+    - 3
+    - 5
+    - 7
+    effective_max_hold_days:
+    - 30
+    - 45
+    - 60
+  baseline: duration-adaptive-exit with initial_threshold_fraction=0.7, decay_period_factor=0.5,
+    min_hold_days=5, effective_max_hold_days=45
+  train_years: 2019-2023
+  test_years: 2024-2025, plus sealed slice 2025-2026
+  cost_model: medium_cost_on
+success_criteria:
+  cumulative_excess_compound_cross_year_gt: 0.0
+  cumulative_excess_compound_better_than_baseline_by_pp: 2.0
+  max_drawdown_le_baseline_plus_pp: 3.0
+falsifiers:
+  train: &id001
+  - cumulative_excess_compound_cross_year_lt_0
+  - any_single_year_drawdown_vs_benchmark_gt_15pct
+  - regime_adaptive_best_candidate_worse_than_non_adaptive_baseline
+  - no_regime_shows_meaningfully_different_optimal_params
+  validate: *id001
+  test: *id001
+risk: 'Low-moderate. The regime classifier adds a hyperparameter dimension (3-5 extra
+  params) that increases overfitting risk on the 2019-2023 training window. If regime
+  assignments are noisy or regimes are too similar, the conditional exit collapses
+  to the non-conditional baseline and adds complexity for no benefit. Two-regime classification
+  with simple rolling-return metric is the starting point to keep the search space
+  manageable.
+
+  '
+why_not_repeated_failure: 'This is not a repeat of market_drawdown_entry_filter (failed_mechanical_thresholds)
+  or contrarian_drawdown_entry (failed_mechanical_thresholds). Both of those were
+  entry-side filters that suppressed new positions based on market conditions. This
+  proposal operates on the exit side only — it does not block any entry, it only adjusts
+  how existing positions are closed. The mechanism is entirely different: conditioning
+  exit decay parameters on regime rather than gating entries on drawdown. It is also
+  not a repeat of any closed_tag direction: regime_classifier_variant is closed, but
+  this does not use a classifier to gate options or size positions — it only conditions
+  exit decay curves on a simple CSI-300-based regime, which the capability menu explicitly
+  supports via C005 and evaluate_cb_arb_regime_adaptive_exit.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22: accepted, baseline for
+    this proposal
+- cb_arb_value_gap_switch_market_drawdown_entry_filter: failed_mechanical_thresholds,
+    entry-side regime gating
+- cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522: failed_mechanical_thresholds,
+    entry-side drawdown gating
+implementation_assumption: The executor evaluate_cb_arb_regime_adaptive_exit must
+  (1) compute daily CSI 300 rolling return and/or realized volatility, (2) assign
+  each day to a regime via percentile-based thresholds, (3) load per-regime decay
+  parameters from the grid search config, (4) apply the regime-appropriate decay curve
+  to each open position's exit decision, (5) keep entry, ranking, and sizing logic
+  identical to the baseline.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: c61ace3dd3770461
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: c61ace3dd3770461
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/proposal.yaml

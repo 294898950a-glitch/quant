@@ -1,0 +1,67 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_3
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_3
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 9
+    selected_name: best_candidate
+  artifacts_hash: 70d6e22b4be91bcd
+interpretation:
+  review_status_code: 2
+  result_summary: PnL feedback scaling (lookback=60, floor=0.7) failed to rescue the
+    forward value-gap strategy — test excess is -23,801.75 yuan, all periods are negative,
+    and adoption_pass is false.
+  main_reason: adoption_pass=false with negative excess returns across all evaluation
+    periods (train, test, 2020); the overlay failed to reduce cumulative excess degradation
+    relative to the -10.47% baseline.
+  failure_causes:
+  - PnL feedback scaling produced negative excess returns in every evaluation window
+    — no period showed improvement over the cost-on baseline
+  - The forward value-gap signal appears structurally unsalvageable after 7 consecutive
+    directional failures (6 entry-filter variants plus this PnL feedback overlay)
+  - Hard floor test_cumulative_excess_compound_greater_than -0.0747 was not met; excess
+    is uniformly negative
+  next_research_directions:
+  - direction: reverse value-gap switch direction
+    why: every forward-direction variant (filters and overlays) has failed; the logical
+      remaining path is to test whether the value-gap signal works in reverse — buying
+      when the gap is against rather than with the signal
+    priority_code: 1
+    priority: high
+  - direction: abandon value-gap signal entirely
+    why: if the reverse direction also fails to produce positive excess, the value-gap
+      signal may carry no exploitable edge in either direction and should be retired
+      to free ideation capacity for other signal families
+    priority_code: 2
+    priority: medium
+  evidence_gaps: []
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 5a42812ed624cb01
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 9
+    selected_name: best_candidate

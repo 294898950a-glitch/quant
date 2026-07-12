@@ -1,0 +1,134 @@
+proposal_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1
+strategy_id: cb_arb_value_gap_switch
+family: regime_adaptive_exit
+hypothesis: 'The duration-adaptive exit accepted on 2026-05-22 uses a single fixed
+  decay schedule (initial_threshold_fraction=0.7, decay_period_factor=0.5) regardless
+  of market conditions. In high-volatility regimes, option-pricing gaps close faster
+  and a single decay schedule may exit too early (leaving money on the table) or too
+  late (allowing gaps to re-widen). Conditioning the decay parameters on a daily market
+  regime classifier — CSI 300 rolling 60-day realized volatility split into terciles
+  (calm / normal / stressed) — tailors exit patience to the prevailing environment:
+  longer patience in calm regimes where gaps close slowly, shorter patience in stressed
+  regimes where gaps close rapidly but risk re-widening. This should improve cumulative
+  excess by reducing mistimed exits without changing entry logic, candidate pool,
+  or position sizing.
+
+  '
+source_insight: 'The duration-adaptive exit was the only forward-direction modification
+  that survived review. Its fixed decay schedule is its weakest link — real market
+  environments vary, and a single exit-timing rule cannot be simultaneously optimal
+  in calm and turbulent conditions. Five entry-filter variants (moneyness x5, bond
+  floor x1) all failed mechanical thresholds because they culled the already-thin
+  forward candidate pool; regime conditioning avoids this by operating purely on exit
+  timing and leaving the candidate pool intact.
+
+  '
+expected_improvement: 'Improve cumulative excess over the accepted duration-adaptive
+  baseline by at least 2 percentage points in the test period (2023-2026), primarily
+  by reducing drawdowns in stress years where the fixed schedule exits positions during
+  temporary panic rather than holding through gap closure.
+
+  '
+capability_ids:
+- C005
+required_executor: evaluate_cb_arb_regime_adaptive_exit
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  data/cb_warehouse/csi300_daily.parquet:
+  - trade_date
+  - close
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - stk_code
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  description: 'Baseline: duration-adaptive exit with accepted params (min_hold_days=5,
+    initial_threshold_fraction=0.7, decay_period_factor=0.5, effective_max_hold_days=45).
+    Regime classifier: CSI 300 rolling 60-day realized volatility (log returns), split
+    into tercile bins (calm / normal / stressed). For each regime, grid-search independent
+    (initial_threshold_fraction, decay_period_factor) within the original parameter
+    ranges. Exit logic reuses the existing formula — after min_hold_days, compare
+    current_gap / entry_gap against a threshold that decays from initial_threshold_fraction
+    to 0 over max_hold_days — but applies the regime-specific parameters locked at
+    entry time. Entry and candidate selection unchanged from baseline. Train 2018-2022,
+    test 2023-2026. Cost-on with slippage 0.0015 and market impact 0.001. Compare
+    best regime-adaptive params against baseline on cumulative excess, drawdown, and
+    Sharpe.
+
+    '
+success_criteria:
+  criteria:
+  - cumulative_excess_compound test period > baseline test period cumulative excess
+  - any_single_year_drawdown_vs_benchmark <= 0.15
+  - any_holdout_year_sharpe >= 0.5
+falsifiers:
+  train: &id001
+  - cumulative_excess_compound test period <= baseline
+  - regime-adaptive exits increase turnover vs baseline by >20pct
+  - all_holdout_years_sharpe < 0.5
+  validate: *id001
+  test: *id001
+risk: 'Regime classification adds complexity and a lookback parameter that may overfit.
+  If regimes are too coarsely defined or the 60-day window is misspecified, the adaptation
+  may add noise rather than signal. The forward direction remains deeply unprofitable
+  in absolute terms; this exit-only improvement cannot make it deployable if the entry
+  signal itself is broken — it can only reduce losses.
+
+  '
+why_not_repeated_failure: 'This is NOT a variant of the five-times-failed moneyness_entry_filter
+  or the failed bond_floor_entry_filter. Those were binary entry filters that excluded
+  candidates from the pool, culling an already-weak forward signal. This proposal
+  modifies only exit timing — all candidates that pass the existing value_gap > 0
+  filter remain eligible for entry. The five moneyness rejections belong to family
+  moneyness_stock_to_conv_threshold; this proposal belongs to a different mechanic
+  family (dynamic_regime_switch / regime_adaptive_exit) that has not been tested.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+- cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524
+implementation_assumption: The executor implements a daily regime classifier using
+  CSI 300 rolling 60-day realized volatility (log returns), split into tercile bins.
+  For each regime it tunes independent (initial_threshold_fraction, decay_period_factor)
+  pairs via grid search. The exit check reuses the existing duration-adaptive formula
+  (current_gap / entry_gap > threshold where threshold decays from initial_threshold_fraction
+  to 0 over max_hold_days) but applies regime-specific parameters locked at entry
+  time.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 40856dcd967f65a0
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 40856dcd967f65a0
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_regime_adaptive_exit_v1/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=regime_adaptive_exit, capability_ids=['C005']);
+    no critical-insight reference; queue depth=0.
+  evidence:
+    family: regime_adaptive_exit
+    capability_ids:
+    - C005
+    cites_critical: null
+    queue_depth: 0

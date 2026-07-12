@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_exit_gap_closing_percentile_v1
+spec_path: data/cb_arb_value_gap_switch_exit_gap_closing_percentile_v1/spec.yaml
+validated_at: '2026-05-27T09:57:41'
+summary_sha256: f6e8a51e2aea114e57de7931ddf16f68d8fa7efdeceee996871bd29afd73524b
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_daily 缺失推荐字段 cb_over_rate、pct_chg，非必需列，已放行
+- daily_value_gap_amounts 最早日期 20190102，训练期起点 20190101 为元旦非交易日，不影响覆盖
+fix_plan: []
+decision_reason: 所有必需文件存在可读，行情数据覆盖训练期和测试期，无硬性列要求或质量门槛未满足，推荐字段缺失不阻塞
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 1f46f049a00203e0

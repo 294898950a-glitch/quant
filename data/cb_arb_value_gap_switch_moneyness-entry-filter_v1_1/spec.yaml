@@ -1,0 +1,309 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+date: '2026-05-24'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'Restricting entries to candidates where the underlying stock price is
+  at or above a threshold fraction of the conversion price (stock_close / conv_price
+  >= threshold) will improve cumulative excess by screening out deep out-of-the-money
+  CBs. Deep OTM CB option values are dominated by time premium and IV assumptions,
+  making their theoretical-value gaps least reliable and most likely to represent
+  model noise rather than tradable mispricing. Unlike the failed entry filters (bond-floor
+  and market drawdown) that suppress all signals during adverse conditions, this filter
+  targets signal quality at the individual candidate level without reference to market
+  regime.
+
+  '
+source_insight: 'Two entry filters (bond-floor and market drawdown) failed mechanical
+  thresholds because they suppress all entries during adverse conditions, destroying
+  opportunity without fixing the root cause. Meanwhile, exit rule innovations (duration-adaptive
+  accepted, gap-speed-adaptive passed adoption) prove the core value-gap signal has
+  merit when combined with smarter mechanics. The logical next step is to improve
+  signal quality at the source — filtering out candidates whose theoretical value
+  is inherently unreliable — rather than suppressing all entries during bad times.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - moneyness_stock_to_conv_threshold
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C003
+mechanics:
+- moneyness_stock_to_conv_threshold
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+- path: data/cb_warehouse/cb_daily.parquet
+- path: data/cb_warehouse/cb_call.parquet
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+- path: data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+hard_floors:
+  criteria:
+  - cumulative_excess_compound > baseline cumulative excess for at least one threshold
+    in test period
+  - max_single_year_drawdown_vs_benchmark <= baseline max drawdown (no worse) for
+    best threshold
+  - at least one threshold produces directionally positive improvement in both train
+    and test slices
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: COMPLETE
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+  strategy_id: cb_arb_value_gap_switch
+  family: moneyness_entry_filter
+  hypothesis: 'Restricting entries to candidates where the underlying stock price
+    is at or above a threshold fraction of the conversion price (stock_close / conv_price
+    >= threshold) will improve cumulative excess by screening out deep out-of-the-money
+    CBs. Deep OTM CB option values are dominated by time premium and IV assumptions,
+    making their theoretical-value gaps least reliable and most likely to represent
+    model noise rather than tradable mispricing. Unlike the failed entry filters (bond-floor
+    and market drawdown) that suppress all signals during adverse conditions, this
+    filter targets signal quality at the individual candidate level without reference
+    to market regime.
+
+    '
+  source_insight: 'Two entry filters (bond-floor and market drawdown) failed mechanical
+    thresholds because they suppress all entries during adverse conditions, destroying
+    opportunity without fixing the root cause. Meanwhile, exit rule innovations (duration-adaptive
+    accepted, gap-speed-adaptive passed adoption) prove the core value-gap signal
+    has merit when combined with smarter mechanics. The logical next step is to improve
+    signal quality at the source — filtering out candidates whose theoretical value
+    is inherently unreliable — rather than suppressing all entries during bad times.
+
+    '
+  expected_improvement: 'Improved risk-adjusted excess returns by reducing exposure
+    to false signals from deep OTM CBs where theoretical value estimates are least
+    reliable. Expected to reduce drawdowns without proportionally reducing upside
+    capture, since filtered candidates contribute noise rather than alpha. Targets
+    the cost-degradation problem (-7.47pp cost-on) by reducing low-quality trades
+    that incur costs without delivering excess returns.
+
+    '
+  capability_ids:
+  - C003
+  required_executor: evaluate_cb_arb_moneyness_entry_filter
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  - path: data/cb_warehouse/cb_daily.parquet
+  - path: data/cb_warehouse/cb_call.parquet
+  - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+  - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  - path: data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+  required_data_fields:
+    data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+    - trade_date
+    - ts_code
+    - value_gap_amount
+    - rank
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - conv_price
+    - stk_code
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - ts_code
+    - trade_date
+    - close
+    data/cb_warehouse/cb_daily.parquet:
+    - ts_code
+    - trade_date
+    - close
+    data/cb_warehouse/cb_call.parquet:
+    - ts_code
+    - ann_date
+    - call_date
+    - is_call
+    data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json:
+    - valuation_params
+    data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json:
+    - valuation_params
+    data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json:
+    - valuation_params
+    data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json:
+    - valuation_params
+  test_design:
+    description: 'Grid search over moneyness thresholds (stock_close / conv_price):
+      0.6, 0.7, 0.8, 0.9, 1.0, 1.1, 1.2. For each threshold, filter candidates to
+      only those where stock_close >= threshold * conv_price on the entry signal date,
+      then run the standard backtester without modifying valuation, ranking, sizing,
+      or exit logic. Threshold 1.0 means only at-the-money or in-the-money candidates;
+      lower thresholds are progressively more permissive. Compare risk-adjusted metrics
+      against the current baseline with no moneyness filter. Standard train/test split
+      over years, same as prior runs.
+
+      '
+  success_criteria:
+    criteria:
+    - cumulative_excess_compound > baseline cumulative excess for at least one threshold
+      in test period
+    - max_single_year_drawdown_vs_benchmark <= baseline max drawdown (no worse) for
+      best threshold
+    - at least one threshold produces directionally positive improvement in both train
+      and test slices
+  falsifiers:
+    train:
+    - all thresholds degrade cumulative_excess_compound vs baseline in test period
+    - best threshold still leaves strategy deeply unprofitable in absolute PnL (cumulative
+      excess < 0)
+    - no threshold produces a meaningful improvement in risk-adjusted returns (Sharpe
+      ratio unchanged or worse)
+    validate:
+    - all thresholds degrade cumulative_excess_compound vs baseline in test period
+    - best threshold still leaves strategy deeply unprofitable in absolute PnL (cumulative
+      excess < 0)
+    - no threshold produces a meaningful improvement in risk-adjusted returns (Sharpe
+      ratio unchanged or worse)
+    test:
+    - all thresholds degrade cumulative_excess_compound vs baseline in test period
+    - best threshold still leaves strategy deeply unprofitable in absolute PnL (cumulative
+      excess < 0)
+    - no threshold produces a meaningful improvement in risk-adjusted returns (Sharpe
+      ratio unchanged or worse)
+  risk: 'Low. This is an additive filter on top of existing entry logic. If moneyness
+    filtering removes too many candidates, the strategy reverts to fewer trades but
+    introduces no new risk sources. Worst case is reduced opportunity without improvement
+    — same pattern as failed entry filters but with a different targeting mechanism
+    that doesn''t suppress all signals during market stress.
+
+    '
+  why_not_repeated_failure: 'This is not a repeat of the failed bond-floor (C002)
+    or market drawdown (C009) entry filters. Those filters suppress all entries during
+    adverse market conditions (timing/regime approach). The moneyness filter operates
+    at the individual candidate level: it filters out specific CBs whose theoretical
+    value calculation is inherently unreliable due to deep OTM option characteristics.
+    The failed entry filters failed because they suppress good signals along with
+    bad ones during market stress; moneyness filtering targets signal quality directly,
+    independent of market regime. This is also not a repeat of the closed ''universe_filter''
+    tag — moneyness filtering preserves the full universe and only gates individual
+    entry signals based on a real-time observable condition.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_bond-floor-entry-filter_1: failed_mechanical_thresholds
+      (entry filter, different mechanism — regime/timing)
+  - cb_arb_value_gap_switch_market_drawdown_entry_filter: failed_mechanical_thresholds
+      (entry filter, different mechanism — regime/timing)
+  - cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22: accepted (exit rule,
+      same strategy, evidence that signal has merit)
+  - cb_arb_value_gap_switch_gap-speed-adaptive-exit_2: adoption_pass (exit rule, same
+      strategy, reinforcing evidence)
+  implementation_assumption: The executor reads stock_close from stk_daily_qfq, conv_price
+    from cb_basic, computes moneyness = stock_close / conv_price on each signal date,
+    and applies a boolean mask before candidate ranking. The concurrent_supervised
+    pool best_params.json files provide the valuation model parameters used to compute
+    value_gap_amount. No changes to valuation, ranking, sizing, or exit logic. The
+    filter is applied as a pre-ranking gate on the daily candidate pool.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 596ae0904b5ea43f
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 596ae0904b5ea43f
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_id_deduped_from: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_moneyness-entry-filter_v1_1/proposal.yaml
+  mechanics:
+  - moneyness_stock_to_conv_threshold
+executor_id: evaluate_cb_arb_moneyness_entry_filter
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_moneyness_entry_filter.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+  sync_paths:
+  - scripts/evaluate_cb_arb_moneyness_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_call.parquet
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+  - data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_moneyness-entry-filter_v1_1/proposal.yaml
+  response_hash: 596ae0904b5ea43f
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data: []
+updated_at: '2026-05-24T04:49:33Z'

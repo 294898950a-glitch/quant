@@ -120,29 +120,29 @@ no_reply_default:
   - do_not_promote_to_live
 recent_results_digest:
   path: data/research_framework/recent_results_digest.yaml
-  updated_at: '2026-05-22T07:21:14+00:00'
+  updated_at: '2026-05-27T01:51:23+00:00'
   latest:
-  - run_id: cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+  - run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+    strategy_id: cb_arb_value_gap_switch
+    verdict: failed_mechanical_thresholds
+    one_line_summary: null
+    closed_direction_tags: []
+  - run_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
     strategy_id: cb_arb_value_gap_switch
     verdict: no_adoption_decision_unusable
     one_line_summary: null
     closed_direction_tags: []
-  - run_id: cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  - run_id: cb_arb_value_gap_switch_full-flip-probe_20260524
     strategy_id: cb_arb_value_gap_switch
-    verdict: null
+    verdict: no_adoption_decision_unusable
     one_line_summary: null
     closed_direction_tags: []
-  - run_id: cb_arb_value_gap_switch_regime-trend-guard_2026-05-19
+  - run_id: cb_arb_value_gap_switch_reverse-probe_20260524
     strategy_id: cb_arb_value_gap_switch
-    verdict: reject
+    verdict: no_adoption_decision_unusable
     one_line_summary: null
     closed_direction_tags: []
-  - run_id: volatility_scaling_001
-    strategy_id: cb_arb_value_gap_switch
-    verdict: null
-    one_line_summary: null
-    closed_direction_tags: []
-  - run_id: volatility_position_scaling_v2_2026-05-21
+  - run_id: cb_arb_value_gap_switch_new_valuation_v1
     strategy_id: cb_arb_value_gap_switch
     verdict: null
     one_line_summary: null

@@ -1,0 +1,23 @@
+schema_version: 1
+run_id: market_drawdown_entry_gate_v1_20260521
+spec_path: data/market_drawdown_entry_gate_v1_20260521/spec.yaml
+validated_at: '2026-05-22T04:08:54'
+summary_sha256: 74860ba785b882e5ed2dd229a3684fa7e28119639469c8ece2bf5c9475586ee5
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_basic.nonnull_columns excludes conv_price; nulls in conv_price may affect conversion-price-dependent
+  calculations.
+- cb_call allows nulls in ann_date, call_date, expire_date; experiments relying on
+  these fields may encounter missing call events.
+- Daily value-gap amounts file has no nonnull constraints; quality of derived signals
+  not verified.
+- Price sanity checks (e.g. high≥low, open/close>0) not performed; assume data quality.
+fix_plan: []
+decision_reason: 所有必需文件均存在且可读，必需字段完整，交易日历覆盖训练与测试区间，未发现阻断性问题。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: deepseek
+response_hash: edc9fcbdfb26d7a3

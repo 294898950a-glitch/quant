@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: ideation_2026-05-21_gap_decay_bond_floor_exit_executor_code
+source: data/ideation_2026-05-21_gap_decay_bond_floor_exit/generated_executor/evaluate_cb_arb_gap_decay_with_bond_floor.py
+compliance_errors:
+- 'compliance_failed: import_reachability_probe_failed: TimeoutExpired: Command ''[''/usr/bin/python3'',
+  ''-E'', ''-c'', "import importlib.util, sys, traceback;spec = importlib.util.spec_from_file_location(''check'',
+  r''/home/jay/projects/quant/data/ideation_2026-05-21_gap_decay_bond_floor_exit/generated_executor/evaluate_cb_arb_gap_decay_with_bond_floor.py'');m
+  = importlib.util.module_from_spec(spec);sys.modules[spec.name] = m;spec.loader.exec_module(m)"]''
+  timed out after 20 seconds'
+required_fix: Add 'from scripts.gatekeeper import GateKeeper' to the generated executor
+  and call the GateKeeper lifecycle methods (before_run_grid / after_run_grid). See
+  scripts/evaluate_cb_arb_exit_gap_closing_percentile.py and scripts/evaluate_cb_arb_iv_percentile_exit.py
+  for the canonical pattern. Do not request manual allowlist; the install path will
+  remain blocked until the import is in place.
+noted_at: '2026-06-28T05:57:28+00:00'
+dry_run: false

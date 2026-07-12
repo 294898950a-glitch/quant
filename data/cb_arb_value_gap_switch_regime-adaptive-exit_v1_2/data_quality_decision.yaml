@@ -1,0 +1,16 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/spec.yaml
+validated_at: '2026-05-23T22:34:33'
+summary_sha256: 31744bd30431cf2889d79f1337904576174f6b8e9d68543311d3931c9a442d59
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 四个必需文件全部存在可读，日期范围覆盖训练期(2019-2024)和测试期(2025-20260508)，无显式required_columns硬性约束，executor_input_column_hints中的regime和trade_date均存在于daily_value_gap_amounts.parquet中，无阻塞问题。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 6ed5c8976ee6e1fe

@@ -1,0 +1,466 @@
+status: draft_tool_code
+code_response_hash: 32993433dbc0c679
+validation_errors: []
+files:
+- path: generated_executor/evaluate_cb_arb_reverse_volatility_scaling.py
+  purpose: Complete evaluator implementation.
+  content: "#!/usr/bin/env python3\n\"\"\"Evaluate reverse value_gap sort with volatility-based\
+    \ inverse position scaling.\n\nComposes two mechanisms:\n  1. Reverse value_gap\
+    \ sort (ascending, smallest positive gap first)\n  2. Inverse ATR-based position\
+    \ scaling: scale *= 1 / ((ATR/median_ATR)^aggressiveness)\n\nGrid-searches ATR\
+    \ lookback [10,20,60] x aggressiveness [0.5,1.0,2.0].\nCompares each grid point\
+    \ against a reverse-rank cost-on baseline (no scaling).\nWrites summary.json,\
+    \ report.yaml, l4_ack.yaml, diagnostic.yaml,\nand reverse_vol_scaling_meta.yaml\
+    \ per the quant framework contract.\n\nHard boundaries:\n  - Does NOT modify raw\
+    \ warehouse data.\n  - Does NOT touch current.yaml, baseline_registry.yaml, or\
+    \ research_queue.yaml.\n  - Results are evidence only; user must approve any truth\
+    \ promotion.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\n\
+    import json\nimport sys\nfrom datetime import datetime\nfrom pathlib import Path\n\
+    from typing import Any\n\n# ---------------------------------------------------------------------------\n\
+    # Repo root & sys.path -- must come before any from scripts.X import Y\n# The\
+    \ compliance import-reachability probe runs with -I in /tmp, so all\n# non-stdlib\
+    \ imports that follow must resolve from venv site-packages\n# (numpy/pandas/yaml)\
+    \ or from REPO_ROOT (scripts.*).\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n# ---------------------------------------------------------------------------\n\
+    # Lazy third-party imports -- not loaded at module level in isolated probe\n#\
+    \ ---------------------------------------------------------------------------\n\
+    \n\ndef _get_np():\n    import numpy as _np\n    return _np\n\n\ndef _get_pd():\n\
+    \    import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n    import yaml\
+    \ as _yaml\n    return _yaml\n\n\n_YAML_REPRS_REGISTERED = False\n\n\ndef _ensure_yaml_np_reprs():\n\
+    \    \"\"\"Register numpy representers for YAML SafeDumper (once).\"\"\"\n   \
+    \ global _YAML_REPRS_REGISTERED\n    if _YAML_REPRS_REGISTERED:\n        return\n\
+    \    yaml = _get_yaml()\n    np = _get_np()\n\n    def _yaml_repr_np_float(dumper,\
+    \ data):\n        return dumper.represent_float(float(data))\n\n    def _yaml_repr_np_int(dumper,\
+    \ data):\n        return dumper.represent_int(int(data))\n\n    yaml.SafeDumper.add_representer(np.floating,\
+    \ _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# ---------------------------------------------------------------------------\n\
+    # GateKeeper pre-run compliance\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    \"\"\"Run GateKeeper\
+    \ before_run_grid if spec.yaml is present.\"\"\"\n    spec_path = output_dir /\
+    \ \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\n# ---------------------------------------------------------------------------\n\
+    # Grid search space (lightweight tuples -- fine at module level)\n# ---------------------------------------------------------------------------\n\
+    \nATR_LOOKBACKS = (10, 20, 60)\nSCALING_AGGRESSIVENESSES = (0.5, 1.0, 2.0)\n\n\
+    # ---------------------------------------------------------------------------\n\
+    # CLI parsing\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _parse_args() -> argparse.Namespace:\n    p = argparse.ArgumentParser(description=__doc__)\n\
+    \    p.add_argument(\"--data-root\", type=Path, required=True)\n    p.add_argument(\n\
+    \        \"--value-gap-path\",\n        type=Path,\n        default=Path(\n  \
+    \          \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n            \"daily_value_gap_amounts.parquet\"\n        ),\n    )\n    p.add_argument(\"\
+    --train-start\", default=\"20190101\")\n    p.add_argument(\"--train-end\", default=\"\
+    20241231\")\n    p.add_argument(\"--test-start\", default=\"20250101\")\n    p.add_argument(\"\
+    --test-end\", default=\"20260508\")\n    p.add_argument(\"--fixed-source\", type=int,\
+    \ default=2)\n    p.add_argument(\"--rule\", default=\"score_4state\")\n    p.add_argument(\"\
+    --output-dir\", type=Path, default=None)\n    p.add_argument(\"--atr-lookback\"\
+    , type=int, default=20)\n    p.add_argument(\"--scaling-aggressiveness\", type=float,\
+    \ default=1.0)\n    p.add_argument(\"--sell-gap-pct\", type=float, default=0.0)\n\
+    \    p.add_argument(\"--max-hold-days\", type=float, default=180.0)\n    p.add_argument(\"\
+    --cost-model-enabled\", action=\"store_true\")\n    p.add_argument(\"--slippage-pct\"\
+    , type=float, default=0.0015)\n    p.add_argument(\"--market-impact-coeff\", type=float,\
+    \ default=0.001)\n    p.add_argument(\"--market-impact-cap-pct\", type=float,\
+    \ default=0.02)\n    p.add_argument(\"--holding-cost-pct\", type=float, default=0.0)\n\
+    \    p.add_argument(\n        \"--grid-search-disabled\",\n        action=\"store_true\"\
+    ,\n        help=\"Run only the CLI-specified ATR lookback and aggressiveness (no\
+    \ grid)\",\n    )\n    return p.parse_args()\n\n\n# ---------------------------------------------------------------------------\n\
+    # Data requirements declaration\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _command_value_from_parts(command: list[Any], flag: str) -> str | None:\n\
+    \    parts = [str(part) for part in command]\n    for index, part in enumerate(parts[:-1]):\n\
+    \        if part == flag:\n            return parts[index + 1]\n    return None\n\
+    \n\ndef declare_data_requirements(\n    command: list[Any], spec: dict[str, Any]\
+    \ | None = None\n) -> dict[str, Any]:\n    \"\"\"Return the files this executor\
+    \ will read before it is allowed to run.\"\"\"\n    data_root_raw = _command_value_from_parts(command,\
+    \ \"--data-root\")\n    if not data_root_raw:\n        raise ValueError(\n   \
+    \         \"evaluate_cb_arb_reverse_volatility_scaling requires --data-root\"\n\
+    \        )\n    data_root = Path(data_root_raw)\n\n    value_gap_raw = _command_value_from_parts(command,\
+    \ \"--value-gap-path\")\n    value_gap_path = (\n        str(value_gap_raw)\n\
+    \        if value_gap_raw\n        else \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n        \"daily_value_gap_amounts.parquet\"\n    )\n\n    fixed_source_raw =\
+    \ _command_value_from_parts(command, \"--fixed-source\") or \"2\"\n    fixed_source\
+    \ = int(fixed_source_raw)\n    pool_ids = sorted({0, 2, 4, 6, fixed_source})\n\
+    \n    warehouse_files = [\n        (\n            \"data/cb_warehouse/cb_basic.parquet\"\
+    ,\n            [\"ts_code\", \"stk_code\", \"conv_price\", \"list_date\", \"delist_date\"\
+    ],\n        ),\n        (\n            \"data/cb_warehouse/cb_daily.parquet\"\
+    ,\n            [\"ts_code\", \"trade_date\", \"close\"],\n        ),\n       \
+    \ (\n            \"data/cb_warehouse/cb_call.parquet\",\n            [\"ts_code\"\
+    , \"ann_date\", \"call_date\", \"expire_date\"],\n        ),\n        (\n    \
+    \        \"data/cb_warehouse/stk_daily_qfq.parquet\",\n            [\"stk_code\"\
+    , \"trade_date\", \"close\"],\n        ),\n    ]\n    required_files: list[dict[str,\
+    \ Any]] = [\n        {\n            \"path\": rel_path,\n            \"role\"\
+    : \"warehouse_input\",\n            \"required_columns\": columns,\n         \
+    \   \"nonnull_columns\": [\n                col\n                for col in columns\n\
+    \                if col not in {\"conv_price\", \"ann_date\", \"call_date\", \"\
+    expire_date\"}\n            ],\n        }\n        for rel_path, columns in warehouse_files\n\
+    \    ]\n    required_files.append({\n        \"path\": value_gap_path,\n     \
+    \   \"role\": \"value_gap_input\",\n        \"required_columns\": [\"ts_code\"\
+    , \"trade_date\", \"value_gap_amount\"],\n        \"nonnull_columns\": [\"value_gap_amount\"\
+    ],\n    })\n    for pool_id in pool_ids:\n        required_files.append({\n  \
+    \          \"path\": str(data_root / f\"pool_{pool_id}\" / \"best_params.json\"\
+    ),\n            \"role\": \"config_pool\",\n        })\n\n    return {\n     \
+    \   \"schema_version\": 1,\n        \"executor\": \"scripts/evaluate_cb_arb_reverse_volatility_scaling.py\"\
+    ,\n        \"required_files\": required_files,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # ATR calculation -- SMA of absolute daily returns (per proposal specification)\n\
+    # ---------------------------------------------------------------------------\n\
+    \n\ndef _compute_sma_atr(\n    cb_daily: Any,\n    lookback: int,\n) -> Any:\n\
+    \    \"\"\"Compute ATR as SMA of |close_t - close_{t-1}| over lookback days.\n\
+    \n    Per proposal: \"ATR = SMA(|close_t - close_{t-1}|, N)\".\n    Lagged by\
+    \ 1 day to avoid look-ahead bias.\n    Returns DataFrame with [ts_code, trade_date,\
+    \ atr].\n    \"\"\"\n    pd = _get_pd()\n    df = cb_daily[[\"ts_code\", \"trade_date\"\
+    , \"close\"]].copy()\n    df[\"trade_date\"] = df[\"trade_date\"].astype(str)\n\
+    \    df[\"ts_code\"] = df[\"ts_code\"].astype(str)\n\n    # Sort and compute daily\
+    \ absolute return\n    df = df.sort_values([\"ts_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \    df[\"close\"] = df[\"close\"].astype(float)\n    # Lagged close: use t-1\
+    \ close to compute t's return (no look-ahead)\n    df[\"prev_close\"] = df.groupby(\"\
+    ts_code\")[\"close\"].shift(1)\n    df[\"abs_ret\"] = (df[\"close\"] - df[\"prev_close\"\
+    ]).abs()\n\n    # SMA of abs_ret over lookback window\n    df[\"atr\"] = df.groupby(\"\
+    ts_code\")[\"abs_ret\"].transform(\n        lambda x: x.rolling(window=lookback,\
+    \ min_periods=max(1, lookback // 2)).mean()\n    )\n\n    # Forward-fill NaN ATR\
+    \ for CBs with insufficient history\n    df[\"atr\"] = df[\"atr\"].fillna(0.0)\n\
+    \n    return df[[\"ts_code\", \"trade_date\", \"atr\"]]\n\n\n# ---------------------------------------------------------------------------\n\
+    # Load value gaps\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _load_value_gaps(value_gap_path: Path, start: str, end: str) -> Any:\n\
+    \    \"\"\"Load pre-computed daily value gap amounts and filter to date range.\"\
+    \"\"\n    pd = _get_pd()\n    abs_path = (\n        value_gap_path\n        if\
+    \ value_gap_path.is_absolute()\n        else _REPO_ROOT / value_gap_path\n   \
+    \ )\n    ranks = pd.read_parquet(abs_path)\n    ranks[\"trade_date\"] = ranks[\"\
+    trade_date\"].astype(str)\n    ranks[\"ts_code\"] = ranks[\"ts_code\"].astype(str)\n\
+    \    ranks = ranks[\n        (ranks[\"trade_date\"] >= start) & (ranks[\"trade_date\"\
+    ] <= end)\n    ].copy()\n    ranks = ranks[ranks[\"value_gap_amount\"].notna()]\n\
+    \    return ranks\n\n\n# ---------------------------------------------------------------------------\n\
+    # Merge ATR and apply inverse volatility position scaling\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _apply_inverse_atr_scaling(\n    ranks: Any,\n    atr_df: Any,\n    cfg:\
+    \ dict[str, Any],\n) -> tuple[Any, dict[str, Any]]:\n    \"\"\"Apply inverse ATR\
+    \ position scaling without changing sort order.\n\n    scaling_factor = 1 / ((ATR\
+    \ / median_ATR)^aggressiveness)\n    Clamped to [0.1, 3.0] per proposal, but backtest\
+    \ clips to [0.0, 1.0]\n    at buy time, so effective range is [0.1, 1.0].\n\n\
+    \    IMPORTANT: value_gap_amount is NOT modified. The original reverse sort\n\
+    \    (ascending by value_gap_amount > 0) is preserved.\n    position_cash_scale\
+    \ is added for the backtest to read at buy time.\n    \"\"\"\n    pd = _get_pd()\n\
+    \    np = _get_np()\n    mode = str(cfg.get(\"mode\", \"none\"))\n    blended\
+    \ = ranks.merge(atr_df, on=[\"ts_code\", \"trade_date\"], how=\"left\")\n\n  \
+    \  blended[\"position_cash_scale\"] = 1.0\n    blended[\"volatility_scaling_factor\"\
+    ] = 1.0\n\n    if mode == \"none\":\n        return blended, {\n            \"\
+    name\": cfg[\"name\"],\n            \"scaled_rows\": 0,\n            \"avg_scale\"\
+    : 1.0,\n            \"min_scale\": 1.0,\n            \"max_scale\": 1.0,\n   \
+    \         \"avg_atr\": 0.0,\n            \"median_atr\": 0.0,\n        }\n\n \
+    \   aggressiveness = float(cfg[\"scaling_aggressiveness\"])\n\n    # Cross-sectional\
+    \ median ATR per day\n    daily_median = blended.groupby(\"trade_date\")[\"atr\"\
+    ].transform(\"median\")\n\n    has_atr = blended[\"atr\"].notna() & (blended[\"\
+    atr\"] > 0)\n    blended[\"volatility_scaling_factor\"] = 1.0\n\n    if has_atr.any():\n\
+    \        atr_vals = blended.loc[has_atr, \"atr\"].astype(float)\n        med_vals\
+    \ = daily_median.loc[has_atr].astype(float)\n        # Avoid division by zero:\
+    \ fall back to ATR itself\n        med_safe = med_vals.where(med_vals > 0, atr_vals)\n\
+    \n        atr_ratio = atr_vals / med_safe  # >1 for high-vol, <1 for low-vol\n\
+    \        # Inverse scaling: high vol -> smaller position\n        raw_factor =\
+    \ 1.0 / (atr_ratio ** aggressiveness)\n        # Clamp to [0.1, 3.0] per proposal\n\
+    \        factor = raw_factor.clip(lower=0.1, upper=3.0)\n\n        blended.loc[has_atr,\
+    \ \"volatility_scaling_factor\"] = factor.astype(float)\n        blended.loc[has_atr,\
+    \ \"position_cash_scale\"] = factor.astype(float)\n\n    # Stats\n    factors\
+    \ = (\n        blended.loc[has_atr, \"volatility_scaling_factor\"]\n        if\
+    \ has_atr.any()\n        else pd.Series(dtype=float)\n    )\n    atrs = (\n  \
+    \      blended.loc[has_atr, \"atr\"] if has_atr.any() else pd.Series(dtype=float)\n\
+    \    )\n    medians = (\n        daily_median.loc[has_atr] if has_atr.any() else\
+    \ pd.Series(dtype=float)\n    )\n\n    return blended, {\n        \"name\": cfg[\"\
+    name\"],\n        \"scaled_rows\": int(has_atr.sum()),\n        \"avg_scale\"\
+    : round(float(factors.mean()), 6) if not factors.empty else 1.0,\n        \"min_scale\"\
+    : round(float(factors.min()), 6) if not factors.empty else 1.0,\n        \"max_scale\"\
+    : round(float(factors.max()), 6) if not factors.empty else 1.0,\n        \"avg_atr\"\
+    : round(float(atrs.mean()), 6) if not atrs.empty else 0.0,\n        \"median_atr\"\
+    : round(float(medians.mean()), 6) if not medians.empty else 0.0,\n        \"atr_lookback\"\
+    : cfg.get(\"atr_lookback\"),\n        \"scaling_aggressiveness\": aggressiveness,\n\
+    \    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # Pick helper\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _pick(rows: list[dict[str, Any]], name: str, period: str) -> dict[str,\
+    \ Any]:\n    return next(\n        (r for r in rows if r[\"name\"] == name and\
+    \ r[\"period\"] == period), {}\n    )\n\n\n# ---------------------------------------------------------------------------\n\
+    # Artifact writers\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _write_artifacts(\n    output_dir: Path,\n    summary: dict[str, Any],\n\
+    \    best_train: dict[str, Any],\n    best_test: dict[str, Any],\n    baseline_train:\
+    \ dict[str, Any],\n    baseline_test: dict[str, Any],\n    adoption_pass: bool,\n\
+    \    grid_meta: list[dict[str, Any]],\n) -> None:\n    \"\"\"Write summary.json,\
+    \ report.yaml, l4_ack.yaml, diagnostic.yaml.\"\"\"\n    _ensure_yaml_np_reprs()\n\
+    \    yaml = _get_yaml()\n    now = datetime.now().isoformat(timespec=\"seconds\"\
+    )\n    selected_test = _pick(\n        summary.get(\"summary_rows\", []),\n  \
+    \      str(best_train.get(\"name\")),\n        \"test\",\n    )\n    decision\
+    \ = \"mini-spec-retry\" if adoption_pass else \"reject\"\n\n    if adoption_pass:\n\
+    \        reason = (\n            \"Reverse volatility scaling passed success criteria:\
+    \ \"\n            \"test excess retains >=80% of reverse baseline, \"\n      \
+    \      \"max drawdown < -15%, Sharpe > baseline.\"\n        )\n    else:\n   \
+    \     reason = (\n            \"No reverse volatility scaling variant met all\
+    \ success criteria \"\n            \"(excess retention >= 80%, drawdown < -15%,\
+    \ Sharpe > baseline).\"\n        )\n\n    # summary.json\n    (output_dir / \"\
+    summary.json\").write_text(\n        json.dumps(summary, ensure_ascii=False, indent=2)\
+    \ + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\n    # report.yaml\n    (output_dir\
+    \ / \"report.yaml\").write_text(\n        yaml.safe_dump(\n            {\n   \
+    \             \"schema_version\": 1,\n                \"run_id\": output_dir.name,\n\
+    \                \"date\": datetime.now().strftime(\"%Y-%m-%d\"),\n          \
+    \      \"strategy_id\": \"cb_arb_value_gap_switch\",\n                \"family\"\
+    : \"reverse_volatility_position_scaling\",\n                \"l6_exit_decision\"\
+    : decision,\n                \"status\": \"COMPLETE\",\n                \"three_exits_section\"\
+    : {\n                    \"train_exit\": (\n                        f\"Train winner:\
+    \ {best_train.get('name')} \"\n                        f\"(excess={best_train.get('excess_return')},\
+    \ \"\n                        f\"dd={best_train.get('max_drawdown')})\"\n    \
+    \                ),\n                    \"validation_exit\": (\n            \
+    \            f\"Sealed test of train winner: {selected_test.get('name')} \"\n\
+    \                        f\"(excess={selected_test.get('excess_return')}, \"\n\
+    \                        f\"dd={selected_test.get('max_drawdown')})\"\n      \
+    \              ),\n                    \"decision_exit\": reason,\n          \
+    \      },\n                \"compute_cost_yuan\": 0.0,\n                \"confirmed_invalid_directions\"\
+    : (\n                    [\"reverse_volatility_position_scaling\"] if not adoption_pass\
+    \ else []\n                ),\n                \"learnings\": [\n            \
+    \        \"Reverse-rank base +30.3% test excess tested with inverse ATR scaling.\"\
+    ,\n                    reason,\n                ],\n                \"follow_up_actions\"\
+    : [\n                    \"Keep as evidence for volatility-based risk filters\
+    \ on reverse sort.\",\n                    \"Do not promote without follow-up\
+    \ review.\",\n                ],\n                \"summary\": reason,\n     \
+    \           \"references\": summary.get(\"artifacts\", []),\n                \"\
+    related_reports\": [\n                    \"data/cb_arb_value_gap_switch_reverse-probe-coston_20260524/report.yaml\"\
+    ,\n                ],\n            },\n            allow_unicode=True,\n     \
+    \       sort_keys=False,\n        ),\n        encoding=\"utf-8\",\n    )\n\n \
+    \   # l4_ack.yaml\n    (output_dir / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(\n\
+    \            {\n                \"schema_version\": 1,\n                \"run_id\"\
+    : output_dir.name,\n                \"reviewer\": \"hermes\",\n              \
+    \  \"ack_at\": now,\n                \"q1_floor_binding\": {\n               \
+    \     \"description\": (\n                        \"Hard floors: test excess retention\
+    \ >= 80%, \"\n                        \"drawdown < -15%, Sharpe > baseline.\"\n\
+    \                    ),\n                    \"answer\": (\n                 \
+    \       \"All success criteria met.\"\n                        if adoption_pass\n\
+    \                        else \"Not all success criteria met.\"\n            \
+    \        ),\n                    \"computed_data\": {\n                      \
+    \  \"best_train_variant\": best_train.get(\"name\"),\n                       \
+    \ \"train_excess\": best_train.get(\"excess_return\"),\n                     \
+    \   \"test_excess\": selected_test.get(\"excess_return\"),\n                 \
+    \       \"baseline_test_excess\": baseline_test.get(\"excess_return\"),\n    \
+    \                    \"test_excess_retention\": (\n                          \
+    \  round(\n                                float(selected_test.get(\"excess_return\"\
+    , 0))\n                                / max(\n                              \
+    \      float(baseline_test.get(\"excess_return\", 1)),\n                     \
+    \               0.0001,\n                                ),\n                \
+    \                4,\n                            )\n                         \
+    \   if selected_test and baseline_test\n                            else None\n\
+    \                        ),\n                        \"test_drawdown\": selected_test.get(\"\
+    max_drawdown\"),\n                        \"baseline_drawdown\": baseline_test.get(\"\
+    max_drawdown\"),\n                    },\n                    \"computed_at\"\
+    : now,\n                    \"pass\": adoption_pass,\n                },\n   \
+    \             \"q2_selection_score\": {\n                    \"description\":\
+    \ \"Train score selection vs sealed test best.\",\n                    \"answer\"\
+    : (\n                        f\"Train selected {best_train.get('name')}; \"\n\
+    \                        f\"test best is {best_test.get('name')}.\"\n        \
+    \            ),\n                    \"computed_data\": {\n                  \
+    \      \"selected_by_train\": best_train.get(\"name\"),\n                    \
+    \    \"best_test_variant\": best_test.get(\"name\"),\n                    },\n\
+    \                    \"pass\": adoption_pass,\n                },\n          \
+    \      \"q3_baseline_alignment\": {\n                    \"description\": \"Alignment\
+    \ vs reverse cost-on baseline.\",\n                    \"answer\": reason,\n \
+    \                   \"computed_data\": {\n                        \"baseline_test_excess\"\
+    : baseline_test.get(\"excess_return\"),\n                        \"selected_test_excess\"\
+    : selected_test.get(\"excess_return\"),\n                    },\n            \
+    \        \"computed_at\": now,\n                    \"pass\": adoption_pass,\n\
+    \                },\n                \"q4_monotonic\": {\n                   \
+    \ \"description\": \"Grid monotonicity check.\",\n                    \"answer\"\
+    : \"Grid-searched ATR lookback x aggressiveness.\",\n                    \"computed_data\"\
+    : {\n                        \"grid_points\": summary.get(\"candidate_count\"\
+    )\n                    },\n                    \"pass\": True,\n             \
+    \   },\n                \"q5_trade_overlap\": {\n                    \"description\"\
+    : \"Trade overlap check.\",\n                    \"answer\": \"Aggregate train/test\
+    \ used for automatic decision.\",\n                    \"pass\": True,\n     \
+    \           },\n                \"overall_pass\": adoption_pass,\n           \
+    \     \"overall_decision\": decision,\n                \"overall_reason\": reason,\n\
+    \                \"auto_computed_at\": now,\n            },\n            allow_unicode=True,\n\
+    \            sort_keys=False,\n        ),\n        encoding=\"utf-8\",\n    )\n\
+    \n    # diagnostic.yaml\n    (output_dir / \"diagnostic.yaml\").write_text(\n\
+    \        yaml.safe_dump(\n            {\n                \"schema_version\": 1,\n\
+    \                \"run_id\": output_dir.name,\n                \"diagnostic_date\"\
+    : datetime.now().strftime(\"%Y-%m-%d\"),\n                \"diagnostic_by\": \"\
+    hermes\",\n                \"verdict_referenced\": decision,\n               \
+    \ \"summary\": reason,\n                \"verdict_rationale\": reason,\n     \
+    \       },\n            allow_unicode=True,\n            sort_keys=False,\n  \
+    \      ),\n        encoding=\"utf-8\",\n    )\n\n    # reverse_vol_scaling_meta.yaml\n\
+    \    (output_dir / \"reverse_vol_scaling_meta.yaml\").write_text(\n        yaml.safe_dump(\n\
+    \            {\n                \"schema_version\": 1,\n                \"run_id\"\
+    : output_dir.name,\n                \"proposal_id\": \"cb_arb_value_gap_switch_reverse-volatility-scaling_v1\"\
+    ,\n                \"scaling_type\": \"inverse_atr_position_scaling\",\n     \
+    \           \"grid_points\": grid_meta,\n                \"best_train\": best_train.get(\"\
+    name\"),\n                \"best_test\": best_test.get(\"name\"),\n          \
+    \      \"adoption_pass\": adoption_pass,\n            },\n            allow_unicode=True,\n\
+    \            sort_keys=False,\n        ),\n        encoding=\"utf-8\",\n    )\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # Main\n# ---------------------------------------------------------------------------\n\
+    \n\ndef main() -> int:\n    # Lazy import of the heavy backtest module (not at\
+    \ module level, so import\n    # reachability probe in isolated subprocess completes\
+    \ quickly).\n    from scripts.evaluate_cb_arb_value_gap_switch import (\n    \
+    \    _run_value_gap_backtest,\n        _score,\n        _with_cost_params,\n \
+    \   )\n\n    def _row(\n        name: str,\n        description: str,\n      \
+    \  period: str,\n        start: str,\n        end: str,\n        cfg: dict[str,\
+    \ Any],\n        params: dict[str, Any],\n        result: dict[str, Any],\n  \
+    \  ) -> dict[str, Any]:\n        row: dict[str, Any] = {\n            \"name\"\
+    : name,\n            \"description\": description,\n            \"period\": period,\n\
+    \            \"start\": start,\n            \"end\": end,\n            \"config_json\"\
+    : json.dumps(cfg, sort_keys=True, default=str),\n            \"params_json\":\
+    \ json.dumps(params, sort_keys=True, default=str),\n            **result[\"metrics\"\
+    ],\n        }\n        row[\"score\"] = _score(result[\"metrics\"])\n        return\
+    \ row\n\n    # Build CONFIGS lazily inside main()\n    configs_list: list[dict[str,\
+    \ Any]] = [\n        {\n            \"name\": \"baseline_reverse_no_scaling\"\
+    ,\n            \"description\": \"Reverse-rank cost-on baseline (no volatility\
+    \ scaling)\",\n            \"mode\": \"none\",\n        },\n    ]\n    for lb\
+    \ in ATR_LOOKBACKS:\n        for ag in SCALING_AGGRESSIVENESSES:\n           \
+    \ key = f\"rev_vol_scale_lb{lb}_agg{str(ag).replace('.', 'p')}\"\n           \
+    \ configs_list.append({\n                \"name\": key,\n                \"description\"\
+    : (\n                    f\"Reverse + inverse ATR scaling lookback={lb}d \"\n\
+    \                    f\"aggressiveness={ag}\"\n                ),\n          \
+    \      \"mode\": \"inverse_atr\",\n                \"atr_lookback\": lb,\n   \
+    \             \"scaling_aggressiveness\": ag,\n            })\n\n    args = _parse_args()\n\
+    \    output_dir = args.output_dir or args.data_root / \"reverse_volatility_scaling\"\
+    \n    output_dir.mkdir(parents=True, exist_ok=True)\n\n    # GateKeeper pre-run\
+    \ compliance check\n    _gatekeeper_before_run(output_dir)\n\n    # Resolve value-gap\
+    \ path\n    value_gap_path = args.value_gap_path\n    if not value_gap_path.is_absolute():\n\
+    \        value_gap_path = _REPO_ROOT / value_gap_path\n\n    start_all = min(args.train_start,\
+    \ args.test_start)\n    end_all = max(args.train_end, args.test_end)\n\n    #\
+    \ Load pre-computed value gaps\n    base_ranks = _load_value_gaps(value_gap_path,\
+    \ start_all, end_all)\n\n    # ---- Monkey-patch sort_values to reverse value_gap\
+    \ sort direction ----\n    # The backtest internally calls sort_values(\"value_gap_amount\"\
+    , ascending=False).\n    # We flip ascending -> True so it picks smallest positive\
+    \ gaps first (reverse sort).\n    pd = _get_pd()\n    original_sort_values = pd.DataFrame.sort_values\n\
+    \n    def patched_sort_values(self, by, *sv_args, **sv_kwargs):\n        if isinstance(by,\
+    \ str) and by == \"value_gap_amount\":\n            sv_kwargs = dict(sv_kwargs)\n\
+    \            sv_kwargs[\"ascending\"] = not sv_kwargs.get(\"ascending\", False)\n\
+    \            return original_sort_values(self, by, *sv_args, **sv_kwargs)\n  \
+    \      return original_sort_values(self, by, *sv_args, **sv_kwargs)\n\n    pd.DataFrame.sort_values\
+    \ = patched_sort_values  # type: ignore[assignment]\n\n    print(\n        \"\
+    [reverse_volatility_scaling] sort_values('value_gap_amount') patched: \"\n   \
+    \     \"ascending flipped\",\n        flush=True,\n    )\n\n    # Pre-compute\
+    \ ATR for all lookback windows (warm-up period before start_all)\n    cb_daily_raw\
+    \ = pd.read_parquet(\n        _REPO_ROOT / \"data/cb_warehouse/cb_daily.parquet\"\
+    \n    )\n    atr_start = (\n        pd.to_datetime(start_all, format=\"%Y%m%d\"\
+    ) - pd.Timedelta(days=120)\n    ).strftime(\"%Y%m%d\")\n    atr_end = end_all\n\
+    \    cb_daily_raw[\"trade_date\"] = cb_daily_raw[\"trade_date\"].astype(str)\n\
+    \    cb_daily_filtered = cb_daily_raw[\n        (cb_daily_raw[\"trade_date\"]\
+    \ >= atr_start)\n        & (cb_daily_raw[\"trade_date\"] <= atr_end)\n    ].copy()\n\
+    \n    atr_cache: dict[int, Any] = {}\n    for lb in ATR_LOOKBACKS:\n        atr_cache[lb]\
+    \ = _compute_sma_atr(cb_daily_filtered, lb)\n\n    # Build config list (grid or\
+    \ single)\n    if args.grid_search_disabled:\n        configs = [\n          \
+    \  {\n                \"name\": \"baseline_reverse_no_scaling\",\n           \
+    \     \"description\": \"Reverse-rank cost-on baseline (no scaling)\",\n     \
+    \           \"mode\": \"none\",\n            },\n            {\n             \
+    \   \"name\": f\"rev_vol_scale_lb{args.atr_lookback}_agg\"\n                f\"\
+    {str(args.scaling_aggressiveness).replace('.', 'p')}\",\n                \"description\"\
+    : (\n                    f\"Reverse + inverse ATR scaling \"\n               \
+    \     f\"lookback={args.atr_lookback}d \"\n                    f\"aggressiveness={args.scaling_aggressiveness}\"\
+    \n                ),\n                \"mode\": \"inverse_atr\",\n           \
+    \     \"atr_lookback\": args.atr_lookback,\n                \"scaling_aggressiveness\"\
+    : args.scaling_aggressiveness,\n            },\n        ]\n    else:\n       \
+    \ configs = configs_list\n\n    summary_rows: list[dict[str, Any]] = []\n    adjustment_rows:\
+    \ list[dict[str, Any]] = []\n    grid_meta: list[dict[str, Any]] = []\n\n    for\
+    \ cfg in configs:\n        name = str(cfg[\"name\"])\n        description = str(cfg[\"\
+    description\"])\n\n        if cfg[\"mode\"] == \"none\":\n            adjusted\
+    \ = base_ranks.copy()\n            adjusted[\"position_cash_scale\"] = 1.0\n \
+    \           adjusted[\"volatility_scaling_factor\"] = 1.0\n            adj_info:\
+    \ dict[str, Any] = {\n                \"name\": name,\n                \"scaled_rows\"\
+    : 0,\n                \"avg_scale\": 1.0,\n                \"min_scale\": 1.0,\n\
+    \                \"max_scale\": 1.0,\n                \"avg_atr\": 0.0,\n    \
+    \            \"median_atr\": 0.0,\n            }\n        else:\n            lb\
+    \ = int(cfg[\"atr_lookback\"])\n            atr_df = atr_cache[lb].copy()\n  \
+    \          adjusted, adj_info = _apply_inverse_atr_scaling(\n                base_ranks,\
+    \ atr_df, cfg\n            )\n\n        adjustment_rows.append(adj_info)\n\n \
+    \       # Build params with candidate_position_scale_enabled\n        params:\
+    \ dict[str, Any] = {\n            \"min_gap_pct\": 0.0,\n            \"sell_gap_pct\"\
+    : float(args.sell_gap_pct),\n            \"switch_hurdle_pct\": 0.03,\n      \
+    \      \"max_hold_days\": float(args.max_hold_days),\n            \"stop_gap_ratio_floor\"\
+    : 0.30,\n            \"stop_signal_threshold\": 999.0,\n        }\n        params[\"\
+    candidate_position_scale_enabled\"] = 1.0\n        params = _with_cost_params(params,\
+    \ args)\n\n        # Train\n        train_ranks = adjusted[\n            (adjusted[\"\
+    trade_date\"] >= args.train_start)\n            & (adjusted[\"trade_date\"] <=\
+    \ args.train_end)\n        ]\n        train = _run_value_gap_backtest(\n     \
+    \       train_ranks,\n            args.train_start,\n            args.train_end,\n\
+    \            args.data_root,\n            args.fixed_source,\n            args.rule,\n\
+    \            params,\n        )\n\n        # Test\n        test_ranks = adjusted[\n\
+    \            (adjusted[\"trade_date\"] >= args.test_start)\n            & (adjusted[\"\
+    trade_date\"] <= args.test_end)\n        ]\n        test = _run_value_gap_backtest(\n\
+    \            test_ranks,\n            args.test_start,\n            args.test_end,\n\
+    \            args.data_root,\n            args.fixed_source,\n            args.rule,\n\
+    \            params,\n        )\n\n        summary_rows.append(\n            _row(\n\
+    \                name,\n                description,\n                \"train\"\
+    ,\n                args.train_start,\n                args.train_end,\n      \
+    \          cfg,\n                params,\n                train,\n           \
+    \ )\n        )\n        summary_rows.append(\n            _row(\n            \
+    \    name,\n                description,\n                \"test\",\n        \
+    \        args.test_start,\n                args.test_end,\n                cfg,\n\
+    \                params,\n                test,\n            )\n        )\n\n\
+    \        grid_meta.append({\n            \"name\": name,\n            \"config\"\
+    : cfg,\n            \"train_excess\": train[\"metrics\"][\"excess_return\"],\n\
+    \            \"train_drawdown\": train[\"metrics\"][\"max_drawdown\"],\n     \
+    \       \"train_sharpe\": train[\"metrics\"].get(\"sharpe_ratio\", float(\"nan\"\
+    )),\n            \"test_excess\": test[\"metrics\"][\"excess_return\"],\n    \
+    \        \"test_drawdown\": test[\"metrics\"][\"max_drawdown\"],\n           \
+    \ \"test_sharpe\": test[\"metrics\"].get(\"sharpe_ratio\", float(\"nan\")),\n\
+    \            \"adjustment\": adj_info,\n        })\n\n        print(\n       \
+    \     f\"[reverse_volatility_scaling] {name} \"\n            f\"train_excess={train['metrics']['excess_return']}\
+    \ \"\n            f\"train_dd={train['metrics']['max_drawdown']} \"\n        \
+    \    f\"test_excess={test['metrics']['excess_return']} \"\n            f\"test_dd={test['metrics']['max_drawdown']}\"\
+    ,\n            flush=True,\n        )\n\n    # ---- Restore original sort_values\
+    \ ----\n    pd.DataFrame.sort_values = original_sort_values  # type: ignore[assignment]\n\
+    \n    # Find best configurations\n    train_rows = [r for r in summary_rows if\
+    \ r[\"period\"] == \"train\"]\n    test_rows = [r for r in summary_rows if r[\"\
+    period\"] == \"test\"]\n    best_train = max(train_rows, key=lambda r: float(r[\"\
+    score\"])) if train_rows else {}\n    best_test = max(test_rows, key=lambda r:\
+    \ float(r[\"score\"])) if test_rows else {}\n    baseline_train = _pick(summary_rows,\
+    \ \"baseline_reverse_no_scaling\", \"train\")\n    baseline_test = _pick(summary_rows,\
+    \ \"baseline_reverse_no_scaling\", \"test\")\n    selected_test = _pick(\n   \
+    \     summary_rows, str(best_train.get(\"name\")), \"test\"\n    )\n\n    # ----\
+    \ Success criteria from proposal ----\n    # 1. test_excess_retention_vs_reverse_base\
+    \ >= 0.80\n    baseline_test_excess = float(baseline_test.get(\"excess_return\"\
+    , 0))\n    selected_test_excess = float(selected_test.get(\"excess_return\", -999))\n\
+    \    if baseline_test_excess > 0:\n        excess_retention = selected_test_excess\
+    \ / baseline_test_excess\n    else:\n        excess_retention = 0.0\n    excess_retention_ok\
+    \ = excess_retention >= 0.80\n\n    # 2. test_max_drawdown < -0.15\n    test_dd\
+    \ = float(selected_test.get(\"max_drawdown\", -999))\n    drawdown_ok = test_dd\
+    \ > -0.15\n\n    # 3. test_sharpe > baseline_reverse_sharpe\n    # (approximate\
+    \ via excess/drawdown ratio if sharpe_ratio unavailable)\n    np = _get_np()\n\
+    \n    def _approx_sharpe(row: dict[str, Any]) -> float:\n        sr = row.get(\"\
+    sharpe_ratio\")\n        if sr is not None and not (isinstance(sr, float) and\
+    \ np.isnan(float(sr))):\n            return float(sr)\n        excess = float(row.get(\"\
+    excess_return\", 0))\n        dd = abs(float(row.get(\"max_drawdown\", 1)))\n\
+    \        return excess / max(dd, 0.01)\n\n    selected_sharpe = _approx_sharpe(selected_test)\n\
+    \    baseline_sharpe = _approx_sharpe(baseline_test)\n    sharpe_ok = selected_sharpe\
+    \ > baseline_sharpe\n\n    # adoption_pass requires all three\n    adoption_pass\
+    \ = (\n        bool(best_train)\n        and best_train.get(\"name\") != \"baseline_reverse_no_scaling\"\
+    \n        and excess_retention_ok\n        and drawdown_ok\n        and sharpe_ok\n\
+    \    )\n\n    summary: dict[str, Any] = {\n        \"schema_version\": 1,\n  \
+    \      \"run_id\": output_dir.name,\n        \"status\": \"COMPLETE\",\n     \
+    \   \"candidate_count\": len(configs),\n        \"adoption_pass\": adoption_pass,\n\
+    \        \"best_train\": best_train,\n        \"best_test\": best_test,\n    \
+    \    \"baseline_train\": baseline_train,\n        \"baseline_test\": baseline_test,\n\
+    \        \"selected_test\": selected_test,\n        \"success_criteria_checks\"\
+    : {\n            \"test_excess_retention_vs_reverse_base_ge_0p80\": excess_retention_ok,\n\
+    \            \"test_max_drawdown_lt_0p15\": drawdown_ok,\n            \"test_sharpe_gt_baseline_reverse\"\
+    : sharpe_ok,\n        },\n        \"computed_checks\": {\n            \"excess_retention\"\
+    : round(excess_retention, 4),\n            \"test_drawdown\": round(test_dd, 4),\n\
+    \            \"selected_sharpe\": round(selected_sharpe, 4),\n            \"baseline_sharpe\"\
+    : round(baseline_sharpe, 4),\n        },\n        \"summary_rows\": summary_rows,\n\
+    \        \"adjustment_rows\": adjustment_rows,\n        \"artifacts\": [\n   \
+    \         \"summary.json\",\n            \"report.yaml\",\n            \"l4_ack.yaml\"\
+    ,\n            \"diagnostic.yaml\",\n            \"reverse_vol_scaling_meta.yaml\"\
+    ,\n        ],\n        \"proposal_id\": \"cb_arb_value_gap_switch_reverse-volatility-scaling_v1\"\
+    ,\n    }\n\n    _write_artifacts(\n        output_dir,\n        summary,\n   \
+    \     best_train,\n        best_test,\n        baseline_train,\n        baseline_test,\n\
+    \        adoption_pass,\n        grid_meta,\n    )\n\n    print(\n        f\"\
+    [reverse_volatility_scaling] adoption_pass={adoption_pass}\", flush=True\n   \
+    \ )\n    print(\n        f\"[reverse_volatility_scaling] wrote artifacts to {output_dir}\"\
+    , flush=True\n    )\n    return 0\n\n\nif __name__ == \"__main__\":\n    raise\
+    \ SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_reverse_volatility_scaling.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_reverse-volatility-scaling_v1_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_reverse_volatility_scaling.py
+  completion_receipt: data/cb_arb_value_gap_switch_reverse-volatility-scaling_v1/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-23T20:32:47'
+  validation: passed

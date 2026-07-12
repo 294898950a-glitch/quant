@@ -261,6 +261,8 @@ def tick() -> str:
     settled_count = remote.settle_running_items(state, queue)
     reviewed_count = review_memory.review_pending_items(state, queue)
     requeued_repaired_count = remote.requeue_repaired_data_items(state, queue)
+    requeued_data_quality_recheck_count = remote.requeue_stale_data_quality_blocks(state, queue)
+    requeued_pipeline_failure_count = remote.requeue_stale_pipeline_failures(state, queue)
     stale_vm_avoidance_reset_count = remote.clear_stale_vm_avoidances(state, queue)
     decision = decide_scheduler_action(state)
     running_count = count_status(state, "running")
@@ -275,6 +277,8 @@ def tick() -> str:
                     "reviewed_count": reviewed_count,
                     "settled_count": settled_count,
                     "requeued_repaired_count": requeued_repaired_count,
+                    "requeued_data_quality_recheck_count": requeued_data_quality_recheck_count,
+                    "requeued_pipeline_failure_count": requeued_pipeline_failure_count,
                     "stale_vm_avoidance_reset_count": stale_vm_avoidance_reset_count,
                     "note": "Remote work is still running; no new direction may be generated.",
                 },
@@ -288,6 +292,8 @@ def tick() -> str:
                     "reviewed_count": reviewed_count,
                     "settled_count": settled_count,
                     "requeued_repaired_count": requeued_repaired_count,
+                    "requeued_data_quality_recheck_count": requeued_data_quality_recheck_count,
+                    "requeued_pipeline_failure_count": requeued_pipeline_failure_count,
                     "stale_vm_avoidance_reset_count": stale_vm_avoidance_reset_count,
                     "note": "Synced results are waiting for review_memory.",
                 },
@@ -295,7 +301,20 @@ def tick() -> str:
             return "waiting_review_memory"
         if escalation_block(state):
             return stop_for_user_block(state)
-        return ideation_service().generate_until_actionable(state)
+        ideation_result = ideation_service().generate_until_actionable(state)
+        if ideation_result == "queued_ideation_spec":
+            refreshed_state = load_state()
+            refreshed_queue = refreshed_state.get("queue") or []
+            if not isinstance(refreshed_queue, list):
+                raise ValueError("research_queue.queue must be list")
+            return remote.start_queued_items(
+                refreshed_state,
+                refreshed_queue,
+                settled_count=settled_count,
+                requeued_repaired_count=requeued_repaired_count,
+                stale_vm_avoidance_reset_count=stale_vm_avoidance_reset_count,
+            )
+        return ideation_result
 
     return remote.start_queued_items(
         state,

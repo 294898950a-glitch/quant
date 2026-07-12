@@ -1,0 +1,25 @@
+proposal_id: unparseable_1
+capability_ids: []
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: f2da2de25f5ae779
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: f2da2de25f5ae779
+strategy_id: cb_arb_value_gap_switch
+strategy_id_corrected_from_current_yaml: true
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: unparseable
+proposal_path: /home/jay/projects/quant/data/unparseable_1/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=∅, capability_ids=∅); no critical-insight
+    reference; queue depth=0.
+  evidence:
+    family: ''
+    capability_ids: []
+    cites_critical: null
+    queue_depth: 0

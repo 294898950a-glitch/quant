@@ -1,0 +1,308 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+date: '2026-05-24'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'Filtering CB arbitrage entries to only candidates where the CB close
+  price is within a threshold distance above the bond floor (computed from discounted
+  remaining coupons and principal at par) will reduce cumulative excess drawdown and
+  improve risk-adjusted returns by excluding positions where the theoretical value
+  gap is dominated by speculative option premium rather than genuine mispricing. The
+  bond floor is the most reliable component of CB theoretical value — it depends only
+  on contractual cash flows discounted at a reasonable yield, not on IV assumptions.
+  When a CB trades far above its floor, the model-implied value gap is disproportionately
+  driven by the embedded option valuation, which is sensitive to model error. By constraining
+  entries to near-floor CBs, we increase the probability that a positive value gap
+  represents an actionable mispricing.
+
+  '
+source_insight: 'The current value-gap signal at entry treats all CBs uniformly regardless
+  of how much of the theoretical value comes from the bond floor vs. the embedded
+  option. The bond component has high valuation reliability; the option component
+  has low reliability (IV estimation, volatility surface assumptions, credit spread
+  interactions). A CB trading at 130 with a bond floor of 95 has ~73% of its theoretical
+  value coming from the option — the value gap for such a CB is overwhelmingly an
+  option-pricing gap, not a bond-pricing gap. Filtering to CBs where close / bond_floor
+  <= 1 + margin (e.g., 1.10) concentrates the strategy on positions where mispricing
+  is more likely to be real and mean-reverting.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - close_to_bond_floor_threshold
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C002
+mechanics:
+- close_to_bond_floor_threshold
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/cb_daily.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  criteria:
+  - cumulative_excess_compound_cross_year_gt_baseline
+  - any_filter_variant_max_drawdown_single_year_lt_baseline
+  - cost_on_degradation_pp_le_baseline
+  - at_least_one_threshold_produces_sharpe_gt_baseline
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: COMPLETE
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+  strategy_id: cb_arb_value_gap_switch
+  family: bond_floor_entry_filter
+  hypothesis: 'Filtering CB arbitrage entries to only candidates where the CB close
+    price is within a threshold distance above the bond floor (computed from discounted
+    remaining coupons and principal at par) will reduce cumulative excess drawdown
+    and improve risk-adjusted returns by excluding positions where the theoretical
+    value gap is dominated by speculative option premium rather than genuine mispricing.
+    The bond floor is the most reliable component of CB theoretical value — it depends
+    only on contractual cash flows discounted at a reasonable yield, not on IV assumptions.
+    When a CB trades far above its floor, the model-implied value gap is disproportionately
+    driven by the embedded option valuation, which is sensitive to model error. By
+    constraining entries to near-floor CBs, we increase the probability that a positive
+    value gap represents an actionable mispricing.
+
+    '
+  source_insight: 'The current value-gap signal at entry treats all CBs uniformly
+    regardless of how much of the theoretical value comes from the bond floor vs.
+    the embedded option. The bond component has high valuation reliability; the option
+    component has low reliability (IV estimation, volatility surface assumptions,
+    credit spread interactions). A CB trading at 130 with a bond floor of 95 has ~73%
+    of its theoretical value coming from the option — the value gap for such a CB
+    is overwhelmingly an option-pricing gap, not a bond-pricing gap. Filtering to
+    CBs where close / bond_floor <= 1 + margin (e.g., 1.10) concentrates the strategy
+    on positions where mispricing is more likely to be real and mean-reverting.
+
+    '
+  expected_improvement: 'Reduced max drawdown in stress periods (2020 being the key
+    test), improved Sharpe ratio due to fewer low-quality entries, and potentially
+    a modest improvement in cumulative excess by eliminating negative-alpha trades
+    from deep above-floor CBs. The trade-off is fewer total entries and potentially
+    lower absolute PnL if near-floor opportunities are scarce — the success criteria
+    account for this by requiring improved risk-adjusted metrics even if gross returns
+    decline.
+
+    '
+  capability_ids:
+  - C002
+  required_executor: evaluate_cb_arb_bond_floor_entry_filter
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/cb_daily.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  required_data_fields:
+    data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+    - trade_date
+    - ts_code
+    - value_gap_amount
+    - ranking_weight
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - code
+    - stk_code
+    - conv_price
+    - par_value
+    - coupon_rate
+    - interest_rate_explain
+    - maturity_date
+    - list_date
+    - delist_date
+    - remain_size
+    - issue_size
+    - rating
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - ts_code
+    - stk_code
+    - trade_date
+    - close
+    data/cb_warehouse/cb_daily.parquet:
+    - ts_code
+    - trade_date
+    - close
+  test_design:
+    description: 'Grid-search over the bond-floor proximity threshold parameter (close
+      / bond_floor <= threshold, with threshold ∈ {1.00, 1.05, 1.10, 1.15, 1.20, 1.25,
+      1.30}) plus a no-filter baseline. Compute bond floor as the present value of
+      remaining coupons and par value discounted at a flat yield (e.g., 3% or the
+      bond''s stated coupon as a proxy for its credit-appropriate yield). Use the
+      existing duration-adaptive exit with accepted best params (min_hold_days=5,
+      initial_threshold_fraction=0.7, decay_period_factor=0.5, effective_max_hold_days=45)
+      as the exit rule. Run on both cost-off and cost-on configurations. Compare each
+      threshold''s cumulative excess, max drawdown, Sharpe, and annual breakdown against
+      baseline. Pay special attention to 2020 stress-period drawdown improvement and
+      whether the filter introduces any new worst-year that is worse than baseline.
+
+      '
+  success_criteria:
+    criteria:
+    - cumulative_excess_compound_cross_year_gt_baseline
+    - any_filter_variant_max_drawdown_single_year_lt_baseline
+    - cost_on_degradation_pp_le_baseline
+    - at_least_one_threshold_produces_sharpe_gt_baseline
+  falsifiers:
+    train:
+    - all_thresholds_produce_cumulative_excess_compound_lt_baseline
+    - no_threshold_reduces_max_drawdown_single_year_vs_baseline
+    - bond_floor_filter_produces_worse_cost_degradation_than_baseline
+    - filter_reduces_entry_count_below_100_total_entries_making_results_unreliable
+    validate:
+    - all_thresholds_produce_cumulative_excess_compound_lt_baseline
+    - no_threshold_reduces_max_drawdown_single_year_vs_baseline
+    - bond_floor_filter_produces_worse_cost_degradation_than_baseline
+    - filter_reduces_entry_count_below_100_total_entries_making_results_unreliable
+    test:
+    - all_thresholds_produce_cumulative_excess_compound_lt_baseline
+    - no_threshold_reduces_max_drawdown_single_year_vs_baseline
+    - bond_floor_filter_produces_worse_cost_degradation_than_baseline
+    - filter_reduces_entry_count_below_100_total_entries_making_results_unreliable
+  risk: 'Medium. The bond floor filter may eliminate too many candidates, especially
+    in bull markets where most CBs trade well above their floors. If 2020-2021 sees
+    near-zero entries, the filter is useless in practice. The discount rate assumption
+    for bond floor computation (flat 3% vs. credit-specific yield) could introduce
+    its own noise. If the true alpha in the value-gap signal comes from the option
+    component (not the bond component), filtering to near-floor CBs could actually
+    destroy the signal rather than purify it.
+
+    '
+  why_not_repeated_failure: 'The 5 failed moneyness-entry-filter runs (C003 family,
+    tagged moneyness_stock_to_conv_threshold, all failed_mechanical_thresholds) filtered
+    on stock_close / conv_price — this is an equity-domain filter that screens based
+    on option moneyness (how deep in/out of the money the embedded call option is).
+    The bond floor filter (C002) operates in the fixed-income domain — it screens
+    based on how much of the theoretical value comes from the reliable bond component
+    vs. the noisy option component. These are orthogonal filters with different economic
+    rationale and different data dependencies (bond floor needs coupon_rate, maturity_date,
+    par_value; moneyness needs conv_price, stock_close). A CB can be deep in-the-money
+    (high stock/conv_price) and still near its bond floor, or deep out-of-the-money
+    and far above its bond floor. The failure of moneyness filtering says nothing
+    about whether proximity to the bond floor improves signal quality.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  - cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  - cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  - cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+  - cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  - cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+  implementation_assumption: Bond floor is computed as present value of remaining
+    semi-annual coupon payments plus par value at maturity, discounted at a flat annual
+    rate of 3% (a conservative proxy for investment-grade CN CB yield). For CBs where
+    the stated coupon schedule is irregular (interest_rate_explain field), the executor
+    will parse the schedule or fall back to using the base coupon_rate for all remaining
+    periods. For CBs that have been called (cb_call table), remaining cash flows are
+    truncated at the call date with call_price replacing par. CBs with missing maturity_date
+    or coupon data are excluded from the filter (treated as if they pass, so no data-quality
+    bias against poorly-documented CBs). The filter is applied at entry only — once
+    a position is opened, it is not force-closed if the CB subsequently moves away
+    from its bond floor.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 1f96ab0673cfbbce
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 1f96ab0673cfbbce
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_bond-floor-entry-filter_v1/proposal.yaml
+  mechanics:
+  - close_to_bond_floor_threshold
+  dropped_unmatched_required_data_fields:
+  - data/cb_warehouse/cb_call.parquet
+  dropped_unmatched_required_data:
+  - data/cb_warehouse/cb_call.parquet
+executor_id: evaluate_cb_arb_bond_floor_entry_filter
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_bond-floor-entry-filter_v1/proposal.yaml
+  response_hash: 1f96ab0673cfbbce
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data:
+  - data/cb_warehouse/cb_call.parquet
+updated_at: '2026-05-24T05:00:37Z'

@@ -1,0 +1,32 @@
+schema_version: 1
+run_id: market_drawdown_entry_gate_v1_20260521
+diagnostic_date: '2026-05-22'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: Market drawdown entry gate gate_n20_t0p12_buf0 failed the fixed criteria.
+verdict_rationale: 'Not all period criteria met: stress_2020_score_fail, train_score_fail,
+  validate_score_pass'
+verdict: reject
+verdict_reason: 'Not all period criteria met: stress_2020_score_fail, train_score_fail,
+  validate_score_pass'
+variant: gate_n20_t0p12_buf0
+params:
+  N: 20
+  threshold: 0.12
+  buffer_days: 0
+gated_metrics:
+  train_score: 0.024009
+  train_excess_return: 0.098245
+  train_max_drawdown: -0.296944
+  train_total_trades: 1009
+  stress_2020_score: -0.230852
+  stress_2020_excess_return: -0.187236
+  validate_score: 0.441301
+  validate_excess_return: 0.465683
+  validate_total_trades: 212
+checks:
+- stress_2020_score_fail
+- train_score_fail
+- validate_score_pass
+warnings: []
+errors: []

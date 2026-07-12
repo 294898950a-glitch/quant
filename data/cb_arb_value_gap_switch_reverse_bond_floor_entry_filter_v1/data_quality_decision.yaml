@@ -1,0 +1,20 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse_bond_floor_entry_filter_v1
+spec_path: data/cb_arb_value_gap_switch_reverse_bond_floor_entry_filter_v1/spec.yaml
+validated_at: '2026-05-25T10:37:52'
+summary_sha256: 1a90bae86cdf7027b1863c4b8791536ce86176fdbb971bb8f413ffb178d89f26
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_daily 缺失推荐字段 cb_over_rate, pct_chg（只影响扩展分析，不阻塞实验）
+- cb_call 缺失推荐字段 call_type（只影响退出类型细分，不阻塞实验）
+- executor_input_column_hints 引用 bond_floor_value，但 daily_value_gap_amounts.parquet
+  实际字段名为 bond_floor（提示非硬性要求，数据可正常加载）
+fix_plan: []
+decision_reason: 所有必需文件存在且可读，行情日期完整覆盖 train(2019-2020) 和 test(2021-20260508)，推荐字段缺失不阻塞实验执行
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 4feaf23744364c0d

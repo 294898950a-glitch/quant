@@ -1,0 +1,20 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_valuation_momentum_extension_v1
+spec_path: data/cb_arb_value_gap_switch_valuation_momentum_extension_v1/spec.yaml
+validated_at: '2026-05-27T11:50:39'
+summary_sha256: 623226d8806cd9e56e2522e10e3431f33b11d4459976a80efb2dcd04be4e2594
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: All 8 required files exist and readable; all required columns present
+  in all 4 warehouse inputs; train (2019-01 to 2024-12) and test (2025-01 to 2026-05-08)
+  fully covered by cb_daily (2007-07 to 2026-05-08) and stk_daily_qfq (1991-04 to
+  2026-05-08); no required_column_quality defined so no non-null enforcement triggered;
+  input column hints for cb_basic and stk_daily all match actual parquet columns.
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: e697145c1b3351c1

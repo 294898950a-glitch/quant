@@ -1,0 +1,5 @@
+{
+  "armed_by": "post_venv_python_fix_2026_05_27",
+  "notes": "Fixed queue_remote_execution to use .venv/bin/python instead of /usr/bin/python3 for auto_research_pipeline. Previous failures were system python missing packages, not real evaluator errors.",
+  "recovery_armed_at": "2026-05-26T21:16:17+00:00"
+}

@@ -1,0 +1,155 @@
+proposal_id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_4
+strategy_id: cb_arb_value_gap_switch
+family: reverse_volatility_position_scaling
+hypothesis: 'The reverse-sort value-gap base (+30.3% test excess cost-on) is the only
+  proven alpha direction. Entry filters (moneyness, bond floor) failed because they
+  cull candidates and destroy the signal''s diversification — fewer trades, concentrated
+  exposure. Position scaling via inverse ATR is a fundamentally different overlay:
+  it preserves ALL candidates (value_gap_amount > 0, sorted ascending), and only adjusts
+  allocation weights. Less-volatile CBs get higher weight, reducing portfolio-level
+  drawdowns without removing any entries. This should improve risk-adjusted returns
+  where entry filters could not, because it attacks noise (volatility-driven weight
+  distortion) rather than signal (candidate selection).
+
+  Repeated-reject-family check for moneyness_stock_to_conv_threshold (3 rejections):
+  (1) Is the underlying signal invalid? No — the reverse-sort signal is proven (+30.3%
+  test excess cost-on). (2) Is the direction reversed? The reverse direction itself
+  is correct; the failure is in the entry-filter overlay, not the sort direction.
+  (3) Is only the execution condition wrong? The execution condition (entry filter
+  culling) is the problem. Entry filters shrink the candidate pool to a handful of
+  names, concentrating risk and destroying the cross-sectional diversification that
+  makes the reverse signal work. Position scaling preserves all candidates so the
+  diversification benefit remains intact.
+
+  '
+source_insight: 'value_gap_rank_is_anti_alpha_2026_05_24: The reverse-rank probe proved
+  that within the value_gap_amount>0 candidate set, sorting ASCENDING (least-positive
+  first) produces +30.3% test excess cost-on while DESCENDING (most-positive first,
+  the production rule) produces -10.5%. A 41pp swing from sort direction alone. The
+  critical insight mandates biasing new variants toward reverse-direction tests. Additionally,
+  entry filters (moneyness v1_1, v1_5, reverse v1_1; bond floor v1, reverse v2) all
+  failed mechanical thresholds — the common failure mode is candidate pool culling.
+  A position-scaling overlay that preserves all candidates is the logical next reverse-direction
+  test that avoids the known failure mode.
+
+  '
+expected_improvement: 'Reduce max drawdown by 5-10pp (from -11.3% test toward -5%
+  to -7%) while preserving at least 80% of the reverse-probe-coston baseline test
+  excess (+30.3% → target ≥ +24%). Improve Sharpe ratio via lower portfolio volatility
+  from down-weighting high-ATR names.
+
+  '
+capability_ids:
+- C001
+required_executor: volatility_based_position_scaling_executor_reverse
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - list_date
+  - delist_date
+  - maturity_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  description: 'Entry: value_gap_amount > 0, sorted ASCENDING (least-positive first),
+    top N selected. Position scaling: compute ATR from stk_daily_qfq close per CB
+    per day (true range of daily closes, rolling mean). position_weight = baseline_weight
+    * (scaling_beta / ATR_rank_percentile). Grid search: ATR lookback [10, 20, 40,
+    60], scaling_beta [0.25, 0.5, 0.75, 1.0, 1.5]. Exit: reverse-probe grid (max_hold_days
+    [120, 150, 180], min_gap_pct [0.005, 0.01], sell_gap_pct 0.0, switch_hurdle_pct
+    [0.0, 0.01]). Cost-on: slippage 0.0015, market impact 0.001. Train: 2018-2022,
+    Test: 2023-2026. Compare best grid result against reverse-probe-coston baseline
+    (+30.3% test excess cost-on). No candidate removal — all value_gap_amount > 0
+    entries are eligible; only allocation weights differ.
+
+    '
+success_criteria:
+  criteria:
+  - test_excess_return >= 0.24 (at least 80% of baseline +0.303 preserved)
+  - test_max_drawdown <= -0.113 (no worse than baseline, ideally improved)
+  - test_sharpe >= baseline_sharpe (risk-adjusted return not degraded)
+  - train_excess_return positive (no overfitting to grid search)
+falsifiers:
+  train: &id001
+  - test_excess_return < 0.15 (scaling destroyed more than half the alpha)
+  - test_max_drawdown > 0.15 in magnitude (worse than baseline despite scaling)
+  - train_excess_return negative (grid search overfit, no real signal)
+  - best_params at grid edge for both ATR lookback and scaling_beta (unstable optimum)
+  validate: *id001
+  test: *id001
+risk: 'Low-to-medium. The overlay is non-destructive — worst case it degrades to equal-weight
+  (scaling_beta near 0 or ATR rank near uniform), producing results close to the reverse-probe-coston
+  baseline which we already know is strongly positive. Unlike entry filters that can
+  accidentally cull the entire candidate pool on some days, position scaling always
+  produces valid weights. The main risk is that ATR-based scaling adds no benefit
+  and wastes compute on a grid search that converges to uniform weights.
+
+  '
+why_not_repeated_failure: 'The repeated_reject_families entry is moneyness_stock_to_conv_threshold
+  (3 rejections), which covers C003 (moneyness entry filters). This proposal uses
+  C001 (static candidate position scale), a different capability family. More importantly,
+  the failure mechanism in the moneyness family was candidate pool culling — filtering
+  entries by moneyness threshold shrinks the pool, concentrates risk, and destroys
+  the cross-sectional diversification that the reverse signal depends on. This proposal
+  explicitly preserves ALL candidates and only adjusts allocation weights. It is a
+  noise-reduction overlay, not a signal-selection overlay. Even if it fails, the failure
+  mode is different (weight distortion vs pool destruction), and the worst case is
+  equal-weight baseline performance which is already proven positive.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524 (baseline: +30.3% test excess
+    cost-on)
+- cb_arb_value_gap_switch_reverse_moneyness_entry_filter_v1_1 (failed: entry culling
+    destroyed signal)
+- cb_arb_value_gap_switch_reverse_bond_floor_entry_filter_v2 (failed: entry culling
+    destroyed signal)
+- cb_arb_value_gap_switch_exit_duration_adaptive_reverse_20260525 (failed: adoption_pass=false)
+- cb_arb_value_gap_switch_pnl-feedback-scaling_v1 (failed: adoption_pass=false, but
+    this was forward-direction)
+implementation_assumption: The executor computes ATR from stk_daily_qfq close prices.
+  True range for daily data without high/low is proxied as |close_t - close_t-1| or
+  uses a simpler rolling standard deviation of returns as the volatility measure.
+  The scaling formula preserves the sum of weights across candidates (softmax or proportional
+  normalization) so total capital allocation per day is unchanged from the baseline.
+  The grid search is 4 × 5 × 3 × 2 × 2 = 240 exit combinations × 20 ATR/beta combinations
+  = 4,800 total parameter tuples, which is tractable for a single executor run.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: be8b966253ba98a6
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: be8b966253ba98a6
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_4/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=reverse_volatility_position_scaling, capability_ids=['C001']);
+    cites critical insight 'value_gap_rank_is_anti_alpha_2026_05_24'; queue depth=0.
+  evidence:
+    family: reverse_volatility_position_scaling
+    capability_ids:
+    - C001
+    cites_critical: value_gap_rank_is_anti_alpha_2026_05_24
+    queue_depth: 0

@@ -1,0 +1,62 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  artifacts_hash: 66575f6321e7f67f
+interpretation:
+  review_status_code: 2
+  result_summary: regime-adaptive exit made zero improvement over static baseline,
+    adoption gate failed, and all four excess return variants hit exactly -1.0.
+  main_reason: adoption_pass is false and excess_improvement_test is 0.0 — regime
+    conditioning added no measurable edge whatsoever.
+  failure_causes:
+  - adoption gate failed (adoption_pass=false)
+  - regime-adaptive excess improvement over static baseline is exactly zero
+  - all four excess return metrics (train/test × regime/static) are identically -1.0,
+    suggesting a systemic floor or computation issue rather than a regime-tuning problem
+  next_research_directions:
+  - direction: debug uniform -1.0 excess return floor
+    why: four independent metrics hitting the identical -1.0 value points to a bug
+      or mis-specified benchmark, not a genuine regime adaptation failure — fixing
+      this may reveal whether the regime signal actually helps
+    priority_code: 1
+    priority: high
+  - direction: pause exit-layer experiments until entry signal is profitable
+    why: if the underlying entry gate produces negative or zero alpha, no exit regime
+      tuning can rescue it; verify entry quality first
+    priority_code: 1
+    priority: high
+  evidence_gaps:
+  - no per-year max_drawdown breakdown to verify the second hard floor (no single
+    year worse than baseline by >2pp)
+  - uniform -1.0 across all four excess return columns is anomalous and needs root-cause
+    investigation before drawing regime conclusions
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 0cb1d647e76fe6cd
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

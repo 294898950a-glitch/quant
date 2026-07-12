@@ -1,0 +1,277 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_4
+date: '2026-05-26'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'The value-gap signal in the forward descending direction produces intermittent
+  alpha with extended cold streaks. During cold streaks, trading at full position
+  size incurs cost drag without compensating excess return — the observed -7.47pp
+  cost degradation is concentrated in periods where the signal has no edge. Scaling
+  position size inversely with rolling realized PnL reduces total cost drag by shrinking
+  exposure during losing streaks while preserving full exposure during winning streaks.
+  This is a pure position-sizing overlay that does not alter entry eligibility, exit
+  logic, or the value-gap ranking signal. Unlike entry filters (moneyness, bond floor)
+  that culled candidates and fell below mechanical thresholds, PnL feedback preserves
+  all candidates and cannot cause adoption_pass failure from insufficient trades.
+  Repeated-reject check for moneyness_stock_to_conv_threshold: (1) Is the underlying
+  signal invalid? No — the signal has intermittent alpha; the problem is cost drag
+  during cold streaks, not zero signal. (2) Is the direction reversed? This proposal
+  operates in the standard descending sort, not the reverse direction. It does not
+  change sort orientation. (3) Is only the execution condition wrong? This proposal
+  targets execution condition — position sizing during cold streaks — rather than
+  signal quality, entry timing, or exit timing. The hypothesis is execution-side (cost
+  management), not signal-side or direction-side.
+
+  '
+source_insight: 'The cost-realism wall for cb_arb_value_gap_switch shows cumulative
+  excess dropping from -0.030 (cost-off) to -0.105 (cost-on), a -7.47pp degradation.
+  Five moneyness entry filter runs and one bond floor entry filter run all returned
+  failed_mechanical_thresholds (adoption_pass: false) because they suppressed too
+  many entries. A position scaling approach that never removes candidates addresses
+  the cost problem without risking mechanical threshold failure. The accepted duration-adaptive
+  exit shows that execution-layer improvements can produce review-passing results
+  even when the forward direction signal remains weak.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - rolling_pnl_feedback
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C004
+mechanics:
+- rolling_pnl_feedback
+new_data_sources: []
+hard_floors:
+  criteria:
+  - cumulative_excess_compound_test_cost_on improvement vs baseline by >= 3pp
+  - any_single_year_drawdown_vs_benchmark_test <= 0.15
+  - adoption_pass is true
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: READY
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_4
+  strategy_id: cb_arb_value_gap_switch
+  family: pnl_feedback_scaling_grid
+  hypothesis: 'The value-gap signal in the forward descending direction produces intermittent
+    alpha with extended cold streaks. During cold streaks, trading at full position
+    size incurs cost drag without compensating excess return — the observed -7.47pp
+    cost degradation is concentrated in periods where the signal has no edge. Scaling
+    position size inversely with rolling realized PnL reduces total cost drag by shrinking
+    exposure during losing streaks while preserving full exposure during winning streaks.
+    This is a pure position-sizing overlay that does not alter entry eligibility,
+    exit logic, or the value-gap ranking signal. Unlike entry filters (moneyness,
+    bond floor) that culled candidates and fell below mechanical thresholds, PnL feedback
+    preserves all candidates and cannot cause adoption_pass failure from insufficient
+    trades. Repeated-reject check for moneyness_stock_to_conv_threshold: (1) Is the
+    underlying signal invalid? No — the signal has intermittent alpha; the problem
+    is cost drag during cold streaks, not zero signal. (2) Is the direction reversed?
+    This proposal operates in the standard descending sort, not the reverse direction.
+    It does not change sort orientation. (3) Is only the execution condition wrong?
+    This proposal targets execution condition — position sizing during cold streaks
+    — rather than signal quality, entry timing, or exit timing. The hypothesis is
+    execution-side (cost management), not signal-side or direction-side.
+
+    '
+  source_insight: 'The cost-realism wall for cb_arb_value_gap_switch shows cumulative
+    excess dropping from -0.030 (cost-off) to -0.105 (cost-on), a -7.47pp degradation.
+    Five moneyness entry filter runs and one bond floor entry filter run all returned
+    failed_mechanical_thresholds (adoption_pass: false) because they suppressed too
+    many entries. A position scaling approach that never removes candidates addresses
+    the cost problem without risking mechanical threshold failure. The accepted duration-adaptive
+    exit shows that execution-layer improvements can produce review-passing results
+    even when the forward direction signal remains weak.
+
+    '
+  expected_improvement: 'Reduce cost degradation from -7.47pp to below -4.0pp (cumulative
+    excess cost-on improving from -0.105 toward -0.07 or better), while maintaining
+    cost-off performance near -0.03. If successful the strategy moves closer to the
+    deployment threshold without requiring signal-level improvements.
+
+    '
+  capability_ids:
+  - C004
+  required_executor: evaluate_cb_arb_pnl_feedback_scaling_grid
+  required_data: []
+  required_data_fields: {}
+  test_design:
+    description: 'Grid search over two parameters: rolling PnL lookback window in
+      [10, 20, 40, 60] trading days and scaling aggressiveness in [0.25, 0.5, 0.75,
+      1.0]. For each candidate on each rebalance day, compute rolling strategy-level
+      realized return over the lookback window. Position weight = baseline_weight
+      * (1 + aggressiveness * rolling_return), clamped to [0.2 * baseline_weight,
+      2.0 * baseline_weight]. Exit uses the accepted duration-adaptive logic (min_hold_days=5,
+      initial_threshold_fraction=0.7, decay_period_factor=0.5, effective_max_hold_days=45).
+      Top N=20 candidates per day by descending value_gap_amount. Train 2018-2022,
+      test 2023-2026. Standard cost model: slippage 0.0015, market_impact 0.001.
+
+      '
+  success_criteria:
+    criteria:
+    - cumulative_excess_compound_test_cost_on improvement vs baseline by >= 3pp
+    - any_single_year_drawdown_vs_benchmark_test <= 0.15
+    - adoption_pass is true
+  falsifiers:
+    train:
+    - cumulative_excess_compound_test_cost_on does not improve vs baseline by at least
+      1pp
+    - any_holdout_year_sharpe < 0.5
+    - cost_degradation_pp does not decrease by at least 1pp from the -7.47pp baseline
+    validate:
+    - cumulative_excess_compound_test_cost_on does not improve vs baseline by at least
+      1pp
+    - any_holdout_year_sharpe < 0.5
+    - cost_degradation_pp does not decrease by at least 1pp from the -7.47pp baseline
+    test:
+    - cumulative_excess_compound_test_cost_on does not improve vs baseline by at least
+      1pp
+    - any_holdout_year_sharpe < 0.5
+    - cost_degradation_pp does not decrease by at least 1pp from the -7.47pp baseline
+  risk: 'Low structural risk. PnL feedback scaling is a position-sizing overlay that
+    never removes candidates. Worst case: scaling parameters add noise, the strategy
+    degrades to baseline performance, and the idea is rejected without breaking anything.
+    Unlike entry filters, it cannot cause mechanical threshold failures since all
+    entries are preserved. The only risk is a wasted compute slot for the grid search.
+
+    '
+  why_not_repeated_failure: 'This is not a variant of the repeatedly-failed moneyness_stock_to_conv_threshold
+    family (5 rejects). Those runs all failed mechanical thresholds because entry
+    filters suppressed candidates below minimum trade count. This proposal adds a
+    position-sizing layer that preserves all candidates — it changes how much is allocated
+    to each position, not which positions are eligible. It is also not a reverse-direction
+    variant: all reverse families (reverse_moneyness_entry_filter, reverse_bond_floor_entry_filter,
+    volatility_position_scaling_reverse, etc.) are closed by value_gap_rank_is_anti_alpha_2026_05_24,
+    and this proposal operates in the standard forward descending sort direction.
+    This direction has not been tested — no PnL feedback scaling run exists in the
+    recent digest.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  - cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  - cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+  implementation_assumption: 'The executor must compute daily rolling realized PnL
+    for the strategy (not per-CB), then adjust position weight as: weight = baseline
+    * (1 + aggressiveness * clip(rolling_return, -1.0, 1.0)), clamped to [0.2 * baseline,
+    2.0 * baseline]. The baseline exit logic (duration-adaptive, accepted 2026-05-22)
+    is unchanged. The executor must report mechanical threshold results (adoption_pass,
+    min_trades, etc.) in addition to standard backtest metrics.'
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 5a77a36dce05558c
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 5a77a36dce05558c
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_id_deduped_from: cb_arb_value_gap_switch_pnl_feedback_scaling_v1
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_4/proposal.yaml
+  research_delta_gate:
+    action: advance
+    reason: novel family/capabilities (family=pnl_feedback_scaling_grid, capability_ids=['C004']);
+      no critical-insight reference; queue depth=0.
+    evidence:
+      family: pnl_feedback_scaling_grid
+      capability_ids:
+      - C004
+      cites_critical: null
+      queue_depth: 0
+  mechanics:
+  - rolling_pnl_feedback
+  dropped_unmatched_required_data_fields:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+executor_id: evaluate_cb_arb_pnl_feedback_scaling_grid
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_pnl_feedback_scaling_grid.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_4
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_pnl_feedback_scaling_grid.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_4
+  sync_paths:
+  - scripts/evaluate_cb_arb_pnl_feedback_scaling_grid.py
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_4/proposal.yaml
+  response_hash: 5a77a36dce05558c
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet

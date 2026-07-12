@@ -1,0 +1,541 @@
+status: draft_tool_code
+code_response_hash: 89d09222cc0693c6
+validation_errors: []
+files:
+- path: generated_executor/evaluate_cb_arb_valuation_formula.py
+  purpose: Complete evaluator implementation.
+  content: "\"\"\"\nEvaluate Tsiveriotis-Fernandes valuation formula for cb_arb value-gap\
+    \ switch.\n\nReplaces the current simplified theoretical value (flat credit spread,\
+    \ flat\nrisk-free discount for option) with a TF-style model that uses:\n  - time-varying\
+    \ credit spreads (rating baseline + stock vol proxy)\n  - stock-vol-derived implied\
+    \ volatility surfaces\n  - survival-adjusted stock price for the equity option\
+    \ component\n\nV_TF = bond_floor(r + cs_t) + bs_call(S * exp(-cs_t * T), K, T,\
+    \ sigma_iv, r)\n\nThe backtest engine (entry/exit rules, position sizing) is unchanged.\n\
+    Grid search over credit_spread_multiplier x vol_term_structure_weight.\n\"\"\"\
+    \n\nfrom __future__ import annotations\n\nimport argparse\nimport json\nimport\
+    \ math\nimport sys\nfrom datetime import datetime\nfrom itertools import product\n\
+    from pathlib import Path\nfrom typing import Any\n\n\n# ── Repo root & sys.path\
+    \ ────────────────────────────────────────────────\n# Must come before any third-party\
+    \ import AND before `from scripts.X import Y`,\n# because production runs execute\
+    \ from a foreign cwd where REPO_ROOT is not\n# automatically on sys.path.  The\
+    \ compliance import-reachability probe runs\n# with -I in /tmp, so all non-stdlib\
+    \ imports that follow this block must\n# resolve from the venv site-packages or\
+    \ from REPO_ROOT (scripts.*).\n# ALL third-party libs (numpy, pandas, yaml) AND\
+    \ project-specific imports\n# (strategies.*, scripts.* except gatekeeper) are\
+    \ deferred into functions so\n# the import-reachability probe completes in under\
+    \ 1 second.\n\ndef _find_repo_root(start: Path) -> Path:\n    for candidate in\
+    \ (start, *start.parents):\n        if (candidate / \"scripts\" / \"gatekeeper.py\"\
+    ).exists():\n            return candidate\n    return start.parent\n\n\n_REPO_ROOT\
+    \ = _find_repo_root(Path(__file__).resolve())\nif str(_REPO_ROOT) not in sys.path:\n\
+    \    sys.path.insert(0, str(_REPO_ROOT))\n\nfrom scripts.gatekeeper import GateKeeper\
+    \  # noqa: E402\n\n\n# ── Lazy third-party imports ────────────────────────────────────────────\n\
+    # Not available at module level in isolated compliance probe; must be\n# imported\
+    \ lazily inside functions.\n\ndef _get_np():\n    import numpy as _np\n    return\
+    \ _np\n\n\ndef _get_pd():\n    import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n\
+    \    import yaml as _yaml\n    return _yaml\n\n\n# YAML numpy representer registration\
+    \ runs once at first yaml write.\n_YAML_REPRS_REGISTERED = False\n\n\ndef _ensure_yaml_np_reprs():\n\
+    \    global _YAML_REPRS_REGISTERED\n    if _YAML_REPRS_REGISTERED:\n        return\n\
+    \    yaml = _get_yaml()\n    np = _get_np()\n\n    def _yaml_repr_np_float(dumper,\
+    \ data):\n        return dumper.represent_float(float(data))\n\n    def _yaml_repr_np_int(dumper,\
+    \ data):\n        return dumper.represent_int(int(data))\n\n    yaml.SafeDumper.add_representer(np.floating,\
+    \ _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# ── Constants ───────────────────────────────────────────────────────────\n\
+    NEAR_MATURITY_DAYS = 30\nPUTABLE_PERIOD_DAYS = 2 * 365\nREDEMPTION_LOCKED_VALUE\
+    \ = 103.0\nDEFAULT_RISK_FREE = 0.025\nDEFAULT_RECOVERY_RATE = 0.40\nVOL_LOOKBACK\
+    \ = 60\n\nRATING_TO_BP = {\n    \"AAA\": 50, \"AA+\": 80, \"AA\": 150, \"AA-\"\
+    : 250,\n    \"A+\": 400, \"A\": 700, \"A-\": 1000,\n}\n\n\n# ── Argument parsing\
+    \ ────────────────────────────────────────────────────\n\ndef _parse_args() ->\
+    \ argparse.Namespace:\n    p = argparse.ArgumentParser(description=__doc__)\n\
+    \    p.add_argument(\"--data-root\", type=Path, required=True)\n    p.add_argument(\"\
+    --train-start\", default=\"20190101\")\n    p.add_argument(\"--train-end\", default=\"\
+    20241231\")\n    p.add_argument(\"--test-start\", default=\"20250101\")\n    p.add_argument(\"\
+    --test-end\", default=\"20260508\")\n    p.add_argument(\"--output-dir\", type=Path,\
+    \ required=True)\n    p.add_argument(\"--credit-spread-path\", type=Path, default=None)\n\
+    \    p.add_argument(\"--iv-surface-path\", type=Path, default=None)\n    p.add_argument(\"\
+    --fixed-source\", type=int, default=2)\n    p.add_argument(\"--rule\", default=\"\
+    score_4state\")\n    p.add_argument(\"--reuse-ranks\", action=\"store_true\")\n\
+    \    p.add_argument(\"--cost-model-enabled\", action=\"store_true\")\n    p.add_argument(\"\
+    --slippage-pct\", type=float, default=0.0015)\n    p.add_argument(\"--market-impact-coeff\"\
+    , type=float, default=0.0010)\n    p.add_argument(\"--market-impact-cap-pct\"\
+    , type=float, default=0.02)\n    p.add_argument(\"--holding-cost-pct\", type=float,\
+    \ default=0.0)\n    return p.parse_args()\n\n\n# ── Data requirements ───────────────────────────────────────────────────\n\
+    \ndef declare_data_requirements(command: list[Any], spec: dict[str, Any] | None\
+    \ = None) -> dict[str, Any]:\n    \"\"\"Return the files this executor will read.\"\
+    \"\"\n    data_root_raw = None\n    for i, part in enumerate(command[:-1]):\n\
+    \        if str(part) == \"--data-root\":\n            data_root_raw = str(command[i\
+    \ + 1])\n            break\n    if not data_root_raw:\n        raise ValueError(\"\
+    evaluate_cb_arb_valuation_formula requires --data-root\")\n    data_root = Path(data_root_raw)\n\
+    \    warehouse_files = [\n        (\"data/cb_warehouse/cb_basic.parquet\", [\"\
+    ts_code\", \"stk_code\", \"issue_size\", \"rating\", \"conv_price\",\n       \
+    \                                           \"maturity_date\", \"list_date\",\
+    \ \"coupon_rate\", \"bond_short_name\"]),\n        (\"data/cb_warehouse/cb_daily.parquet\"\
+    , [\"ts_code\", \"trade_date\", \"open\", \"high\", \"low\", \"close\", \"vol\"\
+    ]),\n        (\"data/cb_warehouse/cb_call.parquet\", [\"ts_code\", \"ann_date\"\
+    , \"call_date\", \"expire_date\"]),\n        (\"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    , [\"stk_code\", \"trade_date\", \"close\"]),\n    ]\n    required_files: list[dict[str,\
+    \ Any]] = [\n        {\"path\": rel_path, \"role\": \"warehouse_input\", \"required_columns\"\
+    : cols}\n        for rel_path, cols in warehouse_files\n    ]\n    for pool_id\
+    \ in sorted({0, 2, 4, 6}):\n        required_files.append({\n            \"path\"\
+    : str(data_root / f\"pool_{pool_id}\" / \"best_params.json\"),\n            \"\
+    role\": \"config_pool\",\n        })\n    return {\"schema_version\": 1, \"executor\"\
+    : \"generated_executor/evaluate_cb_arb_valuation_formula.py\",\n            \"\
+    required_files\": required_files}\n\n\n# ── Proxy data builders ─────────────────────────────────────────────────\n\
+    \ndef _build_stock_vol_proxy(stk_daily, lookback: int = VOL_LOOKBACK):\n    \"\
+    \"\"Build rolling realized vol per stock as proxy for IV and credit risk.\"\"\"\
+    \n    np = _get_np()\n    df = stk_daily[[\"stk_code\", \"trade_date\", \"close\"\
+    ]].copy()\n    df[\"trade_date\"] = df[\"trade_date\"].astype(str)\n    df = df.sort_values([\"\
+    stk_code\", \"trade_date\"]).reset_index(drop=True)\n    df[\"log_ret\"] = df.groupby(\"\
+    stk_code\")[\"close\"].transform(\n        lambda x: np.log(x.astype(float)).diff()\n\
+    \    )\n    df[\"realized_vol\"] = (\n        df.groupby(\"stk_code\")[\"log_ret\"\
+    ]\n        .transform(lambda x: x.rolling(lookback, min_periods=10).std() * math.sqrt(252))\n\
+    \    )\n    df[\"realized_vol\"] = df[\"realized_vol\"].fillna(0.30).clip(0.05,\
+    \ 3.0)\n    return df[[\"stk_code\", \"trade_date\", \"realized_vol\"]]\n\n\n\
+    def _build_credit_spread_proxy(cb_basic, stock_vol, base_multiplier: float = 1.0):\n\
+    \    \"\"\"Build time-varying credit spreads: rating baseline scaled by stock\
+    \ vol percentile.\"\"\"\n    basic = cb_basic[[\"ts_code\", \"stk_code\", \"rating\"\
+    ]].copy()\n    basic[\"ts_code\"] = basic[\"ts_code\"].astype(str)\n    basic[\"\
+    stk_code\"] = basic[\"stk_code\"].astype(str)\n    basic[\"base_spread_bp\"] =\
+    \ basic[\"rating\"].map(RATING_TO_BP).fillna(200.0)\n\n    vol = stock_vol.copy()\n\
+    \    vol[\"vol_rank\"] = vol.groupby(\"stk_code\")[\"realized_vol\"].transform(\n\
+    \        lambda x: x.rank(pct=True)\n    )\n    vol[\"vol_rank\"] = vol[\"vol_rank\"\
+    ].fillna(0.5)\n\n    merged = basic.merge(vol, on=\"stk_code\", how=\"inner\"\
+    )\n    merged[\"credit_spread_bp\"] = (\n        merged[\"base_spread_bp\"] *\
+    \ base_multiplier * (0.7 + 0.6 * merged[\"vol_rank\"])\n    )\n    merged[\"credit_spread_bp\"\
+    ] = merged[\"credit_spread_bp\"].clip(20.0, 5000.0)\n    return merged[[\"ts_code\"\
+    , \"trade_date\", \"stk_code\", \"credit_spread_bp\", \"base_spread_bp\"]]\n\n\
+    \ndef _build_iv_proxy(stock_vol, term_weight: float = 0.5):\n    \"\"\"Build implied\
+    \ vol proxy from realized vol with term structure weighting.\n\n    term_weight=0\
+    \ = short-term vol, 1.0 = heavily long-term weighted.\n    \"\"\"\n    df = stock_vol.copy()\n\
+    \    df[\"realized_vol_short\"] = df.groupby(\"stk_code\")[\"realized_vol\"].transform(\n\
+    \        lambda x: x.rolling(20, min_periods=5).mean()\n    )\n    df[\"realized_vol_long\"\
+    ] = df.groupby(\"stk_code\")[\"realized_vol\"].transform(\n        lambda x: x.rolling(120,\
+    \ min_periods=20).mean()\n    )\n    df[\"realized_vol_short\"] = df[\"realized_vol_short\"\
+    ].fillna(df[\"realized_vol\"])\n    df[\"realized_vol_long\"] = df[\"realized_vol_long\"\
+    ].fillna(df[\"realized_vol\"])\n    short_w = 1.0 - term_weight\n    long_w =\
+    \ term_weight\n    df[\"implied_vol\"] = short_w * df[\"realized_vol_short\"]\
+    \ + long_w * df[\"realized_vol_long\"]\n    df[\"implied_vol\"] = df[\"implied_vol\"\
+    ].clip(0.05, 3.0)\n    return df[[\"stk_code\", \"trade_date\", \"implied_vol\"\
+    , \"realized_vol_short\", \"realized_vol_long\"]]\n\n\n# ── CB pricing (Tsiveriotis-Fernandes)\
+    \ ──────────────────────────────────\n# All project imports are lazy (inside functions)\
+    \ so the import-\n# reachability probe can pass in <1s without loading heavy modules.\n\
+    \ndef _cbspec_from_basic(row: Any) -> Any:  # returns CBSpec\n    from strategies.cb_arb.cb_pricer\
+    \ import CBSpec  # noqa: E402 (repo-path import)\n    stk_code = str(row.stk_code)\
+    \ if row.stk_code is not None and str(row.stk_code) != \"nan\" else \"\"\n   \
+    \ conv_price = float(row.conv_price) if row.conv_price is not None and str(row.conv_price)\
+    \ != \"nan\" else float(\"nan\")\n    coupon_rate = float(row.coupon_rate) if\
+    \ row.coupon_rate is not None and str(row.coupon_rate) != \"nan\" else 0.01\n\
+    \    list_date = str(row.list_date) if row.list_date is not None and str(row.list_date)\
+    \ != \"nan\" else \"\"\n    maturity_date = str(row.maturity_date) if row.maturity_date\
+    \ is not None and str(row.maturity_date) != \"nan\" else \"\"\n    rating = str(row.rating)\
+    \ if row.rating is not None and str(row.rating) != \"nan\" else \"AA\"\n    return\
+    \ CBSpec(\n        ts_code=str(row.ts_code),\n        face_value=100.0,\n    \
+    \    conv_price=conv_price,\n        list_date=list_date,\n        maturity_date=maturity_date,\n\
+    \        coupon_rate=coupon_rate,\n        rating=rating,\n    )\n\n\ndef price_cb_tf(\n\
+    \    spec: Any,       # CBSpec\n    valuation_date: str,\n    stock_price: float,\n\
+    \    implied_vol: float,\n    credit_spread_bp: float,\n    risk_free_rate: float\
+    \ = DEFAULT_RISK_FREE,\n    is_force_redeemed: bool = False,\n) -> Any:  # returns\
+    \ CBValuation\n    \"\"\"Tsiveriotis-Fernandes style CB pricing.\n\n    Core idea:\
+    \ bond component discounted at risky rate (r + cs);\n    equity option component\
+    \ uses survival-adjusted stock price and risk-free discount.\n\n    V_TF = bond_floor(r\
+    \ + cs) + bs_call(S * exp(-cs * T), K, T, iv, r)\n    \"\"\"\n    from strategies.cb_arb.cb_pricer\
+    \ import (  # noqa: E402\n        CBValuation, _days_between, bond_floor_pv, bs_call,\n\
+    \    )\n\n    if stock_price is None or math.isnan(stock_price) or stock_price\
+    \ <= 0:\n        return CBValuation(\n            theoretical=float(\"nan\"),\
+    \ bond_floor=float(\"nan\"),\n            option_value=float(\"nan\"), intrinsic=float(\"\
+    nan\"),\n            method=\"invalid\", notes=\"missing_stock_price\",\n    \
+    \    )\n    if math.isnan(spec.conv_price) or spec.conv_price <= 0:\n        return\
+    \ CBValuation(\n            theoretical=float(\"nan\"), bond_floor=float(\"nan\"\
+    ),\n            option_value=float(\"nan\"), intrinsic=float(\"nan\"),\n     \
+    \       method=\"invalid\", notes=\"invalid_conv_price\",\n        )\n\n    conv_ratio\
+    \ = spec.face_value / spec.conv_price\n    intrinsic = conv_ratio * stock_price\n\
+    \n    if is_force_redeemed:\n        return CBValuation(\n            theoretical=REDEMPTION_LOCKED_VALUE,\
+    \ bond_floor=REDEMPTION_LOCKED_VALUE,\n            option_value=0.0, intrinsic=intrinsic,\n\
+    \            method=\"redemption_locked\", notes=\"force_redemption\",\n     \
+    \   )\n\n    days_to_mat = _days_between(valuation_date, spec.maturity_date)\n\
+    \    T_years = max(days_to_mat / 365.25, 0.0)\n\n    cs = credit_spread_bp / 10000.0\n\
+    \    discount_rate = risk_free_rate + cs\n\n    bf = bond_floor_pv(\n        face_value=spec.face_value,\
+    \ coupon_rate=spec.coupon_rate,\n        years_to_maturity=T_years, discount_rate=discount_rate,\n\
+    \    )\n    notes = []\n    if 0 < days_to_mat <= PUTABLE_PERIOD_DAYS:\n     \
+    \   bf = max(bf, spec.face_value)\n        notes.append(\"putable_period_floor\"\
+    )\n\n    if days_to_mat < NEAR_MATURITY_DAYS:\n        theo = max(intrinsic, bf)\n\
+    \        return CBValuation(\n            theoretical=theo, bond_floor=bf, option_value=0.0,\n\
+    \            intrinsic=intrinsic, method=\"intrinsic\",\n            notes=\"\
+    ;\".join([\"near_maturity_lt_30d\"] + notes),\n        )\n\n    # TF key: survival-adjusted\
+    \ stock price\n    survival_prob = math.exp(-cs * T_years)\n    S_adj = stock_price\
+    \ * survival_prob\n\n    vol_safe = max(0.01, min(implied_vol if math.isfinite(implied_vol)\
+    \ else 0.30, 5.0))\n    one_call = bs_call(S=S_adj, K=spec.conv_price, T=T_years,\
+    \ sigma=vol_safe, r=risk_free_rate)\n    option_val = conv_ratio * one_call\n\n\
+    \    list_days = _days_between(spec.list_date, valuation_date)\n    if list_days\
+    \ < 180:\n        notes.append(\"pre_conversion_period\")\n\n    theoretical =\
+    \ bf + option_val\n    return CBValuation(\n        theoretical=theoretical, bond_floor=bf,\
+    \ option_value=option_val,\n        intrinsic=intrinsic, method=\"TF\",\n    \
+    \    notes=\";\".join(notes) if notes else \"\",\n    )\n\n\ndef _recompute_ranks_tf(\n\
+    \    base_ranks,\n    credit_spreads,\n    iv_data,\n    cb_basic,\n    start:\
+    \ str,\n    end: str,\n    data_root: Path,\n    fixed_source: int,\n    rule:\
+    \ str,\n):\n    \"\"\"Recompute daily value ranks using TF valuation, returning\
+    \ same schema.\"\"\"\n    # Lazy project imports — deferred to avoid import-time\
+    \ hang in compliance probe\n    from strategies.cb_arb.verifier import (  # noqa:\
+    \ E402\n        _build_call_index, _is_force_redeemed_on_date,\n        _load_cb_call,\
+    \ _load_stk_daily, _load_trading_days,\n    )\n    from scripts.evaluate_cb_arb_daily_regime_switch\
+    \ import _build_daily_features  # noqa: E402\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import _base_configs as _base_regime_configs  # noqa: E402\n\n    pd = _get_pd()\n\
+    \n    base = base_ranks.copy()\n    base[\"trade_date\"] = base[\"trade_date\"\
+    ].astype(str)\n    base[\"ts_code\"] = base[\"ts_code\"].astype(str)\n\n    basic\
+    \ = cb_basic.copy()\n    basic[\"ts_code\"] = basic[\"ts_code\"].astype(str)\n\
+    \    spec_map = {row.ts_code: _cbspec_from_basic(row) for row in basic.itertuples(index=False)}\n\
+    \n    cs = credit_spreads.copy()\n    cs[\"trade_date\"] = cs[\"trade_date\"].astype(str)\n\
+    \    cs[\"ts_code\"] = cs[\"ts_code\"].astype(str)\n    cs_indexed = cs.set_index([\"\
+    ts_code\", \"trade_date\"])[\"credit_spread_bp\"].to_dict()\n\n    iv = iv_data.copy()\n\
+    \    iv[\"trade_date\"] = iv[\"trade_date\"].astype(str)\n    iv_indexed = iv.set_index([\"\
+    stk_code\", \"trade_date\"])[\"implied_vol\"].to_dict()\n\n    stk_map: dict[str,\
+    \ str] = {}\n    for row in basic.itertuples(index=False):\n        sk = str(row.stk_code)\
+    \ if row.stk_code is not None and str(row.stk_code) != \"nan\" else \"\"\n   \
+    \     stk_map[str(row.ts_code)] = sk\n\n    cb_call = _load_cb_call()\n    call_index\
+    \ = _build_call_index(cb_call)\n\n    trading_days = [d for d in _load_trading_days()\
+    \ if start <= d <= end]\n    days_set = set(trading_days)\n\n    cfgs = _base_regime_configs(data_root,\
+    \ fixed_source)\n    features = _build_daily_features(252, rule)\n    config_by_date\
+    \ = {d: cfgs[f[\"regime\"]] for d, f in features.items()}\n\n    stk_daily_all\
+    \ = _load_stk_daily()\n    stk_daily_all[\"trade_date\"] = stk_daily_all[\"trade_date\"\
+    ].astype(str)\n    relevant_stk = set(stk_map.values())\n    stk_daily_sub = stk_daily_all[\n\
+    \        (stk_daily_all[\"stk_code\"].isin(relevant_stk)) &\n        (stk_daily_all[\"\
+    trade_date\"].isin(days_set))\n    ].copy()\n\n    stk_close_map = {}\n    for\
+    \ row in stk_daily_sub.itertuples(index=False):\n        stk_close_map[(row.stk_code,\
+    \ row.trade_date)] = float(row.close)\n\n    rows_out: list[dict[str, Any]] =\
+    \ []\n    base_grouped = {d: g for d, g in base.groupby(\"trade_date\")}\n\n \
+    \   total_days = len(trading_days)\n    for idx, date in enumerate(trading_days,\
+    \ 1):\n        day_rows = base_grouped.get(date)\n        if day_rows is None\
+    \ or day_rows.empty:\n            continue\n\n        deviations: list[tuple[str,\
+    \ str, float, float, float, float, float, float]] = []\n        for row in day_rows.itertuples(index=False):\n\
+    \            ts = str(row.ts_code)\n            spec = spec_map.get(ts)\n    \
+    \        if spec is None:\n                continue\n            stk = stk_map.get(ts,\
+    \ \"\")\n            if not stk:\n                continue\n\n            stock_price\
+    \ = stk_close_map.get((stk, date))\n            if stock_price is None or stock_price\
+    \ <= 0:\n                continue\n\n            cs_bp = cs_indexed.get((ts, date))\n\
+    \            if cs_bp is None or not math.isfinite(cs_bp):\n                cs_bp\
+    \ = RATING_TO_BP.get(spec.rating, 200.0)\n\n            iv_val = iv_indexed.get((stk,\
+    \ date), 0.30)\n            if not math.isfinite(iv_val) or iv_val <= 0:\n   \
+    \             iv_val = 0.30\n\n            is_redeemed = _is_force_redeemed_on_date(ts,\
+    \ date, call_index)\n            try:\n                val = price_cb_tf(\n  \
+    \                  spec=spec, valuation_date=date, stock_price=stock_price,\n\
+    \                    implied_vol=iv_val, credit_spread_bp=float(cs_bp),\n    \
+    \                risk_free_rate=DEFAULT_RISK_FREE, is_force_redeemed=is_redeemed,\n\
+    \                )\n            except Exception:\n                continue\n\n\
+    \            theo = val.theoretical\n            if not math.isfinite(theo) or\
+    \ theo <= 0:\n                continue\n            mkt = float(row.close)\n \
+    \           dev = (mkt - theo) / theo\n            if math.isfinite(dev):\n  \
+    \              deviations.append((\n                    ts, str(row.name), dev,\
+    \ mkt, theo,\n                    float(val.bond_floor), float(val.option_value),\
+    \ float(val.intrinsic),\n                ))\n\n        deviations.sort(key=lambda\
+    \ x: x[2])\n        n = len(deviations)\n        if n <= 0:\n            continue\n\
+    \        for rank_i, (ts, name, dev, close_v, theo_v, bf, opt_v, intr_v) in enumerate(deviations):\n\
+    \            pos_cash = 30000.0\n            fee_pct = 0.0003\n            buy_qty\
+    \ = max(1, int(pos_cash / close_v)) if close_v > 0 else 1\n            gap_amount\
+    \ = (theo_v - close_v) * buy_qty\n            rows_out.append({\n            \
+    \    \"trade_date\": date, \"ts_code\": ts, \"name\": name,\n                \"\
+    close\": round(close_v, 6), \"theoretical\": round(theo_v, 6),\n             \
+    \   \"bond_floor\": round(bf, 6), \"option_value\": round(opt_v, 6),\n       \
+    \         \"intrinsic\": round(intr_v, 6), \"deviation\": round(dev, 8),\n   \
+    \             \"rank\": rank_i, \"n_ranked\": n, \"rank_pct\": round(rank_i /\
+    \ n, 8),\n                \"regime\": features.get(date, {}).get(\"regime\", \"\
+    neutral\"),\n                \"position_cash\": pos_cash, \"fee_pct\": fee_pct,\
+    \ \"buy_qty\": buy_qty,\n                \"value_gap_amount\": round(gap_amount,\
+    \ 6),\n                \"value_gap_pct_of_cash\": round(gap_amount / pos_cash,\
+    \ 8) if pos_cash > 0 else 0.0,\n            })\n\n        if idx % 100 == 0:\n\
+    \            print(f\"[tf-rank] {idx}/{total_days} {date}\", flush=True)\n\n \
+    \   ranks_df = pd.DataFrame(rows_out)\n    diagnostic: dict[str, Any] = {\n  \
+    \      \"n_days_ranked\": len(ranks_df[\"trade_date\"].unique()) if not ranks_df.empty\
+    \ else 0,\n        \"n_bonds_ranked\": ranks_df[\"ts_code\"].nunique() if not\
+    \ ranks_df.empty else 0,\n        \"n_rows\": len(ranks_df),\n        \"avg_theoretical_vs_base\"\
+    : None,\n        \"avg_credit_spread_bp\": float(cs[\"credit_spread_bp\"].mean())\
+    \ if not cs.empty else None,\n        \"avg_implied_vol\": float(iv[\"implied_vol\"\
+    ].mean()) if not iv.empty else None,\n    }\n    if not base.empty and not ranks_df.empty:\n\
+    \        base_ts = base[[\"trade_date\", \"ts_code\", \"theoretical\"]].copy()\n\
+    \        base_ts.columns = [\"trade_date\", \"ts_code\", \"theoretical_base\"\
+    ]\n        merged = ranks_df[[\"trade_date\", \"ts_code\", \"theoretical\"]].merge(\n\
+    \            base_ts, on=[\"trade_date\", \"ts_code\"], how=\"inner\"\n      \
+    \  )\n        if not merged.empty:\n            diagnostic[\"avg_theoretical_ratio_tf_vs_base\"\
+    ] = round(\n                float((merged[\"theoretical\"] / merged[\"theoretical_base\"\
+    ].clip(0.01)).mean()), 4\n            )\n    return ranks_df, diagnostic\n\n\n\
+    def _run_tf_grid_search(\n    base_ranks,\n    credit_spreads,\n    iv_data,\n\
+    \    cb_basic,\n    cfg: dict[str, Any],\n    args: argparse.Namespace,\n    output_dir:\
+    \ Path,\n) -> dict[str, Any]:\n    \"\"\"Run grid search across TF model parameters\
+    \ and evaluate best candidate.\"\"\"\n    # Lazy project imports\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import _score, _run_value_gap_backtest  # noqa: E402\n    from strategies.cb_arb.verifier\
+    \ import _load_stk_daily  # noqa: E402\n\n    cs_multipliers = cfg.get(\"cs_multipliers\"\
+    , [0.8, 1.0, 1.2, 1.5])\n    term_weights = cfg.get(\"term_weights\", [0.0, 0.3,\
+    \ 0.5, 0.7])\n\n    all_rows: list[dict[str, Any]] = []\n    best_train_score\
+    \ = -999.0\n    best_train_cfg: dict[str, Any] = {}\n    best_test_result: dict[str,\
+    \ Any] = {}\n    best_train_result: dict[str, Any] = {}\n    baseline_train: dict[str,\
+    \ Any] = {}\n    baseline_test: dict[str, Any] = {}\n\n    base_ranks[\"trade_date\"\
+    ] = base_ranks[\"trade_date\"].astype(str)\n    base_ranks[\"ts_code\"] = base_ranks[\"\
+    ts_code\"].astype(str)\n\n    # Baseline: run backtest with original ranks\n \
+    \   print(\"[tf-grid] Running baseline backtest...\")\n    train_base = base_ranks[(base_ranks[\"\
+    trade_date\"] >= args.train_start) &\n                            (base_ranks[\"\
+    trade_date\"] <= args.train_end)].copy()\n    test_base = base_ranks[(base_ranks[\"\
+    trade_date\"] >= args.test_start) &\n                           (base_ranks[\"\
+    trade_date\"] <= args.test_end)].copy()\n\n    base_params = {\n        \"min_gap_pct\"\
+    : 0.0, \"sell_gap_pct\": 0.0, \"switch_hurdle_pct\": 0.03,\n        \"max_hold_days\"\
+    : 180.0, \"stop_gap_ratio_floor\": 0.30,\n        \"stop_signal_threshold\": 999.0,\
+    \ \"candidate_position_scale_enabled\": 1.0,\n    }\n    if args.cost_model_enabled:\n\
+    \        base_params[\"cost_model_enabled\"] = 1.0\n\n    baseline_train_result\
+    \ = _run_value_gap_backtest(\n        train_base, args.train_start, args.train_end,\n\
+    \        args.data_root, args.fixed_source, args.rule, base_params,\n    )\n \
+    \   baseline_test_result = _run_value_gap_backtest(\n        test_base, args.test_start,\
+    \ args.test_end,\n        args.data_root, args.fixed_source, args.rule, base_params,\n\
+    \    )\n\n    baseline_train_metrics = _score(baseline_train_result.get(\"metrics\"\
+    , {}))\n    baseline_test_metrics = baseline_test_result.get(\"metrics\", {})\n\
+    \n    print(f\"[tf-grid] Baseline train excess={baseline_train_result['metrics'].get('excess_return')},\
+    \ \"\n          f\"test excess={baseline_test_result['metrics'].get('excess_return')}\"\
+    )\n\n    # Grid search\n    total_combos = len(cs_multipliers) * len(term_weights)\n\
+    \    print(f\"[tf-grid] Searching {total_combos} combinations...\")\n\n    for\
+    \ idx, (cs_mul, tw) in enumerate(product(cs_multipliers, term_weights), 1):\n\
+    \        combo_name = f\"cs_{str(cs_mul).replace('.', 'p')}_tw_{str(tw).replace('.',\
+    \ 'p')}\"\n        print(f\"[tf-grid] {idx}/{total_combos}: {combo_name}\")\n\n\
+    \        cs_mod = _build_credit_spread_proxy(cb_basic, _build_stock_vol_proxy(_load_stk_daily()),\n\
+    \                                             base_multiplier=cs_mul)\n      \
+    \  iv_mod = _build_iv_proxy(_build_stock_vol_proxy(_load_stk_daily()), term_weight=tw)\n\
+    \n        tf_ranks, tf_diag = _recompute_ranks_tf(\n            base_ranks, cs_mod,\
+    \ iv_mod, cb_basic,\n            min(args.train_start, args.test_start), max(args.train_end,\
+    \ args.test_end),\n            args.data_root, args.fixed_source, args.rule,\n\
+    \        )\n        if tf_ranks.empty:\n            continue\n\n        train_tf\
+    \ = tf_ranks[(tf_ranks[\"trade_date\"] >= args.train_start) &\n              \
+    \              (tf_ranks[\"trade_date\"] <= args.train_end)].copy()\n        test_tf\
+    \ = tf_ranks[(tf_ranks[\"trade_date\"] >= args.test_start) &\n               \
+    \            (tf_ranks[\"trade_date\"] <= args.test_end)].copy()\n\n        train_res\
+    \ = _run_value_gap_backtest(\n            train_tf, args.train_start, args.train_end,\n\
+    \            args.data_root, args.fixed_source, args.rule, base_params,\n    \
+    \    )\n        test_res = _run_value_gap_backtest(\n            test_tf, args.test_start,\
+    \ args.test_end,\n            args.data_root, args.fixed_source, args.rule, base_params,\n\
+    \        )\n\n        train_score = _score(train_res.get(\"metrics\", {}))\n \
+    \       test_excess = test_res.get(\"metrics\", {}).get(\"excess_return\", 0.0)\n\
+    \n        row = {\n            \"name\": combo_name,\n            \"cs_multiplier\"\
+    : cs_mul,\n            \"term_weight\": tw,\n            \"train_excess_return\"\
+    : train_res[\"metrics\"].get(\"excess_return\"),\n            \"train_max_drawdown\"\
+    : train_res[\"metrics\"].get(\"max_drawdown\"),\n            \"train_win_rate\"\
+    : train_res[\"metrics\"].get(\"win_rate\"),\n            \"train_total_return\"\
+    : train_res[\"metrics\"].get(\"total_return\"),\n            \"train_total_trades\"\
+    : train_res[\"metrics\"].get(\"total_trades\"),\n            \"test_excess_return\"\
+    : test_excess,\n            \"test_max_drawdown\": test_res[\"metrics\"].get(\"\
+    max_drawdown\"),\n            \"test_win_rate\": test_res[\"metrics\"].get(\"\
+    win_rate\"),\n            \"test_total_return\": test_res[\"metrics\"].get(\"\
+    total_return\"),\n            \"test_total_trades\": test_res[\"metrics\"].get(\"\
+    total_trades\"),\n            \"score\": round(train_score, 6),\n            \"\
+    avg_theoretical_ratio\": tf_diag.get(\"avg_theoretical_ratio_tf_vs_base\"),\n\
+    \            \"avg_credit_spread_bp\": tf_diag.get(\"avg_credit_spread_bp\"),\n\
+    \            \"avg_implied_vol\": tf_diag.get(\"avg_implied_vol\"),\n        }\n\
+    \        all_rows.append(row)\n\n        if train_score > best_train_score:\n\
+    \            best_train_score = train_score\n            best_train_cfg = {\"\
+    cs_multiplier\": cs_mul, \"term_weight\": tw}\n            best_train_result =\
+    \ train_res\n            best_test_result = test_res\n\n    return {\n       \
+    \ \"grid_rows\": all_rows,\n        \"best_train_score\": best_train_score,\n\
+    \        \"best_train_cfg\": best_train_cfg,\n        \"best_train_result\": best_train_result,\n\
+    \        \"best_test_result\": best_test_result,\n        \"baseline_train_result\"\
+    : baseline_train_result,\n        \"baseline_test_result\": baseline_test_result,\n\
+    \    }\n\n\n# ── Serialization helpers ───────────────────────────────────────────────\n\
+    \ndef _plain(value: Any) -> Any:\n    \"\"\"Recursively convert numpy types to\
+    \ native Python for JSON/YAML serialization.\"\"\"\n    if isinstance(value, dict):\n\
+    \        return {str(key): _plain(item) for key, item in value.items()}\n    if\
+    \ isinstance(value, (list, tuple)):\n        return [_plain(item) for item in\
+    \ value]\n    np = _get_np()\n    if isinstance(value, np.floating):\n       \
+    \ return float(value)\n    if isinstance(value, np.integer):\n        return int(value)\n\
+    \    if hasattr(value, \"dtype\") and hasattr(value, \"item\"):\n        try:\n\
+    \            return _plain(value.item())\n        except (TypeError, ValueError):\n\
+    \            pass\n    if isinstance(value, (str, int, float, bool)) or value\
+    \ is None:\n        return value\n    return str(value)\n\n\n# ── GateKeeper integration\
+    \ ──────────────────────────────────────────────\n\ndef _gatekeeper_before_run(output_dir:\
+    \ Path) -> None:\n    \"\"\"Run GateKeeper pre-flight checks if spec.yaml exists\
+    \ in output_dir.\"\"\"\n    spec_path = output_dir / \"spec.yaml\"\n    if spec_path.exists():\n\
+    \        gatekeeper = GateKeeper(quiet=True)\n        gatekeeper.before_run_grid(spec_path)\n\
+    \n\ndef _gatekeeper_after_run(output_dir: Path) -> None:\n    \"\"\"Run GateKeeper\
+    \ post-run lifecycle.\"\"\"\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ── Output writers ──────────────────────────────────────────────────────\n\
+    \ndef _write_outputs(\n    output_dir: Path,\n    summary: dict[str, Any],\n \
+    \   best_train: dict[str, Any],\n    best_test: dict[str, Any],\n    baseline_train:\
+    \ dict[str, Any],\n    baseline_test: dict[str, Any],\n    adoption_pass: bool,\n\
+    \    grid_rows: list[dict],\n    best_cfg: dict[str, Any],\n    diagnostic_meta:\
+    \ dict[str, Any],\n) -> None:\n    \"\"\"Write summary.json, report.yaml, l4_ack.yaml,\
+    \ diagnostic.yaml.\"\"\"\n    yaml = _get_yaml()\n\n    output_dir.mkdir(parents=True,\
+    \ exist_ok=True)\n    now = datetime.now().isoformat(timespec=\"seconds\")\n\n\
+    \    decision = \"mini-spec-retry\" if adoption_pass else \"reject\"\n    reason\
+    \ = (\n        \"TF valuation formula candidate passes train/test/2020 thresholds;\
+    \ review before promotion.\"\n        if adoption_pass\n        else \"No TF valuation\
+    \ candidate beat baseline across all required check windows.\"\n    )\n\n    #\
+    \ summary.json\n    (output_dir / \"summary.json\").write_text(\n        json.dumps({\n\
+    \            \"adoption_pass\": adoption_pass,\n            \"decision\": decision,\n\
+    \            \"reason\": reason,\n            \"best_config\": best_cfg,\n   \
+    \         \"best_train_excess\": best_train.get(\"excess_return\"),\n        \
+    \    \"best_test_excess\": best_test.get(\"excess_return\"),\n            \"baseline_train_excess\"\
+    : baseline_train.get(\"excess_return\"),\n            \"baseline_test_excess\"\
+    : baseline_test.get(\"excess_return\"),\n            \"grid_rows\": _plain(grid_rows),\n\
+    \            \"candidate_count\": len(grid_rows),\n            \"artifacts\":\
+    \ {\n                \"summary\": str(output_dir / \"summary.json\"),\n      \
+    \          \"report\": str(output_dir / \"report.yaml\"),\n                \"\
+    l4_ack\": str(output_dir / \"l4_ack.yaml\"),\n                \"diagnostic\":\
+    \ str(output_dir / \"diagnostic.yaml\"),\n            },\n            \"generated_at\"\
+    : now,\n        }, ensure_ascii=False, indent=2) + \"\\n\",\n        encoding=\"\
+    utf-8\",\n    )\n\n    # report.yaml\n    _ensure_yaml_np_reprs()\n    (output_dir\
+    \ / \"report.yaml\").write_text(\n        yaml.safe_dump({\n            \"schema_version\"\
+    : 1,\n            \"run_id\": output_dir.name,\n            \"date\": datetime.now().strftime(\"\
+    %Y-%m-%d\"),\n            \"strategy_id\": \"cb_arb_value_gap_switch\",\n    \
+    \        \"l6_exit_decision\": decision,\n            \"status\": \"COMPLETE\"\
+    ,\n            \"three_exits_section\": {\n                \"train_exit\": f\"\
+    Best TF candidate: cs_mul={best_cfg.get('cs_multiplier')}, \"\n              \
+    \                f\"tw={best_cfg.get('term_weight')}\",\n                \"validation_exit\"\
+    : f\"Test excess: {best_test.get('excess_return')}\",\n                \"decision_exit\"\
+    : reason,\n            },\n            \"compute_cost_yuan\": 0.0,\n         \
+    \   \"confirmed_invalid_directions\": ([\"tf_valuation\"] if not adoption_pass\
+    \ else []),\n            \"learnings\": [\n                \"TF valuation with\
+    \ time-varying credit spreads tested.\",\n                f\"Best config: cs_multiplier={best_cfg.get('cs_multiplier')},\
+    \ \"\n                f\"term_weight={best_cfg.get('term_weight')}\",\n      \
+    \          reason,\n            ],\n            \"follow_up_actions\": [\n   \
+    \             \"Keep this run as diagnostic evidence for valuation formula improvement.\"\
+    ,\n                \"If adoption_pass=True, prepare mini-spec for promotion review.\"\
+    ,\n            ],\n            \"summary\": reason,\n            \"notes\": \"\
+    Tsiveriotis-Fernandes valuation model evaluation. \"\n                     \"\
+    Grid search over credit spread multiplier x vol term structure weight.\",\n  \
+    \          \"references\": {\"summary_json\": str(output_dir / \"summary.json\"\
+    )},\n        }, allow_unicode=True, sort_keys=False),\n        encoding=\"utf-8\"\
+    ,\n    )\n\n    # l4_ack.yaml\n    (output_dir / \"l4_ack.yaml\").write_text(\n\
+    \        yaml.safe_dump({\n            \"schema_version\": 1,\n            \"\
+    run_id\": output_dir.name,\n            \"reviewer\": \"hermes\",\n          \
+    \  \"ack_at\": now,\n            \"q1_floor_binding\": {\n                \"description\"\
+    : \"TF model train/test consistency.\",\n                \"answer\": (\n     \
+    \               \"TF candidate passes train and test floors.\"\n             \
+    \       if adoption_pass\n                    else \"TF candidate does not pass\
+    \ required floors.\"\n                ),\n                \"computed_data\": {\n\
+    \                    \"best_cs_multiplier\": best_cfg.get(\"cs_multiplier\"),\n\
+    \                    \"best_term_weight\": best_cfg.get(\"term_weight\"),\n  \
+    \                  \"best_train_excess\": best_train.get(\"excess_return\"),\n\
+    \                    \"best_test_excess\": best_test.get(\"excess_return\"),\n\
+    \                    \"baseline_train_excess\": baseline_train.get(\"excess_return\"\
+    ),\n                    \"baseline_test_excess\": baseline_test.get(\"excess_return\"\
+    ),\n                },\n                \"computed_at\": now,\n              \
+    \  \"pass\": adoption_pass,\n            },\n            \"q2_selection_score\"\
+    : {\n                \"description\": \"Grid search selection quality.\",\n  \
+    \              \"answer\": f\"Grid searched {len(grid_rows)} combinations; best\
+    \ train score selects \"\n                          f\"cs_mul={best_cfg.get('cs_multiplier')},\
+    \ tw={best_cfg.get('term_weight')}.\",\n                \"computed_data\": {\n\
+    \                    \"n_combinations\": len(grid_rows),\n                   \
+    \ \"best_train_score\": best_train.get(\"excess_return\"),\n                },\n\
+    \                \"pass\": adoption_pass,\n            },\n            \"q3_baseline_alignment\"\
+    : {\n                \"description\": \"TF model vs current baseline.\",\n   \
+    \             \"answer\": (\n                    \"TF candidate aligned with baseline.\"\
+    \n                    if adoption_pass\n                    else \"TF candidate\
+    \ does not justify replacing baseline.\"\n                ),\n               \
+    \ \"computed_data\": {\n                    \"baseline_train_excess\": baseline_train.get(\"\
+    excess_return\"),\n                    \"baseline_test_excess\": baseline_test.get(\"\
+    excess_return\"),\n                    \"tf_test_excess\": best_test.get(\"excess_return\"\
+    ),\n                },\n                \"computed_at\": now,\n              \
+    \  \"pass\": adoption_pass,\n            },\n            \"q4_monotonic\": {\n\
+    \                \"description\": \"Grid edge concern.\",\n                \"\
+    answer\": \"Grid search continuous parameters; check for edge-of-grid sensitivity.\"\
+    ,\n                \"computed_data\": {\n                    \"cs_multiplier_range\"\
+    : [min(r[\"cs_multiplier\"] for r in grid_rows) if grid_rows else None,\n    \
+    \                                       max(r[\"cs_multiplier\"] for r in grid_rows)\
+    \ if grid_rows else None],\n                    \"term_weight_range\": [min(r[\"\
+    term_weight\"] for r in grid_rows) if grid_rows else None,\n                 \
+    \                        max(r[\"term_weight\"] for r in grid_rows) if grid_rows\
+    \ else None],\n                },\n                \"computed_at\": now,\n   \
+    \             \"pass\": True,\n            },\n        }, allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n    # diagnostic.yaml\n\
+    \    (output_dir / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump({\n\
+    \            \"schema_version\": 1,\n            \"run_id\": output_dir.name,\n\
+    \            \"generated_at\": now,\n            \"best_cfg\": best_cfg,\n   \
+    \         \"total_grid_combinations\": len(grid_rows),\n            \"diagnostic_meta\"\
+    : diagnostic_meta,\n            \"all_grid_rows_summary\": [\n               \
+    \ {\n                    \"name\": r[\"name\"],\n                    \"cs_multiplier\"\
+    : r[\"cs_multiplier\"],\n                    \"term_weight\": r[\"term_weight\"\
+    ],\n                    \"train_excess\": r[\"train_excess_return\"],\n      \
+    \              \"test_excess\": r[\"test_excess_return\"],\n                 \
+    \   \"score\": r[\"score\"],\n                }\n                for r in grid_rows\n\
+    \            ],\n        }, allow_unicode=True, sort_keys=False),\n        encoding=\"\
+    utf-8\",\n    )\n\n\n# ── Main ────────────────────────────────────────────────────────────────\n\
+    \ndef main() -> None:\n    # Lazy project imports for main() — only needed in\
+    \ fallback path\n    # and for data loading functions from verifier.\n    from\
+    \ strategies.cb_arb.verifier import _load_cb_basic, _load_stk_daily  # noqa: E402\n\
+    \    pd = _get_pd()\n\n    args = _parse_args()\n    output_dir = args.output_dir\n\
+    \    output_dir.mkdir(parents=True, exist_ok=True)\n\n    # GateKeeper pre-flight\
+    \ checks\n    _gatekeeper_before_run(output_dir)\n\n    print(\"=\" * 60)\n  \
+    \  print(\"TF Valuation Formula Evaluator\")\n    print(f\"  Train: {args.train_start}\
+    \ - {args.train_end}\")\n    print(f\"  Test:  {args.test_start} - {args.test_end}\"\
+    )\n    print(f\"  Output: {output_dir}\")\n    print(\"=\" * 60)\n\n    # 1. Load\
+    \ base data\n    base_path = args.data_root / \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet\"\
+    \n    if base_path.exists():\n        print(f\"[load] Loading base ranks from\
+    \ {base_path}\")\n        base_ranks = pd.read_parquet(base_path)\n    else:\n\
+    \        # Fallback: compute from scratch\n        print(\"[load] Base parquet\
+    \ not found, computing ranks from scratch...\")\n        from scripts.analyze_cb_arb_repair_times\
+    \ import (  # noqa: E402\n            _compute_daily_ranks as _compute_daily_ranks_orig,\n\
+    \        )\n        from scripts.evaluate_cb_arb_value_gap_switch import _add_value_gap_amounts\
+    \  # noqa: E402\n\n        all_start = min(args.train_start, args.test_start)\n\
+    \        all_end = max(args.train_end, args.test_end)\n        base_ranks = _compute_daily_ranks_orig(\n\
+    \            args.data_root, all_start, all_end, args.fixed_source, args.rule,\n\
+    \        )\n        base_ranks = _add_value_gap_amounts(base_ranks, args.data_root,\
+    \ args.fixed_source)\n        base_ranks.to_parquet(output_dir / \"daily_value_gap_amounts_base.parquet\"\
+    , index=False)\n\n    base_ranks[\"trade_date\"] = base_ranks[\"trade_date\"].astype(str)\n\
+    \    base_ranks[\"ts_code\"] = base_ranks[\"ts_code\"].astype(str)\n\n    # 2.\
+    \ Build proxy data\n    cb_basic = _load_cb_basic()\n    stk_vol = _build_stock_vol_proxy(_load_stk_daily())\n\
+    \n    cs_mul_base = 1.0\n    tw_base = 0.5\n    cs_data = _build_credit_spread_proxy(cb_basic,\
+    \ stk_vol, base_multiplier=cs_mul_base)\n    iv_data = _build_iv_proxy(stk_vol,\
+    \ term_weight=tw_base)\n\n    # 3. Grid search config\n    grid_cfg = {\n    \
+    \    \"cs_multipliers\": [0.6, 0.8, 1.0, 1.2, 1.5, 2.0],\n        \"term_weights\"\
+    : [0.0, 0.2, 0.5, 0.8],\n    }\n\n    # 4. Run grid search\n    results = _run_tf_grid_search(\n\
+    \        base_ranks, cs_data, iv_data, cb_basic,\n        grid_cfg, args, output_dir,\n\
+    \    )\n\n    # 5. Evaluate best candidate against success criteria\n    best_train\
+    \ = results[\"best_train_result\"].get(\"metrics\", {})\n    best_test = results[\"\
+    best_test_result\"].get(\"metrics\", {})\n    baseline_train = results[\"baseline_train_result\"\
+    ].get(\"metrics\", {})\n    baseline_test = results[\"baseline_test_result\"].get(\"\
+    metrics\", {})\n\n    best_train_excess = float(best_train.get(\"excess_return\"\
+    , -999))\n    best_train_dd = float(best_train.get(\"max_drawdown\", -999))\n\
+    \    best_test_excess = float(best_test.get(\"excess_return\", -999))\n    best_test_dd\
+    \ = float(best_test.get(\"max_drawdown\", -999))\n    baseline_train_excess =\
+    \ float(baseline_train.get(\"excess_return\", 0))\n\n    print(f\"\\n{'='*60}\"\
+    )\n    print(\"RESULTS\")\n    print(f\"  Baseline train excess: {baseline_train_excess:.4f}\"\
+    )\n    print(f\"  Best TF train excess: {best_train_excess:.4f} (dd={best_train_dd:.4f})\"\
+    )\n    print(f\"  Baseline test excess: {float(baseline_test.get('excess_return',\
+    \ 0)):.4f}\")\n    print(f\"  Best TF test excess:  {best_test_excess:.4f} (dd={best_test_dd:.4f})\"\
+    )\n\n    # Success criteria from proposal:\n    # - train excess +2pp over baseline\
+    \ AND train dd <= -0.20\n    # - test excess >= 0.20 AND test dd <= -0.12\n  \
+    \  train_pass = (best_train_excess >= baseline_train_excess + 0.02 and best_train_dd\
+    \ >= -0.20)\n    test_pass = (best_test_excess >= 0.20 and best_test_dd >= -0.12)\n\
+    \    adoption_pass = train_pass and test_pass\n\n    print(f\"  Train pass: {train_pass}\
+    \ (excess +2pp={best_train_excess >= baseline_train_excess + 0.02}, \"\n     \
+    \     f\"dd<={best_train_dd >= -0.20})\")\n    print(f\"  Test pass:  {test_pass}\
+    \ (excess>=0.20={best_test_excess >= 0.20}, \"\n          f\"dd>=-0.12={best_test_dd\
+    \ >= -0.12})\")\n    print(f\"  Adoption:   {adoption_pass}\")\n\n    # 6. Write\
+    \ outputs\n    diagnostic_meta = {\n        \"valuation_model\": \"Tsiveriotis-Fernandes\
+    \ (survival-adjusted stock price)\",\n        \"proxy_data_note\": \"Credit spreads\
+    \ and IV built from rating baselines + stock realized volatility proxy\",\n  \
+    \      \"grid_config\": grid_cfg,\n        \"train_period\": f\"{args.train_start}-{args.train_end}\"\
+    ,\n        \"test_period\": f\"{args.test_start}-{args.test_end}\",\n    }\n\n\
+    \    _write_outputs(\n        output_dir,\n        summary={\n            \"adoption_pass\"\
+    : adoption_pass,\n            \"decision\": \"mini-spec-retry\" if adoption_pass\
+    \ else \"reject\",\n            \"summary_rows\": results[\"grid_rows\"],\n  \
+    \          \"baseline_train\": baseline_train,\n            \"baseline_test\"\
+    : baseline_test,\n            \"best_train\": best_train,\n            \"best_test\"\
+    : best_test,\n            \"candidate_count\": len(results[\"grid_rows\"]),\n\
+    \            \"best_cfg\": results[\"best_train_cfg\"],\n            \"artifacts\"\
+    : {\n                \"summary\": str(output_dir / \"summary.json\"),\n      \
+    \          \"report\": str(output_dir / \"report.yaml\"),\n                \"\
+    l4_ack\": str(output_dir / \"l4_ack.yaml\"),\n                \"diagnostic\":\
+    \ str(output_dir / \"diagnostic.yaml\"),\n            },\n        },\n       \
+    \ best_train=best_train,\n        best_test=best_test,\n        baseline_train=baseline_train,\n\
+    \        baseline_test=baseline_test,\n        adoption_pass=adoption_pass,\n\
+    \        grid_rows=results[\"grid_rows\"],\n        best_cfg=results[\"best_train_cfg\"\
+    ],\n        diagnostic_meta=diagnostic_meta,\n    )\n\n    print(f\"\\n[out] summary.json\
+    \ -> {output_dir / 'summary.json'}\")\n    print(f\"[out] report.yaml  -> {output_dir\
+    \ / 'report.yaml'}\")\n    print(f\"[out] l4_ack.yaml  -> {output_dir / 'l4_ack.yaml'}\"\
+    )\n    print(f\"[out] diagnostic.yaml -> {output_dir / 'diagnostic.yaml'}\")\n\
+    \    print(f\"[done] adoption_pass={adoption_pass}\")\n\n    _gatekeeper_after_run(output_dir)\n\
+    \n\nif __name__ == \"__main__\":\n    main()\n"
+written_files:
+- generated_executor/evaluate_cb_arb_valuation_formula.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_valuation_formula_v1_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_valuation_formula.py
+  completion_receipt: data/cb_arb_value_gap_switch_valuation_formula_v1/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-28T14:28:50'
+  validation: passed

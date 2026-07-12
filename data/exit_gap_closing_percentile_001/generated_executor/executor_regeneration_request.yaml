@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: exit_gap_closing_percentile_001_executor_code
+target_script_path: scripts/evaluate_cb_arb_exit_gap_closing_percentile.py
+current_target_sha256: d459b9211e75ddb9b400e6c270931ecab1947dd98135c274c2986c923861227e
+previous_installed_source: data/exit_gap_closing_percentile_001/generated_executor/evaluate_cb_arb_exit_gap_closing_percentile.py
+previous_installed_sha256: 8356a01e058618e2
+previous_installed_at: '2026-05-22T15:34:18+00:00'
+required_action: Regenerate the executor from the existing spec.yaml + executor_tool_request.yaml
+  in this run dir. The source file under generated_executor/ was lost after the previous
+  install; the current target in scripts/ may not be the latest version. Write a fresh
+  executor that satisfies the original validation requirements (main + declare_data_requirements
+  + summary.json / report.yaml / l4_ack.yaml / diagnostic.yaml output + GateKeeper
+  import). Once written, the standard handoff completion → install validation → install
+  overwrite (compliance repair flow) path will re-land the executor.
+noted_at: '2026-05-24T23:55:04+00:00'
+dry_run: false

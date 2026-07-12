@@ -1,0 +1,46 @@
+tool_request_id: null
+why_existing_tools_insufficient: null
+reviewed_existing_executor_ids: null
+registry_entry: null
+implementation_outline: null
+validation_plan: null
+ai_provider: deepseek
+design_response_hash: e6af791330e782ba
+code_response_hash: null
+compile_reason: no strict executor match
+tool_design:
+  status: invalid_tool_design_response
+  ai_provider: deepseek
+  response_hash: e6af791330e782ba
+  compile_reason: no strict executor match
+  validation_errors:
+  - missing required tool design field tool_request_id
+  - missing required tool design field why_existing_tools_insufficient
+  - missing required tool design field reviewed_existing_executor_ids
+  - missing required tool design field registry_entry
+  - missing required tool design field implementation_outline
+  - missing required tool design field validation_plan
+  - registry_entry must be a mapping
+  - validation_plan must be a non-empty list
+tool_code_response: null
+files: []
+tool_code_attempts: 0
+validation_errors:
+- 'design: missing required tool design field tool_request_id'
+- 'design: missing required tool design field why_existing_tools_insufficient'
+- 'design: missing required tool design field reviewed_existing_executor_ids'
+- 'design: missing required tool design field registry_entry'
+- 'design: missing required tool design field implementation_outline'
+- 'design: missing required tool design field validation_plan'
+- 'design: registry_entry must be a mapping'
+- 'design: validation_plan must be a non-empty list'
+- 'code: skipped because tool design was invalid'
+written_files: []
+status: automation_skipped_non_runnable
+status_before_automation_skip: invalid_tool_code_response
+automation_skip:
+  status: skipped_non_runnable
+  at: '2026-05-22T07:01:56'
+  proposal_status: DRAFT
+  reason: no strict executor match
+  errors: []

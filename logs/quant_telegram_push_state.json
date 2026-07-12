@@ -94,9 +94,129 @@
       "pushed_at": "2026-05-23T00:00:00+00:00",
       "verdict": "reject",
       "backfilled": true
+    },
+    "cb_arb_value_gap_switch_regime-adaptive-exit-v1": {
+      "signature": "39f7d34cf57b03b8",
+      "pushed_at": "2026-05-23T14:20:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_regime-adaptive-exit_v1": {
+      "signature": "64037e20f21da6e0",
+      "pushed_at": "2026-05-23T14:20:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_regime-adaptive-exit_v1_1": {
+      "signature": "51dd12729130aaf8",
+      "pushed_at": "2026-05-23T14:30:03+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_regime_adaptive_exit_v1_2": {
+      "signature": "edaf67fac63a0097",
+      "pushed_at": "2026-05-23T14:40:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_regime-adaptive-exit_v1_2": {
+      "signature": "6ca7f1a122904847",
+      "pushed_at": "2026-05-23T14:50:01+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_moneyness-entry-filter_v1": {
+      "signature": "143cfc582633a1b9",
+      "pushed_at": "2026-05-24T04:00:03+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_moneyness_entry_filter_v1_3": {
+      "signature": "6d189067d4343a63",
+      "pushed_at": "2026-05-24T04:20:17+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_moneyness_entry_filter_v1_4": {
+      "signature": "fa27c5cc0b5e5971",
+      "pushed_at": "2026-05-24T04:30:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_moneyness_entry_filter_v1_5": {
+      "signature": "ae547dc1b84ee017",
+      "pushed_at": "2026-05-24T04:40:17+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_moneyness-entry-filter_v1_1": {
+      "signature": "0bfe6bdf5d9acf73",
+      "pushed_at": "2026-05-24T05:00:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_bond-floor-entry-filter_v1": {
+      "signature": "07fa14c28fdf916e",
+      "pushed_at": "2026-05-24T05:20:03+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_reverse-probe-coston_20260524": {
+      "signature": "7e9c9f9ea12623af",
+      "pushed_at": "2026-05-24T05:50:14+00:00",
+      "verdict": "accept"
+    },
+    "cb_arb_value_gap_switch_full-flip-probe_20260524": {
+      "signature": "dba4277e01b8a445",
+      "pushed_at": "2026-05-24T06:20:03+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_reverse-probe_20260524": {
+      "signature": "dda8562e4c5a4e98",
+      "pushed_at": "2026-05-24T06:50:02+00:00",
+      "verdict": "inconclusive"
+    },
+    "cb_arb_value_gap_switch_pnl-feedback-scaling_v1": {
+      "signature": "8dd6b495c65fa1e6",
+      "pushed_at": "2026-05-25T01:20:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_exit_duration_adaptive_reverse_20260525": {
+      "signature": "315e7e013e2586c6",
+      "pushed_at": "2026-05-25T04:40:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_reverse_moneyness_entry_filter_v1_1": {
+      "signature": "0c90315ffa1d2f32",
+      "pushed_at": "2026-05-25T05:30:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_reverse_bond_floor_entry_filter_v2": {
+      "signature": "b4e6795071a50f66",
+      "pushed_at": "2026-05-25T05:50:02+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_new_valuation_v1": {
+      "signature": "0e144907d8ae37c5",
+      "pushed_at": "2026-05-26T07:20:01+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_pnl_feedback_scaling_v1_1": {
+      "signature": "f91db41a0f41305b",
+      "pushed_at": "2026-05-26T22:00:03+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_volatility_position_scaling_v1_1": {
+      "signature": "43efae1af311e370",
+      "pushed_at": "2026-05-26T22:20:07+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2": {
+      "signature": "53a06a719de1d887",
+      "pushed_at": "2026-05-26T22:40:17+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_pnl_feedback_scaling_v1_3": {
+      "signature": "f54cbcf2b6864593",
+      "pushed_at": "2026-05-26T22:50:13+00:00",
+      "verdict": "reject"
+    },
+    "cb_arb_value_gap_switch_regime_adaptive_exit_v1": {
+      "signature": "001ac1b5ab2d8063",
+      "pushed_at": "2026-05-27T02:00:04+00:00",
+      "verdict": "accept"
     }
   },
   "backfilled_at": "2026-05-22T19:50:38+00:00",
-  "last_run_at": "2026-05-22T19:50:44+00:00",
-  "last_sent_count": 7
+  "last_run_at": "2026-06-29T13:50:02+00:00",
+  "last_sent_count": 0
 }

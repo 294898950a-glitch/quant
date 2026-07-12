@@ -25,9 +25,12 @@ import sys
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import pandas as pd
-import yaml
+# ── Repo root & sys.path ────────────────────────────────────────────────
+# Must come before any third-party import AND before `from scripts.X import Y`,
+# because production runs execute from a foreign cwd where REPO_ROOT is not
+# automatically on sys.path.  The compliance import-reachability probe runs
+# with -I in /tmp, so all non-stdlib imports that follow this block must
+# resolve from the venv site-packages or from REPO_ROOT (scripts.*).
 
 
 def _find_repo_root(start: Path) -> Path:
@@ -43,6 +46,43 @@ if str(_REPO_ROOT) not in sys.path:
 
 from scripts.gatekeeper import GateKeeper  # noqa: E402
 
+# ── Lazy-loaded heavy deps (imported on first use to keep module import fast) ──
+_np: Any = None
+_pd: Any = None
+_yaml: Any = None
+
+
+def _lazy_imports() -> None:
+    """Import numpy, pandas, yaml and register numpy representers with yaml."""
+    global _np, _pd, _yaml
+    if _np is not None:
+        return  # already loaded
+
+    import numpy as _np_module
+    import pandas as _pd_module
+    import yaml as _yaml_module
+
+    _np = _np_module
+    _pd = _pd_module
+    _yaml = _yaml_module
+
+    # yaml.safe_dump cannot represent numpy scalars; register fallbacks once.
+    def _yaml_repr_np_float(dumper, data):
+        return dumper.represent_float(float(data))
+
+    def _yaml_repr_np_int(dumper, data):
+        return dumper.represent_int(int(data))
+
+    _yaml.SafeDumper.add_representer(_np.floating, _yaml_repr_np_float)
+    _yaml.SafeDumper.add_representer(_np.integer, _yaml_repr_np_int)
+    _yaml.SafeDumper.add_multi_representer(_np.floating, _yaml_repr_np_float)
+    _yaml.SafeDumper.add_multi_representer(_np.integer, _yaml_repr_np_int)
+
+
+# ---------------------------------------------------------------------------
+# Data paths
+# ---------------------------------------------------------------------------
+
 _PREVIOUS_RUN_DATA = (
     "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/"
     "daily_value_gap_amounts.parquet"
@@ -52,6 +92,10 @@ _BASELINE_TRADE_PNL = (
     "baseline_trade_pnl.parquet"
 )
 
+
+# ---------------------------------------------------------------------------
+# Required entrypoints
+# ---------------------------------------------------------------------------
 
 def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = None) -> dict[str, Any]:  # noqa: ARG001
     return {
@@ -75,45 +119,62 @@ def _gatekeeper_before_run(output_dir: Path) -> None:
         gatekeeper.before_run_grid(spec_path)
 
 
-def _load_data(data_root: str) -> pd.DataFrame:
-    relative_path = Path(_PREVIOUS_RUN_DATA)
+def _gatekeeper_after_run(output_dir: Path) -> None:
+    gatekeeper = GateKeeper(quiet=True)
+    gatekeeper.after_run_grid(output_dir)
+
+
+# ---------------------------------------------------------------------------
+# Data loading
+# ---------------------------------------------------------------------------
+
+def _resolve_data_path(data_root_str: str, relative: str) -> Path:
+    _lazy_imports()
+    data_root_p = Path(data_root_str)
+    rel = Path(relative)
     candidates = [
-        Path(data_root) / relative_path,
-        _REPO_ROOT / relative_path,
-        Path.cwd() / relative_path,
+        data_root_p / rel,
+        _REPO_ROOT / rel,
+        Path.cwd() / rel,
     ]
-    path = next((c for c in candidates if c.exists()), None)
-    if path is None:
-        searched = ", ".join(str(c) for c in candidates)
-        raise FileNotFoundError(f"Required data missing; searched: {searched}")
-    df = pd.read_parquet(path)
-    df["trade_date"] = pd.to_datetime(df["trade_date"])
+    for c in candidates:
+        if c.exists():
+            return c
+    searched = ", ".join(str(c) for c in candidates)
+    raise FileNotFoundError(f"Cannot find {relative} under data_root={data_root_str}; searched: {searched}")
+
+
+def _load_data(data_root_str: str) -> Any:  # returns pd.DataFrame
+    _lazy_imports()
+    path = _resolve_data_path(data_root_str, _PREVIOUS_RUN_DATA)
+    df = _pd.read_parquet(path)
+    df["trade_date"] = _pd.to_datetime(df["trade_date"])
     df = df.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
     return df
 
 
-def _try_load_baseline_pnl(data_root: str) -> pd.DataFrame | None:
-    relative_path = Path(_BASELINE_TRADE_PNL)
-    candidates = [
-        Path(data_root) / relative_path,
-        _REPO_ROOT / relative_path,
-        Path.cwd() / relative_path,
-    ]
-    path = next((c for c in candidates if c.exists()), None)
-    if path is None:
+def _try_load_baseline_pnl(data_root_str: str) -> Any:  # returns pd.DataFrame | None
+    _lazy_imports()
+    try:
+        path = _resolve_data_path(data_root_str, _BASELINE_TRADE_PNL)
+    except FileNotFoundError:
         return None
-    df = pd.read_parquet(path)
+    df = _pd.read_parquet(path)
     if "exit_date" in df.columns:
-        df["exit_date"] = pd.to_datetime(df["exit_date"])
+        df["exit_date"] = _pd.to_datetime(df["exit_date"])
     if "pnl" in df.columns:
         df["pnl"] = df["pnl"].astype(float)
     return df
 
 
+# ---------------------------------------------------------------------------
+# Adaptive signal computation
+# ---------------------------------------------------------------------------
+
 def _compute_gap_closing_speed(
-    df: pd.DataFrame,
+    df: Any,  # pd.DataFrame
     ts_code: str,
-    trade_date: pd.Timestamp,
+    trade_date: Any,  # pd.Timestamp
     lookback: int,
 ) -> float:
     """Compute gap closing speed as a normalised rate over the lookback window.
@@ -126,6 +187,7 @@ def _compute_gap_closing_speed(
     Uses the slope of the gap_amount scaled by the trailing maximum gap
     to avoid over-weighting moves at near-zero gaps.
     """
+    _lazy_imports()
     mask = (df["ts_code"] == ts_code) & (df["trade_date"] <= trade_date)
     hist = df.loc[mask, ["trade_date", "value_gap_amount"]].sort_values("trade_date").tail(lookback)
     if len(hist) < max(10, lookback // 2):
@@ -135,20 +197,20 @@ def _compute_gap_closing_speed(
     if len(gaps) < 2:
         return 0.0
 
-    trailing_max = float(np.max(gaps))
+    trailing_max = float(_np.max(gaps))
     if trailing_max <= 0.0:
         return 0.0
 
     first = gaps[0]
     last = gaps[-1]
     raw_change = (last - first) / trailing_max
-    clamped = float(np.clip(raw_change, -1.0, 1.0))
+    clamped = float(_np.clip(raw_change, -1.0, 1.0))
     return -clamped
 
 
 def _compute_rolling_pnl_factor(
-    trade_pnl_history: pd.DataFrame | None,
-    trade_date: pd.Timestamp,
+    trade_pnl_history: Any,  # pd.DataFrame | None
+    trade_date: Any,  # pd.Timestamp
     lookback_days: int,
 ) -> float:
     """Compute rolling PnL feedback factor from recently closed trades.
@@ -157,10 +219,14 @@ def _compute_rolling_pnl_factor(
       Negative → recent losses → tighter exits
       Positive → recent gains  → looser exits
     """
+    _lazy_imports()
     if trade_pnl_history is None or len(trade_pnl_history) == 0:
         return 0.0
 
-    cutoff = trade_date - pd.Timedelta(days=lookback_days)  # Lookback in calendar days
+    if "exit_date" not in trade_pnl_history.columns:
+        return 0.0
+
+    cutoff = trade_date - _pd.Timedelta(days=lookback_days)
     recent = trade_pnl_history[
         (trade_pnl_history["exit_date"] >= cutoff) & (trade_pnl_history["exit_date"] <= trade_date)
     ]
@@ -174,17 +240,21 @@ def _compute_rolling_pnl_factor(
         return 0.0
 
     raw = mean_pnl / abs_pnl
-    return float(np.clip(raw * 0.3, -0.3, 0.3))
+    return float(_np.clip(raw * 0.3, -0.3, 0.3))
 
+
+# ---------------------------------------------------------------------------
+# Simulation engines
+# ---------------------------------------------------------------------------
 
 def _simulate_adaptive(
-    df: pd.DataFrame,
+    df: Any,  # pd.DataFrame
     tp_gap_fraction: float,
     sl_gap_fraction: float,
     gap_speed_lookback: int,
     pnl_lookback: int,
     min_hold_days: int,
-    trade_pnl_history: pd.DataFrame | None = None,
+    trade_pnl_history: Any = None,  # pd.DataFrame | None
 ) -> dict[str, Any]:
     """Simulate adaptive exit with gap closing speed and PnL feedback.
 
@@ -202,6 +272,7 @@ def _simulate_adaptive(
 
     TP/SL exits only apply after min_hold_days.
     """
+    _lazy_imports()
     df = df.copy()
     df["position"] = 0
     df["entry_gap"] = 0.0
@@ -215,7 +286,7 @@ def _simulate_adaptive(
         idx_list = grp.index.tolist()
         in_position = False
         entry_gap_val = 0.0
-        entry_date: pd.Timestamp | None = None
+        entry_date: Any = None  # pd.Timestamp | None
 
         for idx in idx_list:
             row = grp.loc[idx]
@@ -252,10 +323,12 @@ def _simulate_adaptive(
                         df, stock, trade_date, gap_speed_lookback
                     )
                     pnl_factor = _compute_rolling_pnl_factor(
-                        live_trade_pnl, trade_date, pnl_lookback
+                        trade_pnl_history if trade_pnl_history is not None
+                        else _pd.DataFrame(live_trade_pnl),
+                        trade_date, pnl_lookback,
                     )
 
-                    speed_signal = float(np.clip(closing_speed * 0.5, -0.5, 0.5))
+                    speed_signal = float(_np.clip(closing_speed * 0.5, -0.5, 0.5))
                     dynamic_tp = tp_gap_fraction * (1.0 + speed_signal)
                     dynamic_sl = min(sl_gap_fraction * (1.0 - pnl_factor), 1.0)
 
@@ -312,12 +385,13 @@ def _simulate_adaptive(
                 "pnl": pnl,
             })
 
-    live_trade_pnl_df = pd.DataFrame(live_trade_pnl) if live_trade_pnl else pd.DataFrame()
+    live_trade_pnl_df = _pd.DataFrame(live_trade_pnl) if live_trade_pnl else _pd.DataFrame()
     return _aggregate_metrics(trades, total_pnl, live_trade_pnl_df)
 
 
-def _simulate_baseline(df: pd.DataFrame) -> tuple[dict[str, Any], pd.DataFrame]:
+def _simulate_baseline(df: Any) -> tuple[dict[str, Any], Any]:  # returns (dict, pd.DataFrame)
     """Simulate baseline: enter when gap > 0, exit when gap <= 0."""
+    _lazy_imports()
     total_pnl = 0.0
     trades: list[dict[str, Any]] = []
     live_trade_pnl: list[dict[str, Any]] = []
@@ -326,7 +400,7 @@ def _simulate_baseline(df: pd.DataFrame) -> tuple[dict[str, Any], pd.DataFrame]:
         grp = grp.sort_values("trade_date")
         in_position = False
         entry_gap_val = 0.0
-        entry_date: pd.Timestamp | None = None
+        entry_date: Any = None  # pd.Timestamp | None
 
         for _, row in grp.iterrows():
             gap = float(row["value_gap_amount"])
@@ -377,17 +451,22 @@ def _simulate_baseline(df: pd.DataFrame) -> tuple[dict[str, Any], pd.DataFrame]:
             })
             live_trade_pnl.append({"exit_date": last_row["trade_date"], "pnl": pnl})
 
-    live_trade_pnl_df = pd.DataFrame(live_trade_pnl) if live_trade_pnl else pd.DataFrame()
+    live_trade_pnl_df = _pd.DataFrame(live_trade_pnl) if live_trade_pnl else _pd.DataFrame()
     result, _ = _aggregate_metrics(trades, total_pnl, live_trade_pnl_df)
     return result, live_trade_pnl_df
 
 
+# ---------------------------------------------------------------------------
+# Metrics
+# ---------------------------------------------------------------------------
+
 def _aggregate_metrics(
     trades: list[dict[str, Any]],
     total_pnl: float,
-    trade_pnl_df: pd.DataFrame,
-) -> tuple[dict[str, Any], pd.DataFrame]:
+    trade_pnl_df: Any,  # pd.DataFrame
+) -> tuple[dict[str, Any], Any]:  # returns (dict, pd.DataFrame)
     """Compute performance metrics from trade list."""
+    _lazy_imports()
     if not trades:
         return {
             "total_pnl": 0.0,
@@ -400,7 +479,7 @@ def _aggregate_metrics(
             "trades": [],
         }, trade_pnl_df
 
-    trades_df = pd.DataFrame(trades)
+    trades_df = _pd.DataFrame(trades)
     winning = trades_df[trades_df["pnl"] > 0]
     losing = trades_df[trades_df["pnl"] <= 0]
     win_rate = round(len(winning) / len(trades_df), 4) if len(trades_df) > 0 else 0.0
@@ -412,7 +491,7 @@ def _aggregate_metrics(
     trades_sorted = trades_df.sort_values("exit_date")
     trades_sorted["cum_pnl"] = trades_sorted["pnl"].cumsum()
     equity_series = trades_sorted["cum_pnl"]
-    peak = equity_series.iloc[0]
+    peak = equity_series.iloc[0] if len(equity_series) > 0 else 0.0
     max_drawdown = 0.0
     for val in equity_series:
         if val > peak:
@@ -437,25 +516,6 @@ def _compute_excess_return(strategy_pnl: float, baseline_pnl: float) -> float:
     return round(strategy_pnl - baseline_pnl, 2)
 
 
-def _plain(value: Any) -> Any:
-    if isinstance(value, dict):
-        return {str(key): _plain(item) for key, item in value.items()}
-    if isinstance(value, (list, tuple)):
-        return [_plain(item) for item in value]
-    if isinstance(value, np.floating):
-        return float(value)
-    if isinstance(value, np.integer):
-        return int(value)
-    if hasattr(value, "dtype") and hasattr(value, "item"):
-        try:
-            return _plain(value.item())
-        except (TypeError, ValueError):
-            pass
-    if isinstance(value, (str, int, float, bool)) or value is None:
-        return value
-    return str(value)
-
-
 def _compute_params_summary(
     tp_gap_fraction: float,
     sl_gap_fraction: float,
@@ -472,7 +532,13 @@ def _compute_params_summary(
     }
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 def main() -> int:
+    _lazy_imports()  # load numpy, pandas, yaml before anything else
+
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True, help="Path to data root directory")
     parser.add_argument("--train-start", required=True, help="Train period start (YYYYMMDD)")
@@ -502,16 +568,16 @@ def main() -> int:
     except Exception as exc:
         diag = {"error": str(exc), "step": "load_data"}
         (output_dir / "diagnostic.yaml").write_text(
-            yaml.safe_dump(_plain(diag), allow_unicode=True), encoding="utf-8"
+            _yaml.safe_dump(diag, allow_unicode=True), encoding="utf-8"
         )
         print(f"[pnl_adaptive_exit] FATAL: {exc}", flush=True)
         return 1
 
     # Filter periods
-    train_start = pd.Timestamp(args.train_start)
-    train_end = pd.Timestamp(args.train_end)
-    test_start = pd.Timestamp(args.test_start)
-    test_end = pd.Timestamp(args.test_end)
+    train_start = _pd.Timestamp(args.train_start)
+    train_end = _pd.Timestamp(args.train_end)
+    test_start = _pd.Timestamp(args.test_start)
+    test_end = _pd.Timestamp(args.test_end)
 
     df_train = df_raw[(df_raw["trade_date"] >= train_start) & (df_raw["trade_date"] <= train_end)].copy()
     df_test = df_raw[(df_raw["trade_date"] >= test_start) & (df_raw["trade_date"] <= test_end)].copy()
@@ -520,7 +586,7 @@ def main() -> int:
     if len(df_train) == 0:
         diag = {"error": "Train dataframe is empty", "step": "filter_train"}
         (output_dir / "diagnostic.yaml").write_text(
-            yaml.safe_dump(_plain(diag), allow_unicode=True), encoding="utf-8"
+            _yaml.safe_dump(diag, allow_unicode=True), encoding="utf-8"
         )
         return 1
 
@@ -567,13 +633,7 @@ def main() -> int:
         args.gap_speed_lookback, args.pnl_lookback, args.min_hold_days,
     )
 
-    # Success criteria from proposal:
-    #   train excess >= 0.15
-    #   test excess >= 0.33
-    #   2020 repair excess >= -0.15
-    #   win rate >= 0.55 on test
-    #   max drawdown test <= -0.15
-    #   no max_hold > 90 days dominance
+    # Success criteria from proposal
     criteria = {
         "train_excess_ok": excess_train >= 0.15,
         "test_excess_ok": excess_test >= 0.33,
@@ -645,7 +705,7 @@ def main() -> int:
         "params": params,
     }
     (output_dir / "summary.json").write_text(
-        json.dumps(_plain(summary), ensure_ascii=False, indent=2) + "\n",
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
 
@@ -663,7 +723,7 @@ def main() -> int:
         },
     }
     (output_dir / "report.yaml").write_text(
-        yaml.safe_dump(_plain(report), allow_unicode=True), encoding="utf-8"
+        _yaml.safe_dump(report, allow_unicode=True), encoding="utf-8"
     )
 
     # l4_ack.yaml
@@ -673,11 +733,11 @@ def main() -> int:
         "message": "PnL adaptive exit evaluation finished.",
     }
     (output_dir / "l4_ack.yaml").write_text(
-        yaml.safe_dump(_plain(l4_ack), allow_unicode=True), encoding="utf-8"
+        _yaml.safe_dump(l4_ack, allow_unicode=True), encoding="utf-8"
     )
 
     # diagnostic.yaml
-    exit_reason_counts = {}
+    exit_reason_counts: dict[str, int] = {}
     for t in strategy_test.get("trades", []):
         reason = t.get("exit_reason", "unknown")
         exit_reason_counts[reason] = exit_reason_counts.get(reason, 0) + 1
@@ -694,8 +754,11 @@ def main() -> int:
         "criteria_check": criteria,
     }
     (output_dir / "diagnostic.yaml").write_text(
-        yaml.safe_dump(_plain(diagnostic), allow_unicode=True), encoding="utf-8"
+        _yaml.safe_dump(diagnostic, allow_unicode=True), encoding="utf-8"
     )
+
+    # GateKeeper after_run_grid
+    _gatekeeper_after_run(output_dir)
 
     print(
         f"[pnl_adaptive_exit] adoption_pass={adoption_pass} "

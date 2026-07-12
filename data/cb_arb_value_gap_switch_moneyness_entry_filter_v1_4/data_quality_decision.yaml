@@ -1,0 +1,19 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/spec.yaml
+validated_at: '2026-05-24T12:09:11'
+summary_sha256: 7644e8065755080ba074e1c8ba9f8cbf8abd4e7e25c46dd8551be941026ddce9
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- executor_input_column_hints 中 df 引用了 conv_price 和 stk_code，但 daily_value_gap_amounts.parquet
+  实际不含这两个字段；按规则10仅为源码参考，执行器需在运行时 join cb_basic 获取，不构成数据质量阻断
+fix_plan: []
+decision_reason: 全部9个文件存在可读，必需字段齐全无缺失，训练期2019-2024和测试期2025-20260508均被行情数据完整覆盖，config
+  pool文件完好，无阻断性问题。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 104edb1b3c6e7ffd

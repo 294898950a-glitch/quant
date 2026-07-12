@@ -1,0 +1,19 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/spec.yaml
+validated_at: '2026-05-24T11:59:16'
+summary_sha256: f51f06e00c9bfd47e4f0bb18875e696cf7acd86f855d94b46af270367f65bf1c
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- 'cb_basic.parquet: conv_price 是 required 但未列入 nonnull_columns，部分券可能无转股价，按规则放行'
+- 'cb_call.parquet: ann_date / call_date / expire_date 是 required 但未列入 nonnull_columns，部分行可能为空，按规则放行'
+- daily_value_gap_amounts.parquet 包含 18 列（多于描述中列出的 3 列核心字段），属上游产出丰富列，不影响使用
+fix_plan: []
+decision_reason: 9 个数据文件全部存在且可读，required_columns 全覆盖，训练/测试期均被行情数据覆盖，无阻塞问题
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 0cc18a98b18617a0

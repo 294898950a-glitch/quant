@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: cb_arb_value_gap_switch_bond_floor_entry_filter_20260522_executor_code
+target_script_path: scripts/evaluate_cb_arb_bond_floor_entry_filter.py
+current_target_sha256: eabc26cfe9c6428dd5e0849c30714cc68f769ec572c1a10034663ea1f1655432
+previous_installed_source: data/cb_arb_value_gap_switch_bond_floor_entry_filter_20260522/generated_executor/evaluate_cb_arb_bond_floor_entry_filter.py
+previous_installed_sha256: eabc26cfe9c6428d
+previous_installed_at: '2026-05-22T15:34:18+00:00'
+required_action: Regenerate the executor from the existing spec.yaml + executor_tool_request.yaml
+  in this run dir. The source file under generated_executor/ was lost after the previous
+  install; the current target in scripts/ may not be the latest version. Write a fresh
+  executor that satisfies the original validation requirements (main + declare_data_requirements
+  + summary.json / report.yaml / l4_ack.yaml / diagnostic.yaml output + GateKeeper
+  import). Once written, the standard handoff completion → install validation → install
+  overwrite (compliance repair flow) path will re-land the executor.
+noted_at: '2026-05-24T23:55:04+00:00'
+dry_run: false

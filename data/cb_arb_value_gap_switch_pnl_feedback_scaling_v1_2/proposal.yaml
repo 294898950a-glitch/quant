@@ -1,0 +1,127 @@
+proposal_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2
+strategy_id: cb_arb_value_gap_switch
+family: pnl_feedback_scaling_grid
+hypothesis: 'Rolling realized PnL carries predictive signal about near-term strategy
+  edge quality. The forward-direction value-gap signal produces only -3% cumulative
+  excess cost-off but -10.47% cost-on — the signal itself is weak-not-negative, and
+  cost drag accounts for ~7.5pp of deterioration. Scaling position size inversely
+  with recent realized losses reduces exposure during cold streaks and restores it
+  during hot streaks, directly attacking the cost-drag component without changing
+  entry signal quality or exit logic. This is a capital-allocation governor, not a
+  signal-improvement overlay.
+
+  '
+source_insight: 'Baseline cost-on cumulative excess is -10.47% vs cost-off -3% (7.47pp
+  cost degradation per current.yaml). The reverse probe produced +30.3% test excess
+  cost-on — the raw value-gap data contains exploitable signal. The forward direction''s
+  problem is that the signal is near-zero, making cost drag dominant. PnL feedback
+  scaling targets cost drag reduction directly, which is the largest fixable component
+  of the forward-direction underperformance.
+
+  '
+expected_improvement: '2–5pp improvement in cumulative excess (from -10.47% toward
+  -5% or better) by reducing exposure and thus cost drag during losing streaks. Ceiling
+  is bounded by base signal quality — this cannot create alpha where none exists,
+  only reduce the destruction from trading costs when the signal is cold.
+
+  '
+capability_ids:
+- C004
+required_executor: evaluate_cb_arb_pnl_feedback_scaling_grid
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  - theoretical_value
+  - cb_close
+  - ranking_weight
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - stk_code
+  - conv_price
+  - list_date
+  - delist_date
+  - maturity_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+test_design:
+  description: 'Grid search over PnL lookback window [20, 40, 60, 120] trading days
+    and scaling intensity factor [0.25, 0.5, 0.75, 1.0]. Scaling rule: compute rolling
+    cumulative PnL over lookback; if negative, multiply position weight by (1 - intensity
+    * abs(recent_pnl) / max_drawdown_cap); clamp at min_exposure floor (e.g. 0.25).
+    Exit uses the accepted duration-adaptive rule (min_hold_days=5, initial_threshold_fraction=0.7,
+    decay_period_factor=0.5). Train 2018–2022, test 2023–2026. Cost-on with standard
+    slippage (0.0015) and market impact (0.001). Baseline comparator: the accepted
+    duration-adaptive-forward run (cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22).
+
+    '
+success_criteria:
+  criteria:
+  - Test period cumulative excess compound > -5% (minimum 5pp improvement over -10.47%
+    baseline)
+  - OR any single test year with positive cumulative excess
+  - Must not increase max drawdown beyond baseline's -35.16%
+falsifiers:
+  train: &id001
+  - Test cumulative excess <= -10.47% (zero or negative improvement over baseline)
+  - All grid points produce strictly worse risk-adjusted returns than baseline
+  - Max drawdown exceeds -40% in any year
+  validate: *id001
+  test: *id001
+risk: 'PnL feedback is reactive by nature — it reduces exposure after losses have
+  already occurred and may miss the start of a recovery streak. If the forward-direction
+  value-gap signal is truly zero-alpha (not just weak), no scaling rule helps. This
+  is a meta-strategy overlay with bounded upside, not a signal fix.
+
+  '
+why_not_repeated_failure: 'This is not a moneyness-stock-to-conv-threshold variant.
+  No entry filter is applied; no candidates are removed from the pool. The PnL feedback
+  family (pnl_feedback_scaling_grid) is distinct from all closed families (reverse_moneyness,
+  reverse_bond_floor, reverse_volatility_scaling, reverse_exit_duration_adaptive).
+  It is also distinct from the option_source_pnl_feedback family in closed_tags —
+  that family applied PnL feedback to option-sourced candidates only; this applies
+  it to the full value-gap candidate pool. This is the first test of PnL-feedback-driven
+  exposure management in the forward direction.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524
+- cb_arb_value_gap_switch_new_valuation_v1
+implementation_assumption: The executor computes per-strategy rolling realized PnL
+  over a configurable lookback window, converts it to a scaling factor (full exposure
+  when recent PnL is positive, linearly scaled down to a floor when negative), and
+  multiplies each candidate's baseline ranking weight by this factor before position
+  allocation. Exit logic reuses the accepted duration-adaptive rule unchanged. The
+  executor does not remove candidates from the pool — all value_gap_amount > 0 entries
+  remain eligible; only allocation weights adjust.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 49e2ce73780d9525
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 49e2ce73780d9525
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_pnl_feedback_scaling_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=pnl_feedback_scaling_grid, capability_ids=['C004']);
+    no critical-insight reference; queue depth=0.
+  evidence:
+    family: pnl_feedback_scaling_grid
+    capability_ids:
+    - C004
+    cites_critical: null
+    queue_depth: 0

@@ -120,7 +120,7 @@ validation_plan:
   exist
 ai_provider: deepseek
 design_response_hash: f5909fff5d5117e4
-code_response_hash: 9f7fea431ac106ae
+code_response_hash: cedf6bf266bd7050
 compile_reason: missing registered capability
 tool_design:
   tool_request_id: dynamic_exit_gap_decay_executor_v1
@@ -252,8 +252,9 @@ tool_code_response:
   status: draft_tool_code
   handoff_id: cb_arb_value_gap_switch_dynamic_exit_gap_decay_executor_code
   generated_executor: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
-  finalized_by: codex_recovery
-  finalized_at: '2026-05-21T14:34:04'
+  completion_receipt: data/cb_arb_value_gap_switch_dynamic_exit_gap_decay/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-27T06:49:35'
   validation: passed
 files:
 - path: generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
@@ -263,47 +264,75 @@ files:
     AND days held >= min_hold_days, then close the position early.\n\nCompares against\
     \ baseline (hold until bond disappears from daily data).\nReports metrics for\
     \ train / 2020 repair / test periods.\n\"\"\"\n\nfrom __future__ import annotations\n\
-    \nimport argparse\nimport json\nimport sys\nfrom datetime import datetime\nfrom\
-    \ pathlib import Path\nfrom typing import Any\n\nimport numpy as np\nimport pandas\
-    \ as pd\nimport yaml\n\n_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent\n\
+    \nimport argparse\nimport json\nimport sys\nfrom datetime import datetime as _dt\n\
+    from pathlib import Path\nfrom typing import Any\n\n# ---------------------------------------------------------------------------\n\
+    # Repo root & sys.path — must come before any `from scripts.X import Y`.\n# The\
+    \ compliance import-reachability probe runs with -I in /tmp, so all\n# non-stdlib\
+    \ imports that follow must resolve from the venv site-packages\n# (numpy/pandas/yaml)\
+    \ or from REPO_ROOT (scripts.*).\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
     if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
-    \n\n# ---------------------------------------------------------------------------\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n# ---------------------------------------------------------------------------\n\
+    # Lazy third-party imports — not available at module level in isolated probe.\n\
+    # ---------------------------------------------------------------------------\n\
+    \n\ndef _get_np():\n    \"\"\"Lazy import numpy.\"\"\"\n    import numpy as _np\
+    \  # noqa: E402\n    return _np\n\n\ndef _get_pd():\n    \"\"\"Lazy import pandas.\"\
+    \"\"\n    import pandas as _pd  # noqa: E402\n    return _pd\n\n\ndef _get_yaml():\n\
+    \    \"\"\"Lazy import yaml.\"\"\"\n    import yaml as _yaml  # noqa: E402\n \
+    \   return _yaml\n\n\n# YAML numpy representer registration runs once at first\
+    \ yaml write.\n_YAML_REPRS_REGISTERED = False\n\n\ndef _ensure_yaml_np_reprs():\n\
+    \    global _YAML_REPRS_REGISTERED\n    if _YAML_REPRS_REGISTERED:\n        return\n\
+    \    yaml = _get_yaml()\n    np = _get_np()\n\n    def _yaml_repr_np_float(dumper,\
+    \ data):\n        return dumper.represent_float(float(data))\n\n    def _yaml_repr_np_int(dumper,\
+    \ data):\n        return dumper.represent_int(int(data))\n\n    yaml.SafeDumper.add_representer(np.floating,\
+    \ _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# ---------------------------------------------------------------------------\n\
     # Data requirements\n# ---------------------------------------------------------------------------\n\
-    \ndef declare_data_requirements(command: list[str], spec: dict[str, Any]) -> dict[str,\
-    \ Any]:\n    return {\n        \"required_files\": [\n            {\n        \
-    \        \"path\": \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet\"\
-    ,\n                \"description\": \"Daily value-gap amounts with per-bond gap,\
+    \n_GAP_DATA_PATH = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n\n\ndef declare_data_requirements(command:\
+    \ list[Any], spec: dict[str, Any] | None = None) -> dict[str, Any]:\n    return\
+    \ {\n        \"required_files\": [\n            {\n                \"path\": _GAP_DATA_PATH,\n\
+    \                \"description\": \"Daily value-gap amounts with per-bond gap,\
     \ position cash, and buy qty.\",\n            },\n            {\n            \
     \    \"path\": \"data/cb_warehouse/cb_basic.parquet\",\n                \"description\"\
     : \"CB basic reference table (stock code, conversion price).\",\n            },\n\
     \            {\n                \"path\": \"data/cb_warehouse/stk_daily_qfq.parquet\"\
     ,\n                \"description\": \"Forward-adjusted daily stock prices.\",\n\
     \            },\n        ]\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # Gatekeeper helpers\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\ndef _gatekeeper_after_run(output_dir:\
+    \ Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ---------------------------------------------------------------------------\n\
     # Data loading\n# ---------------------------------------------------------------------------\n\
-    \ndef _resolve_data_path(data_root: str | Path, relative: str) -> Path:\n    data_root\
-    \ = Path(data_root)\n    rel = Path(relative)\n    candidates = [\n        data_root\
-    \ / rel,\n        data_root / rel.relative_to(\"data\") if rel.parts[0] == \"\
-    data\" else None,\n        _REPO_ROOT / rel,\n        Path.cwd() / rel,\n    ]\n\
-    \    for c in candidates:\n        if c is not None and c.exists():\n        \
-    \    return c\n    raise FileNotFoundError(f\"Cannot find {relative} under data_root={data_root}\"\
-    )\n\n\ndef load_gap_data(data_root: str) -> pd.DataFrame:\n    \"\"\"Load daily\
-    \ value gap amounts parquet file.\"\"\"\n    path = _resolve_data_path(\n    \
-    \    data_root,\n        \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet\"\
-    ,\n    )\n    df = pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"\
-    trade_date\"], format=\"%Y%m%d\")\n    df = df.sort_values([\"ts_code\", \"trade_date\"\
-    ]).reset_index(drop=True)\n    return df\n\n\ndef load_reference_tables() -> tuple[pd.DataFrame,\
-    \ pd.DataFrame]:\n    \"\"\"Load cb_basic and stk_daily_qfq (used for sanity /\
-    \ future extension).\"\"\"\n    cb_basic = pd.read_parquet(_REPO_ROOT / \"data/cb_warehouse/cb_basic.parquet\"\
-    )\n    stk_daily = pd.read_parquet(_REPO_ROOT / \"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    \n\ndef _resolve_data_path(data_root: str | Path, relative: str) -> Path:\n  \
+    \  data_root = Path(data_root)\n    rel = Path(relative)\n    candidates = [\n\
+    \        data_root / rel,\n        _REPO_ROOT / rel,\n        Path.cwd() / rel,\n\
+    \    ]\n    if rel.parts[0] == \"data\":\n        inner = Path(*rel.parts[1:])\n\
+    \        candidates.append(data_root / inner)\n        candidates.append(_REPO_ROOT\
+    \ / rel)\n    for c in candidates:\n        if c.exists():\n            return\
+    \ c\n    searched = \", \".join(str(c) for c in candidates)\n    raise FileNotFoundError(f\"\
+    Cannot find {relative} under data_root={data_root}; searched: {searched}\")\n\n\
+    \ndef _load_gap_data(data_root: str):\n    pd = _get_pd()\n    path = _resolve_data_path(data_root,\
+    \ _GAP_DATA_PATH)\n    df = pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"\
+    trade_date\"])\n    df = df.sort_values([\"ts_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \    return df\n\n\ndef _load_reference_tables():\n    pd = _get_pd()\n    cb_basic\
+    \ = pd.read_parquet(_REPO_ROOT / \"data/cb_warehouse/cb_basic.parquet\")\n   \
+    \ stk_daily = pd.read_parquet(_REPO_ROOT / \"data/cb_warehouse/stk_daily_qfq.parquet\"\
     )\n    return cb_basic, stk_daily\n\n\n# ---------------------------------------------------------------------------\n\
     # Backtest engine\n# ---------------------------------------------------------------------------\n\
-    \ndef _daily_metrics_from_gap_changes(\n    df: pd.DataFrame, position_col: str\
-    \ = \"position\"\n) -> tuple[pd.DataFrame, float, float, float]:\n    \"\"\"Compute\
-    \ daily PnL, proportional returns, and drawdown.\n\n    Returns (df with added\
-    \ columns, total_return, max_drawdown, win_rate).\n    total_return and max_drawdown\
-    \ are in proportion-of-capital units.\n    \"\"\"\n    df = df.sort_values([\"\
-    ts_code\", \"trade_date\"]).copy()\n\n    # Daily PnL: change in gap × position\
-    \ flag\n    df[\"prev_gap\"] = df.groupby(\"ts_code\")[\"value_gap_amount\"].shift(1)\n\
+    \n\ndef _daily_metrics_from_gap_changes(\n    df, position_col: str = \"position\"\
+    \n):\n    \"\"\"Compute daily PnL, proportional returns, and drawdown.\n\n   \
+    \ Returns (df with added columns, total_return, max_drawdown, win_rate).\n   \
+    \ total_return and max_drawdown are in proportion-of-capital units.\n    \"\"\"\
+    \n    np = _get_np()\n    pd = _get_pd()\n    df = df.sort_values([\"ts_code\"\
+    , \"trade_date\"]).copy()\n\n    # Daily PnL: change in gap x position flag\n\
+    \    df[\"prev_gap\"] = df.groupby(\"ts_code\")[\"value_gap_amount\"].shift(1)\n\
     \    df[\"daily_pnl\"] = df[position_col] * (df[\"value_gap_amount\"] - df[\"\
     prev_gap\"])\n    df[\"daily_pnl\"] = df[\"daily_pnl\"].fillna(0.0)\n\n    # Daily\
     \ portfolio value: sum of position_cash for held bonds\n    held_mask = df[position_col]\
@@ -312,82 +341,76 @@ files:
     \ fill_value=0.0)\n\n    # Map portfolio value to each row\n    port_map = daily_portfolio.to_dict()\n\
     \    df[\"daily_portfolio\"] = df[\"trade_date\"].map(port_map).fillna(0.0)\n\n\
     \    # Aggregate to daily level for return computation\n    daily_pnl_agg = df.groupby(\"\
-    trade_date\")[\"daily_pnl\"].sum()\n    dates = daily_pnl_agg.index.tolist()\n\
-    \    pnl_vals = daily_pnl_agg.values\n    port_vals = daily_portfolio.values\n\
-    \n    daily_returns = np.divide(\n        pnl_vals,\n        port_vals,\n    \
-    \    out=np.zeros_like(pnl_vals, dtype=float),\n        where=port_vals > 0,\n\
-    \    )\n\n    total_return = float(np.sum(daily_returns))\n\n    # Max drawdown\
-    \ on cumulative proportional returns\n    cum_returns = np.cumsum(daily_returns)\n\
+    trade_date\")[\"daily_pnl\"].sum()\n    pnl_vals = daily_pnl_agg.values\n    port_vals\
+    \ = daily_portfolio.values\n\n    daily_returns = np.divide(\n        pnl_vals,\n\
+    \        port_vals,\n        out=np.zeros_like(pnl_vals, dtype=float),\n     \
+    \   where=port_vals > 0,\n    )\n\n    total_return = float(np.sum(daily_returns))\n\
+    \n    # Max drawdown on cumulative proportional returns\n    cum_returns = np.cumsum(daily_returns)\n\
     \    running_max = np.maximum.accumulate(cum_returns)\n    drawdowns = cum_returns\
     \ - running_max\n    max_dd = float(drawdowns.min()) if len(drawdowns) > 0 else\
     \ 0.0\n\n    # Win rate: fraction of bonds with positive cumulative PnL\n    bond_pnl\
     \ = df.groupby(\"ts_code\")[\"daily_pnl\"].sum()\n    win_rate = float((bond_pnl\
     \ > 0).mean()) if len(bond_pnl) > 0 else 0.0\n\n    return df, total_return, max_dd,\
-    \ win_rate\n\n\ndef _trade_count(df: pd.DataFrame) -> int:\n    \"\"\"Count distinct\
-    \ bond entries (first row per bond in the period).\"\"\"\n    return df[\"ts_code\"\
-    ].nunique()\n\n\ndef run_single_period(\n    df: pd.DataFrame,\n    gap_decay_factor:\
-    \ float,\n    min_hold_days: int,\n) -> dict[str, Any]:\n    \"\"\"Run the dynamic\
-    \ exit strategy on a single time period.\n\n    df must contain: ts_code, trade_date,\
+    \ win_rate\n\n\ndef run_single_period(\n    df,\n    gap_decay_factor: float,\n\
+    \    min_hold_days: int,\n) -> dict[str, Any]:\n    \"\"\"Run the dynamic exit\
+    \ strategy on a single time period.\n\n    df must contain: ts_code, trade_date,\
     \ value_gap_amount.\n    All rows are assumed to be positions (buy_qty > 0 in\
-    \ source data).\n\n    Returns metrics dict.\n    \"\"\"\n    if df.empty:\n \
-    \       return {\n            \"total_return\": 0.0,\n            \"excess_return\"\
-    : 0.0,\n            \"max_drawdown\": 0.0,\n            \"win_rate\": 0.0,\n \
-    \           \"trade_count\": 0,\n            \"early_exits\": 0,\n           \
-    \ \"total_positions\": 0,\n        }\n\n    df = df.sort_values([\"ts_code\",\
-    \ \"trade_date\"]).copy()\n\n    # Track per-bond state\n    position_flags: list[int]\
-    \ = []\n    entry_gaps: list[float] = []\n    entry_dates: list[pd.Timestamp |\
-    \ pd.NaT] = []\n\n    # Per-group state\n    state: dict[str, dict[str, Any]]\
-    \ = {}\n\n    for _, row in df.iterrows():\n        code = str(row[\"ts_code\"\
-    ])\n        trade_date = row[\"trade_date\"]\n        gap = float(row[\"value_gap_amount\"\
-    ])\n\n        if code not in state:\n            # First appearance = entry\n\
-    \            state[code] = {\n                \"entry_gap\": gap,\n          \
-    \      \"entry_date\": trade_date,\n                \"in_position\": True,\n \
-    \           }\n\n        st = state[code]\n        if st[\"in_position\"]:\n \
-    \           days_held = (trade_date - st[\"entry_date\"]).days\n            #\
-    \ Exit condition: gap < entry_gap * factor AND held >= min_hold_days\n       \
-    \     if gap < st[\"entry_gap\"] * gap_decay_factor and days_held >= min_hold_days:\n\
-    \                st[\"in_position\"] = False\n\n        position_flags.append(1\
-    \ if st[\"in_position\"] else 0)\n        entry_gaps.append(st[\"entry_gap\"])\n\
-    \        entry_dates.append(st[\"entry_date\"])\n\n    df[\"position\"] = position_flags\n\
-    \    df[\"entry_gap\"] = entry_gaps\n    df[\"entry_date\"] = entry_dates\n\n\
-    \    # Counts\n    total_positions = df[\"ts_code\"].nunique()\n    early_exits\
-    \ = int(df[\"position\"].min() == 0)  # any bond exited early\n\n    # Baseline:\
-    \ always hold while bond appears (position = 1 always)\n    df[\"baseline_position\"\
-    ] = 1\n\n    # PnL for our strategy\n    df, our_total, our_dd, our_wr = _daily_metrics_from_gap_changes(df,\
+    \ source data).\n\n    Returns metrics dict.\n    \"\"\"\n    pd = _get_pd()\n\
+    \n    if df.empty:\n        return {\n            \"total_return\": 0.0,\n   \
+    \         \"excess_return\": 0.0,\n            \"max_drawdown\": 0.0,\n      \
+    \      \"win_rate\": 0.0,\n            \"trade_count\": 0,\n            \"early_exits\"\
+    : 0,\n            \"total_positions\": 0,\n        }\n\n    df = df.sort_values([\"\
+    ts_code\", \"trade_date\"]).copy()\n\n    # Track per-bond state\n    position_flags:\
+    \ list[int] = []\n    entry_gaps: list[float] = []  # noqa: F841 — kept for consistency\n\
+    \n    # Per-group state\n    state: dict[str, dict[str, Any]] = {}\n\n    for\
+    \ _, row in df.iterrows():\n        code = str(row[\"ts_code\"])\n        trade_date\
+    \ = row[\"trade_date\"]\n        gap = float(row[\"value_gap_amount\"])\n\n  \
+    \      if code not in state:\n            # First appearance = entry\n       \
+    \     state[code] = {\n                \"entry_gap\": gap,\n                \"\
+    entry_date\": trade_date,\n                \"in_position\": True,\n          \
+    \  }\n\n        st = state[code]\n        if st[\"in_position\"]:\n          \
+    \  days_held = (trade_date - st[\"entry_date\"]).days\n            # Exit condition:\
+    \ gap < entry_gap * factor AND held >= min_hold_days\n            if gap < st[\"\
+    entry_gap\"] * gap_decay_factor and days_held >= min_hold_days:\n            \
+    \    st[\"in_position\"] = False\n\n        position_flags.append(1 if st[\"in_position\"\
+    ] else 0)\n\n    df[\"position\"] = position_flags\n\n    # Counts\n    total_positions\
+    \ = df[\"ts_code\"].nunique()\n    early_exits = int(df[\"position\"].min() ==\
+    \ 0)  # any bond exited early\n\n    # Baseline: always hold while bond appears\
+    \ (position = 1 always)\n    df[\"baseline_position\"] = 1\n\n    # PnL for our\
+    \ strategy\n    df, our_total, our_dd, our_wr = _daily_metrics_from_gap_changes(df,\
     \ \"position\")\n\n    # PnL for baseline\n    df, bl_total, bl_dd, bl_wr = _daily_metrics_from_gap_changes(df,\
-    \ \"baseline_position\")\n    # Note: baseline_position = 1 always, so baseline\
-    \ metrics come from the\n    # same df with position_col = \"baseline_position\"\
-    \n\n    excess = our_total - bl_total\n\n    return {\n        \"total_return\"\
-    : round(our_total, 6),\n        \"excess_return\": round(excess, 6),\n       \
-    \ \"max_drawdown\": round(our_dd, 6),\n        \"win_rate\": round(our_wr, 6),\n\
-    \        \"trade_count\": total_positions,\n        \"early_exits\": early_exits,\n\
-    \        \"total_positions\": total_positions,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    \ \"baseline_position\")  # noqa: F841\n\n    excess = our_total - bl_total\n\n\
+    \    return {\n        \"total_return\": round(our_total, 6),\n        \"excess_return\"\
+    : round(excess, 6),\n        \"max_drawdown\": round(our_dd, 6),\n        \"win_rate\"\
+    : round(our_wr, 6),\n        \"trade_count\": total_positions,\n        \"early_exits\"\
+    : early_exits,\n        \"total_positions\": total_positions,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
     # Artifact writing\n# ---------------------------------------------------------------------------\n\
-    \ndef _write_artifacts(\n    output_dir: Path,\n    train_metrics: dict[str, Any],\n\
-    \    test_metrics: dict[str, Any],\n    yr2020_metrics: dict[str, Any],\n    params:\
-    \ dict[str, Any],\n) -> None:\n    now = datetime.now().isoformat(timespec=\"\
-    seconds\")\n\n    # --- Adoption decision ---\n    # Success criteria from proposal:\n\
+    \n\ndef _write_artifacts(\n    output_dir: Path,\n    train_metrics: dict[str,\
+    \ Any],\n    test_metrics: dict[str, Any],\n    yr2020_metrics: dict[str, Any],\n\
+    \    params: dict[str, Any],\n) -> bool:\n    \"\"\"Write summary.json, report.yaml,\
+    \ l4_ack.yaml, diagnostic.yaml.\n\n    Returns adoption_pass (bool).\n    \"\"\
+    \"\n    yaml = _get_yaml()\n    now = _dt.now().isoformat(timespec=\"seconds\"\
+    )\n\n    # --- Adoption decision ---\n    # Success criteria from proposal:\n\
     \    #   primary:   2020 excess_return > -0.10 AND max_drawdown > -0.179\n   \
     \ #   secondary: Test total_return >= 0.70 AND win_rate >= 0.55\n    # Falsifiers\
     \ (any triggers rejection):\n    #   - Test total_return < 0.50 OR win_rate <\
     \ 0.45\n    #   - 2020 max_drawdown not improved (deeper than -0.179)\n\n    test_tr\
     \ = test_metrics[\"total_return\"]\n    test_wr = test_metrics[\"win_rate\"]\n\
     \    yr20_excess = yr2020_metrics[\"excess_return\"]\n    yr20_dd = yr2020_metrics[\"\
-    max_drawdown\"]\n    train_dd = train_metrics[\"max_drawdown\"]\n\n    # Primary\n\
-    \    primary_pass = yr20_excess > -0.10 and yr20_dd > -0.179\n\n    # Secondary\n\
-    \    secondary_pass = test_tr >= 0.70 and test_wr >= 0.55\n\n    # Falsifiers\n\
-    \    falsified = (\n        test_tr < 0.50\n        or test_wr < 0.45\n      \
-    \  or yr20_dd <= -0.179\n    )\n\n    adoption_pass = primary_pass and secondary_pass\
-    \ and not falsified\n\n    if adoption_pass:\n        decision = \"mini-spec-retry\"\
-    \n        reason = (\n            f\"Gap decay exit (factor={params['gap_decay_factor']},\
-    \ \"\n            f\"min_hold={params['min_hold_days']}) passes primary (2020)\
-    \ \"\n            f\"and secondary (test) criteria without falsification.\"\n\
-    \        )\n    else:\n        decision = \"reject\"\n        parts = []\n   \
-    \     if not primary_pass:\n            parts.append(\n                f\"2020\
-    \ excess={yr20_excess} (need >-0.10), dd={yr20_dd} (need >-0.179)\"\n        \
-    \    )\n        if not secondary_pass:\n            parts.append(\n          \
-    \      f\"test total_return={test_tr} (need >=0.70), win_rate={test_wr} (need\
-    \ >=0.55)\"\n            )\n        if falsified:\n            parts.append(\"\
+    max_drawdown\"]\n\n    # Primary\n    primary_pass = yr20_excess > -0.10 and yr20_dd\
+    \ > -0.179\n\n    # Secondary\n    secondary_pass = test_tr >= 0.70 and test_wr\
+    \ >= 0.55\n\n    # Falsifiers\n    falsified = (\n        test_tr < 0.50\n   \
+    \     or test_wr < 0.45\n        or yr20_dd <= -0.179\n    )\n\n    adoption_pass\
+    \ = primary_pass and secondary_pass and not falsified\n\n    if adoption_pass:\n\
+    \        decision = \"mini-spec-retry\"\n        reason = (\n            f\"Gap\
+    \ decay exit (factor={params['gap_decay_factor']}, \"\n            f\"min_hold={params['min_hold_days']})\
+    \ passes primary (2020) \"\n            f\"and secondary (test) criteria without\
+    \ falsification.\"\n        )\n    else:\n        decision = \"reject\"\n    \
+    \    parts = []\n        if not primary_pass:\n            parts.append(\n   \
+    \             f\"2020 excess={yr20_excess} (need >-0.10), dd={yr20_dd} (need >-0.179)\"\
+    \n            )\n        if not secondary_pass:\n            parts.append(\n \
+    \               f\"test total_return={test_tr} (need >=0.70), win_rate={test_wr}\
+    \ (need >=0.55)\"\n            )\n        if falsified:\n            parts.append(\"\
     falsifier triggered\")\n        reason = \"; \".join(parts) if parts else \"unknown\"\
     \n\n    # --- summary.json ---\n    summary = {\n        \"schema_version\": 1,\n\
     \        \"run_id\": output_dir.name,\n        \"status\": \"COMPLETE\",\n   \
@@ -397,49 +420,50 @@ files:
     summary.json\", \"report.yaml\", \"l4_ack.yaml\", \"diagnostic.yaml\"],\n    }\n\
     \    (output_dir / \"summary.json\").write_text(\n        json.dumps(summary,\
     \ ensure_ascii=False, indent=2, default=str) + \"\\n\",\n        encoding=\"utf-8\"\
-    ,\n    )\n\n    # --- report.yaml ---\n    report = {\n        \"schema_version\"\
-    : 1,\n        \"run_id\": output_dir.name,\n        \"date\": datetime.now().strftime(\"\
-    %Y-%m-%d\"),\n        \"strategy_id\": \"cb_arb_value_gap_switch\",\n        \"\
-    l6_exit_decision\": decision,\n        \"status\": \"COMPLETE\",\n        \"params\"\
-    : params,\n        \"train\": train_metrics,\n        \"test\": test_metrics,\n\
-    \        \"yr2020\": yr2020_metrics,\n        \"adoption_pass\": adoption_pass,\n\
-    \        \"summary\": reason,\n        \"learnings\": [\n            f\"Gap decay\
-    \ factor={params['gap_decay_factor']}, \"\n            f\"min_hold_days={params['min_hold_days']}:\
-    \ {reason}\",\n        ],\n        \"follow_up_actions\": (\n            [\"Review\
-    \ adoption_pass before promotion.\"]\n            if adoption_pass\n         \
-    \   else [\"Do not promote.\"]\n        ),\n    }\n    (output_dir / \"report.yaml\"\
-    ).write_text(\n        yaml.safe_dump(report, allow_unicode=True, sort_keys=False),\n\
-    \        encoding=\"utf-8\",\n    )\n\n    # --- l4_ack.yaml ---\n    ack = {\n\
-    \        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n      \
-    \  \"reviewer\": \"hermes_executor_code\",\n        \"ack_at\": now,\n       \
-    \ \"q1_hard_floors\": {\n            \"description\": \"Primary success criteria\
-    \ check (2020 repair year).\",\n            \"answer\": (\n                f\"\
-    2020 excess={yr20_excess} (>-0.10: {yr20_excess > -0.10}), \"\n              \
-    \  f\"dd={yr20_dd} (>-0.179: {yr20_dd > -0.179})\"\n            ),\n         \
-    \   \"pass\": primary_pass,\n        },\n        \"q2_selection_quality\": {\n\
-    \            \"description\": \"Test period secondary criteria.\",\n         \
-    \   \"answer\": (\n                f\"Test total_return={test_tr} (>=0.70: {test_tr\
-    \ >= 0.70}), \"\n                f\"win_rate={test_wr} (>=0.55: {test_wr >= 0.55})\"\
-    \n            ),\n            \"pass\": secondary_pass,\n        },\n        \"\
-    q3_falsifiers\": {\n            \"description\": \"Falsifier checks.\",\n    \
-    \        \"answer\": (\n                f\"Test total_return={test_tr} (<0.50:\
-    \ {test_tr < 0.50}), \"\n                f\"win_rate={test_wr} (<0.45: {test_wr\
-    \ < 0.45}), \"\n                f\"2020 dd={yr20_dd} (<= -0.179: {yr20_dd <= -0.179})\"\
-    \n            ),\n            \"pass\": not falsified,\n        },\n        \"\
-    overall_pass\": adoption_pass,\n        \"overall_decision\": decision,\n    \
-    \    \"overall_reason\": reason,\n        \"auto_computed_at\": now,\n    }\n\
-    \    (output_dir / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(ack, allow_unicode=True,\
-    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n    # --- diagnostic.yaml\
-    \ ---\n    diagnostic = {\n        \"schema_version\": 1,\n        \"run_id\"\
-    : output_dir.name,\n        \"diagnostic_date\": datetime.now().strftime(\"%Y-%m-%d\"\
-    ),\n        \"diagnostic_by\": \"hermes\",\n        \"verdict_referenced\": decision,\n\
-    \        \"summary\": reason,\n        \"verdict_rationale\": reason,\n      \
-    \  \"warnings\": [],\n        \"errors\": [],\n        \"params\": params,\n \
-    \   }\n    (output_dir / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump(diagnostic,\
-    \ allow_unicode=True, sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\
-    \n# ---------------------------------------------------------------------------\n\
+    ,\n    )\n\n    # --- report.yaml ---\n    _ensure_yaml_np_reprs()\n    report\
+    \ = {\n        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n\
+    \        \"date\": _dt.now().strftime(\"%Y-%m-%d\"),\n        \"strategy_id\"\
+    : \"cb_arb_value_gap_switch\",\n        \"l6_exit_decision\": decision,\n    \
+    \    \"status\": \"COMPLETE\",\n        \"params\": params,\n        \"train\"\
+    : train_metrics,\n        \"test\": test_metrics,\n        \"yr2020\": yr2020_metrics,\n\
+    \        \"adoption_pass\": adoption_pass,\n        \"summary\": reason,\n   \
+    \     \"learnings\": [\n            f\"Gap decay factor={params['gap_decay_factor']},\
+    \ \"\n            f\"min_hold_days={params['min_hold_days']}: {reason}\",\n  \
+    \      ],\n        \"follow_up_actions\": (\n            [\"Review adoption_pass\
+    \ before promotion.\"]\n            if adoption_pass\n            else [\"Do not\
+    \ promote.\"]\n        ),\n    }\n    (output_dir / \"report.yaml\").write_text(\n\
+    \        yaml.safe_dump(report, allow_unicode=True, sort_keys=False),\n      \
+    \  encoding=\"utf-8\",\n    )\n\n    # --- l4_ack.yaml ---\n    ack = {\n    \
+    \    \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n        \"\
+    reviewer\": \"hermes_executor_code\",\n        \"ack_at\": now,\n        \"q1_hard_floors\"\
+    : {\n            \"description\": \"Primary success criteria check (2020 repair\
+    \ year).\",\n            \"answer\": (\n                f\"2020 excess={yr20_excess}\
+    \ (>-0.10: {yr20_excess > -0.10}), \"\n                f\"dd={yr20_dd} (>-0.179:\
+    \ {yr20_dd > -0.179})\"\n            ),\n            \"pass\": primary_pass,\n\
+    \        },\n        \"q2_selection_quality\": {\n            \"description\"\
+    : \"Test period secondary criteria.\",\n            \"answer\": (\n          \
+    \      f\"Test total_return={test_tr} (>=0.70: {test_tr >= 0.70}), \"\n      \
+    \          f\"win_rate={test_wr} (>=0.55: {test_wr >= 0.55})\"\n            ),\n\
+    \            \"pass\": secondary_pass,\n        },\n        \"q3_falsifiers\"\
+    : {\n            \"description\": \"Falsifier checks.\",\n            \"answer\"\
+    : (\n                f\"Test total_return={test_tr} (<0.50: {test_tr < 0.50}),\
+    \ \"\n                f\"win_rate={test_wr} (<0.45: {test_wr < 0.45}), \"\n  \
+    \              f\"2020 dd={yr20_dd} (<= -0.179: {yr20_dd <= -0.179})\"\n     \
+    \       ),\n            \"pass\": not falsified,\n        },\n        \"overall_pass\"\
+    : adoption_pass,\n        \"overall_decision\": decision,\n        \"overall_reason\"\
+    : reason,\n        \"auto_computed_at\": now,\n    }\n    (output_dir / \"l4_ack.yaml\"\
+    ).write_text(\n        yaml.safe_dump(ack, allow_unicode=True, sort_keys=False),\n\
+    \        encoding=\"utf-8\",\n    )\n\n    # --- diagnostic.yaml ---\n    diagnostic\
+    \ = {\n        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n\
+    \        \"diagnostic_date\": _dt.now().strftime(\"%Y-%m-%d\"),\n        \"diagnostic_by\"\
+    : \"hermes_executor_code\",\n        \"verdict_referenced\": decision,\n     \
+    \   \"summary\": reason,\n        \"verdict_rationale\": reason,\n        \"warnings\"\
+    : [],\n        \"errors\": [],\n        \"params\": params,\n    }\n    (output_dir\
+    \ / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump(diagnostic, allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n    return adoption_pass\n\
+    \n\n# ---------------------------------------------------------------------------\n\
     # Main\n# ---------------------------------------------------------------------------\n\
-    \ndef main() -> int:\n    parser = argparse.ArgumentParser(description=__doc__)\n\
+    \n\ndef main() -> int:\n    pd = _get_pd()\n    parser = argparse.ArgumentParser(description=__doc__)\n\
     \    parser.add_argument(\"--data-root\", required=True)\n    parser.add_argument(\"\
     --train-start\", required=True)\n    parser.add_argument(\"--train-end\", required=True)\n\
     \    parser.add_argument(\"--test-start\", required=True)\n    parser.add_argument(\"\
@@ -447,14 +471,15 @@ files:
     \    parser.add_argument(\"--gap-decay-factor\", type=float, required=True)\n\
     \    parser.add_argument(\"--min-hold-days\", type=int, required=True)\n    args\
     \ = parser.parse_args()\n\n    output_dir = Path(args.output_dir)\n    output_dir.mkdir(parents=True,\
-    \ exist_ok=True)\n\n    params = {\n        \"gap_decay_factor\": args.gap_decay_factor,\n\
-    \        \"min_hold_days\": args.min_hold_days,\n    }\n\n    # Load data\n  \
-    \  try:\n        df_all = load_gap_data(args.data_root)\n        _cb_basic, _stk_daily\
-    \ = load_reference_tables()\n    except Exception as exc:\n        diag = {\"\
-    error\": str(exc), \"traceback\": str(exc)}\n        (output_dir / \"diagnostic.yaml\"\
-    ).write_text(\n            yaml.safe_dump(diag, allow_unicode=True), encoding=\"\
-    utf-8\"\n        )\n        print(f\"FATAL: {exc}\", file=sys.stderr)\n      \
-    \  return 1\n\n    # Filter periods\n    train_start = pd.Timestamp(args.train_start)\n\
+    \ exist_ok=True)\n\n    # GateKeeper: pre-flight compliance checks\n    _gatekeeper_before_run(output_dir)\n\
+    \n    params = {\n        \"gap_decay_factor\": args.gap_decay_factor,\n     \
+    \   \"min_hold_days\": args.min_hold_days,\n    }\n\n    # Load data\n    try:\n\
+    \        df_all = _load_gap_data(args.data_root)\n        _cb_basic, _stk_daily\
+    \ = _load_reference_tables()\n    except Exception as exc:\n        yaml = _get_yaml()\n\
+    \        diag = {\"error\": str(exc), \"step\": \"load_data\"}\n        (output_dir\
+    \ / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(diag, allow_unicode=True),\
+    \ encoding=\"utf-8\"\n        )\n        print(f\"FATAL: {exc}\", file=sys.stderr,\
+    \ flush=True)\n        return 1\n\n    # Filter periods\n    train_start = pd.Timestamp(args.train_start)\n\
     \    train_end = pd.Timestamp(args.train_end)\n    test_start = pd.Timestamp(args.test_start)\n\
     \    test_end = pd.Timestamp(args.test_end)\n\n    df_train = df_all[\n      \
     \  (df_all[\"trade_date\"] >= train_start) & (df_all[\"trade_date\"] <= train_end)\n\
@@ -469,9 +494,12 @@ files:
     \ \"\n        f\"test_excess={test_metrics['excess_return']} \"\n        f\"2020_excess={yr2020_metrics['excess_return']}\
     \ \"\n        f\"2020_dd={yr2020_metrics['max_drawdown']} \"\n        f\"test_tr={test_metrics['total_return']}\
     \ \"\n        f\"test_wr={test_metrics['win_rate']}\",\n        flush=True,\n\
-    \    )\n\n    # Write artifacts\n    _write_artifacts(output_dir, train_metrics,\
-    \ test_metrics, yr2020_metrics, params)\n\n    return 0\n\n\nif __name__ == \"\
-    __main__\":\n    raise SystemExit(main())\n"
+    \    )\n\n    # Write artifacts\n    adoption_pass = _write_artifacts(output_dir,\
+    \ train_metrics, test_metrics, yr2020_metrics, params)\n\n    # GateKeeper: post-run\
+    \ checks\n    _gatekeeper_after_run(output_dir)\n\n    print(\n        f\"[dynamic_exit_gap_decay]\
+    \ DONE adoption_pass={adoption_pass} \"\n        f\"factor={args.gap_decay_factor}\
+    \ min_hold={args.min_hold_days}\",\n        flush=True,\n    )\n    return 0\n\
+    \n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
 written_files:
 - generated_executor/evaluate_cb_arb_dynamic_exit_gap_decay.py
 tool_code_attempts: 1
@@ -480,7 +508,7 @@ hermes_handoff:
   id: cb_arb_value_gap_switch_dynamic_exit_gap_decay_executor_code
   path: data/research_framework/hermes_executor_handoffs.yaml
   recipient: hermes
-status: registered_tool_code
+status: draft_tool_code
 registered_executor_id: dynamic_exit_gap_decay_executor
 registered_files:
 - /home/jay/projects/quant/scripts/evaluate_cb_arb_dynamic_exit_gap_decay.py

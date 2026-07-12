@@ -1,0 +1,70 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: c9fe39acbe5fd033
+interpretation:
+  review_status_code: 2
+  result_summary: Moneyness entry filter at threshold 0.0 produced zero trade suppression
+    — it is a degenerate no-op filter that failed train and stress criteria identically
+    to baseline.
+  main_reason: Filter threshold of 0.0 suppressed no trades at all, meaning this variant
+    never exercised the moneyness gating logic and cannot be considered a valid test
+    of the hypothesis.
+  failure_causes:
+  - threshold 0.0 is a degenerate parameter that passes every candidate unchanged
+    (0% suppression)
+  - train score of -0.154 is far below the 0.1 adoption threshold and identical to
+    baseline
+  - stress_2020 score of -0.184 is below the -0.1 floor and identical to baseline
+  next_research_directions:
+  - direction: retest moneyness filter with meaningful thresholds
+    why: threshold 0.0 is a degenerate no-op; the hypothesis was never actually tested
+      since no trades were filtered
+    priority_code: 1
+    priority: high
+  - direction: multi-dimensional entry filter combining moneyness with bond-floor
+      proximity
+    why: single-axis filtering has now failed across four families (bond-floor, drawdown
+      gate, contrarian drawdown, and this degenerate moneyness run); a compound gate
+      may be needed to surface signal
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - no meaningful threshold was tested — the only variant (0.0) filtered nothing and
+    produced metrics identical to baseline
+  - it is unknown whether a stricter moneyness threshold (e.g. 0.5, 0.7, 0.9) would
+    surface any viable candidates
+  review_status: reject
+closed_directions:
+- mechanic_tag: moneyness_stock_to_conv_threshold
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 8e59cad6c5cf9938
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

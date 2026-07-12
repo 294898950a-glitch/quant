@@ -1,0 +1,81 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: 1c730c4e30fab1f1
+interpretation:
+  review_status_code: 2
+  result_summary: Bond-floor entry filter rejected because 2020 validation excess
+    return is deeply negative (-129M yuan) and trade count retention is only 20.1%,
+    far below the 50% minimum.
+  main_reason: Two hard-floor criteria explicitly failed — validate_2020 excess return
+    was negative and trade count retention fell below 50%, making the filter both
+    unreliable across regimes and too restrictive for statistical confidence.
+  failure_causes:
+  - Validate 2020 excess return is -129.7M yuan with Sharpe -0.4952, showing the filter
+    catastrophically fails during stress regimes by selecting near-floor CBs that
+    were distressed rather than genuinely mispriced
+  - Trade count retention is only 20.1% (7,093 train / 109 test), far below the 50%
+    minimum, leaving test set too sparse for statistical reliability
+  - 2022 suppression hit 97.93%, meaning the filter effectively deactivated the strategy
+    during the drawdown-heavy year, creating severe look-ahead bias in train metrics
+  next_research_directions:
+  - direction: softer-bond-floor-with-trade-count-floor
+    why: The 1.1 threshold is too restrictive; testing 1.2 or 1.3 with an explicit
+      minimum trade-count constraint per year would preserve regime coverage while
+      still filtering extreme option-premium-dominated entries
+    priority_code: 1
+    priority: high
+  - direction: sector-conditional-bond-floor-filter
+    why: Near-floor CBs in 2020 were likely distressed financial/cyclical names; a
+      sector-aware filter that exempts or adjusts for credit-risk regimes could separate
+      genuine mispricing from distress
+    priority_code: 2
+    priority: medium
+  - direction: bond-floor-as-signal-weight-not-hard-gate
+    why: Instead of a binary entry gate, use the close-to-bond-floor ratio as a continuous
+      position-sizing weight so near-floor CBs get larger allocations without eliminating
+      all above-threshold candidates
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No per-year breakdown of which specific CBs passed the filter in 2020 versus failed
+    — cannot distinguish whether the filter selected distressed names or just had
+    bad timing
+  - No credit-rating or sector overlay on the bond-floor metric — cannot determine
+    if the filter's failure in 2020 was a bond-floor problem or a credit-quality problem
+  - No robustness check across alternative discount rates for the bond floor computation
+    — the 3% flat rate may be inappropriate for certain rate environments
+  review_status: reject
+closed_directions:
+- mechanic_tag: close_to_bond_floor_threshold
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 910e0c982b9737a7
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

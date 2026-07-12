@@ -320,6 +320,7 @@ def summarize_data_quality(spec_path: Path) -> dict[str, Any]:
         "executor_script": executor_script,
         "executor_requirements": _normalize_requirement_paths(requirements),
         "executor_requirements_error": requirements_error,
+        "executor_generated_columns": (requirements or {}).get("generated_columns") if isinstance(requirements, dict) else None,
         "executor_column_literals": _script_column_literals(executor_script),
         "executor_input_column_hints": _script_input_column_hints(executor_script),
         "periods": _run_periods(spec),
@@ -342,6 +343,8 @@ def _judge_prompt(summary: dict[str, Any]) -> str:
         "6. required_columns 只代表字段必须存在；只有 required_column_quality 里出现的字段才要求非空。\n"
         "7. 如果只有推荐字段缺失，或者未要求非空的字段存在部分空值，可以放行并说明。\n"
         "8. 如果缺失数据能通过改路径、派生字段、复制池参数等方式修复，返回 repair_candidate 并写清 fix_plan。\n"
+        "9. executor_generated_columns 里的字段是执行器运行时生成的字段，不要求原始输入文件直接存在。\n"
+        "10. executor_input_column_hints 是源码参考，不是硬性输入要求；硬性要求以 executor_requirements.required_files.required_columns 为准。\n"
         "注意：required_column_quality.null_rows 是缺失行数，valid_rows 才是有效行数，不能反着理解。\n\n"
         "只返回 YAML，字段固定为；状态类字段只能输出数字编号，不能输出文字状态：\n"
         f"status_code: {prompt_code_menu('data_quality_decision')}\n"
@@ -399,6 +402,7 @@ def compact_for_ai(summary: dict[str, Any]) -> dict[str, Any]:
         "executor_script": summary.get("executor_script"),
         "executor_requirements": summary.get("executor_requirements"),
         "executor_requirements_error": summary.get("executor_requirements_error"),
+        "executor_generated_columns": summary.get("executor_generated_columns"),
         "executor_input_column_hints": summary.get("executor_input_column_hints"),
         "periods": summary.get("periods"),
         "data_files": compact_files,

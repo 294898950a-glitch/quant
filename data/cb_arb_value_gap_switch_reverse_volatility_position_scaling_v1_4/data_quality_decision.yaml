@@ -1,0 +1,21 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_4
+spec_path: data/cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_4/spec.yaml
+validated_at: '2026-05-25T18:22:00'
+summary_sha256: 94f50194adbe67af4036b9111100f7358e23d7ef2186c13f081db6914979a792
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- delist_date 有 338 行空值（33%），但这是未退市活跃券的正常情况，执行器应能处理
+- list_date 有 1 行空值（1/1012），单条记录不影响实验
+- daily_value_gap_amounts.parquet 最早日期 2019-01-02，训练期 2018-01-01 起的前一年缺少 value_gap
+  数据，实际可用训练窗口将缩短
+- 4 个 config_pool 的 best_params.json 无列级质量摘要，仅验证了文件可读，未逐字段验证结构
+fix_plan: []
+decision_reason: 全部 9 个文件可读、必填字段到场、日期覆盖训练和测试期（value_gap 滞后一年但不阻断），空值均为预期场景，放行
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: aa8db83a136cc081

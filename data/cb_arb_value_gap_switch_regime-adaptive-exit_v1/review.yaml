@@ -1,0 +1,84 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  artifacts_hash: e2151bada9736359
+interpretation:
+  review_status_code: 2
+  result_summary: Regime-adaptive exit failed to pass adoption; train and test excess
+    returns are both -1.0 (likely a sentinel for negative or missing computation),
+    test max drawdown 5.06% exceeds the 3.0pp hard floor, and baseline improvement
+    is 0.0pp against a 2.0pp requirement — all three hard floors broken.
+  main_reason: 'All three hard floors violated: excess negative, no improvement over
+    static baseline, max drawdown 5.06% far above the 3.0pp ceiling.'
+  failure_causes:
+  - Regime conditioning degraded rather than improved the duration-adaptive exit;
+    excess moved from positive (prior accepted run) to -1.0 sentinel.
+  - Max drawdown worsened to 5.06% in test, exceeding the 3.0pp hard floor, suggesting
+    regime switching introduced overfitting or instability at regime boundaries.
+  - Zero baseline improvement (0.0pp vs 2.0pp required) means the regime layer added
+    complexity with no edge, likely because the 2-regime classifier on raw CSI 300
+    return/volatility is too coarse to capture gap-closing dynamics.
+  next_research_directions:
+  - direction: Refine regime signal to gap-specific features instead of broad market
+      CSI 300 return/volatility
+    why: The regime classifier used CSI 300 returns and volatility, but gap-closing
+      dynamics may be driven by convertible-bond-specific flows (discount width distribution,
+      redemption pressure, institutional positioning) rather than broad equity market
+      conditions. A gap-native regime signal may separate environments more usefully.
+    priority_code: 1
+    priority: high
+  - direction: Add a minimum-regime-sample constraint to prevent overfitting on small
+      regime buckets
+    why: Train-period regime bins may be highly imbalanced (2973 high-vol vs 2937
+      low-vol days but actual trade counts per regime are unknown). If one regime
+      has too few trades, its decay parameters are noise. Requiring a minimum trade
+      count per regime before fitting would reduce instability.
+    priority_code: 2
+    priority: medium
+  - direction: Replace categorical regime switch with a continuous blend (regime probability
+      weight × decay parameter)
+    why: Hard regime switches introduce discontinuity at boundaries, which the 5.06%
+      drawdown may reflect. A continuous blending function using regime probabilities
+      rather than discrete bins could smooth transitions and reduce boundary whipsaw.
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - Train and test excess returns are both exactly -1.0, which is highly suspicious
+    as a sentinel value; the actual calculated excess may not have been written to
+    the report correctly, or the run had a computation error masked by the sentinel.
+  - Regime trade counts per bin are not reported; without knowing how many trades
+    fell into each regime, it is impossible to judge whether per-regime parameters
+    are statistically meaningful or pure noise.
+  - No in-sample vs out-of-sample regime distribution comparison; if test-period regime
+    frequencies differ materially from train, the per-regime parameters may be extrapolating
+    into unseen conditions.
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: bdd8f4fd3ecebc7d
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

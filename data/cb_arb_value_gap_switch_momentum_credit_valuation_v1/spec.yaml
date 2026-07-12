@@ -1,0 +1,241 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_momentum_credit_valuation_v1
+date: '2026-05-27'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'new_valuation_v1 proved that formula changes can change the payoff distribution
+  (max DD reduced from -250M to -12). But it only addressed credit-distressed bonds
+  and missed momentum-driven distress — the subset of population B where the discount
+  is justified by downward price trend, not credit deterioration. Adding a downward-
+  momentum penalty to the credit-adjusted theoretical value will push this remaining
+  population B subset out of the candidate pool, converting the 64/36 asymmetric payoff
+  toward positive expected value. The critical insight identifies this as the only
+  overlay direction with proven partial traction.
+
+  '
+source_insight: asymmetric_payoff_mechanism_2026_05_27
+parameter_space:
+- name: mechanics
+  range:
+  - new_valuation_formula
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C006
+mechanics:
+- new_valuation_formula
+new_data_sources: []
+hard_floors:
+  criteria:
+  - test_sharpe >= 0.05
+  - test cumulative_excess_compound > 0
+  - max_drawdown <= -50M
+  - avg_win / avg_loss > 1.0
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: ARCHIVED
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_momentum_credit_valuation_v1
+  strategy_id: cb_arb_value_gap_switch
+  family: momentum_credit_valuation
+  hypothesis: 'new_valuation_v1 proved that formula changes can change the payoff
+    distribution (max DD reduced from -250M to -12). But it only addressed credit-distressed
+    bonds and missed momentum-driven distress — the subset of population B where the
+    discount is justified by downward price trend, not credit deterioration. Adding
+    a downward- momentum penalty to the credit-adjusted theoretical value will push
+    this remaining population B subset out of the candidate pool, converting the 64/36
+    asymmetric payoff toward positive expected value. The critical insight identifies
+    this as the only overlay direction with proven partial traction.
+
+    '
+  source_insight: asymmetric_payoff_mechanism_2026_05_27
+  expected_improvement: 'test_sharpe >= 0.05 (new_valuation_v1 was -0.0128, missing
+    by ~0.013), max_dd <= -50M (new_valuation_v1 already at -12), avg_win / avg_loss
+    > 1.0 (payoff asymmetry inverted), cumulative_excess_compound test > 0
+
+    '
+  capability_ids:
+  - C006
+  required_executor: evaluate_cb_arb_valuation_formula
+  required_data: []
+  required_data_fields: {}
+  test_design:
+    description: 'Start from new_valuation_v1 credit-adjusted theoretical value. For
+      each CB-day, compute underlying stock 20d and 60d returns from stk_daily_qfq,
+      cross-sectional rank each day. Apply penalty_factor to theoretical value for
+      bottom-quintile momentum candidates. Grid: penalty_factor [0.0, 0.1, 0.2, 0.3,
+      0.4, 0.5], momentum_lookback [(20d,), (60d,), (20d+60d composite)], momentum_percentile_cutoff
+      [10, 20, 30]. Jointly retune credit_spread_weight from new_valuation_v1 with
+      momentum params. Stack duration-adaptive exit on all runs. Train 2018-2022,
+      test 2023-2026. Cost-on (slippage 0.0015, impact 0.001). Evaluate cumulative_excess,
+      sharpe, max_dd, win_rate, avg_win/avg_loss ratio.
+
+      '
+  success_criteria:
+    criteria:
+    - test_sharpe >= 0.05
+    - test cumulative_excess_compound > 0
+    - max_drawdown <= -50M
+    - avg_win / avg_loss > 1.0
+  falsifiers:
+    train:
+    - test_sharpe < 0.0
+    - max_drawdown > -100M
+    - win_rate < 50%
+    - avg_win / avg_loss <= 0.8
+    validate:
+    - test_sharpe < 0.0
+    - max_drawdown > -100M
+    - win_rate < 50%
+    - avg_win / avg_loss <= 0.8
+    test:
+    - test_sharpe < 0.0
+    - max_drawdown > -100M
+    - win_rate < 50%
+    - avg_win / avg_loss <= 0.8
+  risk: 'Medium. Proven partial-success foundation (new_valuation_v1). Primary risk:
+    momentum signal is collinear with credit distress — same population B identified
+    twice, no incremental separation. If collinear, fallback is trade-level diagnostic
+    to find orthogonal discriminating attributes. Secondary risk: momentum penalty
+    over-filters, reducing trade count below viability.
+
+    '
+  why_not_repeated_failure: 'new_valuation_v1 was a PARTIAL SUCCESS — it reduced max
+    drawdown by 4 orders of magnitude (-250M to -12), the FIRST overlay to materially
+    change the payoff distribution. It failed adoption only because test_sharpe was
+    -0.0128, missing the 0 floor by 0.013. This proposal EXTENDS that proven mechanism
+    by adding a momentum dimension that targets the specific population B subset missed
+    by credit-only adjustment. The critical insight asymmetric_payoff_mechanism_2026_05_27
+    ranks this as priority direction 1 and explicitly distinguishes it from forbidden
+    single- dimension overlays that all failed uniformly without changing payoff structure.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_new_valuation_v1
+  implementation_assumption: 'evaluate_cb_arb_valuation_formula must be extended to
+    accept momentum penalty parameters. Existing executor handles credit-spread and
+    IV adjustments. Adding momentum requires: compute underlying stock returns from
+    stk_daily_qfq, cross- sectional ranking per day, and apply discount factor to
+    theoretical value for bottom-ranking candidates. This is a DRAFT proposal — executor
+    modification not yet implemented. If executor cannot be extended, build a new
+    executor wrapping new_valuation_v1 credit-adjusted values with momentum penalty
+    before computing value_gap_amount.'
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 55ada55cad67b7b3
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 55ada55cad67b7b3
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_momentum_credit_valuation_v1/proposal.yaml
+  research_delta_gate:
+    action: advance
+    reason: novel family/capabilities (family=momentum_credit_valuation, capability_ids=['C006']);
+      cites critical insight 'asymmetric_payoff_mechanism_2026_05_27'; queue depth=0.
+    evidence:
+      family: momentum_credit_valuation
+      capability_ids:
+      - C006
+      cites_critical: asymmetric_payoff_mechanism_2026_05_27
+      queue_depth: 0
+  mechanics:
+  - new_valuation_formula
+  dropped_unmatched_required_data_fields:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+executor_id: evaluate_cb_arb_valuation_formula
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_valuation_formula.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_momentum_credit_valuation_v1
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_valuation_formula.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_momentum_credit_valuation_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_valuation_formula.py
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_momentum_credit_valuation_v1/proposal.yaml
+  response_hash: 55ada55cad67b7b3
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+updated_at: '2026-05-27T03:30:49Z'

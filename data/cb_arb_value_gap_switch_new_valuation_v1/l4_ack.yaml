@@ -1,0 +1,25 @@
+adoption_pass: false
+message: Refined CB valuation with dynamic credit spread and historical volatility.
+  adoption_pass=False, test_excess=19698.503191, test_sharpe=-0.0128
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-26T06:53:00.391765Z'
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-26T06:53:00.391775Z'
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-26T06:53:00.391777Z'
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-26T06:53:00.391779Z'
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-26T06:53:00.391780Z'
+auto_computed_at: '2026-05-26T06:53:00.391793Z'

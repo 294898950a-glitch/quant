@@ -1,0 +1,21 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1/spec.yaml
+validated_at: '2026-05-24T11:49:02'
+summary_sha256: ed40d29a5d66452281ea0cf9c921c1207b64ef508a59bbd3458dc1cb227254ce
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- train_start=20190101 是元旦非交易日，daily_value_gap_amounts 实际起始日期为 20190102，行情覆盖无实质缺口
+- executor_input_column_hints 中 df 提示了 conv_price 字段，但 daily_value_gap_amounts.parquet
+  不含该字段（conv_price 需通过 cb_basic join 获取），按规则 10 为源码参考非硬性要求，放行
+- cb_call 的 nonnull_columns 仅要求 ts_code，ann_date/call_date/expire_date 允许为空（未强赎债券自然无强赎日期），符合预期
+- cb_basic 的 nonnull_columns 仅要求 ts_code 和 stk_code，conv_price 允许为空（部分债券可能尚未确定转股价），符合预期
+fix_plan: []
+decision_reason: 全部必需文件可读、必需字段齐全、行情日期覆盖训练和测试期、无阻断性数据质量问题
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 560441a157d7e88a

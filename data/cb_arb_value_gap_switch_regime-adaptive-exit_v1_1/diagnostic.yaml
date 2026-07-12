@@ -1,0 +1,42 @@
+data_files_used:
+  csi300_daily: /root/projects/quant/data/cb_warehouse/csi300_daily.parquet
+  daily_value_gap_amounts: /root/projects/quant/data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+data_ranges:
+  test:
+  - '20250101'
+  - '20260508'
+  train:
+  - '20190101'
+  - '20241231'
+exit_reason_breakdown:
+  test:
+    dropped_out: 147
+    end_of_period: 12
+    force_max_hold: 0
+    threshold_breach: 638
+  train:
+    dropped_out: 427
+    end_of_period: 12
+    force_max_hold: 0
+    threshold_breach: 3105
+regime_stats:
+  train_period:
+    high_vol_days: 2973
+    low_vol_days: 2937
+status: completed
+trade_summary:
+  avg_hold_days_test: 6.347553324968632
+  avg_hold_days_train: 6.28216704288939
+  test_trade_count: 797
+  train_trade_count: 3544
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+diagnostic_date: '2026-05-23'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: regime-adaptive exit made zero improvement over static baseline, adoption
+  gate failed, and all four excess return variants hit exactly -1.0.
+verdict_rationale: adoption_pass is false and excess_improvement_test is 0.0 — regime
+  conditioning added no measurable edge whatsoever.
+normalized_at: '2026-05-23T23:04:28+00:00'
+normalized_by: normalize_report_schema

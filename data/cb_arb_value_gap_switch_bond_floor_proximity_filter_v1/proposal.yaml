@@ -1,0 +1,125 @@
+proposal_id: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
+strategy_id: cb_arb_value_gap_switch
+family: entry_quality_filter
+hypothesis: 'The strategy''s -7.47pp cost degradation is driven by entries into CBs
+  whose market price is far above the bond floor, where the value-gap signal is indistinguishable
+  from model noise and gap convergence is unreliable. By requiring the CB market price
+  to be within a configurable threshold of its calculated bond floor at entry, the
+  strategy concentrates exposure on positions with structurally asymmetric payoff
+  — limited downside anchored by the bond floor, upside from gap convergence. This
+  should reduce turnover, improve hit rate, and shrink the cost wall without changing
+  the theoretical value model or exit logic.
+
+  '
+source_insight: 'The only exit variant that passed adoption (duration-adaptive-exit)
+  improved results by imposing patience, not by adding complexity. All binary market-level
+  entry gates failed mechanical thresholds. Position sizing and PnL feedback variants
+  failed adoption. The unresolved bottleneck is entry quality — the strategy enters
+  too many noise positions. The bond floor is a fundamental CB characteristic that
+  the current strategy ignores entirely; filtering entries by bond-floor proximity
+  creates a natural margin of safety without overfitting to market conditions.
+
+  '
+expected_improvement: 'Reduce cost degradation from -7.47pp toward the -3pp to -5pp
+  range by cutting noise entries; improve cumulative excess compound toward breakeven.
+
+  '
+capability_ids:
+- C002
+required_executor: null
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  - entry_signal
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - par_value
+  - coupon_rate
+  - interest_rate_explain
+  - maturity_date
+  - list_date
+  - delist_date
+  - value_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+test_design:
+  description: 'Grid search over bond_floor_proximity_threshold (e.g., 0.85 to 1.05
+    in steps of 0.05, where the threshold is a multiplier: entry allowed only when
+    cb_close <= threshold * bond_floor). Run the existing backtester with the bond-floor
+    filter applied before entry, keeping scoring, sizing, and exit logic unchanged
+    from the current baseline. Compare cost-on and cost-off metrics against baseline.
+
+    '
+success_criteria:
+  criteria:
+  - cumulative_excess_compound_cost_on improves by at least 2pp over baseline
+  - number of noise entries (positions exited within min_hold_days at a loss) decreases
+    by >= 20% vs baseline
+  - no single-year drawdown_vs_benchmark exceeds 15pct
+falsifiers:
+  train: &id001
+  - cumulative_excess_compound_cost_on does not improve over baseline
+  - bond-floor filter eliminates so many entries that the strategy becomes cash-heavy
+    and underperforms baseline in absolute terms
+  - any holdout year Sharpe drops below 0.5
+  validate: *id001
+  test: *id001
+risk: 'Low risk of overfitting — the bond floor is a mechanical calculation, not a
+  learned parameter. Medium risk of sparse entries: if the threshold is too tight,
+  the strategy may hold too few positions. Grid search over threshold values mitigates
+  this. The required executor does not exist (only available executor belongs to forbidden
+  family option_position_sizing), so this proposal will be DRAFT until a new executor
+  is implemented.
+
+  '
+why_not_repeated_failure: 'This is NOT a market-level entry gate (unlike market_drawdown_entry_filter
+  and contrarian_drawdown_entry, which both failed mechanical thresholds). It is NOT
+  a position sizing variant (unlike volatility_position_scaling and pnl_feedback_scaling).
+  It filters entries based on a CB-specific, structurally grounded characteristic
+  — bond-floor proximity — that has never been tested. It does not use any closed
+  mechanic or family.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_market_drawdown_entry_filter
+- cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_volatility_position_scaling_v1
+- cb_arb_value_gap_switch_pnl_feedback_scaling_20260522
+implementation_assumption: 'Bond floor is calculated as sum of discounted coupon payments
+  plus discounted par value at maturity, using a risk-free rate proxy. The filter
+  is: if cb_close > bond_floor_proximity_threshold * bond_floor, suppress entry. All
+  other strategy logic (value-gap scoring, position sizing, exit rules) remains at
+  current baseline. A new executor must be implemented; the only existing C002 executor
+  (option_position_sizing) belongs to a forbidden family.
+
+  '
+missing_capability_request:
+  capability_id: C002
+  reason: 'The only registered executor for C002 is option_position_sizing (family:
+    option_position_sizing), which is in closed_tags and forbidden. A new executor
+    is needed that computes daily bond floor from cb_basic fields, applies the proximity
+    filter to daily_value_gap_amounts entries, and passes filtered candidates to the
+    baseline backtester. The executor should accept bond_floor_proximity_threshold
+    as a tunable parameter.'
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 770849ba40925f92
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 770849ba40925f92
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_bond_floor_proximity_filter_v1/proposal.yaml

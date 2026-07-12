@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: iv_percentile_exit_001
+spec_path: data/iv_percentile_exit_001/spec.yaml
+validated_at: '2026-05-22T07:30:26'
+summary_sha256: 4121f9babbf8304fca1eded6ef1492f6c1ce85c814219231e1c1bfc815c73368
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- daily_value_gap_amounts.parquet 的最早日期为 20190102，比 train_start (20190101) 晚一天；2019‑01‑01
+  为非交易日，实际数据覆盖完整训练区间。
+fix_plan: []
+decision_reason: 所有必需文件可读，必需字段完整，行情日期覆盖训练与测试期，无缺失的必需列或质量要求，通过检查。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: deepseek
+response_hash: 13d2ce6073fbfea2

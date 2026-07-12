@@ -1,0 +1,94 @@
+{
+  "variant": "moneyness_t0p0",
+  "moneyness_threshold": 0.0,
+  "adoption_pass": false,
+  "params": {
+    "min_gap_pct": 0.0,
+    "sell_gap_pct": 0.0,
+    "switch_hurdle_pct": 0.03,
+    "max_hold_days": 45.0,
+    "stop_gap_ratio_floor": 0.3,
+    "stop_signal_threshold": 999.0
+  },
+  "rows": [
+    {
+      "variant": "baseline",
+      "period": "train",
+      "start": "20190101",
+      "end": "20241231",
+      "total_return": 0.19749,
+      "excess_return": -0.074824,
+      "max_drawdown": -0.315518,
+      "win_rate": 0.4931,
+      "sharpe_ratio": 0.0,
+      "total_trades": 1592,
+      "score": -0.153703
+    },
+    {
+      "variant": "moneyness_t0p0",
+      "period": "train",
+      "start": "20190101",
+      "end": "20241231",
+      "total_return": 0.19749,
+      "excess_return": -0.074824,
+      "max_drawdown": -0.315518,
+      "win_rate": 0.4931,
+      "sharpe_ratio": 0.0,
+      "total_trades": 1592,
+      "score": -0.153703
+    },
+    {
+      "variant": "baseline",
+      "period": "stress_2020",
+      "start": "20200101",
+      "end": "20201231",
+      "total_return": -0.045376,
+      "excess_return": -0.149543,
+      "max_drawdown": -0.137306,
+      "win_rate": 0.4076,
+      "sharpe_ratio": 0.0,
+      "total_trades": 157,
+      "score": -0.18387
+    },
+    {
+      "variant": "moneyness_t0p0",
+      "period": "stress_2020",
+      "start": "20200101",
+      "end": "20201231",
+      "total_return": -0.045376,
+      "excess_return": -0.149543,
+      "max_drawdown": -0.137306,
+      "win_rate": 0.4076,
+      "sharpe_ratio": 0.0,
+      "total_trades": 157,
+      "score": -0.18387
+    },
+    {
+      "variant": "baseline",
+      "period": "validate",
+      "start": "20250101",
+      "end": "20260508",
+      "total_return": 0.683957,
+      "excess_return": 0.331692,
+      "max_drawdown": -0.126045,
+      "win_rate": 0.6454,
+      "sharpe_ratio": 0.0,
+      "total_trades": 361,
+      "score": 0.300181
+    },
+    {
+      "variant": "moneyness_t0p0",
+      "period": "validate",
+      "start": "20250101",
+      "end": "20260508",
+      "total_return": 0.683957,
+      "excess_return": 0.331692,
+      "max_drawdown": -0.126045,
+      "win_rate": 0.6454,
+      "sharpe_ratio": 0.0,
+      "total_trades": 361,
+      "score": 0.300181
+    }
+  ],
+  "generated_at": "2026-05-24T11:49:58.638767"
+}

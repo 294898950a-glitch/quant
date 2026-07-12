@@ -1,0 +1,75 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 9
+    selected_name: best_candidate
+  artifacts_hash: 026750c8f58a90d3
+interpretation:
+  review_status_code: 2
+  result_summary: PnL feedback scaling (lookback=60 floor=0.7) produced negative excess
+    returns in all test periods, failing every hard floor and confirming the overlay
+    does not rescue the forward-direction value-gap strategy.
+  main_reason: Test excess was -23801.75 against a hard floor of >-5%, with no single
+    test year positive; the capital-allocation governor hypothesis is falsified by
+    this run.
+  failure_causes:
+  - Test period cumulative excess is negative and well below the -5% hard floor
+  - No single test year achieved positive cumulative excess (2020 was -23809.36)
+  - Train excess also deeply negative (-98499.72), confirming no in-sample signal
+    to exploit
+  next_research_directions:
+  - direction: Reverse-direction value-gap entry
+    why: The reverse probe previously achieved +30.3% test excess cost-on, indicating
+      the exploitable signal is in the opposite direction. The forward-direction's
+      near-zero signal makes any cost-reduction overlay futile.
+    priority_code: 1
+    priority: high
+  - direction: Explicit cost filters and higher entry thresholds
+    why: Scaling position size did not reduce cost drag enough; a direct threshold-based
+      approach (minimum expected edge before entry) may be more effective than a continuous
+      governor.
+    priority_code: 2
+    priority: medium
+  - direction: Volatility-based instead of PnL-based position scaling
+    why: PnL feedback failed; scaling positions inversely with volatility (not past
+      PnL) may better capture regime-dependent edge quality without introducing noise
+      from realized randomness.
+    priority_code: 3
+    priority: low
+  evidence_gaps:
+  - No per-year test excess breakdown beyond 2020 — cannot verify whether any single
+    year was close to breakeven
+  - Max drawdown unit mismatch between test (yuan) and baseline hard floor (percent)
+    — cannot conclusively verify the third hard floor
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 972ae98d761c2cde
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 9
+    selected_name: best_candidate

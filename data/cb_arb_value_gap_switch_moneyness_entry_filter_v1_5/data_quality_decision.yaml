@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+spec_path: data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_5/spec.yaml
+validated_at: '2026-05-24T12:21:35'
+summary_sha256: b4ad6577cb060f9d537a5623fe683d80728b7641320aa3a75bd05bb792010723
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_basic.conv_price 是 required_column 但不在 nonnull_columns 中，部分行 conv_price 可能为空。按
+  executor_requirements 的设计这是允许的，但执行器需自行处理空值转债（跳过或报警）。
+decision_reason: 全部 9 个必需文件存在且可读，所有 required_columns 均存在于对应文件中，训练期和测试期均被行情数据覆盖，无字段缺失或日期覆盖缺口。
+fix_plan: []
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 9fd220383aa454d8

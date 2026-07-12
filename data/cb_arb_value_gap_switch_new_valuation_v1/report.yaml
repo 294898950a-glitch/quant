@@ -1,0 +1,65 @@
+adoption_pass: false
+checks:
+  drawdown_2020_not_worse: true
+  test_dd_not_worse: true
+  test_excess_improved: true
+  test_sharpe_ok: false
+  train_dd_not_worse: true
+executor: new_valuation_executor
+periods:
+  test:
+    baseline:
+      avg_loss: -26.59652
+      avg_win: 33.068108
+      max_drawdown: -19671.938226
+      sharpe_ratio: -0.0467
+      total_pnl: -19697.208983
+      trade_count: 772
+      win_rate: 0.0181
+    excess_return: 19698.503191
+    refined:
+      avg_loss: -0.036995
+      avg_win: 0.118695
+      max_drawdown: -5.517861
+      sharpe_ratio: -0.0128
+      total_pnl: 1.294208
+      trade_count: 1358
+      win_rate: 0.2437
+  train:
+    baseline:
+      avg_loss: -21.221875
+      avg_win: 59.1745
+      max_drawdown: -73672.102013
+      sharpe_ratio: 0.0004
+      total_pnl: -73692.763625
+      trade_count: 3893
+      win_rate: 0.0285
+    excess_return: 73698.028351
+    refined:
+      avg_loss: -0.017036
+      avg_win: 0.11662
+      max_drawdown: -12.122543
+      sharpe_ratio: -0.0034
+      total_pnl: 5.264726
+      trade_count: 4712
+      win_rate: 0.1358
+  validate_2020:
+    baseline:
+      avg_loss: -46.574277
+      avg_win: 13.122041
+      max_drawdown: -24989.755668
+      sharpe_ratio: -0.0297
+      total_pnl: -27153.360753
+      trade_count: 633
+      win_rate: 0.0616
+    excess_return: 27157.503595
+    refined:
+      avg_loss: -0.030947
+      avg_win: 0.119569
+      max_drawdown: -8.141341
+      sharpe_ratio: 0.0007
+      total_pnl: 4.142842
+      trade_count: 620
+      win_rate: 0.25
+proposal_id: cb_arb_value_gap_switch_new_valuation_formula_v1
+strategy_id: cb_arb_value_gap_switch

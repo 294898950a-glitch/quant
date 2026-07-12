@@ -1,0 +1,67 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+date: '2026-05-24'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  adoption_pass: false
+  selected_variant:
+    bond_floor_threshold: 1.1
+    min_days_below: 1
+    discount_rate: 0.03
+  criteria:
+    excess_test_gt_0: true
+    excess_train_gt_0: true
+    excess_2020_gt_0: false
+    trade_count_retention_gt_50pct: false
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- bond_floor_entry_filter threshold=1.1 min_days=1
+learnings:
+- Evaluated bond-floor entry filter (threshold=1.1, min_days_below=1, discount_rate=0.03)
+  with duration-adaptive exit baseline.
+follow_up_actions:
+- review reject reason; do not revive without new mechanism
+status: COMPLETE
+generated_at: '2026-05-24T05:00:37+00:00'
+adoption_pass: false
+decision: failed_mechanical_thresholds
+metrics:
+  train:
+    baseline:
+      total_pnl: -218488649.58
+      trade_count: 35339
+      max_drawdown: -679068554.14
+      sharpe_ratio: -0.1784
+    filtered:
+      total_pnl: 9890690.57
+      trade_count: 7093
+      max_drawdown: -97173784.43
+      sharpe_ratio: 0.0319
+      excess_return: 228379340.15
+    suppression_pct: 87.13
+  test:
+    baseline:
+      total_pnl: -30288454.08
+      trade_count: 2807
+      max_drawdown: -127589879.69
+      sharpe_ratio: -0.2589
+    filtered:
+      total_pnl: 9890460.41
+      trade_count: 109
+      max_drawdown: -2582655.31
+      sharpe_ratio: 1.2861
+      excess_return: 40178914.49
+  validate_2020:
+    baseline:
+      total_pnl: 88172035.89
+      trade_count: 4501
+      max_drawdown: -224901173.27
+      sharpe_ratio: 0.2995
+    filtered:
+      total_pnl: -41487280.11
+      trade_count: 795
+      max_drawdown: -67267198.6
+      sharpe_ratio: -0.4952
+      excess_return: -129659316.0
+warnings: []

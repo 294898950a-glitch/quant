@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v1
+spec_path: data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v1/spec.yaml
+validated_at: '2026-05-24T09:57:33'
+summary_sha256: 8a1f99c2179a5355e84051380fbc0d68884f85afcfb5d77ccf03b84f5af3fc09
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_daily 缺少推荐字段 cb_over_rate 和 pct_chg，未在 required_columns 中声明为必需，不影响实验
+- daily_value_gap_amounts 最早日期为 20190102，train_start 为 20190101，差 1 天（非交易日），实际无影响
+fix_plan: []
+decision_reason: 全部必需文件可读、日期覆盖训练和测试期、无硬性必需字段缺失、无空值或价格异常报告，放行
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: f7b91d502bdc3c1f

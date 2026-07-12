@@ -1,0 +1,132 @@
+proposal_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_3
+strategy_id: cb_arb_value_gap_switch
+family: pnl_feedback_scaling
+hypothesis: 'The forward value-gap strategy (-10.47% cumulative excess cost-on) suffers
+  from extended cold periods where the signal produces serial negative returns. Rolling
+  realized PnL feedback can identify these cold regimes and reduce position sizes
+  proportionally, cutting cost drag without abandoning the signal or removing candidates.
+  Unlike entry filters (moneyness x5, bond floor x1) which culled the candidate pool
+  and failed to rescue forward-direction returns, PnL feedback is an orthogonal overlay
+  that preserves all candidates and only adjusts allocation weights. The key testable
+  claim: scaling inverse to recent strategy PnL reduces cumulative excess degradation
+  by at least 3pp relative to the cost-on baseline (-10.47%), without needing to change
+  which bonds enter or when they exit.
+
+  '
+source_insight: 'Recent digest shows 6 consecutive entry-filter failures (moneyness
+  x5 variants + bond floor x1) on the forward direction, all returning adoption_pass=false.
+  These filters removed candidates and destroyed whatever signal the forward direction
+  had. The logical next step is an overlay that preserves all candidates — position
+  scaling via rolling PnL feedback is the only remaining untested forward-direction
+  mechanic that does not alter entry eligibility or exit rules. This is not a renamed
+  repeat of any closed or failed direction.
+
+  '
+expected_improvement: 'Reduce cumulative excess degradation from the -10.47% cost-on
+  baseline by at least 3 percentage points, primarily by shrinking exposure during
+  cold streaks. Unlike entry filters which reduced signal by removing candidates,
+  PnL feedback keeps all candidates and only adjusts weights. Secondary expectation:
+  lower max drawdown via smaller positions during drawdown periods.
+
+  '
+capability_ids:
+- C004
+required_executor: evaluate_cb_arb_pnl_feedback_scaling_grid
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - code
+  - conv_price
+  - list_date
+  - delist_date
+  - maturity_date
+  - par_value
+  - coupon_rate
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+test_design:
+  description: 'Grid search over PnL feedback parameters: lookback window for rolling
+    realized PnL (e.g. [20, 40, 60, 120] trading days), scaling floor/ceiling bounds,
+    and feedback sensitivity multiplier. Apply scaling to baseline position weights
+    without changing entry eligibility (value_gap_amount > 0), candidate ranking (descending
+    gap), or exit logic (duration-adaptive from accepted 2026-05-22 params: min_hold_days=5,
+    initial_threshold_fraction=0.7, decay_period_factor=0.5). Cost-on evaluation with
+    standard slippage (0.0015) and market impact (0.001). Train 2018-2022, test 2023-2026.
+    Compare best result against baseline row cb_arb-value-gap-switch-medium-signal-cost-on-20260516.
+
+    '
+success_criteria:
+  criteria:
+  - test_cumulative_excess_compound_greater_than: -0.0747
+  - test_max_drawdown_less_than_current_baseline_or_improved_by_2pp
+  - adoption_pass: true
+falsifiers:
+  train: &id001
+  - test_cumulative_excess_compound_no_better_than_baseline
+  - any_holdout_year_sharpe_lt_0
+  - position_scaling_introduces_perverse_incentive_to_chase_or_flee
+  validate: *id001
+  test: *id001
+risk: 'Low structural risk: PnL feedback is an overlay on existing ranking/sizing,
+  not a new entry or exit rule. Main risk is that the forward signal is so weak that
+  even adaptive sizing cannot rescue it — but this is precisely what the test measures.
+  If it fails, it closes the "position sizing overlay" branch without breaking anything
+  else. Unlike entry filters, it cannot destroy the signal because it preserves all
+  candidates.
+
+  '
+why_not_repeated_failure: 'This is not in any repeated_reject_families (moneyness_stock_to_conv_threshold)
+  or closed_families_from_insights (reverse-direction families). It is a new family
+  (pnl_feedback_scaling) with a fundamentally different mechanic: position sizing
+  overlay rather than entry eligibility filter. The moneyness and bond-floor entry
+  filters failed because they removed candidates and starved the signal. PnL feedback
+  keeps all candidates — it addresses the "how much" question, not the "which ones"
+  question. The three required repeated-reject questions do not apply to this family.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+- cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+implementation_assumption: The executor reads daily value gaps and computes rolling
+  realized strategy PnL from historical trade records or synthetic PnL derived from
+  position-level gap changes. Scaling is applied as a multiplicative factor on baseline
+  position weights, bounded by configurable floor/ceiling. No new data sources required
+  beyond what is listed in required_data.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: a2052d50249ff417
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: a2052d50249ff417
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_pnl_feedback_scaling_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_3/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=pnl_feedback_scaling, capability_ids=['C004']);
+    no critical-insight reference; queue depth=0.
+  evidence:
+    family: pnl_feedback_scaling
+    capability_ids:
+    - C004
+    cites_critical: null
+    queue_depth: 0

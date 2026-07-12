@@ -1,0 +1,834 @@
+tool_request_id: evaluate_cb_arb_valuation_formula_momentum_v1
+why_existing_tools_insufficient: 'Two existing executors match capability C006 (new_valuation_formula):
+  evaluate_cb_arb_valuation_formula and evaluate_cb_arb_new_valuation. Both compute
+  a credit-adjusted theoretical value using time-varying credit spreads and implied
+  volatility. Neither implements momentum penalties on the underlying stock. The proposal
+  explicitly requires: (1) credit-adjusted theoretical value using new_valuation_v1
+  logic, (2) daily stock momentum z-score from stk_daily_qfq close prices over configurable
+  lookback windows, (3) a multiplicative momentum penalty applied to the credit-adjusted
+  TV, (4) grid search across momentum_penalty_weight and momentum_lookback_days, (5)
+  duration-adaptive exit stacked on top of the revised value gaps. No existing C006
+  executor computes momentum z-scores, applies penalty weights, or performs the combined
+  grid search. A new executor is required.'
+reviewed_existing_executor_ids:
+- evaluate_cb_arb_valuation_formula
+- evaluate_cb_arb_new_valuation
+registry_entry:
+  id: evaluate_cb_arb_valuation_formula_momentum
+  version: 1
+  status: draft
+  strategy_id: cb_arb_value_gap_switch
+  family: extended_valuation_momentum
+  script_path: scripts/evaluate_cb_arb_valuation_formula_momentum.py
+  owner: ai_draft
+  description: Extend the credit-adjusted valuation formula from new_valuation_v1
+    with a downward-momentum penalty on the underlying stock. Compute daily stock
+    momentum z-score from stk_daily_qfq close prices, apply multiplicative penalty
+    to the credit-adjusted theoretical value, produce revised value_gap_amount, and
+    backtest with duration-adaptive exit stacked. Grid search over momentum_penalty_weight
+    and momentum_lookback_days.
+  can_test:
+  - new_valuation_formula
+  can_test_capability_ids:
+  - C006
+  cannot_test:
+  - close_to_bond_floor_threshold
+  - dynamic_regime_switch
+  - global_entry_filter
+  - moneyness_stock_to_conv_threshold
+  - new_data_source
+  - new_exit_rule
+  - regime_conditioning
+  - rolling_pnl_feedback
+  - static_candidate_position_scale
+  cannot_test_capability_ids:
+  - C001
+  - C002
+  - C003
+  - C004
+  - C005
+  - C007
+  - C008
+  - C009
+  - C010
+  required_data:
+  - path: data/cb_warehouse/cb_daily.parquet
+    description: Daily CB market prices.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_basic.parquet
+    description: CB basic terms (conv_price, stk_code, maturity_date, coupon_rate,
+      par_value, list_date, delist_date).
+    schema_hash: null
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted daily stock close prices for momentum z-score and
+      volatility computation.
+    schema_hash: null
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    description: Existing value gaps for baseline comparison.
+    schema_hash: null
+  required_config_fields:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  - momentum_penalty_weight
+  - momentum_lookback_days
+  - max_hold_days
+  - min_gap_pct
+  - sell_gap_pct
+  - switch_hurdle_pct
+  command_template:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_valuation_formula_momentum.py
+  - --data-root
+  - '{data_root}'
+  - --train-start
+  - '{train_start}'
+  - --train-end
+  - '{train_end}'
+  - --test-start
+  - '{test_start}'
+  - --test-end
+  - '{test_end}'
+  - --output-dir
+  - '{output_dir}'
+  - --momentum-penalty-weight
+  - '{momentum_penalty_weight}'
+  - --momentum-lookback-days
+  - '{momentum_lookback_days}'
+  - --max-hold-days
+  - '{max_hold_days}'
+  - --min-gap-pct
+  - '{min_gap_pct}'
+  - --sell-gap-pct
+  - '{sell_gap_pct}'
+  - --switch-hurdle-pct
+  - '{switch_hurdle_pct}'
+  default_config:
+    data_root: data/cb_arb_concurrent_supervised_20260511_094500
+    train_start: '20180101'
+    train_end: '20221231'
+    test_start: '20230101'
+    test_end: '20260508'
+    momentum_penalty_weight: 0.2
+    momentum_lookback_days: 60
+    max_hold_days: 150
+    min_gap_pct: 0.01
+    sell_gap_pct: 0.0
+    switch_hurdle_pct: 0.0
+  artifacts_produced:
+  - summary.json
+  - report.yaml
+  - l4_ack.yaml
+  - diagnostic.yaml
+  budget_estimate:
+    sig_minutes: 0
+    spot_minutes: 180
+    local_minutes: 0
+    estimated_cost_yuan: 0.0
+  vm_local_limits:
+    vm_required: true
+    local_allowed: false
+  obsolescence_date: null
+implementation_outline:
+  script_path: scripts/evaluate_cb_arb_valuation_formula_momentum.py
+  main_inputs:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  - momentum_penalty_weight
+  - momentum_lookback_days
+  - max_hold_days
+  - min_gap_pct
+  - sell_gap_pct
+  - switch_hurdle_pct
+  core_steps:
+  - load cb_daily, cb_basic, stk_daily_qfq, and daily_value_gap_amounts from warehouse
+    paths
+  - compute credit-adjusted theoretical value per CB per day using new_valuation_v1
+    logic (time-varying credit spreads, OAS, implied volatility)
+  - for each CB-day, compute stock momentum z-score: stock 60d cumulative return relative
+      to cross-sectional distribution on each date, using momentum_lookback_days
+  - compute revised theoretical value: TV_momentum = credit_adjusted_TV * (1 - momentum_penalty_weight
+      * max(0, -stock_momentum_zscore))
+  - compute revised value_gap_amount = TV_momentum - market_close
+  - apply value_gap_amount > 0 filter, sort descending by revised gap, select top
+    N by rank
+  - run backtest with reverse-probe exit logic (max_hold_days, min_gap_pct, sell_gap_pct,
+    switch_hurdle_pct) and duration-adaptive exit stacked
+  - apply cost-on evaluation (slippage=0.0015, market_impact=0.001)
+  - perform grid search over momentum_penalty_weight in [0.1, 0.2, 0.3, 0.5] and momentum_lookback_days
+    in [20, 40, 60]
+  - for each (weight, lookback) combination, run train on 2018-2022, test on 2023-2026
+  - select best candidate by train cumulative excess
+  - compare best test result against new_valuation_v1 baseline and duration-adaptive-exit
+    baseline
+  - write summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml
+  code_constraints:
+  - use existing project data files from data/cb_warehouse/ and data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/
+  - import GateKeeper from scripts.gatekeeper
+  - prepend REPO_ROOT to sys.path before any project imports
+  - define main() and declare_data_requirements(command, spec)
+  - use ThreadPoolExecutor with os.cpu_count()-1 workers for parallel grid search
+  - do not overwrite raw warehouse files
+  - do not change current strategy truth
+  - do not write placeholder, TODO, or pseudocode implementations
+validation_plan:
+- python3 -m py_compile scripts/evaluate_cb_arb_valuation_formula_momentum.py
+- verify import reachability from outside repo cwd (sys.path probe)
+- verify GateKeeper import is present in source
+- verify declare_data_requirements(command, spec) is defined and callable
+- verify artifacts_produced (summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml)
+  are written to output_dir
+- verify summary.json contains adoption_pass field
+- run small data smoke test with train_start=20180101 train_end=20181231 test_start=20190101
+  test_end=20191231 momentum_penalty_weight=0.2 momentum_lookback_days=20 and verify
+  exit code 0
+ai_provider: hermes
+design_response_hash: 6b27b0093ea71ad9
+code_response_hash: 53f3fdffca5a6df4
+compile_reason: no strict executor match
+tool_design:
+  tool_request_id: evaluate_cb_arb_valuation_formula_momentum_v1
+  why_existing_tools_insufficient: 'Two existing executors match capability C006 (new_valuation_formula):
+    evaluate_cb_arb_valuation_formula and evaluate_cb_arb_new_valuation. Both compute
+    a credit-adjusted theoretical value using time-varying credit spreads and implied
+    volatility. Neither implements momentum penalties on the underlying stock. The
+    proposal explicitly requires: (1) credit-adjusted theoretical value using new_valuation_v1
+    logic, (2) daily stock momentum z-score from stk_daily_qfq close prices over configurable
+    lookback windows, (3) a multiplicative momentum penalty applied to the credit-adjusted
+    TV, (4) grid search across momentum_penalty_weight and momentum_lookback_days,
+    (5) duration-adaptive exit stacked on top of the revised value gaps. No existing
+    C006 executor computes momentum z-scores, applies penalty weights, or performs
+    the combined grid search. A new executor is required.'
+  reviewed_existing_executor_ids:
+  - evaluate_cb_arb_valuation_formula
+  - evaluate_cb_arb_new_valuation
+  registry_entry:
+    id: evaluate_cb_arb_valuation_formula_momentum
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: extended_valuation_momentum
+    script_path: scripts/evaluate_cb_arb_valuation_formula_momentum.py
+    owner: ai_draft
+    description: Extend the credit-adjusted valuation formula from new_valuation_v1
+      with a downward-momentum penalty on the underlying stock. Compute daily stock
+      momentum z-score from stk_daily_qfq close prices, apply multiplicative penalty
+      to the credit-adjusted theoretical value, produce revised value_gap_amount,
+      and backtest with duration-adaptive exit stacked. Grid search over momentum_penalty_weight
+      and momentum_lookback_days.
+    can_test:
+    - new_valuation_formula
+    can_test_capability_ids:
+    - C006
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - dynamic_regime_switch
+    - global_entry_filter
+    - moneyness_stock_to_conv_threshold
+    - new_data_source
+    - new_exit_rule
+    - regime_conditioning
+    - rolling_pnl_feedback
+    - static_candidate_position_scale
+    cannot_test_capability_ids:
+    - C001
+    - C002
+    - C003
+    - C004
+    - C005
+    - C007
+    - C008
+    - C009
+    - C010
+    required_data:
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market prices.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic terms (conv_price, stk_code, maturity_date, coupon_rate,
+        par_value, list_date, delist_date).
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted daily stock close prices for momentum z-score
+        and volatility computation.
+      schema_hash: null
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Existing value gaps for baseline comparison.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - momentum_penalty_weight
+    - momentum_lookback_days
+    - max_hold_days
+    - min_gap_pct
+    - sell_gap_pct
+    - switch_hurdle_pct
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_valuation_formula_momentum.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --momentum-penalty-weight
+    - '{momentum_penalty_weight}'
+    - --momentum-lookback-days
+    - '{momentum_lookback_days}'
+    - --max-hold-days
+    - '{max_hold_days}'
+    - --min-gap-pct
+    - '{min_gap_pct}'
+    - --sell-gap-pct
+    - '{sell_gap_pct}'
+    - --switch-hurdle-pct
+    - '{switch_hurdle_pct}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20180101'
+      train_end: '20221231'
+      test_start: '20230101'
+      test_end: '20260508'
+      momentum_penalty_weight: 0.2
+      momentum_lookback_days: 60
+      max_hold_days: 150
+      min_gap_pct: 0.01
+      sell_gap_pct: 0.0
+      switch_hurdle_pct: 0.0
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 180
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  implementation_outline:
+    script_path: scripts/evaluate_cb_arb_valuation_formula_momentum.py
+    main_inputs:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - momentum_penalty_weight
+    - momentum_lookback_days
+    - max_hold_days
+    - min_gap_pct
+    - sell_gap_pct
+    - switch_hurdle_pct
+    core_steps:
+    - load cb_daily, cb_basic, stk_daily_qfq, and daily_value_gap_amounts from warehouse
+      paths
+    - compute credit-adjusted theoretical value per CB per day using new_valuation_v1
+      logic (time-varying credit spreads, OAS, implied volatility)
+    - for each CB-day, compute stock momentum z-score: stock 60d cumulative return
+        relative to cross-sectional distribution on each date, using momentum_lookback_days
+    - compute revised theoretical value: TV_momentum = credit_adjusted_TV * (1 - momentum_penalty_weight
+        * max(0, -stock_momentum_zscore))
+    - compute revised value_gap_amount = TV_momentum - market_close
+    - apply value_gap_amount > 0 filter, sort descending by revised gap, select top
+      N by rank
+    - run backtest with reverse-probe exit logic (max_hold_days, min_gap_pct, sell_gap_pct,
+      switch_hurdle_pct) and duration-adaptive exit stacked
+    - apply cost-on evaluation (slippage=0.0015, market_impact=0.001)
+    - perform grid search over momentum_penalty_weight in [0.1, 0.2, 0.3, 0.5] and
+      momentum_lookback_days in [20, 40, 60]
+    - for each (weight, lookback) combination, run train on 2018-2022, test on 2023-2026
+    - select best candidate by train cumulative excess
+    - compare best test result against new_valuation_v1 baseline and duration-adaptive-exit
+      baseline
+    - write summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml
+    code_constraints:
+    - use existing project data files from data/cb_warehouse/ and data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/
+    - import GateKeeper from scripts.gatekeeper
+    - prepend REPO_ROOT to sys.path before any project imports
+    - define main() and declare_data_requirements(command, spec)
+    - use ThreadPoolExecutor with os.cpu_count()-1 workers for parallel grid search
+    - do not overwrite raw warehouse files
+    - do not change current strategy truth
+    - do not write placeholder, TODO, or pseudocode implementations
+  validation_plan:
+  - python3 -m py_compile scripts/evaluate_cb_arb_valuation_formula_momentum.py
+  - verify import reachability from outside repo cwd (sys.path probe)
+  - verify GateKeeper import is present in source
+  - verify declare_data_requirements(command, spec) is defined and callable
+  - verify artifacts_produced (summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml)
+    are written to output_dir
+  - verify summary.json contains adoption_pass field
+  - run small data smoke test with train_start=20180101 train_end=20181231 test_start=20190101
+    test_end=20191231 momentum_penalty_weight=0.2 momentum_lookback_days=20 and verify
+    exit code 0
+  ai_provider: hermes
+  response_hash: 6b27b0093ea71ad9
+  compile_reason: no strict executor match
+  validation_errors: []
+  status: draft_tool_design
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_momentum_extended_valuation_v1_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_valuation_formula_momentum.py
+  completion_receipt: data/cb_arb_value_gap_switch_momentum_extended_valuation_v1/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-10T04:57:33'
+  validation: passed
+files:
+- path: generated_executor/evaluate_cb_arb_valuation_formula_momentum.py
+  purpose: Complete evaluator implementation.
+  content: "\"\"\"\nEvaluate momentum-extended credit-adjusted valuation formula for\
+    \ cb_arb.\n\nExtends the credit-adjusted theoretical value from new_valuation_v1\
+    \ with a\ndownward-momentum penalty on the underlying stock:\n\n    TV_momentum\
+    \ = theoretical_value * (1 - penalty_weight * max(0, -momentum_zscore))\n\nwhere\
+    \ momentum_zscore is the stock's N-day cumulative return z-scored within the\n\
+    cross-section on each trading day. Grid search over penalty_weight x lookback_days.\n\
+    \nEntry/exit rules, position sizing, and market regime switching are unchanged\n\
+    from the value-gap-switch baseline.\n\"\"\"\n\nfrom __future__ import annotations\n\
+    \nimport argparse\nimport json\nimport os\nimport sys\nfrom concurrent.futures\
+    \ import ThreadPoolExecutor, as_completed\nfrom datetime import datetime\nfrom\
+    \ pathlib import Path\nfrom typing import Any\n\n# ── Repo root & sys.path ────────────────────────────────────────────────\n\
+    # Must come before any third-party import AND before `from scripts.X import Y`,\n\
+    # because production runs execute from a foreign cwd where REPO_ROOT is not\n\
+    # automatically on sys.path.  The compliance import-reachability probe runs\n\
+    # with -I in /tmp, so all non-stdlib imports that follow this block must\n# resolve\
+    \ from the venv site-packages (numpy/pandas/yaml) or from REPO_ROOT\n# (scripts.*).\n\
+    \n\ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n# ── Third-party\
+    \ imports (venv site-packages) ────────────────────────────\nimport numpy as np\n\
+    import pandas as pd\nimport yaml\n\n# ── Repo imports ────────────────────────────────────────────────────────\n\
+    from strategies.cb_arb.verifier import (  # noqa: E402\n    _build_call_index,\n\
+    \    _is_force_redeemed_on_date,\n    _load_cb_basic,\n    _load_cb_call,\n  \
+    \  _load_cb_daily,\n    _load_stk_daily,\n    _load_trading_days,\n)\nfrom scripts.evaluate_cb_arb_daily_regime_switch\
+    \ import (  # noqa: E402\n    _build_daily_features,\n)\nfrom scripts.evaluate_cb_arb_value_gap_switch\
+    \ import (  # noqa: E402\n    _base_configs as _base_regime_configs,\n    _score,\n\
+    \    _run_value_gap_backtest,\n)\n\n# ── YAML numpy representation fixes ─────────────────────────────────────\n\
+    \n\ndef _yaml_repr_np_float(dumper, data):\n    return dumper.represent_float(float(data))\n\
+    \n\ndef _yaml_repr_np_int(dumper, data):\n    return dumper.represent_int(int(data))\n\
+    \n\nyaml.SafeDumper.add_representer(np.floating, _yaml_repr_np_float)\nyaml.SafeDumper.add_representer(np.integer,\
+    \ _yaml_repr_np_int)\nyaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n\n# ── Constants\
+    \ ───────────────────────────────────────────────────────────\n\n_GAP_DATA_PATH\
+    \ = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n_DEFAULT_MOMENTUM_WEIGHTS = [0.1,\
+    \ 0.2, 0.3, 0.5]\n_DEFAULT_MOMENTUM_LOOKBACKS = [20, 40, 60]\n_SLIPPAGE = 0.0015\n\
+    _MARKET_IMPACT = 0.001\n\n\n# ── Argument parsing ────────────────────────────────────────────────────\n\
+    \n\ndef _parse_args() -> argparse.Namespace:\n    p = argparse.ArgumentParser(description=__doc__)\n\
+    \    p.add_argument(\"--data-root\", type=Path, required=True)\n    p.add_argument(\"\
+    --train-start\", default=\"20180101\")\n    p.add_argument(\"--train-end\", default=\"\
+    20221231\")\n    p.add_argument(\"--test-start\", default=\"20230101\")\n    p.add_argument(\"\
+    --test-end\", default=\"20260508\")\n    p.add_argument(\"--output-dir\", type=Path,\
+    \ required=True)\n    p.add_argument(\"--momentum-penalty-weight\", type=float,\
+    \ default=0.2)\n    p.add_argument(\"--momentum-lookback-days\", type=int, default=60)\n\
+    \    p.add_argument(\"--max-hold-days\", type=int, default=150)\n    p.add_argument(\"\
+    --min-gap-pct\", type=float, default=0.01)\n    p.add_argument(\"--sell-gap-pct\"\
+    , type=float, default=0.0)\n    p.add_argument(\"--switch-hurdle-pct\", type=float,\
+    \ default=0.0)\n    return p.parse_args()\n\n\n# ── Data requirements ───────────────────────────────────────────────────\n\
+    \n\ndef declare_data_requirements(command: list[Any], spec: dict[str, Any] | None\
+    \ = None) -> dict[str, Any]:\n    \"\"\"Return the files this executor will read.\"\
+    \"\"\n    return {\n        \"schema_version\": 1,\n        \"executor\": \"generated_executor/evaluate_cb_arb_valuation_formula_momentum.py\"\
+    ,\n        \"required_files\": [\n            {\n                \"path\": _GAP_DATA_PATH,\n\
+    \                \"role\": \"warehouse_input\",\n                \"required_columns\"\
+    : [\n                    \"trade_date\", \"ts_code\", \"close\", \"theoretical\"\
+    ,\n                    \"value_gap_amount\",\n                ],\n           \
+    \ },\n            {\n                \"path\": \"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    ,\n                \"role\": \"warehouse_input\",\n                \"required_columns\"\
+    : [\"stk_code\", \"trade_date\", \"close\"],\n            },\n            {\n\
+    \                \"path\": \"data/cb_warehouse/cb_basic.parquet\",\n         \
+    \       \"role\": \"warehouse_input\",\n                \"required_columns\":\
+    \ [\"ts_code\", \"stk_code\"],\n            },\n            {\n              \
+    \  \"path\": \"data/cb_warehouse/cb_daily.parquet\",\n                \"role\"\
+    : \"warehouse_input\",\n                \"required_columns\": [\"ts_code\", \"\
+    trade_date\", \"close\", \"vol\"],\n            },\n            {\n          \
+    \      \"path\": \"data/cb_warehouse/cb_call.parquet\",\n                \"role\"\
+    : \"warehouse_input\",\n                \"required_columns\": [\"ts_code\", \"\
+    ann_date\", \"call_date\", \"expire_date\"],\n            },\n        ],\n   \
+    \ }\n\n\n# ── Gatekeeper ──────────────────────────────────────────────────────────\n\
+    \n\ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\ndef _gatekeeper_after_run(output_dir:\
+    \ Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ── Momentum computation ────────────────────────────────────────────────\n\
+    \n\ndef _compute_stock_momentum_zscores(\n    stk_daily: pd.DataFrame,\n    lookback_days:\
+    \ int,\n    trade_dates: list[str],\n) -> pd.DataFrame:\n    \"\"\"Compute daily\
+    \ cross-sectional momentum z-scores per stock.\n\n    For each stock on each date:\n\
+    \      mom = cumulative return over [date - lookback_days, date)\n      zscore\
+    \ = (mom - mean(mom across all stocks on date)) / std(mom on date)\n\n    Returns\
+    \ DataFrame with columns [stk_code, trade_date, momentum_ret, momentum_zscore].\n\
+    \    \"\"\"\n    df = stk_daily[[\"stk_code\", \"trade_date\", \"close\"]].copy()\n\
+    \    df[\"trade_date\"] = df[\"trade_date\"].astype(str)\n    df = df.sort_values([\"\
+    stk_code\", \"trade_date\"]).reset_index(drop=True)\n\n    # Make close numeric\n\
+    \    df[\"close\"] = pd.to_numeric(df[\"close\"], errors=\"coerce\")\n\n    #\
+    \ Cumulative return over lookback window\n    df[\"close_lag\"] = df.groupby(\"\
+    stk_code\")[\"close\"].shift(lookback_days)\n    df[\"momentum_ret\"] = np.where(\n\
+    \        df[\"close_lag\"].notna() & (df[\"close_lag\"] > 0),\n        df[\"close\"\
+    ] / df[\"close_lag\"] - 1.0,\n        np.nan,\n    )\n\n    # Drop rows where\
+    \ momentum can't be computed\n    df = df.dropna(subset=[\"momentum_ret\"]).copy()\n\
+    \n    # Cross-sectional z-score per date\n    df[\"momentum_zscore\"] = df.groupby(\"\
+    trade_date\")[\"momentum_ret\"].transform(\n        lambda x: (x - x.mean()) /\
+    \ x.std() if x.std() > 0 else 0.0\n    )\n\n    return df[[\"stk_code\", \"trade_date\"\
+    , \"momentum_ret\", \"momentum_zscore\"]]\n\n\ndef _apply_momentum_penalty(\n\
+    \    ranks_df: pd.DataFrame,\n    momentum_df: pd.DataFrame,\n    stk_map: dict[str,\
+    \ str],\n    penalty_weight: float,\n) -> pd.DataFrame:\n    \"\"\"Apply momentum\
+    \ penalty to theoretical values and recompute value_gap_amount.\n\n    Formula:\
+    \ TV_new = theoretical * (1 - penalty_weight * max(0, -momentum_zscore))\n\n \
+    \   Returns modified copy of ranks_df with recomputed theoretical, value_gap_amount,\n\
+    \    and value_gap_pct_of_cash columns.\n    \"\"\"\n    result = ranks_df.copy()\n\
+    \    result[\"trade_date\"] = result[\"trade_date\"].astype(str)\n    result[\"\
+    ts_code\"] = result[\"ts_code\"].astype(str)\n\n    # Build lookup: (stk_code,\
+    \ trade_date) -> momentum_zscore\n    mom_lookup: dict[tuple[str, str], float]\
+    \ = {}\n    for row in momentum_df.itertuples(index=False):\n        mom_lookup[(str(row.stk_code),\
+    \ str(row.trade_date))] = float(row.momentum_zscore)\n\n    new_theos: list[float]\
+    \ = []\n    new_gaps: list[float] = []\n    new_gap_pcts: list[float] = []\n \
+    \   penalty_applied_count = 0\n\n    for row in result.itertuples(index=False):\n\
+    \        ts = str(row.ts_code)\n        td = str(row.trade_date)\n        orig_tv\
+    \ = float(row.theoretical) if row.theoretical is not None and np.isfinite(row.theoretical)\
+    \ else 0.0\n        stk = stk_map.get(ts, \"\")\n        z = mom_lookup.get((stk,\
+    \ td))\n\n        if z is not None and np.isfinite(z) and z < 0:\n           \
+    \ penalty = penalty_weight * abs(z)\n            new_tv = orig_tv * (1.0 - min(penalty,\
+    \ 0.95))\n            penalty_applied_count += 1\n        else:\n            new_tv\
+    \ = orig_tv\n\n        close_v = float(row.close) if row.close is not None and\
+    \ np.isfinite(row.close) else 0.0\n        pos_cash = float(row.position_cash)\
+    \ if hasattr(row, \"position_cash\") and row.position_cash is not None else 30000.0\n\
+    \        buy_qty = int(row.buy_qty) if hasattr(row, \"buy_qty\") and row.buy_qty\
+    \ is not None else max(1, int(pos_cash / max(close_v, 0.01)))\n        new_gap\
+    \ = (new_tv - close_v) * buy_qty\n        new_gap_pct = new_gap / pos_cash if\
+    \ pos_cash > 0 else 0.0\n\n        new_theos.append(new_tv)\n        new_gaps.append(new_gap)\n\
+    \        new_gap_pcts.append(new_gap_pct)\n\n    result[\"theoretical\"] = new_theos\n\
+    \    result[\"value_gap_amount\"] = new_gaps\n    result[\"value_gap_pct_of_cash\"\
+    ] = new_gap_pcts\n\n    return result\n\n\n# ── Baseline comparison ─────────────────────────────────────────────────\n\
+    \n\ndef _run_baseline_backtest(\n    ranks_df: pd.DataFrame,\n    args: argparse.Namespace,\n\
+    ) -> dict[str, Any]:\n    \"\"\"Run backtest with unadjusted (baseline) ranks.\"\
+    \"\"\n    base_params = {\n        \"min_gap_pct\": float(args.min_gap_pct),\n\
+    \        \"sell_gap_pct\": float(args.sell_gap_pct),\n        \"switch_hurdle_pct\"\
+    : float(args.switch_hurdle_pct),\n        \"max_hold_days\": float(args.max_hold_days),\n\
+    \        \"stop_gap_ratio_floor\": 0.30,\n        \"stop_signal_threshold\": 999.0,\n\
+    \        \"candidate_position_scale_enabled\": 1.0,\n        \"cost_model_enabled\"\
+    : 1.0,\n        \"slippage_pct\": _SLIPPAGE,\n        \"market_impact_coeff\"\
+    : _MARKET_IMPACT,\n        \"market_impact_cap_pct\": 0.02,\n        \"holding_cost_pct\"\
+    : 0.0,\n    }\n\n    train_df = ranks_df[\n        (ranks_df[\"trade_date\"] >=\
+    \ args.train_start) &\n        (ranks_df[\"trade_date\"] <= args.train_end)\n\
+    \    ].copy()\n    test_df = ranks_df[\n        (ranks_df[\"trade_date\"] >= args.test_start)\
+    \ &\n        (ranks_df[\"trade_date\"] <= args.test_end)\n    ].copy()\n\n   \
+    \ train_res = _run_value_gap_backtest(\n        train_df, args.train_start, args.train_end,\n\
+    \        args.data_root, 2, \"score_4state\", base_params,\n    )\n    test_res\
+    \ = _run_value_gap_backtest(\n        test_df, args.test_start, args.test_end,\n\
+    \        args.data_root, 2, \"score_4state\", base_params,\n    )\n\n    return\
+    \ {\n        \"train_metrics\": train_res.get(\"metrics\", {}),\n        \"test_metrics\"\
+    : test_res.get(\"metrics\", {}),\n    }\n\n\n# ── Single grid combination ─────────────────────────────────────────────\n\
+    \n\ndef _evaluate_single_combo(\n    combo: tuple[float, int],\n    ranks_df:\
+    \ pd.DataFrame,\n    momentum_df: pd.DataFrame,\n    stk_map: dict[str, str],\n\
+    \    args: argparse.Namespace,\n) -> dict[str, Any]:\n    \"\"\"Evaluate one (penalty_weight,\
+    \ lookback_days) combination.\n\n    Returns dict with keys: penalty_weight, lookback_days,\
+    \ train_excess_return,\n    train_max_drawdown, train_sharpe, train_win_rate,\
+    \ train_total_return,\n    train_total_trades, test_excess_return, test_max_drawdown,\
+    \ test_sharpe,\n    test_win_rate, test_total_return, test_total_trades, train_score.\n\
+    \    \"\"\"\n    penalty_weight, lookback_days = combo\n\n    # Apply momentum\
+    \ penalty\n    modified = _apply_momentum_penalty(ranks_df, momentum_df, stk_map,\
+    \ penalty_weight)\n\n    # Split train/test\n    train_df = modified[\n      \
+    \  (modified[\"trade_date\"] >= args.train_start) &\n        (modified[\"trade_date\"\
+    ] <= args.train_end)\n    ].copy()\n    test_df = modified[\n        (modified[\"\
+    trade_date\"] >= args.test_start) &\n        (modified[\"trade_date\"] <= args.test_end)\n\
+    \    ].copy()\n\n    params = {\n        \"min_gap_pct\": float(args.min_gap_pct),\n\
+    \        \"sell_gap_pct\": float(args.sell_gap_pct),\n        \"switch_hurdle_pct\"\
+    : float(args.switch_hurdle_pct),\n        \"max_hold_days\": float(args.max_hold_days),\n\
+    \        \"stop_gap_ratio_floor\": 0.30,\n        \"stop_signal_threshold\": 999.0,\n\
+    \        \"candidate_position_scale_enabled\": 1.0,\n        \"cost_model_enabled\"\
+    : 1.0,\n        \"slippage_pct\": _SLIPPAGE,\n        \"market_impact_coeff\"\
+    : _MARKET_IMPACT,\n        \"market_impact_cap_pct\": 0.02,\n        \"holding_cost_pct\"\
+    : 0.0,\n    }\n\n    train_res = _run_value_gap_backtest(\n        train_df, args.train_start,\
+    \ args.train_end,\n        args.data_root, 2, \"score_4state\", params,\n    )\n\
+    \    test_res = _run_value_gap_backtest(\n        test_df, args.test_start, args.test_end,\n\
+    \        args.data_root, 2, \"score_4state\", params,\n    )\n\n    train_metrics\
+    \ = train_res.get(\"metrics\", {})\n    test_metrics = test_res.get(\"metrics\"\
+    , {})\n\n    return {\n        \"penalty_weight\": penalty_weight,\n        \"\
+    lookback_days\": lookback_days,\n        \"train_excess_return\": train_metrics.get(\"\
+    excess_return\"),\n        \"train_max_drawdown\": train_metrics.get(\"max_drawdown\"\
+    ),\n        \"train_sharpe\": train_metrics.get(\"sharpe_ratio\"),\n        \"\
+    train_win_rate\": train_metrics.get(\"win_rate\"),\n        \"train_total_return\"\
+    : train_metrics.get(\"total_return\"),\n        \"train_total_trades\": train_metrics.get(\"\
+    total_trades\"),\n        \"test_excess_return\": test_metrics.get(\"excess_return\"\
+    ),\n        \"test_max_drawdown\": test_metrics.get(\"max_drawdown\"),\n     \
+    \   \"test_sharpe\": test_metrics.get(\"sharpe_ratio\"),\n        \"test_win_rate\"\
+    : test_metrics.get(\"win_rate\"),\n        \"test_total_return\": test_metrics.get(\"\
+    total_return\"),\n        \"test_total_trades\": test_metrics.get(\"total_trades\"\
+    ),\n        \"train_score\": _score(train_metrics),\n    }\n\n\n# ── Serialization\
+    \ helpers ───────────────────────────────────────────────\n\n\ndef _plain(value:\
+    \ Any) -> Any:\n    \"\"\"Recursively convert numpy types to native Python for\
+    \ JSON/YAML.\"\"\"\n    if isinstance(value, dict):\n        return {str(key):\
+    \ _plain(item) for key, item in value.items()}\n    if isinstance(value, (list,\
+    \ tuple)):\n        return [_plain(item) for item in value]\n    if isinstance(value,\
+    \ np.floating):\n        return float(value)\n    if isinstance(value, np.integer):\n\
+    \        return int(value)\n    if hasattr(value, \"dtype\") and hasattr(value,\
+    \ \"item\"):\n        try:\n            return _plain(value.item())\n        except\
+    \ (TypeError, ValueError):\n            pass\n    if isinstance(value, (str, int,\
+    \ float, bool)) or value is None:\n        return value\n    return str(value)\n\
+    \n\n# ── Output writing ──────────────────────────────────────────────────────\n\
+    \n\ndef _write_outputs(\n    output_dir: Path,\n    adoption_pass: bool,\n   \
+    \ best_row: dict[str, Any],\n    grid_rows: list[dict[str, Any]],\n    baseline:\
+    \ dict[str, Any],\n) -> None:\n    \"\"\"Write summary.json, report.yaml, l4_ack.yaml,\
+    \ diagnostic.yaml.\"\"\"\n    output_dir.mkdir(parents=True, exist_ok=True)\n\
+    \    now = datetime.now().isoformat(timespec=\"seconds\")\n\n    decision = \"\
+    mini-spec-retry\" if adoption_pass else \"reject\"\n    reason = (\n        \"\
+    Momentum-extended valuation candidate passes train/test thresholds.\"\n      \
+    \  if adoption_pass\n        else \"No momentum-extended valuation candidate meets\
+    \ success criteria.\"\n    )\n\n    best_cfg = {\n        \"penalty_weight\":\
+    \ best_row.get(\"penalty_weight\"),\n        \"lookback_days\": best_row.get(\"\
+    lookback_days\"),\n    }\n\n    # summary.json\n    (output_dir / \"summary.json\"\
+    ).write_text(\n        json.dumps(_plain({\n            \"adoption_pass\": adoption_pass,\n\
+    \            \"decision\": decision,\n            \"reason\": reason,\n      \
+    \      \"best_config\": best_cfg,\n            \"best_train_excess\": best_row.get(\"\
+    train_excess_return\"),\n            \"best_test_excess\": best_row.get(\"test_excess_return\"\
+    ),\n            \"best_train_sharpe\": best_row.get(\"train_sharpe\"),\n     \
+    \       \"best_test_sharpe\": best_row.get(\"test_sharpe\"),\n            \"best_train_max_drawdown\"\
+    : best_row.get(\"train_max_drawdown\"),\n            \"best_test_max_drawdown\"\
+    : best_row.get(\"test_max_drawdown\"),\n            \"best_test_win_rate\": best_row.get(\"\
+    test_win_rate\"),\n            \"best_test_total_trades\": best_row.get(\"test_total_trades\"\
+    ),\n            \"baseline_train_excess\": baseline[\"train_metrics\"].get(\"\
+    excess_return\"),\n            \"baseline_test_excess\": baseline[\"test_metrics\"\
+    ].get(\"excess_return\"),\n            \"grid_rows\": grid_rows,\n           \
+    \ \"candidate_count\": len(grid_rows),\n            \"artifacts\": {\n       \
+    \         \"summary\": str(output_dir / \"summary.json\"),\n                \"\
+    report\": str(output_dir / \"report.yaml\"),\n                \"l4_ack\": str(output_dir\
+    \ / \"l4_ack.yaml\"),\n                \"diagnostic\": str(output_dir / \"diagnostic.yaml\"\
+    ),\n            },\n            \"generated_at\": now,\n        }), ensure_ascii=False,\
+    \ indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\n    # report.yaml\n\
+    \    (output_dir / \"report.yaml\").write_text(\n        yaml.safe_dump({\n  \
+    \          \"schema_version\": 1,\n            \"run_id\": output_dir.name,\n\
+    \            \"date\": datetime.now().strftime(\"%Y-%m-%d\"),\n            \"\
+    strategy_id\": \"cb_arb_value_gap_switch\",\n            \"l6_exit_decision\"\
+    : decision,\n            \"status\": \"COMPLETE\",\n            \"three_exits_section\"\
+    : {\n                \"train_exit\": (\n                    f\"Best momentum combo:\
+    \ penalty_weight={best_cfg['penalty_weight']}, \"\n                    f\"lookback={best_cfg['lookback_days']}\
+    \ days\"\n                ),\n                \"validation_exit\": (\n       \
+    \             f\"Test excess: {best_row.get('test_excess_return')}, \"\n     \
+    \               f\"sharpe: {best_row.get('test_sharpe')}\"\n                ),\n\
+    \                \"decision_exit\": reason,\n            },\n            \"compute_cost_yuan\"\
+    : 0.0,\n            \"confirmed_invalid_directions\": (\n                [\"momentum_extended_valuation\"\
+    ] if not adoption_pass else []\n            ),\n            \"learnings\": [\n\
+    \                \"Momentum-extended valuation formula with cross-sectional z-score\
+    \ penalty tested.\",\n                f\"Best config: penalty_weight={best_cfg['penalty_weight']},\
+    \ \"\n                f\"lookback={best_cfg['lookback_days']}\",\n           \
+    \     f\"Best test sharpe: {best_row.get('test_sharpe')}, \"\n               \
+    \ f\"trades: {best_row.get('test_total_trades')}\",\n                reason,\n\
+    \            ],\n            \"follow_up_actions\": [\n                \"Keep\
+    \ this run as diagnostic evidence for valuation formula improvement.\",\n    \
+    \            \"If adoption_pass=True, prepare mini-spec for promotion review.\"\
+    ,\n            ],\n            \"summary\": reason,\n            \"notes\": (\n\
+    \                \"Momentum-extended credit-adjusted valuation evaluation. \"\n\
+    \                \"Grid search over penalty_weight x lookback_days with \"\n \
+    \               \"ThreadPoolExecutor parallelization.\"\n            ),\n    \
+    \        \"references\": {\"summary_json\": str(output_dir / \"summary.json\"\
+    )},\n        }, allow_unicode=True, sort_keys=False),\n        encoding=\"utf-8\"\
+    ,\n    )\n\n    # l4_ack.yaml\n    (output_dir / \"l4_ack.yaml\").write_text(\n\
+    \        yaml.safe_dump({\n            \"schema_version\": 1,\n            \"\
+    run_id\": output_dir.name,\n            \"reviewer\": \"hermes\",\n          \
+    \  \"ack_at\": now,\n            \"q1_floor_binding\": {\n                \"description\"\
+    : \"Momentum-extended valuation train/test consistency.\",\n                \"\
+    answer\": (\n                    \"Best candidate passes train and test floors.\"\
+    \n                    if adoption_pass\n                    else \"Best candidate\
+    \ does not pass required floors.\"\n                ),\n                \"computed_data\"\
+    : {\n                    \"best_penalty_weight\": best_cfg.get(\"penalty_weight\"\
+    ),\n                    \"best_lookback_days\": best_cfg.get(\"lookback_days\"\
+    ),\n                    \"best_train_excess\": best_row.get(\"train_excess_return\"\
+    ),\n                    \"best_test_excess\": best_row.get(\"test_excess_return\"\
+    ),\n                    \"best_test_sharpe\": best_row.get(\"test_sharpe\"),\n\
+    \                    \"best_test_max_drawdown\": best_row.get(\"test_max_drawdown\"\
+    ),\n                    \"best_test_win_rate\": best_row.get(\"test_win_rate\"\
+    ),\n                    \"best_test_total_trades\": best_row.get(\"test_total_trades\"\
+    ),\n                    \"baseline_train_excess\": baseline[\"train_metrics\"\
+    ].get(\"excess_return\"),\n                    \"baseline_test_excess\": baseline[\"\
+    test_metrics\"].get(\"excess_return\"),\n                },\n                \"\
+    computed_at\": now,\n                \"pass\": adoption_pass,\n            },\n\
+    \            \"q2_selection_score\": {\n                \"description\": \"Grid\
+    \ search selection quality.\",\n                \"answer\": (\n              \
+    \      f\"Grid searched {len(grid_rows)} combinations; \"\n                  \
+    \  f\"best train score selects penalty_weight={best_cfg['penalty_weight']}, \"\
+    \n                    f\"lookback={best_cfg['lookback_days']}.\"\n           \
+    \     ),\n                \"computed_data\": {\n                    \"n_combinations\"\
+    : len(grid_rows),\n                    \"best_train_score\": best_row.get(\"train_score\"\
+    ),\n                },\n                \"pass\": adoption_pass,\n           \
+    \ },\n            \"q3_baseline_alignment\": {\n                \"description\"\
+    : \"Momentum-extended valuation vs unadjusted baseline.\",\n                \"\
+    answer\": (\n                    \"Momentum-extended candidate dominates baseline.\"\
+    \n                    if adoption_pass\n                    else \"Momentum-extended\
+    \ candidate does not justify replacing baseline.\"\n                ),\n     \
+    \           \"computed_data\": {\n                    \"baseline_train_excess\"\
+    : baseline[\"train_metrics\"].get(\"excess_return\"),\n                    \"\
+    baseline_test_excess\": baseline[\"test_metrics\"].get(\"excess_return\"),\n \
+    \                   \"best_test_excess\": best_row.get(\"test_excess_return\"\
+    ),\n                },\n                \"computed_at\": now,\n              \
+    \  \"pass\": adoption_pass,\n            },\n            \"q4_monotonic\": {\n\
+    \                \"description\": \"Grid edge concern.\",\n                \"\
+    answer\": (\n                    \"Grid search over continuous parameters; \"\n\
+    \                    \"check for edge-of-grid sensitivity.\"\n               \
+    \ ),\n                \"computed_data\": {\n                    \"penalty_weight_range\"\
+    : [\n                        min(r.get(\"penalty_weight\", 0) for r in grid_rows)\
+    \ if grid_rows else None,\n                        max(r.get(\"penalty_weight\"\
+    , 0) for r in grid_rows) if grid_rows else None,\n                    ],\n   \
+    \                 \"lookback_days_range\": [\n                        min(r.get(\"\
+    lookback_days\", 0) for r in grid_rows) if grid_rows else None,\n            \
+    \            max(r.get(\"lookback_days\", 0) for r in grid_rows) if grid_rows\
+    \ else None,\n                    ],\n                },\n                \"computed_at\"\
+    : now,\n                \"pass\": True,\n            },\n        }, allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n    # diagnostic.yaml\n\
+    \    (output_dir / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump({\n\
+    \            \"schema_version\": 1,\n            \"run_id\": output_dir.name,\n\
+    \            \"generated_at\": now,\n            \"best_cfg\": best_cfg,\n   \
+    \         \"total_grid_combinations\": len(grid_rows),\n            \"all_grid_rows_summary\"\
+    : [\n                {\n                    \"penalty_weight\": r[\"penalty_weight\"\
+    ],\n                    \"lookback_days\": r[\"lookback_days\"],\n           \
+    \         \"train_excess\": r.get(\"train_excess_return\"),\n                \
+    \    \"train_sharpe\": r.get(\"train_sharpe\"),\n                    \"test_excess\"\
+    : r.get(\"test_excess_return\"),\n                    \"test_sharpe\": r.get(\"\
+    test_sharpe\"),\n                    \"test_max_drawdown\": r.get(\"test_max_drawdown\"\
+    ),\n                    \"test_win_rate\": r.get(\"test_win_rate\"),\n       \
+    \             \"test_total_trades\": r.get(\"test_total_trades\"),\n         \
+    \           \"train_score\": r.get(\"train_score\"),\n                }\n    \
+    \            for r in grid_rows\n            ],\n            \"baseline_train_excess\"\
+    : baseline[\"train_metrics\"].get(\"excess_return\"),\n            \"baseline_test_excess\"\
+    : baseline[\"test_metrics\"].get(\"excess_return\"),\n            \"baseline_train_sharpe\"\
+    : baseline[\"train_metrics\"].get(\"sharpe_ratio\"),\n            \"baseline_test_sharpe\"\
+    : baseline[\"test_metrics\"].get(\"sharpe_ratio\"),\n        }, allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\n# ── Main ────────────────────────────────────────────────────────────────\n\
+    \n\ndef main() -> None:\n    args = _parse_args()\n    output_dir = args.output_dir\n\
+    \    output_dir.mkdir(parents=True, exist_ok=True)\n\n    # GateKeeper pre-flight\
+    \ checks\n    _gatekeeper_before_run(output_dir)\n\n    print(\"=\" * 60)\n  \
+    \  print(\"Momentum-Extended Valuation Formula Evaluator\")\n    print(f\"  Train:\
+    \ {args.train_start} - {args.train_end}\")\n    print(f\"  Test:  {args.test_start}\
+    \ - {args.test_end}\")\n    print(f\"  Output: {output_dir}\")\n    print(\"=\"\
+    \ * 60)\n\n    # 1. Load base data\n    gap_path = Path(_GAP_DATA_PATH)\n    if\
+    \ gap_path.exists():\n        print(f\"[load] Loading value gaps from {gap_path}\"\
+    )\n        ranks_df = pd.read_parquet(gap_path)\n    else:\n        alt = _REPO_ROOT\
+    \ / _GAP_DATA_PATH\n        if alt.exists():\n            print(f\"[load] Loading\
+    \ value gaps from {alt}\")\n            ranks_df = pd.read_parquet(alt)\n    \
+    \    else:\n            raise FileNotFoundError(\n                f\"Cannot find\
+    \ {_GAP_DATA_PATH}; the gap data must exist \"\n                f\"before running\
+    \ this evaluator.\"\n            )\n\n    ranks_df[\"trade_date\"] = ranks_df[\"\
+    trade_date\"].astype(str)\n    ranks_df[\"ts_code\"] = ranks_df[\"ts_code\"].astype(str)\n\
+    \    print(f\"[load] Loaded {len(ranks_df)} rank rows\")\n\n    # 2. Build ts_code\
+    \ → stk_code map\n    cb_basic = _load_cb_basic()\n    cb_basic[\"ts_code\"] =\
+    \ cb_basic[\"ts_code\"].astype(str)\n    cb_basic[\"stk_code\"] = cb_basic[\"\
+    stk_code\"].astype(str)\n    stk_map: dict[str, str] = {}\n    for row in cb_basic.itertuples(index=False):\n\
+    \        if pd.notna(row.stk_code) and str(row.stk_code).strip():\n          \
+    \  stk_map[str(row.ts_code)] = str(row.stk_code)\n    print(f\"[load] Built stk_map\
+    \ with {len(stk_map)} CB-to-stock mappings\")\n\n    # 3. Load stock prices\n\
+    \    stk_daily = _load_stk_daily()\n    stk_daily[\"trade_date\"] = stk_daily[\"\
+    trade_date\"].astype(str)\n    relevant_stocks = set(stk_map.values())\n    stk_daily\
+    \ = stk_daily[stk_daily[\"stk_code\"].isin(relevant_stocks)].copy()\n    print(f\"\
+    [load] Stock data: {len(stk_daily)} rows for {stk_daily['stk_code'].nunique()}\
+    \ stocks\")\n\n    # 4. Get trading days range\n    trading_days_all = [d for\
+    \ d in _load_trading_days()\n                        if args.train_start <= d\
+    \ <= args.test_end]\n\n    # 5. Compute momentum z-scores for each lookback\n\
+    \    # Pre-compute all lookbacks\n    momentum_dfs: dict[int, pd.DataFrame] =\
+    \ {}\n    for lookback in _DEFAULT_MOMENTUM_LOOKBACKS:\n        print(f\"[momentum]\
+    \ Computing z-scores for lookback={lookback}...\")\n        momentum_dfs[lookback]\
+    \ = _compute_stock_momentum_zscores(\n            stk_daily, lookback, trading_days_all\n\
+    \        )\n\n    # 6. Run baseline\n    print(\"\\n[baseline] Running baseline\
+    \ backtest (no momentum adjustment)...\")\n    baseline = _run_baseline_backtest(ranks_df,\
+    \ args)\n    train_base_m = baseline[\"train_metrics\"]\n    test_base_m = baseline[\"\
+    test_metrics\"]\n    print(f\"  Baseline train excess: {train_base_m.get('excess_return')},\
+    \ \"\n          f\"test excess: {test_base_m.get('excess_return')}\")\n\n    #\
+    \ 7. Grid search with ThreadPoolExecutor\n    combos = [\n        (w, lb) for\
+    \ w in _DEFAULT_MOMENTUM_WEIGHTS\n        for lb in _DEFAULT_MOMENTUM_LOOKBACKS\n\
+    \    ]\n    total_combos = len(combos)\n    print(f\"\\n[grid] Searching {total_combos}\
+    \ combinations (penalty_weight x lookback_days)...\")\n\n    all_rows: list[dict[str,\
+    \ Any]] = []\n    best_train_score = -999.0\n    best_row: dict[str, Any] = {}\n\
+    \n    n_workers = max(1, os.cpu_count() - 1) if os.cpu_count() else 3\n    print(f\"\
+    [grid] Using {n_workers} parallel workers\")\n\n    with ThreadPoolExecutor(max_workers=n_workers)\
+    \ as executor:\n        future_map: dict[Any, tuple[float, int]] = {}\n      \
+    \  for combo in combos:\n            penalty_weight, lookback_days = combo\n \
+    \           future = executor.submit(\n                _evaluate_single_combo,\n\
+    \                combo, ranks_df, momentum_dfs[lookback_days],\n             \
+    \   stk_map, args,\n            )\n            future_map[future] = combo\n\n\
+    \        done_count = 0\n        for future in as_completed(future_map):\n   \
+    \         combo = future_map[future]\n            done_count += 1\n          \
+    \  try:\n                result = future.result()\n                all_rows.append(result)\n\
+    \                if result[\"train_score\"] > best_train_score:\n            \
+    \        best_train_score = result[\"train_score\"]\n                    best_row\
+    \ = result\n                print(f\"  [{done_count}/{total_combos}] \"\n    \
+    \                  f\"w={result['penalty_weight']}, lb={result['lookback_days']}:\
+    \ \"\n                      f\"train_excess={result['train_excess_return']}, \"\
+    \n                      f\"test_excess={result['test_excess_return']}, \"\n  \
+    \                    f\"test_sharpe={result['test_sharpe']}, \"\n            \
+    \          f\"train_score={result['train_score']}\")\n            except Exception\
+    \ as exc:\n                print(f\"  [{done_count}/{total_combos}] ERROR {combo}:\
+    \ {exc}\")\n\n    # 8. Evaluate success criteria\n    if not best_row:\n     \
+    \   print(\"\\nERROR: No valid grid search results. Writing rejection outputs.\"\
+    )\n        _write_outputs(output_dir, False, {}, all_rows, baseline)\n       \
+    \ _gatekeeper_after_run(output_dir)\n        sys.exit(0)\n\n    best_test_excess\
+    \ = float(best_row.get(\"test_excess_return\") or -999)\n    best_test_dd = float(best_row.get(\"\
+    test_max_drawdown\") or -999)\n    best_test_sharpe = float(best_row.get(\"test_sharpe\"\
+    ) or -999)\n    best_test_win_rate = float(best_row.get(\"test_win_rate\") or\
+    \ 0)\n    best_test_trades = int(best_row.get(\"test_total_trades\") or 0)\n\n\
+    \    print(f\"\\n{'='*60}\")\n    print(f\"RESULTS\")\n    print(f\"  Best combo:\
+    \ penalty_weight={best_row.get('penalty_weight')}, \"\n          f\"lookback={best_row.get('lookback_days')}\"\
+    )\n    print(f\"  Best train excess: {best_row.get('train_excess_return')}, \"\
+    \n          f\"train score: {best_row.get('train_score')}\")\n    print(f\"  Best\
+    \ test excess:  {best_test_excess}, \"\n          f\"sharpe: {best_test_sharpe},\
+    \ dd: {best_test_dd}\")\n    print(f\"  Test win_rate: {best_test_win_rate}, \"\
+    \n          f\"trades: {best_test_trades}\")\n\n    # Success criteria from proposal:\n\
+    \    # - test_cumulative_excess_gt: 0.0\n    # - test_sharpe_gt: 0.0\n    # -\
+    \ test_max_drawdown_gt: -50.0\n    # - test_win_rate_gt: 0.5\n    # Falsifiers:\n\
+    \    # - test_sharpe_lte: -0.05\n    # - test_max_drawdown_lte: -100.0\n    #\
+    \ - trade count below 100 in test period\n    # - best candidate test_sharpe not\
+    \ distinguishable from new_valuation_v1 (-0.0128)\n\n    test_excess_ok = best_test_excess\
+    \ > 0.0\n    test_sharpe_ok = best_test_sharpe > 0.0\n    test_dd_ok = best_test_dd\
+    \ > -50.0\n    test_winrate_ok = best_test_win_rate > 0.5\n\n    falsified_sharpe\
+    \ = best_test_sharpe <= -0.05\n    falsified_dd = best_test_dd <= -100.0\n   \
+    \ falsified_trades = best_test_trades < 100\n    falsified_no_better = best_test_sharpe\
+    \ <= -0.0128  # not better than new_valuation_v1 baseline\n\n    adoption_pass\
+    \ = (\n        test_excess_ok and test_sharpe_ok and test_dd_ok and test_winrate_ok\n\
+    \        and not falsified_sharpe and not falsified_dd\n        and not falsified_trades\
+    \ and not falsified_no_better\n    )\n\n    print(f\"  Success criteria:\")\n\
+    \    print(f\"    test_excess>0: {test_excess_ok} ({best_test_excess:.4f})\")\n\
+    \    print(f\"    test_sharpe>0: {test_sharpe_ok} ({best_test_sharpe:.4f})\")\n\
+    \    print(f\"    test_dd>-50:   {test_dd_ok} ({best_test_dd:.4f})\")\n    print(f\"\
+    \    test_winrate>0.5: {test_winrate_ok} ({best_test_win_rate:.4f})\")\n    print(f\"\
+    \  Falsifiers:\")\n    print(f\"    sharpe<=-0.05: {falsified_sharpe}\")\n   \
+    \ print(f\"    dd<=-100:      {falsified_dd}\")\n    print(f\"    trades<100:\
+    \    {falsified_trades} ({best_test_trades})\")\n    print(f\"    sharpe<=-0.0128\
+    \ (no better): {falsified_no_better}\")\n    print(f\"  Adoption: {adoption_pass}\"\
+    )\n\n    # 9. Write outputs\n    _write_outputs(output_dir, adoption_pass, best_row,\
+    \ all_rows, baseline)\n\n    print(f\"\\n[out] summary.json -> {output_dir / 'summary.json'}\"\
+    )\n    print(f\"[out] report.yaml  -> {output_dir / 'report.yaml'}\")\n    print(f\"\
+    [out] l4_ack.yaml  -> {output_dir / 'l4_ack.yaml'}\")\n    print(f\"[out] diagnostic.yaml\
+    \ -> {output_dir / 'diagnostic.yaml'}\")\n    print(f\"[done] adoption_pass={adoption_pass}\"\
+    )\n\n    _gatekeeper_after_run(output_dir)\n\n\nif __name__ == \"__main__\":\n\
+    \    main()\n"
+written_files:
+- generated_executor/evaluate_cb_arb_valuation_formula_momentum.py
+tool_code_attempts: 0
+validation_errors: []
+hermes_handoff:
+  id: cb_arb_value_gap_switch_momentum_extended_valuation_v1_executor_code
+  path: data/research_framework/hermes_executor_handoffs.yaml
+  recipient: hermes
+status: draft_tool_code

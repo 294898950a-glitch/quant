@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: volatility_position_scaling_v2_2026-05-21
+spec_path: data/volatility_position_scaling_v2_2026-05-21/spec.yaml
+validated_at: '2026-05-22T03:38:09'
+summary_sha256: 5f95ef5b4ce1d7941bcaddc65b4073aaa00f0ff459a2580afaba6fa11c75beaf
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- daily_value_gap_amounts.parquet 的最早日期为 20190102，而训练期从 20190101 开始，缺少该日数据，但主要行情数据完整，预计不阻塞实验。
+fix_plan: []
+decision_reason: 所有必需文件存在且可读，必需字段完整，行情数据覆盖训练和测试期，仅 daily_value_gap_amounts 缺少一天，不阻塞实验。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: deepseek
+response_hash: f71ceb4cfe88c367

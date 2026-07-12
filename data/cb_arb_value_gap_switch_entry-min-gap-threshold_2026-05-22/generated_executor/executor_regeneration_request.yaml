@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: cb_arb_value_gap_switch_entry-min-gap-threshold_2026-05-22_executor_code
+target_script_path: scripts/evaluate_cb_arb_entry_min_gap_threshold.py
+current_target_sha256: 521620c8d18a2a8acdd0359e08d0486206f06f0089eee402688de81894668640
+previous_installed_source: data/cb_arb_value_gap_switch_entry-min-gap-threshold_2026-05-22/generated_executor/evaluate_cb_arb_entry_min_gap_threshold.py
+previous_installed_sha256: 521620c8d18a2a8a
+previous_installed_at: '2026-05-22T15:34:18+00:00'
+required_action: Regenerate the executor from the existing spec.yaml + executor_tool_request.yaml
+  in this run dir. The source file under generated_executor/ was lost after the previous
+  install; the current target in scripts/ may not be the latest version. Write a fresh
+  executor that satisfies the original validation requirements (main + declare_data_requirements
+  + summary.json / report.yaml / l4_ack.yaml / diagnostic.yaml output + GateKeeper
+  import). Once written, the standard handoff completion → install validation → install
+  overwrite (compliance repair flow) path will re-land the executor.
+noted_at: '2026-05-24T23:55:04+00:00'
+dry_run: false

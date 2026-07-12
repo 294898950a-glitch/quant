@@ -1,0 +1,113 @@
+{
+  "schema_version": 1,
+  "run_id": "cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2",
+  "status": "COMPLETE",
+  "adoption_pass": false,
+  "decision": "reject",
+  "params": {
+    "lookback_days": 60,
+    "pnl_scaling_floor": 0.7
+  },
+  "baseline": {
+    "train": {
+      "total_pnl": 4242155.96,
+      "trade_count": 3893,
+      "win_rate": 0.6412,
+      "avg_win": 2630.59,
+      "avg_loss": -1663.41,
+      "avg_hold_days": 68.8,
+      "max_drawdown": -90928.68
+    },
+    "test": {
+      "total_pnl": 1634823.43,
+      "trade_count": 772,
+      "win_rate": 0.649,
+      "avg_win": 4121.31,
+      "avg_loss": -1586.55,
+      "avg_hold_days": 28.6,
+      "max_drawdown": -46177.44
+    },
+    "yr2020": {
+      "total_pnl": 1064321.86,
+      "trade_count": 633,
+      "win_rate": 0.5814,
+      "avg_win": 5286.0,
+      "avg_loss": -3324.25,
+      "avg_hold_days": 52.0,
+      "max_drawdown": -292699.77
+    }
+  },
+  "train": {
+    "total_pnl": 4143656.24,
+    "trade_count": 3893,
+    "win_rate": 0.6412,
+    "avg_win": 2565.46,
+    "avg_loss": -1617.56,
+    "avg_hold_days": 68.8,
+    "max_drawdown": -89068.77,
+    "excess_return": -98499.72
+  },
+  "test": {
+    "total_pnl": 1611021.68,
+    "trade_count": 772,
+    "win_rate": 0.649,
+    "avg_win": 4055.51,
+    "avg_loss": -1552.73,
+    "avg_hold_days": 28.6,
+    "max_drawdown": -44416.83,
+    "excess_return": -23801.75
+  },
+  "yr2020": {
+    "total_pnl": 1040512.5,
+    "trade_count": 633,
+    "win_rate": 0.5814,
+    "avg_win": 5146.49,
+    "avg_loss": -3220.36,
+    "avg_hold_days": 52.0,
+    "max_drawdown": -284516.47,
+    "excess_return": -23809.36
+  },
+  "best_candidate": {
+    "lookback_days": 60,
+    "pnl_scaling_floor": 0.7,
+    "config_name": "pnl_fb_lb60_f0p7",
+    "train": {
+      "total_pnl": 4143656.24,
+      "trade_count": 3893,
+      "win_rate": 0.6412,
+      "avg_win": 2565.46,
+      "avg_loss": -1617.56,
+      "avg_hold_days": 68.8,
+      "max_drawdown": -89068.77,
+      "excess_return": -98499.72
+    },
+    "test": {
+      "total_pnl": 1611021.68,
+      "trade_count": 772,
+      "win_rate": 0.649,
+      "avg_win": 4055.51,
+      "avg_loss": -1552.73,
+      "avg_hold_days": 28.6,
+      "max_drawdown": -44416.83,
+      "excess_return": -23801.75
+    },
+    "validate_2020": {
+      "total_pnl": 1040512.5,
+      "trade_count": 633,
+      "win_rate": 0.5814,
+      "avg_win": 5146.49,
+      "avg_loss": -3220.36,
+      "avg_hold_days": 52.0,
+      "max_drawdown": -284516.47,
+      "excess_return": -23809.36
+    }
+  },
+  "candidate_count": 9,
+  "artifacts": [
+    "summary.json",
+    "report.yaml",
+    "l4_ack.yaml",
+    "diagnostic.yaml"
+  ],
+  "grid_summary_csv": "grid_summary_pnl_feedback.csv"
+}

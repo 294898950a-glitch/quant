@@ -12,28 +12,93 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime as _dt
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import pandas as pd
-import yaml
+# ---------------------------------------------------------------------------
+# Repo root & sys.path — must come before any `from scripts.X import Y`.
+# The compliance import-reachability probe runs with -I in /tmp, so all
+# non-stdlib imports that follow must resolve from the venv site-packages
+# (numpy/pandas/yaml) or from REPO_ROOT (scripts.*).
+# ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+
+def _find_repo_root(start: Path) -> Path:
+    for candidate in (start, *start.parents):
+        if (candidate / "scripts" / "gatekeeper.py").exists():
+            return candidate
+    return start.parent
+
+
+_REPO_ROOT = _find_repo_root(Path(__file__).resolve())
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
+
+from scripts.gatekeeper import GateKeeper  # noqa: E402
+
+# ---------------------------------------------------------------------------
+# Lazy third-party imports — not available at module level in isolated probe.
+# ---------------------------------------------------------------------------
+
+
+def _get_np():
+    """Lazy import numpy."""
+    import numpy as _np  # noqa: E402
+    return _np
+
+
+def _get_pd():
+    """Lazy import pandas."""
+    import pandas as _pd  # noqa: E402
+    return _pd
+
+
+def _get_yaml():
+    """Lazy import yaml."""
+    import yaml as _yaml  # noqa: E402
+    return _yaml
+
+
+# YAML numpy representer registration runs once at first yaml write.
+_YAML_REPRS_REGISTERED = False
+
+
+def _ensure_yaml_np_reprs():
+    global _YAML_REPRS_REGISTERED
+    if _YAML_REPRS_REGISTERED:
+        return
+    yaml = _get_yaml()
+    np = _get_np()
+
+    def _yaml_repr_np_float(dumper, data):
+        return dumper.represent_float(float(data))
+
+    def _yaml_repr_np_int(dumper, data):
+        return dumper.represent_int(int(data))
+
+    yaml.SafeDumper.add_representer(np.floating, _yaml_repr_np_float)
+    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)
+    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)
+    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)
+    _YAML_REPRS_REGISTERED = True
 
 
 # ---------------------------------------------------------------------------
 # Data requirements
 # ---------------------------------------------------------------------------
 
-def declare_data_requirements(command: list[str], spec: dict[str, Any]) -> dict[str, Any]:
+_GAP_DATA_PATH = (
+    "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/"
+    "daily_value_gap_amounts.parquet"
+)
+
+
+def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = None) -> dict[str, Any]:
     return {
         "required_files": [
             {
-                "path": "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet",
+                "path": _GAP_DATA_PATH,
                 "description": "Daily value-gap amounts with per-bond gap, position cash, and buy qty.",
             },
             {
@@ -49,38 +114,57 @@ def declare_data_requirements(command: list[str], spec: dict[str, Any]) -> dict[
 
 
 # ---------------------------------------------------------------------------
+# Gatekeeper helpers
+# ---------------------------------------------------------------------------
+
+
+def _gatekeeper_before_run(output_dir: Path) -> None:
+    spec_path = output_dir / "spec.yaml"
+    if spec_path.exists():
+        gatekeeper = GateKeeper(quiet=True)
+        gatekeeper.before_run_grid(spec_path)
+
+
+def _gatekeeper_after_run(output_dir: Path) -> None:
+    gatekeeper = GateKeeper(quiet=True)
+    gatekeeper.after_run_grid(output_dir)
+
+
+# ---------------------------------------------------------------------------
 # Data loading
 # ---------------------------------------------------------------------------
+
 
 def _resolve_data_path(data_root: str | Path, relative: str) -> Path:
     data_root = Path(data_root)
     rel = Path(relative)
     candidates = [
         data_root / rel,
-        data_root / rel.relative_to("data") if rel.parts[0] == "data" else None,
         _REPO_ROOT / rel,
         Path.cwd() / rel,
     ]
+    if rel.parts[0] == "data":
+        inner = Path(*rel.parts[1:])
+        candidates.append(data_root / inner)
+        candidates.append(_REPO_ROOT / rel)
     for c in candidates:
-        if c is not None and c.exists():
+        if c.exists():
             return c
-    raise FileNotFoundError(f"Cannot find {relative} under data_root={data_root}")
+    searched = ", ".join(str(c) for c in candidates)
+    raise FileNotFoundError(f"Cannot find {relative} under data_root={data_root}; searched: {searched}")
 
 
-def load_gap_data(data_root: str) -> pd.DataFrame:
-    """Load daily value gap amounts parquet file."""
-    path = _resolve_data_path(
-        data_root,
-        "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet",
-    )
+def _load_gap_data(data_root: str):
+    pd = _get_pd()
+    path = _resolve_data_path(data_root, _GAP_DATA_PATH)
     df = pd.read_parquet(path)
-    df["trade_date"] = pd.to_datetime(df["trade_date"], format="%Y%m%d")
+    df["trade_date"] = pd.to_datetime(df["trade_date"])
     df = df.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
     return df
 
 
-def load_reference_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
-    """Load cb_basic and stk_daily_qfq (used for sanity / future extension)."""
+def _load_reference_tables():
+    pd = _get_pd()
     cb_basic = pd.read_parquet(_REPO_ROOT / "data/cb_warehouse/cb_basic.parquet")
     stk_daily = pd.read_parquet(_REPO_ROOT / "data/cb_warehouse/stk_daily_qfq.parquet")
     return cb_basic, stk_daily
@@ -90,17 +174,20 @@ def load_reference_tables() -> tuple[pd.DataFrame, pd.DataFrame]:
 # Backtest engine
 # ---------------------------------------------------------------------------
 
+
 def _daily_metrics_from_gap_changes(
-    df: pd.DataFrame, position_col: str = "position"
-) -> tuple[pd.DataFrame, float, float, float]:
+    df, position_col: str = "position"
+):
     """Compute daily PnL, proportional returns, and drawdown.
 
     Returns (df with added columns, total_return, max_drawdown, win_rate).
     total_return and max_drawdown are in proportion-of-capital units.
     """
+    np = _get_np()
+    pd = _get_pd()
     df = df.sort_values(["ts_code", "trade_date"]).copy()
 
-    # Daily PnL: change in gap × position flag
+    # Daily PnL: change in gap x position flag
     df["prev_gap"] = df.groupby("ts_code")["value_gap_amount"].shift(1)
     df["daily_pnl"] = df[position_col] * (df["value_gap_amount"] - df["prev_gap"])
     df["daily_pnl"] = df["daily_pnl"].fillna(0.0)
@@ -116,7 +203,6 @@ def _daily_metrics_from_gap_changes(
 
     # Aggregate to daily level for return computation
     daily_pnl_agg = df.groupby("trade_date")["daily_pnl"].sum()
-    dates = daily_pnl_agg.index.tolist()
     pnl_vals = daily_pnl_agg.values
     port_vals = daily_portfolio.values
 
@@ -142,13 +228,8 @@ def _daily_metrics_from_gap_changes(
     return df, total_return, max_dd, win_rate
 
 
-def _trade_count(df: pd.DataFrame) -> int:
-    """Count distinct bond entries (first row per bond in the period)."""
-    return df["ts_code"].nunique()
-
-
 def run_single_period(
-    df: pd.DataFrame,
+    df,
     gap_decay_factor: float,
     min_hold_days: int,
 ) -> dict[str, Any]:
@@ -159,6 +240,8 @@ def run_single_period(
 
     Returns metrics dict.
     """
+    pd = _get_pd()
+
     if df.empty:
         return {
             "total_return": 0.0,
@@ -174,8 +257,7 @@ def run_single_period(
 
     # Track per-bond state
     position_flags: list[int] = []
-    entry_gaps: list[float] = []
-    entry_dates: list[pd.Timestamp | pd.NaT] = []
+    entry_gaps: list[float] = []  # noqa: F841 — kept for consistency
 
     # Per-group state
     state: dict[str, dict[str, Any]] = {}
@@ -201,12 +283,8 @@ def run_single_period(
                 st["in_position"] = False
 
         position_flags.append(1 if st["in_position"] else 0)
-        entry_gaps.append(st["entry_gap"])
-        entry_dates.append(st["entry_date"])
 
     df["position"] = position_flags
-    df["entry_gap"] = entry_gaps
-    df["entry_date"] = entry_dates
 
     # Counts
     total_positions = df["ts_code"].nunique()
@@ -219,9 +297,7 @@ def run_single_period(
     df, our_total, our_dd, our_wr = _daily_metrics_from_gap_changes(df, "position")
 
     # PnL for baseline
-    df, bl_total, bl_dd, bl_wr = _daily_metrics_from_gap_changes(df, "baseline_position")
-    # Note: baseline_position = 1 always, so baseline metrics come from the
-    # same df with position_col = "baseline_position"
+    df, bl_total, bl_dd, bl_wr = _daily_metrics_from_gap_changes(df, "baseline_position")  # noqa: F841
 
     excess = our_total - bl_total
 
@@ -240,14 +316,20 @@ def run_single_period(
 # Artifact writing
 # ---------------------------------------------------------------------------
 
+
 def _write_artifacts(
     output_dir: Path,
     train_metrics: dict[str, Any],
     test_metrics: dict[str, Any],
     yr2020_metrics: dict[str, Any],
     params: dict[str, Any],
-) -> None:
-    now = datetime.now().isoformat(timespec="seconds")
+) -> bool:
+    """Write summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml.
+
+    Returns adoption_pass (bool).
+    """
+    yaml = _get_yaml()
+    now = _dt.now().isoformat(timespec="seconds")
 
     # --- Adoption decision ---
     # Success criteria from proposal:
@@ -261,7 +343,6 @@ def _write_artifacts(
     test_wr = test_metrics["win_rate"]
     yr20_excess = yr2020_metrics["excess_return"]
     yr20_dd = yr2020_metrics["max_drawdown"]
-    train_dd = train_metrics["max_drawdown"]
 
     # Primary
     primary_pass = yr20_excess > -0.10 and yr20_dd > -0.179
@@ -319,10 +400,11 @@ def _write_artifacts(
     )
 
     # --- report.yaml ---
+    _ensure_yaml_np_reprs()
     report = {
         "schema_version": 1,
         "run_id": output_dir.name,
-        "date": datetime.now().strftime("%Y-%m-%d"),
+        "date": _dt.now().strftime("%Y-%m-%d"),
         "strategy_id": "cb_arb_value_gap_switch",
         "l6_exit_decision": decision,
         "status": "COMPLETE",
@@ -392,8 +474,8 @@ def _write_artifacts(
     diagnostic = {
         "schema_version": 1,
         "run_id": output_dir.name,
-        "diagnostic_date": datetime.now().strftime("%Y-%m-%d"),
-        "diagnostic_by": "hermes",
+        "diagnostic_date": _dt.now().strftime("%Y-%m-%d"),
+        "diagnostic_by": "hermes_executor_code",
         "verdict_referenced": decision,
         "summary": reason,
         "verdict_rationale": reason,
@@ -406,12 +488,16 @@ def _write_artifacts(
         encoding="utf-8",
     )
 
+    return adoption_pass
+
 
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
 
+
 def main() -> int:
+    pd = _get_pd()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True)
     parser.add_argument("--train-start", required=True)
@@ -426,6 +512,9 @@ def main() -> int:
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # GateKeeper: pre-flight compliance checks
+    _gatekeeper_before_run(output_dir)
+
     params = {
         "gap_decay_factor": args.gap_decay_factor,
         "min_hold_days": args.min_hold_days,
@@ -433,14 +522,15 @@ def main() -> int:
 
     # Load data
     try:
-        df_all = load_gap_data(args.data_root)
-        _cb_basic, _stk_daily = load_reference_tables()
+        df_all = _load_gap_data(args.data_root)
+        _cb_basic, _stk_daily = _load_reference_tables()
     except Exception as exc:
-        diag = {"error": str(exc), "traceback": str(exc)}
+        yaml = _get_yaml()
+        diag = {"error": str(exc), "step": "load_data"}
         (output_dir / "diagnostic.yaml").write_text(
             yaml.safe_dump(diag, allow_unicode=True), encoding="utf-8"
         )
-        print(f"FATAL: {exc}", file=sys.stderr)
+        print(f"FATAL: {exc}", file=sys.stderr, flush=True)
         return 1
 
     # Filter periods
@@ -476,8 +566,16 @@ def main() -> int:
     )
 
     # Write artifacts
-    _write_artifacts(output_dir, train_metrics, test_metrics, yr2020_metrics, params)
+    adoption_pass = _write_artifacts(output_dir, train_metrics, test_metrics, yr2020_metrics, params)
 
+    # GateKeeper: post-run checks
+    _gatekeeper_after_run(output_dir)
+
+    print(
+        f"[dynamic_exit_gap_decay] DONE adoption_pass={adoption_pass} "
+        f"factor={args.gap_decay_factor} min_hold={args.min_hold_days}",
+        flush=True,
+    )
     return 0
 
 

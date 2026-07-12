@@ -1,0 +1,130 @@
+proposal_id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+strategy_id: cb_arb_value_gap_switch
+family: regime_adaptive_exit
+hypothesis: 'The duration-adaptive exit accepted on 2026-05-22 applies a single fixed
+  decay schedule (initial_threshold_fraction=0.7, decay_period_factor=0.5) regardless
+  of market conditions. Gap-closing speeds differ systematically across regimes: in
+  deteriorating markets gaps re-widen faster, while in stable or improving markets
+  gaps close more reliably. Conditioning the decay schedule on a daily CSI 300-based
+  regime classifier will improve cumulative excess return by accelerating exits in
+  adverse regimes (preventing re-widening losses) and extending patience in favorable
+  regimes (capturing full gap closure).
+
+  '
+source_insight: 'The duration-adaptive exit is the only recent direction accepted
+  by review memory, confirming time-decaying gap thresholds work. The gap-speed-adaptive-exit_2
+  result (adoption_pass: True) independently suggests gap-closing dynamics carry predictive
+  information. A single fixed decay schedule optimizes for the average regime, leaving
+  efficiency on the table in both tails — regime conditioning directly addresses this
+  by matching exit urgency to environment.
+
+  '
+expected_improvement: 'Cumulative excess compound expected to improve 2-5pp over the
+  fixed-decay baseline, primarily by reducing drawdown in stressed years (2020, 2022)
+  without sacrificing returns in normal years. The mechanism is asymmetric: regime
+  conditioning can prevent late exits in bad markets while still capturing full gap
+  closure in good ones.
+
+  '
+capability_ids:
+- C005
+required_executor: evaluate_cb_arb_regime_adaptive_exit
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  - entry_gap
+  data/cb_warehouse/csi300_daily.parquet:
+  - trade_date
+  - close
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - list_date
+  - delist_date
+  - conv_price
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  parameter_grid:
+    regime_classifier:
+      signal_primary: CSI 300 rolling 20-day return percentile rank
+      signal_secondary: CSI 300 rolling 60-day realized volatility percentile rank
+      bucket_count:
+      - 2
+      - 3
+    decay_schedule_per_regime:
+      adverse_regime:
+        initial_threshold_fraction:
+        - 0.4
+        - 0.5
+        - 0.6
+        decay_period_factor:
+        - 0.2
+        - 0.3
+        - 0.4
+      favorable_regime:
+        initial_threshold_fraction:
+        - 0.7
+        - 0.8
+        - 0.9
+        decay_period_factor:
+        - 0.5
+        - 0.6
+        - 0.7
+    min_hold_days:
+    - 3
+    - 5
+  method: grid_search
+  split: time_series_cross_val
+  benchmark: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+success_criteria:
+  criteria:
+  - cumulative_excess_compound_cross_year_gt_0
+  - any_single_year_drawdown_vs_benchmark_lt_15pct
+  - at_least_one_holdout_year_sharpe_gte_0_5
+falsifiers:
+  train: &id001
+  - regime_adaptive_excess_compound_lte_fixed_decay_baseline
+  - no_regime_configuration_reduces_2020_max_drawdown
+  - all_holdout_years_sharpe_lt_0_5
+  validate: *id001
+  test: *id001
+risk: medium
+why_not_repeated_failure: 'This is a new direction building on the one accepted result.
+  No prior run has conditioned exit decay parameters on market regime. closed_tags
+  includes ''regime_conditioned_option_entry_gate'' and ''regime_classifier_variant'',
+  but those target entry-gate filtering and classifier architecture variants respectively
+  — this proposal applies regime information to exit logic via a different signal
+  path and a different executor family. Not a re-run of market_drawdown_entry_filter,
+  bond-floor-entry-filter, or contrarian_drawdown_entry, all of which gate entries
+  rather than modulate exits.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+- cb_arb_value_gap_switch_market_drawdown_entry_filter
+implementation_assumption: Executor classifies each trading day into 2-3 buckets using
+  CSI 300 rolling return and volatility percentiles, assigns a regime-specific (initial_threshold_fraction,
+  decay_period_factor) pair per position at entry time, and applies the duration-adaptive
+  exit formula with regime-tuned parameters. The fixed-decay baseline uses the accepted
+  parameters (0.7, 0.5, min_hold_days=5).
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: cc4d9b45a044b4da
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: cc4d9b45a044b4da
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_regime-adaptive-exit-v1/proposal.yaml

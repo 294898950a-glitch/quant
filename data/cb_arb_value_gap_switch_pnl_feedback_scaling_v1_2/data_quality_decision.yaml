@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2
+spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2/spec.yaml
+validated_at: '2026-05-27T06:17:26'
+summary_sha256: 7ca333a978febfe49e2d1f8d142f429ae5679ce0f342d6fb985263cbada1702a
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- train_start 为 20190101，但 daily_value_gap_amounts 最早日期为 20190102（元旦休市，实际无缝覆盖）
+- 数据摘要未提供 required_column_quality 字段，无法执行空值/负价格等深度质量检查；按规则，仅校验字段存在性
+decision_reason: 三份必需文件均存在可读，全部 required_columns 均存在，行情日期覆盖训练和测试全周期，无阻塞问题
+fix_plan: []
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 59807413b0bd857f

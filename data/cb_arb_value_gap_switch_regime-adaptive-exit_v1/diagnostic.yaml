@@ -1,0 +1,44 @@
+data_files_used:
+  csi300_daily: /root/projects/quant/data/cb_warehouse/csi300_daily.parquet
+  daily_value_gap_amounts: /root/projects/quant/data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+data_ranges:
+  test:
+  - '20250101'
+  - '20260508'
+  train:
+  - '20190101'
+  - '20241231'
+exit_reason_breakdown:
+  test:
+    dropped_out: 147
+    end_of_period: 12
+    force_max_hold: 0
+    threshold_breach: 638
+  train:
+    dropped_out: 427
+    end_of_period: 12
+    force_max_hold: 0
+    threshold_breach: 3105
+regime_stats:
+  train_period:
+    high_vol_days: 2973
+    low_vol_days: 2937
+status: completed
+trade_summary:
+  avg_hold_days_test: 6.347553324968632
+  avg_hold_days_train: 6.28216704288939
+  test_trade_count: 797
+  train_trade_count: 3544
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+diagnostic_date: '2026-05-23'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: Regime-adaptive exit failed to pass adoption; train and test excess returns
+  are both -1.0 (likely a sentinel for negative or missing computation), test max
+  drawdown 5.06% exceeds the 3.0pp hard floor, and baseline improvement is 0.0pp against
+  a 2.0pp requirement — all three hard floors broken.
+verdict_rationale: 'All three hard floors violated: excess negative, no improvement
+  over static baseline, max drawdown 5.06% far above the 3.0pp ceiling.'
+normalized_at: '2026-05-23T23:04:28+00:00'
+normalized_by: normalize_report_schema

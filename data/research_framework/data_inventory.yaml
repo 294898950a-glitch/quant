@@ -1,0 +1,170 @@
+schema_version: 1
+generated_at_utc: '2026-05-22T01:53:08.917808+00:00'
+purpose: Machine-readable local data inventory for strategy ideation, proposal gating,
+  and data-quality planning. This file is descriptive; it does not approve runs.
+repo_root: /home/jay/projects/quant
+summary:
+  file_count: 7
+  category_counts:
+    benchmark: 1
+    core_warehouse: 6
+  format_counts:
+    parquet: 7
+  unreadable_count: 0
+  scope: core_database_only
+files:
+- path: data/benchmarks/cb_equal.parquet
+  category: benchmark
+  size_bytes: 68787
+  mtime_utc: '2026-05-09T19:53:11.422440+00:00'
+  readable: true
+  format: parquet
+  rows: 4571
+  columns:
+  - trade_date
+  - close
+  date_ranges:
+    trade_date:
+      min: '2007-07-12'
+      max: '2026-05-08'
+- path: data/cb_warehouse/cb_basic.parquet
+  category: core_warehouse
+  size_bytes: 95538
+  mtime_utc: '2026-05-09T07:26:31.400850+00:00'
+  readable: true
+  format: parquet
+  rows: 1012
+  columns:
+  - ts_code
+  - code
+  - bond_short_name
+  - stk_code
+  - issue_size
+  - remain_size
+  - conv_price
+  - value_date
+  - list_date
+  - delist_date
+  - maturity_date
+  - transfer_start_date
+  - transfer_end_date
+  - rating
+  - coupon_rate
+  - interest_rate_explain
+  - par_value
+  - issue_price
+  date_ranges:
+    value_date:
+      min: '2007-07-02'
+      max: '2026-04-20'
+    list_date:
+      min: '2007-07-12'
+      max: '2026-05-13'
+    delist_date:
+      min: '2008-04-09'
+      max: '2026-06-05'
+    maturity_date:
+      min: '2008-03-27'
+      max: '2032-04-20'
+- path: data/cb_warehouse/cb_call.parquet
+  category: core_warehouse
+  size_bytes: 30974
+  mtime_utc: '2026-05-09T01:19:56.417023+00:00'
+  readable: true
+  format: parquet
+  rows: 997
+  columns:
+  - ts_code
+  - code
+  - ann_date
+  - call_date
+  - call_price
+  - is_call
+  - expire_date
+  date_ranges:
+    ann_date:
+      min: '2008-02-27'
+      max: '2026-05-09'
+    call_date:
+      min: '2008-03-27'
+      max: '2026-06-01'
+    expire_date:
+      min: '2008-03-27'
+      max: '2032-04-20'
+- path: data/cb_warehouse/cb_daily.parquet
+  category: core_warehouse
+  size_bytes: 12432734
+  mtime_utc: '2026-05-09T01:34:27.636819+00:00'
+  readable: true
+  format: parquet
+  rows: 736216
+  columns:
+  - ts_code
+  - trade_date
+  - open
+  - high
+  - low
+  - close
+  - vol
+  date_ranges:
+    trade_date:
+      min: '2007-07-12'
+      max: '2026-05-08'
+- path: data/cb_warehouse/csi300_daily.parquet
+  category: core_warehouse
+  size_bytes: 251735
+  mtime_utc: '2026-05-21T19:30:42.260268+00:00'
+  readable: true
+  format: parquet
+  rows: 5910
+  columns:
+  - trade_date
+  - open
+  - high
+  - low
+  - close
+  - volume
+  date_ranges:
+    trade_date:
+      min: '2002-01-04'
+      max: '2026-05-20'
+- path: data/cb_warehouse/stk_daily.parquet
+  category: core_warehouse
+  size_bytes: 39611617
+  mtime_utc: '2026-05-09T01:53:06.372542+00:00'
+  readable: true
+  format: parquet
+  rows: 2678144
+  columns:
+  - ts_code
+  - stk_code
+  - trade_date
+  - open
+  - high
+  - low
+  - close
+  - volume
+  date_ranges:
+    trade_date:
+      min: '1991-04-03'
+      max: '2026-05-08'
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+  category: core_warehouse
+  size_bytes: 39176140
+  mtime_utc: '2026-05-09T01:45:38.528655+00:00'
+  readable: true
+  format: parquet
+  rows: 2678144
+  columns:
+  - ts_code
+  - stk_code
+  - trade_date
+  - open
+  - high
+  - low
+  - close
+  - volume
+  date_ranges:
+    trade_date:
+      min: '1991-04-03'
+      max: '2026-05-08'

@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_reverse_entry_filter_v1
+spec_path: data/cb_arb_value_gap_switch_moneyness_reverse_entry_filter_v1/spec.yaml
+validated_at: '2026-05-25T12:37:52'
+summary_sha256: 856423e6e8587e2d00ae6c92e1f668c66e2f212a16188d6c594f9a0411f09553
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings: []
+fix_plan: []
+decision_reason: 4个必需文件全部可读，所有required_columns均存在，日期覆盖完整（daily_value_gap_amounts 20190102起、cb_daily
+  20070712起、stk_daily_qfq 19910403起均覆盖至20260508，覆盖训练期2019-2024和测试期2025-20260508），nonnull列已声明，无阻塞性问题。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 912aa7b9857ef220

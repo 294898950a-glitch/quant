@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_iv_percentile_exit_v1_20260521
+spec_path: data/cb_arb_iv_percentile_exit_v1_20260521/spec.yaml
+validated_at: '2026-05-22T05:46:38'
+summary_sha256: de90b6a94f01a769e982c569ec5f01f0590e9adb292b3e486d32c3b7c9f7b476
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- daily_value_gap_amounts 数据最早日期为 20190102，训练期起始日期为 20190101，相差 1 天，但 20190101 为非交易日，不影响实验覆盖。
+fix_plan: []
+decision_reason: 所有必需文件存在且可读，必需字段齐全，日期覆盖充分，执行器可正常生成所需列，数据质量满足实验要求。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: deepseek
+response_hash: 7e61f1dbedd25dcb

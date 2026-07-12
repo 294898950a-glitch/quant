@@ -6,6 +6,7 @@ checks:
   compile_passed: true
   has_main: true
   has_declare_data_requirements: true
+  imports_gatekeeper: true
   writes_summary_json: true
   summary_has_adoption_pass: true
   writes_report_yaml: true

@@ -50,7 +50,14 @@ EXPERIMENTS = REPO_ROOT / "data" / "research_framework" / "experiments.yaml"
 MANIFEST_DIR = REPO_ROOT / "data" / "research_framework" / "run_manifests"
 PROTOCOL_RULES = REPO_ROOT / "data" / "research_framework" / "protocol_rules.yaml"
 SPEC_STATUSES_RUNNABLE = {"READY", "RUNNING"}
-DEFAULT_ALLOWED_COMPUTE_HOSTNAMES = {"VM-0-9-opencloudos", "VM-0-4-ubuntu"}
+DEFAULT_ALLOWED_COMPUTE_HOSTNAMES = {
+    "VM-0-9-opencloudos",
+    "VM-0-4-ubuntu",
+    # New Guangzhou spot (ins-o18mmzwk, SA9.2XLARGE16) created 2026-05-27
+    # after the previous spot (ins-5lb9zo12, VM-0-4-ubuntu) was reclaimed
+    # by Tencent. Same purpose, same network, just a different hostname.
+    "VM-16-16-ubuntu",
+}
 DATA_QUALITY_DECISION_FILE = "data_quality_decision.yaml"
 
 

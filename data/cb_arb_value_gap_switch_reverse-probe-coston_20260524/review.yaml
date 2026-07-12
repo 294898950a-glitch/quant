@@ -1,0 +1,68 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+  strategy_id: cb_arb_value_gap_switch
+  decision: no_adoption_decision_unusable
+  verdict: {}
+  key_metrics: {}
+  evidence_usable: false
+  artifacts_hash: bac341e3cab43507
+interpretation:
+  review_status_code: 1
+  result_summary: Reverse probe with cost model enabled produced test excess +0.303
+    (win_rate 58.6%, 377 trades, max_dd -0.113), confirming the anti-alpha direction
+    survives standard costs
+  main_reason: The cost-on test excess +0.303 versus the cost-off predecessor +0.381
+    confirms ~8pp cost bleed but leaves the direction solidly positive — value_gap
+    is anti-informative, not just a cost-arbitrage artifact
+  failure_causes: []
+  next_research_directions:
+  - direction: reverse_full_flip_cost_on
+    why: This probe only reversed the rank signal; a full flip (reverse entry logic
+      + sell-into-strength instead of sell-into-weakness) may capture the anti-alpha
+      more cleanly and is the next step in the anti_alpha followup sequence
+    priority_code: 1
+    priority: high
+  - direction: correlation_diagnostic_value_gap_vs_factors
+    why: The confounder diagnostic can rule out whether the reversal effect is captured
+      by an existing factor (e.g. discount, size, momentum) — if it survives orthogonalization,
+      the anti-alpha is a genuinely independent edge
+    priority_code: 2
+    priority: medium
+  - direction: cost_robustness_sweep
+    why: Vary slippage and market-impact assumptions to find the break-even cost level
+      where test excess drops to zero, establishing the practical tradeability envelope
+    priority_code: 3
+    priority: low
+  evidence_gaps:
+  - Cost bleed decomposition not yet done (which cost component eats the ~8pp: slippage,
+      market impact, or holding cost?)
+  - No confounder diagnostic — unclear whether the anti-alpha effect is captured by
+    discount, size, or momentum factors already in play
+  - Single-window CV (2025-2026 holdout) — need multi-window or walk-forward to confirm
+    the effect is not regime-dependent
+  review_status: accept
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 76b644a8416c6ddf
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: no_adoption_decision_unusable
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data: {}

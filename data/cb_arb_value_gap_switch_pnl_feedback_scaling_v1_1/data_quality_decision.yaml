@@ -1,0 +1,19 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_1
+spec_path: data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_1/spec.yaml
+validated_at: '2026-05-27T05:36:11'
+summary_sha256: f75fb3923cc118f6679b07a1ed42bf291ad14d57863c3a01cdeb83f6da38330d
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_basic 和 stk_daily_qfq 两个文件只声明了路径，未指定 required_columns，按规则不要求任何字段校验，但建议后续补全 executor_requirements
+  以增加保护。
+decision_reason: 三个必需文件均可读，value_gap_amounts 的 9 个必需字段全部存在，行情日期覆盖训练期和测试期，缺少 required_column_quality
+  配置因此无字段级质量检查需求，无阻塞项。
+fix_plan: []
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: c5df8de3b8eaf15d

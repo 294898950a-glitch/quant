@@ -1,0 +1,138 @@
+proposal_id: cb_arb_value_gap_switch_gap_closing_percentile_exit_v1
+strategy_id: cb_arb_value_gap_switch
+family: exit_gap_closing_percentile
+hypothesis: 'The current duration-adaptive exit uses a fixed linear decay schedule
+  that treats all entry gaps identically regardless of their initial magnitude. In
+  reality, large gaps and small gaps close at different speeds — empirical evidence
+  from the cb_arb trade history shows heterogeneous gap-closing time distributions.
+  Replacing the parametric decay with a non-parametric exit rule — "exit when hold
+  days exceeds the P-th percentile of historical days-to-close for gaps of similar
+  initial magnitude" — will tailor exit patience to each position''s actual gap profile.
+  Small gaps that historically close fast get shorter holds; large gaps that need
+  more time get longer holds. This should reduce premature exits (selling before the
+  gap closes) and avoid holding dead positions past their useful life, improving cumulative
+  excess without changing the entry signal or universe.
+
+  '
+source_insight: 'The duration-adaptive exit (accepted 2026-05-22) proved that time-decaying
+  thresholds improve over static exits, but its single fixed schedule imposes the
+  same patience on all positions. The gap-closing-percentile approach uses the strategy''s
+  own trade history to compute conditional exit timing — it is a strictly more informed
+  version of the same idea. No active_critical_insights exist to reference.
+
+  '
+expected_improvement: 'Cumulative test excess compound improved by 3-8 percentage
+  points over the duration-adaptive exit baseline, driven primarily by fewer premature
+  exits on large-gap positions and faster exits on small-gap noise trades.
+
+  '
+capability_ids:
+- C007
+required_executor: evaluate_cb_arb_exit_gap_closing_percentile
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/csi300_daily.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/csi300_daily.parquet:
+  - trade_date
+  - close
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet:
+  - trade_date
+  - ts_code
+  - entry_gap
+  - exit_gap
+  - hold_days
+  - realized_pnl
+test_design:
+  description: 'Grid search over percentile thresholds P in [0.50, 0.60, 0.70, 0.75,
+    0.80, 0.85, 0.90] and gap magnitude bins (quantile-based bucketing vs absolute
+    threshold buckets). Min hold days also grid-searched [3, 5, 7]. For each candidate,
+    on each entry day, look up the historical days-to-close distribution for gaps
+    within the same magnitude bin (using expanding window only, no forward-looking).
+    Exit when hold_days > P-th percentile of that distribution AND hold_days >= min_hold_days.
+    Baseline comparator is the accepted duration-adaptive exit (min_hold_days=5, initial_threshold_fraction=0.7,
+    decay_period_factor=0.5). Cost-on evaluation with slippage 0.0015 and market impact
+    0.001. Train 2018-2022, test 2023-2026.
+
+    '
+success_criteria:
+  criteria:
+  - test_cumulative_excess_compound_gt_baseline: true
+  - test_max_drawdown_lte_baseline_or_within_2pp: true
+  - any_holdout_year_sharpe_gt_0: true
+falsifiers:
+  train: &id001
+  - test_cumulative_excess_compound_lte_baseline
+  - test_max_drawdown_worse_than_baseline_by_gt_5pp
+  - all_holdout_years_sharpe_lt_0
+  validate: *id001
+  test: *id001
+risk: 'Low. This is a pure exit-rule change that does not touch entry signal, universe
+  selection, or position sizing. Worst case it degrades to the baseline duration-adaptive
+  performance if gap-closing times carry no usable signal. The expanding-window constraint
+  eliminates look-ahead bias. The primary implementation risk is that historical gap-closing
+  distributions may be unstable across regimes, but the grid search over P covers
+  a wide range of conservatism.
+
+  '
+why_not_repeated_failure: 'This proposal is not a variant of any failed or closed
+  family. It targets exit logic (C007, new_exit_rule) using a non-parametric empirical
+  distribution approach (exit_gap_closing_percentile family), not an entry filter
+  or position sizing tweak. The repeated_reject_families tag moneyness_stock_to_conv_threshold
+  refers to entry filtering — this proposal does not touch entry eligibility. The
+  closed_families_from_insights list (reverse_moneyness_entry_filter, exit_duration_adaptive_reverse,
+  reverse_bond_floor_entry_filter, volatility_position_scaling_reverse, reverse_volatility_position_scaling,
+  reverse_volatility_scaling) all concern reverse-direction variants closed by the
+  anti-alpha insight — this proposal operates in the forward (descending value gap)
+  direction and does not cite that demoted insight. The only prior exit-rule work
+  in this direction (duration-adaptive exit) was accepted, not rejected — this proposal
+  builds on that success with a strictly more informed exit mechanism.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+implementation_assumption: The executor evaluate_cb_arb_exit_gap_closing_percentile
+  exists in the registry and can compute expanding-window historical gap-closing percentiles
+  from the baseline trade PnL parquet. The gap magnitude binning uses either quantile-based
+  or absolute threshold bucketing as configured by the grid search parameters. All
+  lookups use only data available on or before the entry date.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 9cbb756b0538afdb
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 9cbb756b0538afdb
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_gap_closing_percentile_exit_v1/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=exit_gap_closing_percentile, capability_ids=['C007']);
+    no critical-insight reference; queue depth=0.
+  evidence:
+    family: exit_gap_closing_percentile
+    capability_ids:
+    - C007
+    cites_critical: null
+    queue_depth: 0

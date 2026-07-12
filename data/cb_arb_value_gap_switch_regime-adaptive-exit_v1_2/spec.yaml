@@ -1,0 +1,270 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+date: '2026-05-23'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'The duration-adaptive exit accepted on 2026-05-22 uses a single global
+  decay schedule (initial_threshold_fraction=0.7, decay_period_factor=0.5) regardless
+  of market environment. Gap closing dynamics are not uniform — in high-volatility
+  regimes gaps close faster, making a fixed decay schedule simultaneously too patient
+  in calm markets (leaving money on the table as gaps reverse) and too impatient in
+  turbulent markets (exiting before gaps fully close). Conditioning the decay parameters
+  on a daily market regime classifier derived from CSI300 rolling volatility will
+  improve cumulative excess by matching exit patience to the prevailing gap-closing
+  speed.
+
+  '
+source_insight: 'The only accepted result in the current research track is the duration-adaptive
+  exit, proving that time-decaying gap thresholds work. But a single schedule is a
+  blunt instrument. The recent digest shows entry filters (bond floor, market drawdown,
+  contrarian drawdown) all failed mechanical thresholds, and position scaling (volatility,
+  PnL feedback) failed adoption — suggesting the remaining edge is in exit refinement,
+  not entry gating or sizing.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - dynamic_regime_switch
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C005
+mechanics:
+- dynamic_regime_switch
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/csi300_daily.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+hard_floors:
+  criteria:
+  - cumulative_excess_compound_cost_on improves over the duration-adaptive exit baseline
+  - at least one candidate achieves adoption_pass=True
+  - max_drawdown does not materially degrade relative to baseline
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: COMPLETE
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  strategy_id: cb_arb_value_gap_switch
+  family: regime_adaptive_exit
+  hypothesis: 'The duration-adaptive exit accepted on 2026-05-22 uses a single global
+    decay schedule (initial_threshold_fraction=0.7, decay_period_factor=0.5) regardless
+    of market environment. Gap closing dynamics are not uniform — in high-volatility
+    regimes gaps close faster, making a fixed decay schedule simultaneously too patient
+    in calm markets (leaving money on the table as gaps reverse) and too impatient
+    in turbulent markets (exiting before gaps fully close). Conditioning the decay
+    parameters on a daily market regime classifier derived from CSI300 rolling volatility
+    will improve cumulative excess by matching exit patience to the prevailing gap-closing
+    speed.
+
+    '
+  source_insight: 'The only accepted result in the current research track is the duration-adaptive
+    exit, proving that time-decaying gap thresholds work. But a single schedule is
+    a blunt instrument. The recent digest shows entry filters (bond floor, market
+    drawdown, contrarian drawdown) all failed mechanical thresholds, and position
+    scaling (volatility, PnL feedback) failed adoption — suggesting the remaining
+    edge is in exit refinement, not entry gating or sizing.
+
+    '
+  expected_improvement: 'Cumulative excess compound (cost-on) improves over the accepted
+    duration-adaptive exit baseline by at least 1-2 percentage points, driven by better
+    exit timing in both high-vol and low-vol regimes.
+
+    '
+  capability_ids:
+  - C005
+  required_executor: evaluate_cb_arb_regime_adaptive_exit
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - path: data/cb_warehouse/csi300_daily.parquet
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  required_data_fields:
+    data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+    - trade_date
+    - ts_code
+    - value_gap_amount
+    - entry_gap
+    data/cb_warehouse/csi300_daily.parquet:
+    - trade_date
+    - close
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - conv_price
+    - list_date
+    - delist_date
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - ts_code
+    - trade_date
+    - close
+  test_design:
+    description: 'Replace the global fixed decay parameters with regime-conditioned
+      ones. Classify each trading day into two regimes (high-vol / low-vol) using
+      CSI300 20-day rolling annualized volatility percentile (threshold at median).
+      In high-vol regimes apply faster decay: lower initial_threshold_fraction (e.g.
+      0.5-0.7) and shorter effective_max_hold_days (e.g. 20-35). In low-vol regimes
+      apply slower decay: higher initial_threshold_fraction (e.g. 0.7-0.9) and longer
+      effective_max_hold_days (e.g. 35-60). Grid search over regime threshold percentile,
+      per-regime initial_threshold_fraction, and per-regime decay_period_factor. Keep
+      min_hold_days at 5 (from accepted result). Run full cost-on backtest with the
+      same train/validation/holdout split as the accepted duration-adaptive run.
+
+      '
+  success_criteria:
+    criteria:
+    - cumulative_excess_compound_cost_on improves over the duration-adaptive exit
+      baseline
+    - at least one candidate achieves adoption_pass=True
+    - max_drawdown does not materially degrade relative to baseline
+  falsifiers:
+    train:
+    - no candidate improves cumulative excess compound over the duration-adaptive
+      baseline
+    - all per-regime parameterizations produce worse risk-adjusted metrics than the
+      single global schedule
+    - regime switching introduces whipsaw that degrades exit timing relative to the
+      simpler fixed schedule
+    validate:
+    - no candidate improves cumulative excess compound over the duration-adaptive
+      baseline
+    - all per-regime parameterizations produce worse risk-adjusted metrics than the
+      single global schedule
+    - regime switching introduces whipsaw that degrades exit timing relative to the
+      simpler fixed schedule
+    test:
+    - no candidate improves cumulative excess compound over the duration-adaptive
+      baseline
+    - all per-regime parameterizations produce worse risk-adjusted metrics than the
+      single global schedule
+    - regime switching introduces whipsaw that degrades exit timing relative to the
+      simpler fixed schedule
+  risk: 'Medium. Regime classification adds a layer of complexity and an additional
+    parameter (regime threshold). Risk of overfitting if regimes are defined too granularly.
+    Mitigated by using only two regimes and a simple CSI300 volatility classifier
+    — the regime signal is slow-moving and economically grounded, not a fragile pattern.
+
+    '
+  why_not_repeated_failure: 'This is not a repeat of any failed or closed direction.
+    The closed tag regime_classifier_variant applies to entry gate conditioning (deciding
+    whether to enter), not exit adaptation. The closed tag regime_conditioned_option_entry_gate
+    applies to option-sourced entry gating. Recent entry filter failures (bond floor,
+    market drawdown, contrarian drawdown) all modified entry eligibility — this proposal
+    modifies exit timing only, preserving the exact same entry logic as the accepted
+    duration-adaptive run. The moneyness entry filter (C003) and gap-closing percentile
+    exit (C007) are alternative unexplored directions, but C005 builds directly on
+    the only accepted result in the track.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  - cb_arb_value_gap_switch_market_drawdown_entry_filter
+  - cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+  - cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  implementation_assumption: The executor extends the accepted duration-adaptive exit
+    code by adding a pre-computed daily regime label column (derived from CSI300 20-day
+    rolling volatility percentile with a configurable threshold). During exit evaluation,
+    the decay parameters are looked up per-regime instead of using global constants.
+    Regime labels are computed once per backtest date range before the main loop,
+    so no forward-looking bias.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: a926a95cfd59baa1
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: a926a95cfd59baa1
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_id_deduped_from: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/proposal.yaml
+  mechanics:
+  - dynamic_regime_switch
+executor_id: evaluate_cb_arb_regime_adaptive_exit
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_regime_adaptive_exit.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  sync_paths:
+  - scripts/evaluate_cb_arb_regime_adaptive_exit.py
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_2/proposal.yaml
+  response_hash: a926a95cfd59baa1
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data: []
+updated_at: '2026-05-23T14:35:01Z'

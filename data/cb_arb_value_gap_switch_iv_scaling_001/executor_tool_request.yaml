@@ -1,0 +1,411 @@
+status: draft_tool_code
+code_response_hash: 6cf75151484375c3
+validation_errors: []
+files:
+- path: generated_executor/evaluate_cb_arb_iv_position_scaling.py
+  purpose: Complete evaluator implementation.
+  content: "#!/usr/bin/env python3\n\"\"\"Evaluate inverse IV-percentile position\
+    \ scaling for cb_arb value-gap switch.\n\nThis executor computes rolling 252-day\
+    \ stock-implied-volatility percentile\nfor each convertible bond, then applies\
+    \ inverse position scaling at entry:\nhigher IV percentile → smaller position.\
+    \ The baseline ranking weight and\nbuy amount are scaled down when IV is elevated,\
+    \ while entry/exit eligibility\nremains unchanged from the baseline gap-based\
+    \ rules.\n\nGrid search over iv_percentile_threshold (0.5–0.9), scaling_factor_power\n\
+    (0.5–2.0), and min_hold_days (1/3/5).  Compares against un-scaled baseline\non\
+    \ train, 2020 repair, and test periods.\n\nIV proxy: rolling 20-day annualised\
+    \ stock volatility from stk_daily_qfq.\nPercentile: rolling 252-day rank within\
+    \ each CB's own history.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport\
+    \ argparse\nimport json\nimport sys\nfrom datetime import datetime as _dt, timezone\
+    \ as _tz\nfrom pathlib import Path\nfrom typing import Any\n\n# ── Repo root &\
+    \ sys.path ────────────────────────────────────────────────\n# Must come before\
+    \ any third-party import AND before `from scripts.X import Y`,\n# because production\
+    \ runs execute from a foreign cwd where REPO_ROOT is not\n# automatically on sys.path.\
+    \  The compliance import-reachability probe runs\n# with -I in /tmp, so all non-stdlib\
+    \ imports that follow this block must\n# resolve from the venv site-packages (numpy/pandas/yaml)\
+    \ or from REPO_ROOT\n# (scripts.*).\n\ndef _find_repo_root(start: Path) -> Path:\n\
+    \    for candidate in (start, *start.parents):\n        if (candidate / \"scripts\"\
+    \ / \"gatekeeper.py\").exists():\n            return candidate\n    return start.parent\n\
+    \n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\nif str(_REPO_ROOT)\
+    \ not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\nfrom scripts.gatekeeper\
+    \ import GateKeeper  # noqa: E402\n\n# ── Lazy third-party imports ────────────────────────────────────────────\n\
+    # Not available at module level in isolated compliance probe; must be\n# imported\
+    \ lazily inside functions.\n\n\ndef _get_np():\n    \"\"\"Lazy import numpy.\"\
+    \"\"\n    import numpy as _np\n    return _np\n\n\ndef _get_pd():\n    \"\"\"\
+    Lazy import pandas.\"\"\"\n    import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n\
+    \    \"\"\"Lazy import yaml.\"\"\"\n    import yaml as _yaml\n    return _yaml\n\
+    \n\n# YAML numpy representer registration runs once at first yaml write.\n_YAML_REPRS_REGISTERED\
+    \ = False\n\n\ndef _ensure_yaml_np_reprs():\n    global _YAML_REPRS_REGISTERED\n\
+    \    if _YAML_REPRS_REGISTERED:\n        return\n    yaml = _get_yaml()\n    np\
+    \ = _get_np()\n\n    def _yaml_repr_np_float(dumper, data):\n        return dumper.represent_float(float(data))\n\
+    \n    def _yaml_repr_np_int(dumper, data):\n        return dumper.represent_int(int(data))\n\
+    \n    yaml.SafeDumper.add_representer(np.floating, _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer,\
+    \ _yaml_repr_np_int)\n    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# ── constants ───────────────────────────────────────────────────────────\n\
+    _PREVIOUS_RUN_DATA = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n_CB_BASIC_PATH = \"data/cb_warehouse/cb_basic.parquet\"\
+    \n_STK_DAILY_PATH = \"data/cb_warehouse/stk_daily_qfq.parquet\"\n_VOL_LOOKBACK\
+    \ = 20       # trading days for rolling stock vol\n_PCT_LOOKBACK = 252       #\
+    \ trading days for IV percentile window\n_PCT_MIN_SAMPLES = 60     # minimum observations\
+    \ to compute a percentile\n_GRID_THRESHOLDS = (0.5, 0.6, 0.7, 0.8, 0.9)\n_GRID_POWERS\
+    \ = (0.5, 1.0, 1.5, 2.0)\n_GRID_MIN_HOLD = (1, 3, 5)\n\n\n# ── data-requirements\
+    \ declaration ───────────────────────────────────────\ndef declare_data_requirements(\n\
+    \    command: list[Any], spec: dict[str, Any] | None = None\n) -> dict[str, Any]:\n\
+    \    return {\n        \"required_files\": [\n            {\n                \"\
+    path\": _PREVIOUS_RUN_DATA,\n                \"description\": (\n            \
+    \        \"Daily value-gap amounts from regime-option-entry-gate run. \"\n   \
+    \                 \"Contains trade_date, ts_code, value_gap_amount, position_cash,\
+    \ \"\n                    \"buy_qty, rank_pct, and other baseline fields.\"\n\
+    \                ),\n                \"required_columns\": [\n               \
+    \     \"trade_date\", \"ts_code\", \"value_gap_amount\",\n                   \
+    \ \"position_cash\", \"buy_qty\",\n                ],\n            },\n      \
+    \      {\n                \"path\": _CB_BASIC_PATH,\n                \"description\"\
+    : (\n                    \"CB-to-underlying-stock mapping. Required columns: ts_code,\
+    \ stk_code.\"\n                ),\n                \"required_columns\": [\"ts_code\"\
+    , \"stk_code\"],\n            },\n            {\n                \"path\": _STK_DAILY_PATH,\n\
+    \                \"description\": (\n                    \"Forward-adjusted daily\
+    \ stock prices for volatility computation.\"\n                ),\n           \
+    \     \"required_columns\": [\"stk_code\", \"trade_date\", \"close\"],\n     \
+    \       },\n        ],\n        \"generated_columns\": {\n            \"stk_code\"\
+    : (\n                \"Derived for value-gap rows via cb_basic.ts_code -> cb_basic.stk_code.\"\
+    \n            ),\n            \"stock_vol\": (\n                \"Computed inside\
+    \ executor: 20-day rolling annualised log-return \"\n                \"volatility\
+    \ from stk_daily_qfq.close.\"\n            ),\n            \"vol_pctile\": (\n\
+    \                \"Computed inside executor: 252-day rolling percentile rank (0-100)\
+    \ \"\n                \"of stock_vol within each CB's own history.\"\n       \
+    \     ),\n            \"scaling_factor\": (\n                \"Computed inside\
+    \ executor: (1 - vol_pctile/100) ** power when \"\n                \"vol_pctile/100\
+    \ > threshold, else 1.0.\"\n            ),\n        },\n    }\n\n\n# ── GateKeeper\
+    \ integration ──────────────────────────────────────────────\ndef _gatekeeper_before_run(output_dir:\
+    \ Path) -> None:\n    spec_path = output_dir / \"spec.yaml\"\n    if spec_path.exists():\n\
+    \        gatekeeper = GateKeeper(quiet=True)\n        gatekeeper.before_run_grid(spec_path)\n\
+    \n\ndef _gatekeeper_after_run(output_dir: Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n\
+    \    gatekeeper.after_run_grid(output_dir)\n\n\n# ── path resolution ─────────────────────────────────────────────────────\n\
+    def _resolve_path(relative: str, data_root: str) -> Path:\n    rel = Path(relative)\n\
+    \    candidates = [Path(data_root) / rel, _REPO_ROOT / rel, Path.cwd() / rel]\n\
+    \    path = next((c for c in candidates if c.exists()), None)\n    if path is\
+    \ None:\n        searched = \", \".join(str(c) for c in candidates)\n        raise\
+    \ FileNotFoundError(f\"Required data missing; searched: {searched}\")\n    return\
+    \ path\n\n\n# ── data loading ────────────────────────────────────────────────────────\n\
+    def _load_gap_data(data_root: str) -> Any:\n    pd = _get_pd()\n    path = _resolve_path(_PREVIOUS_RUN_DATA,\
+    \ data_root)\n    df = pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"\
+    trade_date\"])\n    df = df.sort_values([\"ts_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \    return df\n\n\ndef _load_cb_basic(data_root: str) -> Any:\n    pd = _get_pd()\n\
+    \    path = _resolve_path(_CB_BASIC_PATH, data_root)\n    df = pd.read_parquet(path)\n\
+    \    missing = {\"ts_code\", \"stk_code\"} - set(df.columns)\n    if missing:\n\
+    \        raise ValueError(f\"cb_basic missing columns: {sorted(missing)}\")\n\
+    \    return df[[\"ts_code\", \"stk_code\"]].dropna().drop_duplicates()\n\n\ndef\
+    \ _load_and_compute_stock_vol(data_root: str) -> Any:\n    \"\"\"Compute rolling\
+    \ 20-day annualised stock vol for each stock.\"\"\"\n    np = _get_np()\n    pd\
+    \ = _get_pd()\n    path = _resolve_path(_STK_DAILY_PATH, data_root)\n    df =\
+    \ pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"trade_date\"\
+    ], errors=\"coerce\")\n    df = df.sort_values([\"stk_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \n    df[\"log_return\"] = df.groupby(\"stk_code\")[\"close\"].transform(\n  \
+    \      lambda s: np.log(s / s.shift(1))\n    )\n    df[\"stock_vol\"] = df.groupby(\"\
+    stk_code\")[\"log_return\"].transform(\n        lambda s: s.rolling(_VOL_LOOKBACK,\
+    \ min_periods=10).std() * np.sqrt(252)\n    )\n    return df[[\"stk_code\", \"\
+    trade_date\", \"close\", \"stock_vol\"]]\n\n\n# ── IV percentile computation ───────────────────────────────────────────\n\
+    def _compute_vol_percentile(df: Any) -> Any:\n    \"\"\"Compute rolling 252-day\
+    \ percentile rank (0-100) of stock_vol per CB.\"\"\"\n    np = _get_np()\n   \
+    \ pd = _get_pd()\n    df = df.copy()\n    df[\"vol_pctile\"] = np.nan\n\n    for\
+    \ ts_code, grp in df.groupby(\"ts_code\"):\n        grp = grp.sort_values(\"trade_date\"\
+    )\n        vols = grp[\"stock_vol\"].values\n        pctiles = np.full(len(vols),\
+    \ np.nan)\n\n        for i in range(len(vols)):\n            win_start = max(0,\
+    \ i - _PCT_LOOKBACK + 1)\n            win_vols = vols[win_start : i + 1]\n   \
+    \         valid = win_vols[~np.isnan(win_vols)]\n            if len(valid) < _PCT_MIN_SAMPLES:\n\
+    \                continue\n            current = vols[i]\n            if np.isnan(current):\n\
+    \                continue\n            rank = (valid < current).sum() + 0.5 *\
+    \ (valid == current).sum()\n            pctiles[i] = (rank / len(valid)) * 100.0\n\
+    \n        df.loc[grp.index, \"vol_pctile\"] = pctiles\n\n    return df\n\n\ndef\
+    \ _compute_scaling_factor(\n    vol_pctile: float, threshold: float, power: float\n\
+    ) -> float:\n    \"\"\"Return inverse IV-percentile scaling factor.\n\n    If\
+    \ vol_pctile/100 > threshold:\n      scale = (1 - vol_pctile/100) ** power\n \
+    \   else:\n      scale = 1.0\n\n    Args:\n        vol_pctile: percentile in [0,\
+    \ 100] (or NaN)\n        threshold: trigger threshold in [0, 1]\n        power:\
+    \ exponent >= 0\n    \"\"\"\n    np = _get_np()\n    if not np.isfinite(vol_pctile):\n\
+    \        return 1.0\n    pct_frac = vol_pctile / 100.0\n    if pct_frac > threshold:\n\
+    \        return max(0.0, float((1.0 - pct_frac) ** power))\n    return 1.0\n\n\
+    \n# ── backtest simulation (position-scaled gap trading) ───────────────────\n\
+    def _simulate(\n    df: Any,\n    threshold: float | None = None,\n    power:\
+    \ float | None = None,\n    min_hold_days: int = 0,\n) -> dict[str, Any]:\n  \
+    \  \"\"\"Simulate gap-based CB trading with optional IV-percentile position scaling.\n\
+    \n    Entry: gap > 0 and flat and (if re-entering after exit, min_hold_days passed).\n\
+    \    Exit:  gap <= 0 (always).\n    PnL:   position_cash * (exit_gap_pct - entry_gap_pct)\
+    \ * scaling_factor,\n           where gap_pct = value_gap_amount / position_cash.\n\
+    \n    When threshold and power are None this runs the *un-scaled* baseline\n \
+    \   (scaling_factor == 1.0).\n    \"\"\"\n    np = _get_np()\n    use_scaling\
+    \ = threshold is not None and power is not None\n    total_pnl = 0.0\n    trades:\
+    \ list[dict[str, Any]] = []\n\n    for ts_code, grp in df.groupby(\"ts_code\"\
+    ):\n        grp = grp.sort_values(\"trade_date\")\n        in_position = False\n\
+    \        entry_row: dict[str, Any] | None = None\n        last_exit_idx: int =\
+    \ -99999\n\n        for idx, row in grp.iterrows():\n            trade_date =\
+    \ row[\"trade_date\"]\n            gap = float(row[\"value_gap_amount\"])\n  \
+    \          pos_cash = float(row.get(\"position_cash\", 30000.0))\n\n         \
+    \   if not in_position and gap > 0:\n                # Enforce min_hold_days gate\
+    \ on re-entry\n                if min_hold_days > 0 and (idx - last_exit_idx)\
+    \ < min_hold_days:\n                    continue\n                in_position\
+    \ = True\n                entry_row = {\n                    \"trade_date\": trade_date,\n\
+    \                    \"gap\": gap,\n                    \"pos_cash\": pos_cash,\n\
+    \                }\n                # Compute scaling factor at entry\n      \
+    \          if use_scaling:\n                    vol_pct = float(row.get(\"vol_pctile\"\
+    , np.nan))\n                    sf = _compute_scaling_factor(vol_pct, threshold,\
+    \ power)\n                else:\n                    sf = 1.0\n              \
+    \  entry_row[\"scaling_factor\"] = sf\n                continue\n\n          \
+    \  if in_position and gap <= 0:\n                e = entry_row\n             \
+    \   gap_pct_entry = e[\"gap\"] / e[\"pos_cash\"]\n                gap_pct_exit\
+    \ = gap / pos_cash\n                pnl = e[\"pos_cash\"] * (gap_pct_exit - gap_pct_entry)\
+    \ * e[\"scaling_factor\"]\n                total_pnl += pnl\n                hold\
+    \ = int((trade_date - e[\"trade_date\"]).days)\n                trades.append({\n\
+    \                    \"ts_code\": ts_code,\n                    \"entry_date\"\
+    : str(e[\"trade_date\"].date()),\n                    \"exit_date\": str(trade_date.date()),\n\
+    \                    \"exit_reason\": \"gap_closed\",\n                    \"\
+    entry_gap\": round(e[\"gap\"], 4),\n                    \"exit_gap\": round(gap,\
+    \ 4),\n                    \"pnl\": round(float(pnl), 2),\n                  \
+    \  \"hold_days\": int(hold),\n                    \"scaling_factor\": round(e[\"\
+    scaling_factor\"], 4),\n                })\n                in_position = False\n\
+    \                entry_row = None\n                last_exit_idx = idx\n\n   \
+    \     # Force-close any open position at end of data\n        if in_position and\
+    \ entry_row is not None:\n            last = grp.iloc[-1]\n            final_gap\
+    \ = float(last[\"value_gap_amount\"])\n            pos_cash = float(last.get(\"\
+    position_cash\", 30000.0))\n            gap_pct_entry = entry_row[\"gap\"] / entry_row[\"\
+    pos_cash\"]\n            gap_pct_exit = final_gap / pos_cash\n            pnl\
+    \ = entry_row[\"pos_cash\"] * (gap_pct_exit - gap_pct_entry) * entry_row[\"scaling_factor\"\
+    ]\n            total_pnl += pnl\n            hold = int((last[\"trade_date\"]\
+    \ - entry_row[\"trade_date\"]).days)\n            trades.append({\n          \
+    \      \"ts_code\": ts_code,\n                \"entry_date\": str(entry_row[\"\
+    trade_date\"].date()),\n                \"exit_date\": str(last[\"trade_date\"\
+    ].date()),\n                \"exit_reason\": \"force_close\",\n              \
+    \  \"entry_gap\": round(entry_row[\"gap\"], 4),\n                \"exit_gap\"\
+    : round(final_gap, 4),\n                \"pnl\": round(float(pnl), 2),\n     \
+    \           \"hold_days\": int(hold),\n                \"scaling_factor\": round(entry_row[\"\
+    scaling_factor\"], 4),\n            })\n\n    return _aggregate_metrics(trades,\
+    \ total_pnl)\n\n\ndef _aggregate_metrics(\n    trades: list[dict[str, Any]], total_pnl:\
+    \ float\n) -> dict[str, Any]:\n    pd = _get_pd()\n    if not trades:\n      \
+    \  return {\n            \"total_pnl\": 0.0,\n            \"total_return\": 0.0,\n\
+    \            \"excess_return\": 0.0,\n            \"trade_count\": 0,\n      \
+    \      \"win_rate\": 0.0,\n            \"avg_win\": 0.0,\n            \"avg_loss\"\
+    : 0.0,\n            \"max_drawdown\": 0.0,\n            \"trades\": [],\n    \
+    \    }\n    tdf = pd.DataFrame(trades)\n    winning = tdf[tdf[\"pnl\"] > 0]\n\
+    \    losing = tdf[tdf[\"pnl\"] <= 0]\n    win_rate = round(len(winning) / len(tdf),\
+    \ 4) if len(tdf) > 0 else 0.0\n    avg_win = round(float(winning[\"pnl\"].mean()),\
+    \ 2) if len(winning) > 0 else 0.0\n    avg_loss = round(float(losing[\"pnl\"].mean()),\
+    \ 2) if len(losing) > 0 else 0.0\n\n    tdf_sorted = tdf.sort_values(\"exit_date\"\
+    )\n    tdf_sorted[\"cum_pnl\"] = tdf_sorted[\"pnl\"].cumsum()\n    equity = tdf_sorted[\"\
+    cum_pnl\"]\n    peak = equity.iloc[0] if len(equity) > 0 else 0.0\n    max_dd\
+    \ = 0.0\n    for val in equity:\n        if val > peak:\n            peak = val\n\
+    \        dd = val - peak\n        if dd < max_dd:\n            max_dd = dd\n\n\
+    \    return {\n        \"total_pnl\": round(total_pnl, 2),\n        \"total_return\"\
+    : round(total_pnl, 2),   # same for gap-based PnL\n        \"excess_return\":\
+    \ 0.0,\n        \"trade_count\": int(len(tdf)),\n        \"win_rate\": win_rate,\n\
+    \        \"avg_win\": avg_win,\n        \"avg_loss\": avg_loss,\n        \"max_drawdown\"\
+    : float(max_dd),\n        \"trades\": trades,\n    }\n\n\n# ── utility ─────────────────────────────────────────────────────────────\n\
+    def _plain(value: Any) -> Any:\n    np = _get_np()\n    if isinstance(value, dict):\n\
+    \        return {str(key): _plain(item) for key, item in value.items()}\n    if\
+    \ isinstance(value, (list, tuple)):\n        return [_plain(item) for item in\
+    \ value]\n    if isinstance(value, np.floating):\n        return float(value)\n\
+    \    if isinstance(value, np.integer):\n        return int(value)\n    if hasattr(value,\
+    \ \"dtype\") and hasattr(value, \"item\"):\n        try:\n            return _plain(value.item())\n\
+    \        except (TypeError, ValueError):\n            pass\n    if isinstance(value,\
+    \ (str, int, float, bool)) or value is None:\n        return value\n    return\
+    \ str(value)\n\n\ndef _fail(output_dir: Path, step: str, exc: Exception) -> int:\n\
+    \    yaml = _get_yaml()\n    diag = {\"error\": str(exc), \"step\": step}\n  \
+    \  _ensure_yaml_np_reprs()\n    (output_dir / \"diagnostic.yaml\").write_text(\n\
+    \        yaml.safe_dump(_plain(diag), allow_unicode=True), encoding=\"utf-8\"\n\
+    \    )\n    _gatekeeper_after_run(output_dir)\n    print(f\"[iv_position_scaling]\
+    \ FATAL ({step}): {exc}\", flush=True)\n    return 1\n\n\n# ── main ────────────────────────────────────────────────────────────────\n\
+    def main() -> int:\n    np = _get_np()\n    pd = _get_pd()\n    yaml = _get_yaml()\n\
+    \    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\"\
+    --data-root\", required=True)\n    parser.add_argument(\"--train-start\", required=True)\n\
+    \    parser.add_argument(\"--train-end\", required=True)\n    parser.add_argument(\"\
+    --test-start\", required=True)\n    parser.add_argument(\"--test-end\", required=True)\n\
+    \    parser.add_argument(\"--output-dir\", required=True)\n    parser.add_argument(\"\
+    --iv-lookback\", type=int, default=252,\n                        help=\"Rolling\
+    \ window for IV percentile (default: 252)\")\n    parser.add_argument(\"--iv-percentile-threshold\"\
+    , type=float, default=0.8,\n                        help=\"IV percentile threshold\
+    \ for scaling trigger (default: 0.8)\")\n    parser.add_argument(\"--scaling-factor-power\"\
+    , type=float, default=1.0,\n                        help=\"Exponent for inverse\
+    \ scaling (default: 1.0)\")\n    parser.add_argument(\"--min-hold-days\", type=int,\
+    \ default=5,\n                        help=\"Minimum hold days before re-entry\
+    \ (default: 5)\")\n    parser.add_argument(\"--fixed-source\", type=str, default=\"\
+    2\")\n    parser.add_argument(\"--rule\", type=str, default=\"score_4state\")\n\
+    \    parser.add_argument(\"--base-ranks-path\", type=str,\n                  \
+    \      default=_PREVIOUS_RUN_DATA)\n    parser.add_argument(\"--reuse-ranks\"\
+    , action=\"store_true\", default=True)\n    parser.add_argument(\"--cost-model-enabled\"\
+    , action=\"store_true\", default=True)\n    args = parser.parse_args()\n\n   \
+    \ output_dir = Path(args.output_dir)\n    output_dir.mkdir(parents=True, exist_ok=True)\n\
+    \    _gatekeeper_before_run(output_dir)\n\n    # -- 1. Load gap data --\n    try:\n\
+    \        df_raw = _load_gap_data(args.data_root)\n    except Exception as exc:\n\
+    \        return _fail(output_dir, \"load_gap_data\", exc)\n\n    # -- 2. Load\
+    \ CB->stock mapping --\n    try:\n        df_basic = _load_cb_basic(args.data_root)\n\
+    \    except Exception as exc:\n        return _fail(output_dir, \"load_cb_basic\"\
+    , exc)\n\n    # -- 3. Load & compute stock vol --\n    try:\n        df_vol =\
+    \ _load_and_compute_stock_vol(args.data_root)\n    except Exception as exc:\n\
+    \        return _fail(output_dir, \"load_stock_vol\", exc)\n\n    # -- 4. Merge\
+    \ vol -> gap data, compute percentile --\n    cb_to_stk = dict(\n        zip(df_basic[\"\
+    ts_code\"].astype(str), df_basic[\"stk_code\"].astype(str))\n    )\n    df_enriched\
+    \ = df_raw.copy()\n    df_enriched[\"stk_code\"] = df_enriched[\"ts_code\"].astype(str).map(cb_to_stk)\n\
+    \n    df_vol_lean = df_vol[[\"stk_code\", \"trade_date\", \"stock_vol\"]].copy()\n\
+    \    df_merged = df_enriched.merge(\n        df_vol_lean, on=[\"stk_code\", \"\
+    trade_date\"], how=\"left\"\n    )\n    df_merged = _compute_vol_percentile(df_merged)\n\
+    \n    # -- 5. Filter periods --\n    train_start = pd.Timestamp(args.train_start)\n\
+    \    train_end = pd.Timestamp(args.train_end)\n    test_start = pd.Timestamp(args.test_start)\n\
+    \    test_end = pd.Timestamp(args.test_end)\n\n    df_train = df_merged[\n   \
+    \     (df_merged[\"trade_date\"] >= train_start)\n        & (df_merged[\"trade_date\"\
+    ] <= train_end)\n    ].copy()\n    df_test = df_merged[\n        (df_merged[\"\
+    trade_date\"] >= test_start)\n        & (df_merged[\"trade_date\"] <= test_end)\n\
+    \    ].copy()\n    df_2020 = df_train[df_train[\"trade_date\"].dt.year == 2020].copy()\n\
+    \n    if len(df_train) == 0:\n        return _fail(output_dir, \"filter_train\"\
+    ,\n                     ValueError(\"Train dataframe is empty\"))\n\n    # --\
+    \ 6. Baseline (un-scaled) --\n    baseline_train = _simulate(df_train)\n    baseline_test\
+    \ = _simulate(df_test)\n    baseline_2020 = _simulate(df_2020)\n\n    # -- 7.\
+    \ Grid search --\n    thresholds = sorted(set(_GRID_THRESHOLDS + (args.iv_percentile_threshold,)))\n\
+    \    powers = sorted(set(_GRID_POWERS + (args.scaling_factor_power,)))\n    min_holds\
+    \ = sorted(set(_GRID_MIN_HOLD + (args.min_hold_days,)))\n\n    all_candidates:\
+    \ list[dict[str, Any]] = []\n    best_candidate: dict[str, Any] | None = None\n\
+    \    best_score = -float(\"inf\")\n\n    for thr in thresholds:\n        for pwr\
+    \ in powers:\n            for mhd in min_holds:\n                train_res = _simulate(df_train,\
+    \ thr, pwr, mhd)\n                test_res = _simulate(df_test, thr, pwr, mhd)\n\
+    \                yr2020_res = _simulate(df_2020, thr, pwr, mhd)\n\n          \
+    \      excess_train = round(\n                    train_res[\"total_pnl\"] - baseline_train[\"\
+    total_pnl\"], 2\n                )\n                excess_test = round(\n   \
+    \                 test_res[\"total_pnl\"] - baseline_test[\"total_pnl\"], 2\n\
+    \                )\n                excess_2020 = round(\n                   \
+    \ yr2020_res[\"total_pnl\"] - baseline_2020[\"total_pnl\"], 2\n              \
+    \  )\n\n                candidate = {\n                    \"iv_percentile_threshold\"\
+    : thr,\n                    \"scaling_factor_power\": pwr,\n                 \
+    \   \"min_hold_days\": mhd,\n                    \"train\": {\n              \
+    \          \"total_pnl\": train_res[\"total_pnl\"],\n                        \"\
+    total_return\": train_res[\"total_pnl\"],\n                        \"trade_count\"\
+    : train_res[\"trade_count\"],\n                        \"win_rate\": train_res[\"\
+    win_rate\"],\n                        \"avg_win\": train_res[\"avg_win\"],\n \
+    \                       \"avg_loss\": train_res[\"avg_loss\"],\n             \
+    \           \"max_drawdown\": train_res[\"max_drawdown\"],\n                 \
+    \       \"excess_return\": excess_train,\n                    },\n           \
+    \         \"test\": {\n                        \"total_pnl\": test_res[\"total_pnl\"\
+    ],\n                        \"total_return\": test_res[\"total_pnl\"],\n     \
+    \                   \"trade_count\": test_res[\"trade_count\"],\n            \
+    \            \"win_rate\": test_res[\"win_rate\"],\n                        \"\
+    avg_win\": test_res[\"avg_win\"],\n                        \"avg_loss\": test_res[\"\
+    avg_loss\"],\n                        \"max_drawdown\": test_res[\"max_drawdown\"\
+    ],\n                        \"excess_return\": excess_test,\n                \
+    \    },\n                    \"validate_2020\": {\n                        \"\
+    total_pnl\": yr2020_res[\"total_pnl\"],\n                        \"total_return\"\
+    : yr2020_res[\"total_pnl\"],\n                        \"trade_count\": yr2020_res[\"\
+    trade_count\"],\n                        \"win_rate\": yr2020_res[\"win_rate\"\
+    ],\n                        \"avg_win\": yr2020_res[\"avg_win\"],\n          \
+    \              \"avg_loss\": yr2020_res[\"avg_loss\"],\n                     \
+    \   \"max_drawdown\": yr2020_res[\"max_drawdown\"],\n                        \"\
+    excess_return\": excess_2020,\n                    },\n                }\n   \
+    \             all_candidates.append(candidate)\n\n                # Score: primary\
+    \ objective is 2020 excess return\n                # Secondary: test excess return\n\
+    \                score = excess_2020 * 2.0 + excess_test\n                if score\
+    \ > best_score:\n                    best_score = score\n                    best_candidate\
+    \ = candidate\n\n    # -- 8. Adoption criteria (from proposal) --\n    adoption_pass\
+    \ = False\n    if best_candidate is not None:\n        bc = best_candidate\n\n\
+    \        # Criterion 1: 2020 metrics must improve over baseline\n        dd_2020_ok\
+    \ = (\n            bc[\"validate_2020\"][\"max_drawdown\"]\n            >= baseline_2020[\"\
+    max_drawdown\"]\n        )  # less-negative drawdown is improvement\n        excess_2020_ok\
+    \ = bc[\"validate_2020\"][\"excess_return\"] > 0\n\n        # Criterion 2: test\
+    \ period not significantly degraded\n        test_excess_ok = bc[\"test\"][\"\
+    excess_return\"] >= 0\n\n        # Criterion 3: win_rate in test >= baseline\n\
+    \        test_wr_ok = bc[\"test\"][\"win_rate\"] >= baseline_test[\"win_rate\"\
+    ]\n\n        adoption_pass = dd_2020_ok and excess_2020_ok and test_excess_ok\
+    \ and test_wr_ok\n\n    # -- 9. summary.json --\n    summary = {\n        \"adoption_pass\"\
+    : adoption_pass,\n        \"best_candidate\": best_candidate,\n        \"all_candidates\"\
+    : all_candidates,\n        \"baseline\": {\n            \"train\": {\n       \
+    \         \"total_pnl\": baseline_train[\"total_pnl\"],\n                \"trade_count\"\
+    : baseline_train[\"trade_count\"],\n                \"win_rate\": baseline_train[\"\
+    win_rate\"],\n                \"max_drawdown\": baseline_train[\"max_drawdown\"\
+    ],\n            },\n            \"test\": {\n                \"total_pnl\": baseline_test[\"\
+    total_pnl\"],\n                \"trade_count\": baseline_test[\"trade_count\"\
+    ],\n                \"win_rate\": baseline_test[\"win_rate\"],\n             \
+    \   \"max_drawdown\": baseline_test[\"max_drawdown\"],\n            },\n     \
+    \       \"validate_2020\": {\n                \"total_pnl\": baseline_2020[\"\
+    total_pnl\"],\n                \"trade_count\": baseline_2020[\"trade_count\"\
+    ],\n                \"win_rate\": baseline_2020[\"win_rate\"],\n             \
+    \   \"max_drawdown\": baseline_2020[\"max_drawdown\"],\n            },\n     \
+    \   },\n        \"train_period\": {\"start\": args.train_start, \"end\": args.train_end},\n\
+    \        \"test_period\": {\"start\": args.test_start, \"end\": args.test_end},\n\
+    \        \"swept_thresholds\": list(thresholds),\n        \"swept_powers\": list(powers),\n\
+    \        \"swept_min_hold_days\": list(min_holds),\n    }\n    (output_dir / \"\
+    summary.json\").write_text(\n        json.dumps(_plain(summary), ensure_ascii=False,\
+    \ indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\n    # -- 10. report.yaml\
+    \ --\n    _now = _dt.now(_tz.utc).isoformat(timespec=\"seconds\")\n    _today\
+    \ = _now.split(\"T\", 1)[0]\n    l6_decision = \"adopt\" if adoption_pass else\
+    \ \"reject\"\n\n    evaluator_report = {\n        \"proposal_id\": \"cb_arb_value_gap_switch_iv_scaling_001\"\
+    ,\n        \"strategy_id\": \"cb_arb_value_gap_switch\",\n        \"executor\"\
+    : \"cb_iv_position_scaling_executor\",\n        \"adoption_pass\": adoption_pass,\n\
+    \        \"best_iv_percentile_threshold\": (\n            best_candidate[\"iv_percentile_threshold\"\
+    ] if best_candidate else None\n        ),\n        \"best_scaling_factor_power\"\
+    : (\n            best_candidate[\"scaling_factor_power\"] if best_candidate else\
+    \ None\n        ),\n        \"best_min_hold_days\": (\n            best_candidate[\"\
+    min_hold_days\"] if best_candidate else None\n        ),\n        \"candidates\"\
+    : all_candidates,\n        \"baseline\": {\n            \"train_pnl\": baseline_train[\"\
+    total_pnl\"],\n            \"test_pnl\": baseline_test[\"total_pnl\"],\n     \
+    \       \"validate_2020_pnl\": baseline_2020[\"total_pnl\"],\n        },\n   \
+    \ }\n    report = {\n        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n\
+    \        \"date\": _today,\n        \"strategy_id\": \"cb_arb_value_gap_switch\"\
+    ,\n        \"l6_exit_decision\": l6_decision,\n        \"three_exits_section\"\
+    : {\n            \"adoption_pass\": adoption_pass,\n            \"best_iv_percentile_threshold\"\
+    : (\n                best_candidate[\"iv_percentile_threshold\"] if best_candidate\
+    \ else None\n            ),\n            \"best_scaling_factor_power\": (\n  \
+    \              best_candidate[\"scaling_factor_power\"] if best_candidate else\
+    \ None\n            ),\n            \"best_min_hold_days\": (\n              \
+    \  best_candidate[\"min_hold_days\"] if best_candidate else None\n           \
+    \ ),\n            \"evaluator\": \"cb_iv_position_scaling_executor\",\n      \
+    \  },\n        \"compute_cost_yuan\": 0.0,\n        \"confirmed_invalid_directions\"\
+    : (\n            [\n                f\"variants below {output_dir.name} best by\
+    \ adoption criteria \"\n                f\"-- evidence only, not promoted\"\n\
+    \            ]\n            if adoption_pass\n            else [\n           \
+    \     f\"{output_dir.name}: rejected by mechanical thresholds; \"\n          \
+    \      f\"review.yaml must finalize.\"\n            ]\n        ),\n        \"\
+    learnings\": [\n            \"IV-percentile position scaling grid evaluated end-to-end.\"\
+    ,\n        ],\n        \"follow_up_actions\": (\n            [\"evidence-only\
+    \ record; do not promote without user approval\"]\n            if adoption_pass\n\
+    \            else [\"review reject reason; do not revive without new mechanism\"\
+    ]\n        ),\n        \"status\": \"COMPLETE\",\n        \"generated_at\": _now,\n\
+    \        \"evaluator_report\": evaluator_report,\n    }\n    _ensure_yaml_np_reprs()\n\
+    \    (output_dir / \"report.yaml\").write_text(\n        yaml.safe_dump(_plain(report),\
+    \ allow_unicode=True, sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\
+    \    # -- 11. l4_ack.yaml --\n    l4_ack = {\n        \"status\": \"completed\"\
+    ,\n        \"adoption_pass\": adoption_pass,\n        \"message\": \"IV-percentile\
+    \ position scaling evaluation finished.\",\n    }\n    (output_dir / \"l4_ack.yaml\"\
+    ).write_text(\n        yaml.safe_dump(_plain(l4_ack), allow_unicode=True), encoding=\"\
+    utf-8\"\n    )\n\n    # -- 12. diagnostic.yaml --\n    vol_missing_train = int(df_train[\"\
+    stock_vol\"].isna().sum())\n    vol_missing_test = int(df_test[\"stock_vol\"].isna().sum())\n\
+    \    vol_missing_2020 = int(df_2020[\"stock_vol\"].isna().sum())\n\n    # Scaling\
+    \ distribution for best candidate\n    scaling_stats: dict[str, Any] = {}\n  \
+    \  if best_candidate is not None:\n        bc = best_candidate\n        best_test_res\
+    \ = _simulate(\n            df_test, bc[\"iv_percentile_threshold\"],\n      \
+    \      bc[\"scaling_factor_power\"], bc[\"min_hold_days\"]\n        )\n      \
+    \  sfs = [t.get(\"scaling_factor\", 1.0) for t in best_test_res.get(\"trades\"\
+    , [])]\n        if sfs:\n            scaling_stats = {\n                \"mean\"\
+    : round(float(np.mean(sfs)), 4),\n                \"min\": round(float(np.min(sfs)),\
+    \ 4),\n                \"max\": round(float(np.max(sfs)), 4),\n              \
+    \  \"pct_scaled_down\": round(\n                    sum(1 for s in sfs if s <\
+    \ 1.0) / len(sfs) * 100, 1\n                ),\n            }\n\n    diagnostics\
+    \ = {\n        \"warnings\": [],\n        \"errors\": [],\n        \"data_rows\"\
+    : {\n            \"train\": int(len(df_train)),\n            \"test\": int(len(df_test)),\n\
+    \            \"validate_2020\": int(len(df_2020)),\n        },\n        \"vol_coverage\"\
+    : {\n            \"train_missing\": vol_missing_train,\n            \"test_missing\"\
+    : vol_missing_test,\n            \"validate_2020_missing\": vol_missing_2020,\n\
+    \        },\n        \"cb_to_stk_mapping_count\": len(cb_to_stk),\n        \"\
+    scaling_stats\": scaling_stats,\n    }\n    (output_dir / \"diagnostic.yaml\"\
+    ).write_text(\n        yaml.safe_dump(_plain(diagnostics), allow_unicode=True),\
+    \ encoding=\"utf-8\"\n    )\n\n    best_info = (\n        f\"thr={best_candidate['iv_percentile_threshold']},\"\
+    \n        f\"pwr={best_candidate['scaling_factor_power']},\"\n        f\"mhd={best_candidate['min_hold_days']}\"\
+    \n        if best_candidate\n        else \"none\"\n    )\n    print(\n      \
+    \  f\"[iv_position_scaling] adoption_pass={adoption_pass} \"\n        f\"best=({best_info})\
+    \ \"\n        f\"candidates={len(all_candidates)}\",\n        flush=True,\n  \
+    \  )\n    _gatekeeper_after_run(output_dir)\n    return 0\n\n\nif __name__ ==\
+    \ \"__main__\":\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_iv_position_scaling.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_iv_scaling_001_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_iv_position_scaling.py
+  completion_receipt: data/cb_arb_value_gap_switch_iv_scaling_001/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-28T14:26:25'
+  validation: passed

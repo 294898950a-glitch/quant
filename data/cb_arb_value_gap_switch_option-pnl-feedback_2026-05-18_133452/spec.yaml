@@ -138,7 +138,7 @@ automation:
       max_drawdown:
         min: -0.3
     train_single_year_dd_ceiling: -0.15
-status: ARCHIVED
+status: READY
 archive_reason: remote run failed before producing required artifacts
 failure_reason: evaluate_cb_arb_option_pnl_feedback.py called shared cost parameter
   helper without max_holdings/max_position_pct/max_holding_days attributes; fixed

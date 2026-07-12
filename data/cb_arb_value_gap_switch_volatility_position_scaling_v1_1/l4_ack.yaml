@@ -1,0 +1,51 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_volatility_position_scaling_v1_1
+reviewer: codex
+ack_at: '2026-05-27T06:05:29'
+q1_floor_binding:
+  description: Hard floors and train/test consistency.
+  answer: Selected train winner does not pass train/test/2020 robustness checks together.
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-26T22:05:29.943536Z'
+  pass: false
+q2_selection_score:
+  description: Candidate selection quality.
+  answer: Train score selects baseline_no_scaling; sealed test best is baseline_no_scaling.
+  computed_data:
+    note: ranked.csv empty
+  pass: false
+  computed_at: '2026-05-26T22:05:29.943549Z'
+q3_baseline_alignment:
+  description: Alignment against current cb_arb_value_gap_switch baseline.
+  answer: Candidate does not justify replacing the current baseline.
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-26T22:05:29.943552Z'
+  pass: false
+q4_monotonic:
+  description: Edge-of-grid or monotonic concern.
+  answer: Grid-searched volatility scaling factors; no monotonic promotion without
+    manual review.
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-26T22:05:29.943554Z'
+  pass: true
+q5_trade_overlap:
+  description: Trade overlap baseline vs selected.
+  answer: Aggregate train/test/2020 checks are used for automatic decision.
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-26T22:05:29.943556Z'
+  pass: true
+q6_trigger_timing:
+  description: Trigger timing leakage.
+  applicable: false
+q7_path_contamination:
+  description: Path/data contamination.
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: No volatility scaling variant beat baseline across train, 2020 repair,
+  and sealed test together.
+auto_computed_at: '2026-05-26T22:05:29.943570Z'

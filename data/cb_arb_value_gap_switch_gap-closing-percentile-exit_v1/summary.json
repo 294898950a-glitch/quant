@@ -1,0 +1,140 @@
+{
+  "schema_version": 1,
+  "run_id": "cb_arb_value_gap_switch_gap-closing-percentile-exit_v1",
+  "status": "COMPLETE",
+  "adoption_pass": false,
+  "decision": "reject",
+  "params": {
+    "min_hold_days": 3,
+    "percentile_threshold": 60,
+    "gap_bin_size": 0.05
+  },
+  "baseline": {
+    "train": {
+      "total_pnl": -872139688.91,
+      "trade_count": 3893,
+      "win_rate": 0.0285,
+      "avg_win": 711041.09,
+      "avg_loss": -251471.51,
+      "avg_hold_days": 68.8,
+      "max_drawdown": -913542945.83,
+      "gap_closed_exits": 3743,
+      "percentile_exits": 0,
+      "force_closes": 150
+    },
+    "test": {
+      "total_pnl": -259842942.26,
+      "trade_count": 772,
+      "win_rate": 0.0181,
+      "avg_win": 472929.37,
+      "avg_loss": -351535.56,
+      "avg_hold_days": 28.6,
+      "max_drawdown": -261221511.15,
+      "gap_closed_exits": 750,
+      "percentile_exits": 0,
+      "force_closes": 22
+    },
+    "yr2020": {
+      "total_pnl": -312618660.64,
+      "trade_count": 633,
+      "win_rate": 0.0616,
+      "avg_win": 141786.53,
+      "avg_loss": -535603.26,
+      "avg_hold_days": 52.0,
+      "max_drawdown": -312481445.81,
+      "gap_closed_exits": 499,
+      "percentile_exits": 0,
+      "force_closes": 134
+    }
+  },
+  "train": {
+    "total_pnl": -877987639.79,
+    "trade_count": 9360,
+    "win_rate": 0.3556,
+    "avg_win": 143278.72,
+    "avg_loss": -224605.31,
+    "avg_hold_days": 27.9,
+    "max_drawdown": -880112621.28,
+    "gap_closed_exits": 3439,
+    "percentile_exits": 5771,
+    "force_closes": 150,
+    "excess_return": -5847950.88
+  },
+  "test": {
+    "total_pnl": -247956059.29,
+    "trade_count": 1293,
+    "win_rate": 0.2428,
+    "avg_win": 171438.93,
+    "avg_loss": -308261.37,
+    "avg_hold_days": 16.4,
+    "max_drawdown": -247836229.37,
+    "gap_closed_exits": 721,
+    "percentile_exits": 550,
+    "force_closes": 22,
+    "excess_return": 11886882.97
+  },
+  "yr2020": {
+    "total_pnl": -308103590.47,
+    "trade_count": 1319,
+    "win_rate": 0.3199,
+    "avg_win": 224191.54,
+    "avg_loss": -448954.76,
+    "avg_hold_days": 24.3,
+    "max_drawdown": -312038659.59,
+    "gap_closed_exits": 452,
+    "percentile_exits": 737,
+    "force_closes": 130,
+    "excess_return": 4515070.17
+  },
+  "best_candidate": {
+    "min_hold_days": 3,
+    "percentile_threshold": 60,
+    "gap_bin_size": 0.05,
+    "train": {
+      "total_pnl": -877987639.79,
+      "trade_count": 9360,
+      "win_rate": 0.3556,
+      "avg_win": 143278.72,
+      "avg_loss": -224605.31,
+      "avg_hold_days": 27.9,
+      "max_drawdown": -880112621.28,
+      "gap_closed_exits": 3439,
+      "percentile_exits": 5771,
+      "force_closes": 150,
+      "excess_return": -5847950.88
+    },
+    "test": {
+      "total_pnl": -247956059.29,
+      "trade_count": 1293,
+      "win_rate": 0.2428,
+      "avg_win": 171438.93,
+      "avg_loss": -308261.37,
+      "avg_hold_days": 16.4,
+      "max_drawdown": -247836229.37,
+      "gap_closed_exits": 721,
+      "percentile_exits": 550,
+      "force_closes": 22,
+      "excess_return": 11886882.97
+    },
+    "validate_2020": {
+      "total_pnl": -308103590.47,
+      "trade_count": 1319,
+      "win_rate": 0.3199,
+      "avg_win": 224191.54,
+      "avg_loss": -448954.76,
+      "avg_hold_days": 24.3,
+      "max_drawdown": -312038659.59,
+      "gap_closed_exits": 452,
+      "percentile_exits": 737,
+      "force_closes": 130,
+      "excess_return": 4515070.17
+    }
+  },
+  "candidate_count": 96,
+  "artifacts": [
+    "summary.json",
+    "report.yaml",
+    "l4_ack.yaml",
+    "diagnostic.yaml"
+  ]
+}

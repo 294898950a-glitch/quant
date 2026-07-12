@@ -1,0 +1,65 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_full-flip-probe_20260524
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_full-flip-probe_20260524
+  strategy_id: cb_arb_value_gap_switch
+  decision: no_adoption_decision_unusable
+  verdict: {}
+  key_metrics: {}
+  evidence_usable: false
+  artifacts_hash: 01a3963a2d689a3b
+interpretation:
+  review_status_code: 2
+  result_summary: full_flip probe generated zero trades — the candidate set is empty
+    under negated value_gap with descending sort, making the probe degenerate and
+    unusable.
+  main_reason: zero trades in both train and test windows means the probe cannot disambiguate
+    whether the anti-alpha is signed or absolute — the test is void.
+  failure_causes:
+  - negated value_gap_amount combined with the same >0 filter produces an empty candidate
+    set
+  - the hypothesis required trades on the negative-gap subset to compare against the
+    forward and reverse-rank results, but none existed
+  next_research_directions:
+  - direction: cost-on reverse rerun of the original reverse-rank signal
+    why: the full-flip degeneracy confirms the negative-gap subset is empty or near-empty
+      under current filters — the cost-adjusted reverse-rank probe (same >0 filter,
+      same descending sort on gap, with cost model enabled) remains the cleanest next
+      comparison against the +38% test-excess cost-off result
+    priority_code: 1
+    priority: high
+  - direction: widen candidate filter to include negative-gap bonds
+    why: if the full-flip hypothesis is to be tested, the >0 filter must be relaxed
+      or removed so the negative-gap subset can actually populate
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - full-flip degeneracy means the three-way disambiguation (forward vs reverse vs
+    full-flip) remains unresolved — only the reverse-rank cost-off probe produced
+    usable evidence
+  - no cost-model-adjusted run exists for the reverse-rank probe to quantify whether
+    costs eat the +38% test excess
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: fc7264403d700bf9
+ai_review_attempts: 2
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: no_adoption_decision_unusable
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data: {}

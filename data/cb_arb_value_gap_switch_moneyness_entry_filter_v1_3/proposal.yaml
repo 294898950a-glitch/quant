@@ -1,0 +1,136 @@
+proposal_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+strategy_id: cb_arb_value_gap_switch
+family: moneyness_entry_filter
+hypothesis: 'Deep out-of-the-money convertible bonds have option values dominated
+  by time premium and implied volatility assumptions, making their theoretical-value
+  gaps the least reliable signals. Restricting entries to candidates where the underlying
+  stock price is at or above a threshold fraction of the conversion price (stock_close
+  / conv_price >= threshold) will screen out the noisiest signals, improving the quality
+  of remaining value-gap entries and producing better risk-adjusted excess returns.
+
+  '
+source_insight: 'The duration-adaptive exit (accepted 2026-05-22) improved exit timing
+  but the strategy remains deeply unprofitable with costs (cumulative excess -10.47%).
+  Three entry-filter families have been tested and all failed: bond-floor proximity
+  (C002, failed mechanical thresholds), market drawdown gate (C009, failed), and contrarian
+  drawdown entry (failed). None of these target the core failure mode of deep OTM
+  CBs — where theoretical value is most sensitive to model assumptions that the current
+  valuation formula may not capture accurately. Moneyness filtering attacks the signal
+  quality problem at its root rather than applying a blunt market-timing overlay.
+
+  '
+expected_improvement: 'Moderate. Screening out deep OTM entries should reduce noise-driven
+  trades and cut tail losses. Expected direction: higher Sharpe ratio, lower max drawdown,
+  modestly improved cumulative excess vs baseline. Not expected to flip cumulative
+  excess to positive on its own, but should be a meaningful building block toward
+  a deployable strategy.
+
+  '
+capability_ids:
+- C003
+required_executor: evaluate_cb_arb_moneyness_entry_filter
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - stk_code
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_call.parquet:
+  - ts_code
+  - is_call
+  - call_date
+test_design:
+  description: 'Grid search over moneyness threshold parameter (stock_close / conv_price)
+    from 0.5 to 1.1 in steps of 0.1. For each threshold, filter the candidate pool
+    to only CBs where stock_close >= threshold * conv_price on the signal date, then
+    run the existing backtester with baseline exit logic unchanged. Evaluate all candidates
+    on the standard train/test split with cost-on. Compare each candidate against
+    the current baseline row (cb_arb-value-gap-switch-medium-signal-cost-on-20260516).
+
+    '
+success_criteria:
+  criteria:
+  - At least one threshold produces a candidate with improved Sharpe ratio vs baseline
+    (cost-on)
+  - No candidate worsens max drawdown vs baseline by more than 2 percentage points
+  - At least one candidate shows directionally improved cumulative excess vs baseline
+    (cost-on)
+falsifiers:
+  train: &id001
+  - All moneyness thresholds produce cumulative excess worse than or equal to baseline
+    (cost-on)
+  - The best candidate Sharpe is lower than baseline Sharpe (cost-on)
+  - Filtering reduces average annual trade count below 5, rendering the strategy non-viable
+  validate: *id001
+  test: *id001
+risk: 'Low. The moneyness filter reduces the candidate pool, which could shrink trade
+  count below viability if the threshold is set too high. But the grid covers 0.5–1.1,
+  so low thresholds (0.5–0.7) should preserve most candidates while still screening
+  out the deepest OTM names where model noise is worst. The risk of accidentally filtering
+  out genuine alpha is low because deep OTM CB option values are theoretically the
+  least reliable inputs to the valuation model.
+
+  '
+why_not_repeated_failure: 'This is not a repeat of any failed or closed direction.
+  The bond-floor entry filter (C002, cb_arb_value_gap_switch_bond-floor-entry-filter_1,
+  failed mechanical thresholds) tested CB price proximity to bond floor — a credit-floor
+  mechanism. The market drawdown entry filter (C009, cb_arb_value_gap_switch_market_drawdown_entry_filter,
+  failed) tested a global market-timing gate. The contrarian drawdown entry tested
+  another market-level timing gate. C003 moneyness filtering is a per-CB quality screen
+  based on the equity option''s distance from the conversion price — a fundamentally
+  different failure mode (model noise in deep OTM theoretical valuations). None of
+  the closed_tags (global_option_entry_gate, option_position_sizing, universe_filter,
+  regime_classifier_variant, etc.) cover this mechanic. The moneyness_entry_filter
+  family has a registered executor (evaluate_cb_arb_moneyness_entry_filter) that has
+  not been tested in any prior run in the recent digest.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_bond-floor-entry-filter_1 (failed_mechanical_thresholds,
+  C002, different mechanic)
+- cb_arb_value_gap_switch_market_drawdown_entry_filter (failed_mechanical_thresholds,
+  C009, different mechanic)
+- cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522 (failed_mechanical_thresholds,
+  different mechanic)
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22 (accepted, C007 exit-side,
+  complementary)
+implementation_assumption: The evaluate_cb_arb_moneyness_entry_filter executor computes
+  stock_close / conv_price for each candidate on each signal date using stk_daily_qfq.parquet
+  (stock close) and cb_basic.parquet (conv_price). It applies a boolean mask to the
+  candidate pool before ranking/scoring, runs the existing backtester unchanged, grid-searches
+  over threshold values, and produces standard review artifacts including train/test
+  metrics, trade logs, and parameter comparison tables.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 15f54236ed0fe294
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 15f54236ed0fe294
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_moneyness_entry_filter_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_3/proposal.yaml

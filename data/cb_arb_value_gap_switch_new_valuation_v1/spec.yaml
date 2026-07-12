@@ -1,0 +1,325 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_new_valuation_v1
+date: '2026-05-26'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'The current theoretical value model uses static or oversimplified credit
+  spread and volatility assumptions that produce noisy value gaps — especially for
+  CBs far from the bond floor where the option component dominates. Incorporating
+  a dynamic credit spread (derived from CB market price vs risk-free bond PV) and
+  time-varying implied volatility into the theoretical valuation will produce more
+  accurate value gaps. This attacks the root cause (signal quality) rather than applying
+  filters on top of a weak signal. The forward-direction sort (most-positive gap first,
+  which review has concluded IS the correct signal direction) should see improved
+  risk-adjusted excess returns because fewer entries will be driven by model noise
+  rather than genuine mispricing.
+
+  Repeated-reject family check — moneyness_stock_to_conv_threshold (3 recent failures):
+  (1) Is the underlying signal invalid? No — review_memory has concluded the forward
+  direction IS the signal and the reverse is anti-alpha. The signal direction is correct
+  but noisy. (2) Is the direction reversed? No — the reverse direction produces strong
+  test excess but review has closed reverse families. The forward direction is correct.
+  (3) Is only the execution condition wrong? Partially — the accepted duration-adaptive
+  exit already improved execution, but the entry signal itself remains the bottleneck.
+  Entry filters (moneyness, bond floor) failed because they reduce candidate count
+  without improving signal-to-noise. The solution is to improve the signal at the
+  source — the valuation formula — not to cull candidates from a noisy signal.
+
+  This proposal is not in any closed family, not in any forbidden family, and not
+  a renamed repeat of failed entry-filter or reverse-direction experiments.
+
+  '
+source_insight: 'The recent digest shows the forward-direction value-gap signal consistently
+  produces negative cumulative excess (-0.1047 cost-on baseline). Entry filters (moneyness
+  v1.1, v1.5, bond floor v1) all failed mechanical thresholds in the forward direction.
+  Reverse-direction probes show +30.3% test excess but review_memory has closed all
+  reverse families under value_gap_rank_is_anti_alpha_2026_05_24. The accepted duration-adaptive
+  exit (2026-05-22) improved execution but did not flip the strategy to positive.
+  The unresolved bottleneck is the valuation model itself — no valuation formula experiment
+  has been run. Improving the theoretical value computation is the highest-leverage
+  untested intervention.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - new_valuation_formula
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C006
+mechanics:
+- new_valuation_formula
+new_data_sources:
+- path: data/cb_warehouse/cb_daily.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+hard_floors:
+  criteria:
+  - cumulative_excess_compound_test_gt_baseline: true
+  - test_sharpe_gte_0: true
+  - adoption_pass: true
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: COMPLETE
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_new_valuation_v1
+  strategy_id: cb_arb_value_gap_switch
+  family: new_valuation_formula
+  hypothesis: 'The current theoretical value model uses static or oversimplified credit
+    spread and volatility assumptions that produce noisy value gaps — especially for
+    CBs far from the bond floor where the option component dominates. Incorporating
+    a dynamic credit spread (derived from CB market price vs risk-free bond PV) and
+    time-varying implied volatility into the theoretical valuation will produce more
+    accurate value gaps. This attacks the root cause (signal quality) rather than
+    applying filters on top of a weak signal. The forward-direction sort (most-positive
+    gap first, which review has concluded IS the correct signal direction) should
+    see improved risk-adjusted excess returns because fewer entries will be driven
+    by model noise rather than genuine mispricing.
+
+    Repeated-reject family check — moneyness_stock_to_conv_threshold (3 recent failures):
+    (1) Is the underlying signal invalid? No — review_memory has concluded the forward
+    direction IS the signal and the reverse is anti-alpha. The signal direction is
+    correct but noisy. (2) Is the direction reversed? No — the reverse direction produces
+    strong test excess but review has closed reverse families. The forward direction
+    is correct. (3) Is only the execution condition wrong? Partially — the accepted
+    duration-adaptive exit already improved execution, but the entry signal itself
+    remains the bottleneck. Entry filters (moneyness, bond floor) failed because they
+    reduce candidate count without improving signal-to-noise. The solution is to improve
+    the signal at the source — the valuation formula — not to cull candidates from
+    a noisy signal.
+
+    This proposal is not in any closed family, not in any forbidden family, and not
+    a renamed repeat of failed entry-filter or reverse-direction experiments.
+
+    '
+  source_insight: 'The recent digest shows the forward-direction value-gap signal
+    consistently produces negative cumulative excess (-0.1047 cost-on baseline). Entry
+    filters (moneyness v1.1, v1.5, bond floor v1) all failed mechanical thresholds
+    in the forward direction. Reverse-direction probes show +30.3% test excess but
+    review_memory has closed all reverse families under value_gap_rank_is_anti_alpha_2026_05_24.
+    The accepted duration-adaptive exit (2026-05-22) improved execution but did not
+    flip the strategy to positive. The unresolved bottleneck is the valuation model
+    itself — no valuation formula experiment has been run. Improving the theoretical
+    value computation is the highest-leverage untested intervention.
+
+    '
+  expected_improvement: 'Cumulative excess compound should move closer to zero or
+    positive by reducing false-positive entries. Even a 3-5pp improvement in cumulative
+    excess (from -0.1047 toward -0.05 or better) would be meaningful. The direction
+    of improvement is more important than magnitude — this tests whether signal quality
+    is the binding constraint.
+
+    '
+  capability_ids:
+  - C006
+  required_executor: evaluate_cb_arb_new_valuation
+  required_data:
+  - path: data/cb_warehouse/cb_daily.parquet
+  - path: data/cb_warehouse/cb_basic.parquet
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  required_data_fields:
+    data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+    - ts_code
+    - trade_date
+    - value_gap_amount
+    - close
+    data/cb_warehouse/cb_daily.parquet:
+    - ts_code
+    - trade_date
+    - close
+    - open
+    - high
+    - low
+    - vol
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - conv_price
+    - maturity_date
+    - coupon_rate
+    - par_value
+    - issue_size
+    - remain_size
+    - delist_date
+    - list_date
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - stk_code
+    - trade_date
+    - close
+    - open
+    - high
+    - low
+    - volume
+  test_design:
+    description: 'Replace the existing theoretical value computation with one that
+      incorporates: (a) a dynamic credit spread estimated daily from CB market price
+      vs discounted bond cash flows, and (b) a rolling historical volatility or GARCH
+      estimate for the equity option component. Recompute daily value_gap_amount =
+      close - new_theo_value. Run the existing value-gap switch backtester with the
+      accepted duration-adaptive exit (min_hold_days=5, initial_threshold_fraction=0.7,
+      decay_period_factor=0.5) in the forward direction (descending sort, most-positive
+      gap first). Compare against the current baseline (cb_arb-value-gap-switch-medium-signal-cost-on-20260516).
+      Train 2018-2022, test 2023-2026, cost-on (slippage=0.0015, impact=0.001).
+
+      '
+  success_criteria:
+    criteria:
+    - cumulative_excess_compound_test_gt_baseline: true
+    - test_sharpe_gte_0: true
+    - adoption_pass: true
+  falsifiers:
+    train:
+    - cumulative_excess_compound_test_lte_baseline: No improvement over current valuation
+    - any_test_year_drawdown_gt_35pct: New valuation increases tail risk
+    - test_sharpe_lt_0: Signal remains unprofitable despite valuation change
+    validate:
+    - cumulative_excess_compound_test_lte_baseline: No improvement over current valuation
+    - any_test_year_drawdown_gt_35pct: New valuation increases tail risk
+    - test_sharpe_lt_0: Signal remains unprofitable despite valuation change
+    test:
+    - cumulative_excess_compound_test_lte_baseline: No improvement over current valuation
+    - any_test_year_drawdown_gt_35pct: New valuation increases tail risk
+    - test_sharpe_lt_0: Signal remains unprofitable despite valuation change
+  risk: 'Low structural risk — changing the valuation formula does not remove candidates
+    or alter exit logic. The worst case is no improvement over baseline. The main
+    risk is that dynamic spread estimation introduces its own noise (lookback parameter
+    sensitivity), but this is testable and can be iterated.
+
+    '
+  why_not_repeated_failure: "This is not a repeated failure of any prior direction:\
+    \ - Entry filter families (moneyness, bond floor) culled candidates from a noisy\n\
+    \  signal and all failed mechanical thresholds. This proposal does not filter\n\
+    \  candidates — it improves the signal they are ranked on.\n- Reverse-direction\
+    \ families (reverse_moneyness, reverse_bond_floor, reverse_exit,\n  reverse_vol_scaling)\
+    \ were closed by review_memory under\n  value_gap_rank_is_anti_alpha_2026_05_24.\
+    \ This proposal uses the forward direction.\n- PnL feedback scaling (C004) failed\
+    \ because it scales exposure to a weak signal.\n  This proposal improves the signal\
+    \ itself.\n- IV percentile exit (C007, iv_percentile_exit_v2) was rejected for\
+    \ negative\n  train-period excess. That was an exit overlay on a weak signal;\
+    \ this attacks\n  the signal at the source.\n- No valuation formula experiment\
+    \ has been run. This is a genuinely new direction.\n"
+  related_prior_runs:
+  - cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+  - cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  - cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+  - cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+  - cb_arb_value_gap_switch_pnl-feedback-scaling_v1
+  - cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+  implementation_assumption: The new theoretical value can be computed from existing
+    warehouse data without requiring new external data sources. Dynamic credit spread
+    uses CB market close price minus risk-free bond PV (using par_value, coupon_rate,
+    maturity_date from cb_basic). Time-varying volatility uses a rolling window (e.g.
+    60-day) of stock daily returns from stk_daily_qfq. The executor replaces value_gap_amount
+    in the daily value gap parquet with the new computation, then passes control to
+    the existing value-gap switch backtester with the accepted exit parameters.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 9e4d6c93cf1434eb
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 9e4d6c93cf1434eb
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_v1/proposal.yaml
+  research_delta_gate:
+    action: advance
+    reason: novel family/capabilities (family=new_valuation_formula, capability_ids=['C006']);
+      no critical-insight reference; queue depth=1.
+    evidence:
+      family: new_valuation_formula
+      capability_ids:
+      - C006
+      cites_critical: null
+      queue_depth: 1
+  mechanics:
+  - new_valuation_formula
+executor_id: evaluate_cb_arb_new_valuation
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_new_valuation.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_new_valuation_v1
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_new_valuation.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_new_valuation_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_new_valuation.py
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_new_valuation_v1/proposal.yaml
+  response_hash: 9e4d6c93cf1434eb
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data: []
+updated_at: '2026-05-26T06:53:00Z'

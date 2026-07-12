@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: ideation_2026-05-21_gap_decay_bond_floor_exit_executor_code
+target_script_path: scripts/evaluate_cb_arb_gap_decay_with_bond_floor.py
+current_target_sha256: 68cc401a563418aa56842fbee3c0edece743aab56e0a8ed775b926eb34c9e488
+previous_installed_source: data/ideation_2026-05-21_gap_decay_bond_floor_exit/generated_executor/evaluate_cb_arb_gap_decay_with_bond_floor.py
+previous_installed_sha256: 68cc401a563418aa
+previous_installed_at: '2026-05-22T15:34:18+00:00'
+required_action: Regenerate the executor from the existing spec.yaml + executor_tool_request.yaml
+  in this run dir. The source file under generated_executor/ was lost after the previous
+  install; the current target in scripts/ may not be the latest version. Write a fresh
+  executor that satisfies the original validation requirements (main + declare_data_requirements
+  + summary.json / report.yaml / l4_ack.yaml / diagnostic.yaml output + GateKeeper
+  import). Once written, the standard handoff completion → install validation → install
+  overwrite (compliance repair flow) path will re-land the executor.
+noted_at: '2026-05-24T23:55:04+00:00'
+dry_run: false

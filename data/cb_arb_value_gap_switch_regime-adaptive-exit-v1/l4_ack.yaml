@@ -1,0 +1,61 @@
+acknowledged: true
+adoption_pass: false
+reason: Regime-adaptive exit evaluated with high_vol_decay=0.5, low_vol_decay=0.7,
+  lookback=126
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-23T14:11:25.724908Z'
+  description: Auto-filled q1_floor_binding description from review.
+  answer: Regime-adaptive exit produced zero excess improvement over the static decay
+    baseline in both train and test periods; strategy remains deeply unprofitable
+    with excess return of -1.0 across all variants.
+  pass: false
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-23T14:11:25.724918Z'
+  description: Auto-filled q2_selection_score description from review.
+  answer: Regime-adaptive exit produced zero excess improvement over the static decay
+    baseline in both train and test periods; strategy remains deeply unprofitable
+    with excess return of -1.0 across all variants.
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-23T14:11:25.724921Z'
+  description: Auto-filled q3_baseline_alignment description from review.
+  answer: Regime-adaptive exit produced zero excess improvement over the static decay
+    baseline in both train and test periods; strategy remains deeply unprofitable
+    with excess return of -1.0 across all variants.
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-23T14:11:25.724922Z'
+  description: Auto-filled q4_monotonic description from review.
+  answer: Regime-adaptive exit produced zero excess improvement over the static decay
+    baseline in both train and test periods; strategy remains deeply unprofitable
+    with excess return of -1.0 across all variants.
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-23T14:11:25.724924Z'
+  description: Auto-filled q5_trade_overlap description from review.
+  answer: Regime-adaptive exit produced zero excess improvement over the static decay
+    baseline in both train and test periods; strategy remains deeply unprofitable
+    with excess return of -1.0 across all variants.
+  pass: false
+auto_computed_at: '2026-05-23T14:11:25.724925Z'
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+reviewer: codex
+ack_at: '2026-05-23T23:04:28+00:00'
+overall_pass: false
+overall_decision: reject
+overall_reason: excess_improvement_test is 0.0 — regime conditioning added no predictive
+  value — and cumulative excess is negative across all periods, failing the hard floor.
+normalized_at: '2026-05-23T23:04:28+00:00'
+normalized_by: normalize_report_schema

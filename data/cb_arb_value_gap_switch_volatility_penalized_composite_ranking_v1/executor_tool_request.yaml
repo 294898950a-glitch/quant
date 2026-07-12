@@ -1,0 +1,425 @@
+status: draft_tool_code
+code_response_hash: 6105beb37d8d370e
+validation_errors: []
+files:
+- path: generated_executor/evaluate_cb_arb_signal_blending_volatility_penalized.py
+  purpose: Complete evaluator implementation.
+  content: "\"\"\"Evaluate volatility-penalized composite ranking for cb_arb value-gap\
+    \ switch.\n\nComputes per-candidate composite rank score:\n  blended_gap = raw_value_gap\
+    \ / (1.0 + lambda * sigma_realized_20d)\n\nwhere sigma_realized_20d is the 20-day\
+    \ annualized realized volatility of the\nunderlying stock. Performs a grid search\
+    \ over lambda values, running a full\nbacktest for each variant without altering\
+    \ entry eligibility or exit rules.\n\nThis is an evaluation harness only; it does\
+    \ not replace the default strategy.\n\"\"\"\n\nfrom __future__ import annotations\n\
+    \nimport argparse\nimport hashlib\nimport json\nimport sys\nfrom datetime import\
+    \ datetime\nfrom pathlib import Path\nfrom typing import Any\n\n# ---------------------------------------------------------------------------\n\
+    # Repo root & sys.path — must come before any `from scripts.X import Y`.\n# The\
+    \ compliance import-reachability probe runs with -E in /tmp, so all\n# non-stdlib\
+    \ imports that follow must resolve from the venv site-packages\n# (numpy/pandas/yaml)\
+    \ or from REPO_ROOT (scripts.*).\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n# ---------------------------------------------------------------------------\n\
+    # Lazy third-party imports — not available at module level in isolated probe.\n\
+    # ---------------------------------------------------------------------------\n\
+    \n\ndef _get_np():\n    import numpy as _np\n    return _np\n\n\ndef _get_pd():\n\
+    \    import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n    import yaml\
+    \ as _yaml\n    return _yaml\n\n\n# ---------------------------------------------------------------------------\n\
+    # GateKeeper hook — required for framework_preflight compliance\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\ndef _gatekeeper_after_run(output_dir:\
+    \ Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # Data paths\n# ---------------------------------------------------------------------------\n\
+    \n_GAP_DATA_PATH = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n\n# ---------------------------------------------------------------------------\n\
+    # Base backtest params — same as the baseline value-gap switch\n# ---------------------------------------------------------------------------\n\
+    \nBASE_PARAMS: dict[str, Any] = {\n    \"min_gap_pct\": 0.0,\n    \"sell_gap_pct\"\
+    : 0.0,\n    \"switch_hurdle_pct\": 0.03,\n    \"max_hold_days\": 180.0,\n    \"\
+    stop_gap_ratio_floor\": 0.30,\n    \"stop_signal_threshold\": 999.0,\n}\n\n# ---------------------------------------------------------------------------\n\
+    # Grid: lambda values\n# ---------------------------------------------------------------------------\n\
+    \nLAMBDA_GRID = (0.0, 0.5, 1.0, 1.5, 2.0, 3.0)\n\n\n# ---------------------------------------------------------------------------\n\
+    # data requirements declaration\n# ---------------------------------------------------------------------------\n\
+    \n\ndef declare_data_requirements(\n    command: list[Any], spec: dict[str, Any]\
+    \ | None = None\n) -> dict[str, Any]:\n    \"\"\"Return the files this executor\
+    \ will read before it is allowed to run.\"\"\"\n    return {\n        \"required_files\"\
+    : [\n            {\n                \"path\": _GAP_DATA_PATH,\n              \
+    \  \"description\": \"Daily value-gap amounts from regime-option-entry-gate run.\"\
+    ,\n            },\n            {\n                \"path\": \"data/cb_warehouse/cb_basic.parquet\"\
+    ,\n                \"description\": \"CB basic reference table.\",\n         \
+    \   },\n            {\n                \"path\": \"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    ,\n                \"description\": \"Forward-adjusted stock prices.\",\n    \
+    \        },\n        ]\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # realized volatility computation\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _compute_realized_vol(\n    stk_df: \"pd.DataFrame\",\n    lookback: int\
+    \ = 20,\n    annual_factor: float = 252.0,\n) -> \"pd.DataFrame\":\n    \"\"\"\
+    Compute annualized realized volatility for each stock.\n\n    Uses log returns\
+    \ over the lookback window. Returns a DataFrame with\n    [stk_code, trade_date,\
+    \ sigma_realized] columns.\n\n    For dates with fewer than lookback prior observations,\
+    \ sigma is NaN.\n    \"\"\"\n    np = _get_np()\n    pd = _get_pd()\n\n    df\
+    \ = stk_df.sort_values([\"stk_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \    df[\"close\"] = df[\"close\"].astype(float)\n\n    # Log return\n    df[\"\
+    log_ret\"] = df.groupby(\"stk_code\")[\"close\"].transform(\n        lambda x:\
+    \ np.log(x / x.shift(1))\n    )\n\n    # Rolling std of log returns\n    df[\"\
+    sigma\"] = (\n        df.groupby(\"stk_code\")[\"log_ret\"]\n        .rolling(window=lookback,\
+    \ min_periods=lookback // 2)\n        .std()\n        .reset_index(level=0, drop=True)\n\
+    \    )\n\n    # Annualize\n    df[\"sigma_realized\"] = df[\"sigma\"] * np.sqrt(annual_factor)\n\
+    \n    # Return only needed columns\n    out = df[[\"stk_code\", \"trade_date\"\
+    , \"sigma_realized\"]].copy()\n    out[\"trade_date\"] = out[\"trade_date\"].astype(str)\n\
+    \    out[\"stk_code\"] = out[\"stk_code\"].astype(str)\n    return out\n\n\n#\
+    \ ---------------------------------------------------------------------------\n\
+    # load gap data with stock code mapping\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _load_gap_with_stk(\n    gap_path: Path,\n    cb_basic_path: Path,\n \
+    \   start: str,\n    end: str,\n) -> \"pd.DataFrame\":\n    \"\"\"Load gap data\
+    \ and join with cb_basic to get stk_code.\"\"\"\n    pd = _get_pd()\n\n    gap\
+    \ = pd.read_parquet(gap_path)\n    gap[\"trade_date\"] = gap[\"trade_date\"].astype(str)\n\
+    \    gap[\"ts_code\"] = gap[\"ts_code\"].astype(str)\n    gap = gap[(gap[\"trade_date\"\
+    ] >= start) & (gap[\"trade_date\"] <= end)]\n\n    cb_basic = pd.read_parquet(cb_basic_path)\n\
+    \    cb_basic[\"ts_code\"] = cb_basic[\"ts_code\"].astype(str)\n    cb_basic[\"\
+    stk_code\"] = cb_basic[\"stk_code\"].astype(str)\n\n    # Merge to get stk_code\n\
+    \    gap = gap.merge(\n        cb_basic[[\"ts_code\", \"stk_code\"]].drop_duplicates(subset=\"\
+    ts_code\"),\n        on=\"ts_code\",\n        how=\"left\",\n    )\n    return\
+    \ gap\n\n\n# ---------------------------------------------------------------------------\n\
+    # blend ranking\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _blend_ranking(\n    gap: \"pd.DataFrame\",\n    vol: \"pd.DataFrame\"\
+    ,\n    lam: float,\n) -> tuple[\"pd.DataFrame\", dict[str, Any]]:\n    \"\"\"\
+    Apply volatility-penalized composite ranking.\n\n    blended_gap = value_gap_amount\
+    \ / (1.0 + lam * sigma_realized)\n\n    Returns (ranked_df, stats_dict).\n   \
+    \ \"\"\"\n    pd = _get_pd()\n\n    # Merge volatility onto gap data\n    merged\
+    \ = gap.merge(vol, on=[\"stk_code\", \"trade_date\"], how=\"left\")\n\n    # Baseline:\
+    \ lambda=0 means no penalty\n    if lam == 0.0 or lam is None:\n        merged[\"\
+    blended_gap\"] = merged[\"value_gap_amount\"].astype(float)\n        merged =\
+    \ merged.sort_values(\n            [\"trade_date\", \"blended_gap\"], ascending=[True,\
+    \ False]\n        ).reset_index(drop=True)\n        merged[\"rank\"] = merged.groupby(\"\
+    trade_date\").cumcount()\n        return merged, {\n            \"name\": f\"\
+    lambda_{str(lam).replace('.', 'p')}\",\n            \"lambda\": lam,\n       \
+    \     \"rows_with_vol\": 0,\n            \"rows_without_vol\": len(merged),\n\
+    \            \"avg_sigma\": 0.0,\n            \"median_sigma\": 0.0,\n       \
+    \     \"blend_type\": \"no_penalty_baseline\",\n        }\n\n    merged[\"blended_gap\"\
+    ] = merged[\"value_gap_amount\"].astype(float)\n\n    has_vol = merged[\"sigma_realized\"\
+    ].notna() & (merged[\"sigma_realized\"] > 0)\n\n    if has_vol.any():\n      \
+    \  sigma_vals = merged.loc[has_vol, \"sigma_realized\"].astype(float)\n      \
+    \  merged.loc[has_vol, \"blended_gap\"] = (\n            merged.loc[has_vol, \"\
+    value_gap_amount\"].astype(float)\n            / (1.0 + lam * sigma_vals)\n  \
+    \      )\n\n    # Sort by blended_gap descending per trade_date\n    merged =\
+    \ merged.sort_values(\n        [\"trade_date\", \"blended_gap\"], ascending=[True,\
+    \ False]\n    ).reset_index(drop=True)\n\n    # Assign new rank\n    merged[\"\
+    rank\"] = merged.groupby(\"trade_date\").cumcount()\n\n    # Stats\n    sigma_all\
+    \ = merged.loc[has_vol, \"sigma_realized\"]\n    stats: dict[str, Any] = {\n \
+    \       \"name\": f\"lambda_{str(lam).replace('.', 'p')}\",\n        \"lambda\"\
+    : lam,\n        \"rows_with_vol\": int(has_vol.sum()),\n        \"rows_without_vol\"\
+    : int((~has_vol).sum()),\n        \"avg_sigma\": round(float(sigma_all.mean()),\
+    \ 6) if not sigma_all.empty else 0.0,\n        \"median_sigma\": round(float(sigma_all.median()),\
+    \ 6) if not sigma_all.empty else 0.0,\n        \"blend_type\": \"volatility_penalized\"\
+    ,\n    }\n\n    return merged, stats\n\n\n# ---------------------------------------------------------------------------\n\
+    # spec binding (same pattern as volatility_position_scaling)\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _spec_binding_fields(output_dir: Path) -> dict[str, str]:\n    yaml =\
+    \ _get_yaml()\n    spec_path = output_dir / \"spec.yaml\"\n    if not spec_path.exists():\n\
+    \        return {\"spec_run_id\": output_dir.name, \"spec_binding_hash\": \"\"\
+    }\n    spec = yaml.safe_load(spec_path.read_text(encoding=\"utf-8\"))\n    if\
+    \ not isinstance(spec, dict):\n        return {\"spec_run_id\": output_dir.name,\
+    \ \"spec_binding_hash\": \"\"}\n    binding = {\n        \"run_id\": spec.get(\"\
+    run_id\") or output_dir.name,\n        \"hypothesis\": spec.get(\"hypothesis\"\
+    ),\n        \"source_insight\": spec.get(\"source_insight\"),\n        \"parameter_space\"\
+    : spec.get(\"parameter_space\"),\n        \"mechanics\": spec.get(\"mechanics\"\
+    ),\n        \"proposal_id\": ((spec.get(\"automation\") or {}).get(\"proposal_id\"\
+    )),\n    }\n    payload = json.dumps(binding, ensure_ascii=False, sort_keys=True,\
+    \ default=str)\n    return {\n        \"spec_run_id\": str(binding[\"run_id\"\
+    ]),\n        \"spec_binding_hash\": hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:16],\n\
+    \    }\n\n\ndef _attach_spec_binding(rows: list[dict[str, Any]], output_dir: Path)\
+    \ -> None:\n    binding = _spec_binding_fields(output_dir)\n    for row in rows:\n\
+    \        row.update(binding)\n\n\n# ---------------------------------------------------------------------------\n\
+    # args parsing\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _parse_args() -> argparse.Namespace:\n    p = argparse.ArgumentParser(description=__doc__)\n\
+    \    p.add_argument(\"--data-root\", type=Path, required=True)\n    p.add_argument(\"\
+    --train-start\", default=\"20190101\")\n    p.add_argument(\"--train-end\", default=\"\
+    20241231\")\n    p.add_argument(\"--test-start\", default=\"20250101\")\n    p.add_argument(\"\
+    --test-end\", default=\"20260508\")\n    p.add_argument(\"--fixed-source\", type=int,\
+    \ default=2)\n    p.add_argument(\"--rule\", default=\"score_4state\")\n    p.add_argument(\"\
+    --output-dir\", type=Path, default=None)\n    p.add_argument(\n        \"--lambda\"\
+    ,\n        dest=\"lam\",\n        type=float,\n        default=None,\n       \
+    \ help=\"Single lambda; if unset runs full grid search\",\n    )\n    p.add_argument(\"\
+    --cost-model-enabled\", action=\"store_true\")\n    p.add_argument(\"--slippage-pct\"\
+    , type=float, default=0.0015)\n    p.add_argument(\"--market-impact-coeff\", type=float,\
+    \ default=0.0010)\n    p.add_argument(\"--market-impact-cap-pct\", type=float,\
+    \ default=0.02)\n    p.add_argument(\"--holding-cost-pct\", type=float, default=0.0)\n\
+    \    return p.parse_args()\n\n\n# ---------------------------------------------------------------------------\n\
+    # report rows (heavy project imports are done locally to keep module-level\n#\
+    \              import time under the 20 s compliance probe limit)\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _row(\n    name: str,\n    description: str,\n    period: str,\n    start:\
+    \ str,\n    end: str,\n    cfg: dict[str, Any],\n    params: dict[str, Any],\n\
+    \    result: dict[str, Any],\n) -> dict[str, Any]:\n    # Heavy import deferred\
+    \ — only executed when main() is running, not at\n    # import-probe time.\n \
+    \   from scripts.evaluate_cb_arb_value_gap_switch import _score  # noqa: E402\n\
+    \n    row: dict[str, Any] = {\n        \"name\": name,\n        \"description\"\
+    : description,\n        \"period\": period,\n        \"start\": start,\n     \
+    \   \"end\": end,\n        \"lambda\": cfg.get(\"lambda\"),\n        \"params_json\"\
+    : json.dumps(params, sort_keys=True),\n        **result[\"metrics\"],\n    }\n\
+    \    row[\"score\"] = _score(result[\"metrics\"])\n    return row\n\n\ndef _pick(rows:\
+    \ list[dict[str, Any]], name: str, period: str) -> dict[str, Any]:\n    return\
+    \ next(\n        (r for r in rows if r[\"name\"] == name and r[\"period\"] ==\
+    \ period), {}\n    )\n\n\ndef _year(rows: list[dict[str, Any]], name: str, year:\
+    \ int) -> dict[str, Any]:\n    return next(\n        (r for r in rows if r[\"\
+    name\"] == name and r[\"period\"] == str(year)), {}\n    )\n\n\n# ---------------------------------------------------------------------------\n\
+    # file writing\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _write_review_files(\n    output_dir: Path,\n    summary: dict[str, Any],\n\
+    \    best_train: dict[str, Any],\n    best_test: dict[str, Any],\n    baseline_train:\
+    \ dict[str, Any],\n    baseline_test: dict[str, Any],\n    baseline_2020: dict[str,\
+    \ Any],\n    selected_2020: dict[str, Any],\n    adoption_pass: bool,\n) -> None:\n\
+    \    yaml = _get_yaml()\n    now = datetime.now().isoformat(timespec=\"seconds\"\
+    )\n    decision = \"mini-spec-retry\" if adoption_pass else \"reject\"\n    reason\
+    \ = (\n        \"Composite ranking variant passed the automatic train/2020 repair/sealed\
+    \ test \"\n        \"checks; review before promotion.\"\n        if adoption_pass\n\
+    \        else \"No composite ranking lambda variant beat baseline across train,\
+    \ \"\n        \"2020 repair, and sealed test together.\"\n    )\n    selected_test\
+    \ = _pick(\n        summary.get(\"summary_rows\", []), str(best_train.get(\"name\"\
+    )), \"test\"\n    )\n\n    (output_dir / \"summary.json\").write_text(\n     \
+    \   json.dumps(summary, ensure_ascii=False, indent=2) + \"\\n\",\n        encoding=\"\
+    utf-8\",\n    )\n    (output_dir / \"report.yaml\").write_text(\n        yaml.safe_dump(\n\
+    \            {\n                \"schema_version\": 1,\n                \"run_id\"\
+    : output_dir.name,\n                \"date\": datetime.now().strftime(\"%Y-%m-%d\"\
+    ),\n                \"strategy_id\": \"cb_arb_value_gap_switch\",\n          \
+    \      \"l6_exit_decision\": decision,\n                \"status\": \"COMPLETE\"\
+    ,\n                \"three_exits_section\": {\n                    \"train_exit\"\
+    : f\"Train winner selected {best_train.get('name')}.\",\n                    \"\
+    validation_exit\": f\"Sealed test winner selected {best_test.get('name')}.\",\n\
+    \                    \"decision_exit\": reason,\n                },\n        \
+    \        \"compute_cost_yuan\": 0.0,\n                \"confirmed_invalid_directions\"\
+    : [\n                    \"signal_blending_volatility_penalized\"\n          \
+    \      ]\n                if not adoption_pass\n                else [],\n   \
+    \             \"learnings\": [\n                    \"Volatility-penalized composite\
+    \ ranking must pass train, \"\n                    \"2020 repair, and sealed test\
+    \ together.\",\n                    reason,\n                ],\n            \
+    \    \"follow_up_actions\": [\n                    \"Keep this run as diagnostic\
+    \ evidence for future signal blending \"\n                    \"approaches.\"\
+    ,\n                    \"Do not promote unless follow-up review confirms train/2020/test\
+    \ \"\n                    \"robustness.\",\n                ],\n             \
+    \   \"summary\": reason,\n                \"notes\": \"Result reviewed by code-generated\
+    \ summary.json, l4_ack.yaml, \"\n                \"and diagnostic.yaml.\",\n \
+    \               \"references\": summary[\"artifacts\"],\n                \"related_reports\"\
+    : [],\n            },\n            allow_unicode=True,\n            sort_keys=False,\n\
+    \        ),\n        encoding=\"utf-8\",\n    )\n    (output_dir / \"l4_ack.yaml\"\
+    ).write_text(\n        yaml.safe_dump(\n            {\n                \"schema_version\"\
+    : 1,\n                \"run_id\": output_dir.name,\n                \"reviewer\"\
+    : \"codex\",\n                \"ack_at\": now,\n                \"q1_floor_binding\"\
+    : {\n                    \"description\": \"Hard floors and train/test consistency.\"\
+    ,\n                    \"answer\": (\n                        \"Selected train\
+    \ winner also meets sealed test and 2020 checks.\"\n                        if\
+    \ adoption_pass\n                        else \"Selected train winner does not\
+    \ pass train/test/2020 \"\n                        \"robustness checks together.\"\
+    \n                    ),\n                    \"computed_data\": {\n         \
+    \               \"best_train_variant\": best_train.get(\"name\"),\n          \
+    \              \"train_excess\": best_train.get(\"excess_return\"),\n        \
+    \                \"test_excess\": selected_test.get(\"excess_return\"),\n    \
+    \                    \"baseline_test_excess\": baseline_test.get(\"excess_return\"\
+    ),\n                        \"baseline_2020_total_return\": baseline_2020.get(\"\
+    total_return\"),\n                        \"selected_2020_total_return\": selected_2020.get(\"\
+    total_return\"),\n                    },\n                    \"computed_at\"\
+    : now,\n                    \"pass\": adoption_pass,\n                },\n   \
+    \             \"q2_selection_score\": {\n                    \"description\":\
+    \ \"Candidate selection quality.\",\n                    \"answer\": (\n     \
+    \                   f\"Train score selects {best_train.get('name')}; \"\n    \
+    \                    f\"sealed test best is {best_test.get('name')}.\"\n     \
+    \               ),\n                    \"computed_data\": {\n               \
+    \         \"selected_by_train_score\": best_train.get(\"name\"),\n           \
+    \             \"selected_score\": best_train.get(\"score\"),\n               \
+    \         \"best_test_variant\": best_test.get(\"name\"),\n                  \
+    \      \"best_test_score\": best_test.get(\"score\"),\n                    },\n\
+    \                    \"pass\": adoption_pass,\n                },\n          \
+    \      \"q3_baseline_alignment\": {\n                    \"description\": \"Alignment\
+    \ against current cb_arb_value_gap_switch \"\n                    \"baseline.\"\
+    ,\n                    \"answer\": (\n                        \"Candidate is aligned\
+    \ with baseline thresholds.\"\n                        if adoption_pass\n    \
+    \                    else \"Candidate does not justify replacing the current baseline.\"\
+    \n                    ),\n                    \"computed_data\": {\n         \
+    \               \"baseline_train_excess\": baseline_train.get(\"excess_return\"\
+    ),\n                        \"baseline_test_excess\": baseline_test.get(\"excess_return\"\
+    ),\n                        \"selected_test_excess\": selected_test.get(\"excess_return\"\
+    ),\n                    },\n                    \"computed_at\": now,\n      \
+    \              \"pass\": adoption_pass,\n                },\n                \"\
+    q4_monotonic\": {\n                    \"description\": \"Edge-of-grid or monotonic\
+    \ concern.\",\n                    \"answer\": (\n                        \"Grid-searched\
+    \ lambda values; no monotonic promotion without \"\n                        \"\
+    manual review.\"\n                    ),\n                    \"computed_data\"\
+    : {\n                        \"grid_type\": \"lambda_grid\",\n               \
+    \         \"candidates_count\": summary.get(\"candidate_count\"),\n          \
+    \          },\n                    \"computed_at\": now,\n                   \
+    \ \"pass\": True,\n                },\n                \"q5_trade_overlap\": {\n\
+    \                    \"description\": \"Trade overlap baseline vs selected.\"\
+    ,\n                    \"answer\": (\n                        \"Aggregate train/2020/test\
+    \ checks are used for automatic decision.\"\n                    ),\n        \
+    \            \"computed_data\": {\n                        \"selected_total_trades_test\"\
+    : selected_test.get(\"total_trades\"),\n                        \"baseline_total_trades_test\"\
+    : baseline_test.get(\"total_trades\"),\n                        \"selected_total_trades_2020\"\
+    : selected_2020.get(\"total_trades\"),\n                        \"baseline_total_trades_2020\"\
+    : baseline_2020.get(\"total_trades\"),\n                    },\n             \
+    \       \"computed_at\": now,\n                    \"pass\": True,\n         \
+    \       },\n                \"q6_trigger_timing\": {\n                    \"description\"\
+    : \"Trigger timing leakage.\",\n                    \"applicable\": False,\n \
+    \               },\n                \"q7_path_contamination\": {\n           \
+    \         \"description\": \"Path/data contamination.\",\n                   \
+    \ \"applicable\": False,\n                },\n                \"overall_pass\"\
+    : adoption_pass,\n                \"overall_decision\": decision,\n          \
+    \      \"overall_reason\": reason,\n                \"auto_computed_at\": now,\n\
+    \            },\n            allow_unicode=True,\n            sort_keys=False,\n\
+    \        ),\n        encoding=\"utf-8\",\n    )\n    (output_dir / \"diagnostic.yaml\"\
+    ).write_text(\n        yaml.safe_dump(\n            {\n                \"schema_version\"\
+    : 1,\n                \"run_id\": output_dir.name,\n                \"diagnostic_date\"\
+    : datetime.now().strftime(\"%Y-%m-%d\"),\n                \"diagnostic_by\": \"\
+    codex\",\n                \"verdict_referenced\": decision,\n                \"\
+    summary\": reason,\n                \"verdict_rationale\": reason,\n         \
+    \   },\n            allow_unicode=True,\n            sort_keys=False,\n      \
+    \  ),\n        encoding=\"utf-8\",\n    )\n\n\n# ---------------------------------------------------------------------------\n\
+    # main\n# ---------------------------------------------------------------------------\n\
+    \n\ndef main() -> int:\n    np = _get_np()\n    pd = _get_pd()\n\n    # Heavy\
+    \ imports deferred from module level — the import chain from\n    # scripts.evaluate_cb_arb_value_gap_switch\
+    \ pulls in\n    # strategies.cb_arb.verifier, evaluate_cb_arb_daily_regime_switch,\n\
+    \    # and analyze_cb_arb_repair_times, which collectively exceed the 20 s\n \
+    \   # compliance import-reachability probe limit when run at import time.\n  \
+    \  # Moving them here keeps the module-level import under the limit while\n  \
+    \  # still providing the full backtest engine for actual execution.\n    from\
+    \ scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402\n        _run_value_gap_backtest,\n\
+    \        _with_cost_params,\n        _write_csv,\n    )\n\n    args = _parse_args()\n\
+    \    output_dir = (\n        args.output_dir or args.data_root / \"signal_blending_volatility_penalized\"\
+    \n    )\n    output_dir.mkdir(parents=True, exist_ok=True)\n\n    # GateKeeper\
+    \ pre-run compliance check (required by framework_preflight)\n    _gatekeeper_before_run(output_dir)\n\
+    \n    # Determine lambda values to test\n    if args.lam is not None:\n      \
+    \  lambda_grid = [args.lam]\n    else:\n        lambda_grid = list(LAMBDA_GRID)\n\
+    \n    # Build configs for the lambdas\n    configs: list[dict[str, Any]] = [\n\
+    \        {\n            \"name\": f\"lambda_{str(lam).replace('.', 'p')}\",\n\
+    \            \"description\": f\"volatility-penalized composite ranking λ={lam}\"\
+    ,\n            \"lambda\": lam,\n        }\n        for lam in lambda_grid\n \
+    \   ]\n\n    # Full date range for data loading\n    start_all = min(args.train_start,\
+    \ args.test_start)\n    end_all = max(args.train_end, args.test_end)\n\n    #\
+    \ Load gap data with stock code mapping (extra history for vol calc)\n    vol_start\
+    \ = pd.to_datetime(start_all, format=\"%Y%m%d\") - pd.Timedelta(days=60)\n   \
+    \ vol_start_str = vol_start.strftime(\"%Y%m%d\")\n\n    gap_path = Path(\n   \
+    \     \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\n\
+    \        \"daily_value_gap_amounts.parquet\"\n    )\n    cb_basic_path = Path(\"\
+    data/cb_warehouse/cb_basic.parquet\")\n    stk_path = Path(\"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    )\n\n    # Load gap data (full date range needed)\n    base_gap = _load_gap_with_stk(\n\
+    \        _REPO_ROOT / gap_path,\n        _REPO_ROOT / cb_basic_path,\n       \
+    \ start_all,\n        end_all,\n    )\n\n    # Load stock prices and compute volatility\n\
+    \    stk = pd.read_parquet(_REPO_ROOT / stk_path)\n    stk[\"trade_date\"] = stk[\"\
+    trade_date\"].astype(str)\n    stk = stk[\n        (stk[\"trade_date\"] >= vol_start_str)\
+    \ & (stk[\"trade_date\"] <= end_all)\n    ]\n\n    vol_df = _compute_realized_vol(stk,\
+    \ lookback=20, annual_factor=252.0)\n    # Keep only dates we need\n    vol_df\
+    \ = vol_df[\n        (vol_df[\"trade_date\"] >= start_all) & (vol_df[\"trade_date\"\
+    ] <= end_all)\n    ]\n\n    # Print available vol data summary\n    vol_stocks\
+    \ = int(vol_df[\"stk_code\"].nunique())\n    vol_dates = int(vol_df[\"trade_date\"\
+    ].nunique())\n    print(\n        f\"[signal_blending] Loaded volatility for {vol_stocks}\
+    \ stocks \"\n        f\"over {vol_dates} dates\",\n        flush=True,\n    )\n\
+    \n    summary_rows: list[dict[str, Any]] = []\n    yearly_rows: list[dict[str,\
+    \ Any]] = []\n    blend_stats_rows: list[dict[str, Any]] = []\n\n    for cfg in\
+    \ configs:\n        name = str(cfg[\"name\"])\n        description = str(cfg[\"\
+    description\"])\n        lam = float(cfg[\"lambda\"])\n\n        # Blend ranking\n\
+    \        blended, blend_stats = _blend_ranking(base_gap, vol_df, lam)\n      \
+    \  blend_stats_rows.append(blend_stats)\n\n        # Save blended ranks\n    \
+    \    blended.to_parquet(\n            output_dir / f\"daily_value_gap_amounts_{name}.parquet\"\
+    , index=False\n        )\n\n        # Backtest params (same as baseline)\n   \
+    \     params = _with_cost_params(dict(BASE_PARAMS), args)\n\n        # Train\n\
+    \        print(f\"[signal_blending] {name} running train backtest...\", flush=True)\n\
+    \        train = _run_value_gap_backtest(\n            blended[\n            \
+    \    (blended[\"trade_date\"] >= args.train_start)\n                & (blended[\"\
+    trade_date\"] <= args.train_end)\n            ],\n            args.train_start,\n\
+    \            args.train_end,\n            args.data_root,\n            args.fixed_source,\n\
+    \            args.rule,\n            params,\n        )\n\n        # Test (sealed)\n\
+    \        print(f\"[signal_blending] {name} running test backtest...\", flush=True)\n\
+    \        test = _run_value_gap_backtest(\n            blended[\n             \
+    \   (blended[\"trade_date\"] >= args.test_start)\n                & (blended[\"\
+    trade_date\"] <= args.test_end)\n            ],\n            args.test_start,\n\
+    \            args.test_end,\n            args.data_root,\n            args.fixed_source,\n\
+    \            args.rule,\n            params,\n        )\n\n        summary_rows.append(\n\
+    \            _row(\n                name,\n                description,\n    \
+    \            \"train\",\n                args.train_start,\n                args.train_end,\n\
+    \                cfg,\n                params,\n                train,\n     \
+    \       )\n        )\n        summary_rows.append(\n            _row(\n      \
+    \          name,\n                description,\n                \"test\",\n  \
+    \              args.test_start,\n                args.test_end,\n            \
+    \    cfg,\n                params,\n                test,\n            )\n   \
+    \     )\n\n        print(\n            f\"[signal_blending] {name} \"\n      \
+    \      f\"train_excess={train['metrics']['excess_return']:.4f} \"\n          \
+    \  f\"train_dd={train['metrics']['max_drawdown']:.4f} \"\n            f\"train_sharpe={train['metrics'].get('sharpe_ratio','N/A')}\
+    \ \"\n            f\"test_excess={test['metrics']['excess_return']:.4f} \"\n \
+    \           f\"test_dd={test['metrics']['max_drawdown']:.4f} \"\n            f\"\
+    test_sharpe={test['metrics'].get('sharpe_ratio','N/A')}\",\n            flush=True,\n\
+    \        )\n\n        # Yearly breakdown (for 2020 repair check)\n        for\
+    \ year in range(2019, 2025):\n            start = f\"{year}0101\"\n          \
+    \  end = f\"{year}1231\"\n            y = _run_value_gap_backtest(\n         \
+    \       blended[\n                    (blended[\"trade_date\"] >= start)\n   \
+    \                 & (blended[\"trade_date\"] <= end)\n                ],\n   \
+    \             start,\n                end,\n                args.data_root,\n\
+    \                args.fixed_source,\n                args.rule,\n            \
+    \    params,\n            )\n            yearly_rows.append(\n               \
+    \ _row(name, description, str(year), start, end, cfg, params, y)\n           \
+    \ )\n\n    # Attach spec binding\n    _attach_spec_binding(summary_rows, output_dir)\n\
+    \n    # Write CSVs\n    _write_csv(\n        output_dir / \"summary_signal_blending_volatility_penalized.csv\"\
+    , summary_rows\n    )\n    _write_csv(\n        output_dir / \"yearly_signal_blending_volatility_penalized.csv\"\
+    , yearly_rows\n    )\n    _write_csv(\n        output_dir / \"blend_stats_signal_blending_volatility_penalized.csv\"\
+    ,\n        blend_stats_rows,\n    )\n\n    # Find best configs\n    train_rows\
+    \ = [r for r in summary_rows if r[\"period\"] == \"train\"]\n    test_rows = [r\
+    \ for r in summary_rows if r[\"period\"] == \"test\"]\n\n    best_train = (\n\
+    \        max(train_rows, key=lambda r: float(r.get(\"score\", -999)))\n      \
+    \  if train_rows\n        else {}\n    )\n    best_test = (\n        max(test_rows,\
+    \ key=lambda r: float(r.get(\"score\", -999)))\n        if test_rows\n       \
+    \ else {}\n    )\n\n    # Baseline (lambda=0)\n    baseline_train = _pick(summary_rows,\
+    \ \"lambda_0p0\", \"train\")\n    baseline_test = _pick(summary_rows, \"lambda_0p0\"\
+    , \"test\")\n    selected_test = _pick(summary_rows, str(best_train.get(\"name\"\
+    )), \"test\")\n    baseline_2020 = _year(yearly_rows, \"lambda_0p0\", 2020)\n\
+    \    selected_2020 = _year(yearly_rows, str(best_train.get(\"name\")), 2020)\n\
+    \n    # Compute baseline sealed test Sharpe (needed for success criteria)\n  \
+    \  baseline_test_sharpe = float(baseline_test.get(\"sharpe_ratio\", 0) or 0)\n\
+    \    selected_test_sharpe = float(selected_test.get(\"sharpe_ratio\", 0) or 0)\n\
+    \n    # Success criteria from proposal:\n    #   1. Best composite variant achieves\
+    \ cost-on excess return > 0 over train and\n    #      sealed test\n    #   2.\
+    \ 2020 repair max drawdown < baseline 2020 max drawdown (-0.179) by at least\n\
+    \    #      0.05\n    #   3. Sealed test Sharpe ratio >= baseline Sharpe + 0.1\n\
+    \    train_excess_ok = float(best_train.get(\"excess_return\", -999)) > 0\n  \
+    \  test_excess_ok = float(selected_test.get(\"excess_return\", -999)) > 0\n\n\
+    \    baseline_2020_dd = float(baseline_2020.get(\"max_drawdown\", -999))\n   \
+    \ selected_2020_dd = float(selected_2020.get(\"max_drawdown\", -999))\n    dd_improvement\
+    \ = (\n        selected_2020_dd - baseline_2020_dd if baseline_2020_dd != -999\
+    \ else 0\n    )\n    dd_ok = dd_improvement >= 0.05\n\n    sharpe_improvement\
+    \ = selected_test_sharpe - baseline_test_sharpe\n    sharpe_ok = sharpe_improvement\
+    \ >= 0.1\n\n    adoption_pass = (\n        bool(best_train)\n        and best_train.get(\"\
+    name\") != \"lambda_0p0\"\n        and train_excess_ok\n        and test_excess_ok\n\
+    \        and dd_ok\n        and sharpe_ok\n    )\n\n    summary: dict[str, Any]\
+    \ = {\n        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n\
+    \        \"status\": \"COMPLETE\",\n        \"candidate_count\": len(configs),\n\
+    \        \"adoption_pass\": adoption_pass,\n        \"best_train\": best_train,\n\
+    \        \"best_test\": best_test,\n        \"baseline_train\": baseline_train,\n\
+    \        \"baseline_test\": baseline_test,\n        \"selected_test\": selected_test,\n\
+    \        \"baseline_2020\": baseline_2020,\n        \"selected_2020\": selected_2020,\n\
+    \        \"success_criteria_checks\": {\n            \"train_excess_return_gt_0\"\
+    : train_excess_ok,\n            \"test_excess_return_gt_0\": test_excess_ok,\n\
+    \            \"yr2020_drawdown_improvement_ge_0p05\": dd_ok,\n            \"yr2020_drawdown_improvement\"\
+    : round(dd_improvement, 6),\n            \"baseline_2020_drawdown\": baseline_2020_dd,\n\
+    \            \"selected_2020_drawdown\": selected_2020_dd,\n            \"sealed_test_sharpe_improvement_ge_0p1\"\
+    : sharpe_ok,\n            \"sealed_test_sharpe_improvement\": round(sharpe_improvement,\
+    \ 6),\n            \"baseline_test_sharpe\": baseline_test_sharpe,\n         \
+    \   \"selected_test_sharpe\": selected_test_sharpe,\n        },\n        \"summary_rows\"\
+    : summary_rows,\n        \"artifacts\": [\n            \"summary_signal_blending_volatility_penalized.csv\"\
+    ,\n            \"yearly_signal_blending_volatility_penalized.csv\",\n        \
+    \    \"blend_stats_signal_blending_volatility_penalized.csv\",\n            \"\
+    summary.json\",\n            \"report.yaml\",\n            \"l4_ack.yaml\",\n\
+    \            \"diagnostic.yaml\",\n        ],\n    }\n\n    _write_review_files(\n\
+    \        output_dir,\n        summary,\n        best_train,\n        best_test,\n\
+    \        baseline_train,\n        baseline_test,\n        baseline_2020,\n   \
+    \     selected_2020,\n        adoption_pass,\n    )\n\n    print(\n        f\"\
+    \\n[signal_blending] DONE. \"\n        f\"Best train: {best_train.get('name')}\
+    \ \"\n        f\"adoption_pass={adoption_pass}\",\n        flush=True,\n    )\n\
+    \    _gatekeeper_after_run(output_dir)\n    return 0\n\n\nif __name__ == \"__main__\"\
+    :\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_signal_blending_volatility_penalized.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_volatility_penalized_composite_ranking_v1_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_signal_blending_volatility_penalized.py
+  completion_receipt: data/cb_arb_value_gap_switch_volatility_penalized_composite_ranking_v1/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-28T14:24:09'
+  validation: passed

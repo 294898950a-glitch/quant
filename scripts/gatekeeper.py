@@ -62,14 +62,14 @@ class GateKeeper:
     def after_run_grid(self, run_dir: Path | None = None) -> None:
         """跑完回测: run_manifest 完整 + 自动算 L4 数据.
 
-        注: 当前 validate_run_manifest + auto_compute_l4_data 都扫所有 active run,
-        run_dir 参数仅用于 logging context. 未来 validator 支持 single-run 时改传.
-        按 Codex 12:07 review: 参数保留 (信息性), 但语义说清.
+        auto_compute_l4_data 只处理本轮 run_dir，避免旧 run 的坏 l4_ack
+        拖死新任务。
         """
         self._log(f"[GateKeeper] after_run_grid (context: {run_dir})")
         self._must_run("validate_run_manifest.py", [],
                        fail_msg="run_manifest.yaml 不全, 拒进入 L4")
-        self._must_run("auto_compute_l4_data.py", [],
+        l4_args = ["--run-dir", str(run_dir)] if run_dir is not None else []
+        self._must_run("auto_compute_l4_data.py", l4_args,
                        fail_msg="L4 数据自动算失败, 检查 ranked.csv / trades.csv")
         self._log("  ✓ 跑批产物 + L4 数据自动算 完整")
 

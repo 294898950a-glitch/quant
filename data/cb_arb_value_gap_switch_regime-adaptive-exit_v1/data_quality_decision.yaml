@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1/spec.yaml
+validated_at: '2026-05-23T22:16:56'
+summary_sha256: 5fb86f997cae81cddaaaebd8f16624e6e8a8d154ccdd7fb14b9c9e3d3108b0b9
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- train_start=20190101 为非交易日，daily_value_gap_amounts 最早数据 20190102，无影响
+fix_plan: []
+decision_reason: 4个必需文件全部存在可读，日期覆盖完整，executor_input_column_hints（regime/trade_date）与数据字段匹配，无required_columns/required_column_quality硬性缺失要求，无阻塞问题
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 6b76af4877d3ed3e

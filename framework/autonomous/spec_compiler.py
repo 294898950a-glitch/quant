@@ -75,6 +75,15 @@ def _proposal_data(proposal: dict[str, Any]) -> set[str]:
     return {str(item["path"] if isinstance(item, dict) else item) for item in proposal.get("required_data", [])}
 
 
+def _executor_required_data(executor: Any) -> list[dict[str, str]]:
+    required: list[dict[str, str]] = []
+    for item in _executor_value(executor, "required_data", []) or []:
+        path = item.get("path") if isinstance(item, dict) else item
+        if path:
+            required.append({"path": str(path)})
+    return required
+
+
 def _missing_proposal_data(proposal: dict[str, Any], repo_root: Path | None = None) -> list[str]:
     root = repo_root or REPO_ROOT
     missing: list[str] = []
@@ -93,6 +102,28 @@ def _normalized_proposal(proposal: dict[str, Any], mechanics: set[str], capabili
     normalized["mechanics"] = sorted(mechanics)
     normalized["capability_ids"] = sorted(capability_ids)
     return normalized
+
+
+def _proposal_with_executor_data(proposal: dict[str, Any], executor: Any) -> tuple[dict[str, Any], list[str]]:
+    """Use executor-declared inputs as executable truth, recording AI-only extras."""
+    normalized = dict(proposal)
+    executor_data = _executor_required_data(executor)
+    executor_paths = {item["path"] for item in executor_data}
+    extra_paths = sorted(path for path in _proposal_data(proposal) if path and path not in executor_paths)
+    normalized["required_data"] = executor_data
+    fields = normalized.get("required_data_fields")
+    if isinstance(fields, dict):
+        dropped_field_paths = sorted(str(path) for path in fields if str(path) not in executor_paths)
+        normalized["required_data_fields"] = {
+            str(path): value
+            for path, value in fields.items()
+            if str(path) in executor_paths
+        }
+        if dropped_field_paths:
+            normalized["dropped_unmatched_required_data_fields"] = dropped_field_paths
+    if extra_paths:
+        normalized["dropped_unmatched_required_data"] = extra_paths
+    return normalized, extra_paths
 
 
 def _closed_intersections(proposal: dict[str, Any], mechanics: set[str], closed_tags: dict[str, Any]) -> set[str]:
@@ -142,7 +173,7 @@ def _format_command_template(executor: Any, proposal: dict[str, Any], output_dir
     config = dict(_executor_value(executor, "default_config", {}) or {})
     config.update(proposal.get("executor_config") or {})
     portable_output_dir = _portable_path(output_dir)
-    config.setdefault("output_dir", portable_output_dir)
+    config["output_dir"] = portable_output_dir
     formatted: list[str] = []
     for item in template:
         text = str(item)
@@ -176,6 +207,18 @@ def _executor_sync_paths(executor: Any) -> list[str]:
         ]
     )
     return list(dict.fromkeys(paths))
+
+
+def _executor_script_missing(executor: Any) -> str | None:
+    script = _executor_value(executor, "script_path")
+    if not script:
+        return "executor script_path missing"
+    path = Path(str(script))
+    if path.is_absolute() or ".." in path.parts:
+        return f"unsafe executor script_path: {script}"
+    if not (REPO_ROOT / path).exists():
+        return f"executor script missing: {script}"
+    return None
 
 
 def _run_id(proposal: dict[str, Any]) -> str:
@@ -318,6 +361,7 @@ def compile(
             implementation_plan_path=plan_path,
         )
 
+    proposal, dropped_unmatched_required_data = _proposal_with_executor_data(proposal, match)
     matching_rules = registry.get("matching_rules") or {}
     if isinstance(matching_rules, dict) and matching_rules.get("require_required_data_exists") is True:
         missing_proposal_data = _missing_proposal_data(proposal)
@@ -364,6 +408,33 @@ def compile(
                 implementation_plan_path=plan_path or "implementation_plan.yaml",
             )
 
+    script_check_enabled = bool(
+        isinstance(matching_rules, dict)
+        and matching_rules.get("require_executor_script_exists") is True
+        and output_dir is not None
+    )
+    script_error = _executor_script_missing(match) if script_check_enabled else None
+    if script_error:
+        plan_path = None
+        spec_path = None
+        if output_dir is not None:
+            out = Path(output_dir)
+            plan_path = _write_yaml(out / "implementation_plan.yaml", {
+                "proposal_id": proposal.get("proposal_id"),
+                "executor_id": _executor_value(match, "executor_id") or _executor_value(match, "id"),
+                "reason": script_error,
+            })
+            spec_path = _write_yaml(
+                out / "spec.yaml",
+                _base_spec(proposal, "DRAFT", script_error, mechanics=mechanics),
+            )
+        return CompileResult(
+            "DRAFT",
+            script_error,
+            spec_path=spec_path,
+            implementation_plan_path=plan_path or "implementation_plan.yaml",
+        )
+
     spec_path = None
     if output_dir is not None:
         ready_spec = _base_spec(proposal, "READY", "all guarded checks passed", mechanics=mechanics)
@@ -385,6 +456,7 @@ def compile(
                 "response_hash": proposal.get("response_hash"),
                 "compiler_decision": "READY",
                 "compiler_reason": "all guarded checks passed",
+                "dropped_unmatched_required_data": dropped_unmatched_required_data,
             },
         })
         spec_path = _write_yaml(Path(output_dir) / "spec.yaml", ready_spec)

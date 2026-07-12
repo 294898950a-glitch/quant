@@ -1,0 +1,21 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+spec_path: data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/spec.yaml
+validated_at: '2026-05-23T22:22:56'
+summary_sha256: c194381c236460627c740e1c5c7fa9525e9b6d5964ea53015b0a48d648c8e4c3
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- executor_requirements 未显式声明 required_columns 和 required_column_quality，无法执行字段级空值/质量校验；但
+  executor_input_column_hints 所列字段（regime, trade_date）均存在于 daily_value_gap_amounts.parquet
+  中
+- 主要输入数据来自上游实验 cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17，非本实验目录，需确认
+  regime 字段定义与本实验预期一致
+fix_plan: []
+decision_reason: 4 个必需文件全部存在且可读，训练/测试日期均被行情数据完整覆盖，hint 字段齐全，最小行数门槛满足，无障碍放行
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 8daca80fae0beb55

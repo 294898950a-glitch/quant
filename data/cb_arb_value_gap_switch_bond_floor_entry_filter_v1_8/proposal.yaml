@@ -1,0 +1,142 @@
+proposal_id: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
+strategy_id: cb_arb_value_gap_switch
+family: entry_filter
+hypothesis: 'Restricting entries to candidates whose CB close price is within a threshold  multiplier
+  of their computed bond floor (close / bond_floor <= threshold) will  reduce the
+  -0.3516 max drawdown and improve cumulative excess by filtering out  signals where
+  the market price is driven by equity speculation rather than  genuine valuation
+  gaps. The bond floor is the only contractually-anchored  valuation component in
+  CB pricing — when the CB trades far above it, the  value-gap signal may reflect
+  premium noise rather than mispricing.
+
+  '
+source_insight: 'Current cost-on results show cumulative excess compound of -0.1047
+  with max  drawdown of -0.3516. Exit-rule improvements (duration-adaptive exit accepted  2026-05-22)
+  showed promise in optimizing exits, but the underlying signal  quality problem remains:
+  many value-gap signals come from CBs trading at large  premiums above bond floor
+  where the theoretical-value comparison is least  reliable. Prior entry-gating attempts
+  targeted global market conditions  (CSI 300 drawdown) — these failed because suppressing
+  all entries during  down markets removes both good and bad signals. A per-CB filter
+  targeting  signal quality at the individual security level is a different mechanism:  it
+  removes only the noisy signals while preserving high-quality ones  regardless of
+  market regime.
+
+  '
+expected_improvement: 'Max drawdown reduction of at least 5pp (from -0.3516 toward
+  -0.30 or better)  without destroying the alpha signal. Cumulative excess should
+  directionally  improve or at minimum not degrade beyond the current -0.1047.
+
+  '
+capability_ids:
+- C002
+required_executor: evaluate_cb_arb_bond_floor_entry_filter
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - gap_amount
+  - ranking_weight
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - par_value
+  - maturity_date
+  - coupon_rate
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  param_grid:
+    bond_floor_threshold:
+    - 1.0
+    - 1.05
+    - 1.1
+    - 1.15
+    - 1.2
+    - 1.3
+    - 1.5
+  train_period: 2018-01-01 to 2021-12-31
+  test_period: 2022-01-01 to 2026-04-30
+  baseline: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+  mechanics: 'For each candidate on each trade date, compute the bond floor as the  discounted
+    present value of remaining coupon payments plus principal at  maturity using a
+    fixed discount rate (e.g., 3.5% or par coupon rate).  Compute ratio = cb_close
+    / bond_floor. If ratio > threshold, exclude the  candidate from entry on that
+    day. Do not modify scoring, sizing, or exit  logic. Grid search over bond_floor_threshold
+    values.
+
+    '
+success_criteria:
+  criteria:
+  - cumulative_excess_compound_cross_year_gt: -0.1
+  - max_drawdown_lt: -0.3
+  - any_holdout_year_sharpe_gt: 0.0
+falsifiers:
+  train: &id001
+  - cumulative_excess_compound_worse_than_baseline_by_3pp
+  - max_drawdown_not_improved_by_3pp
+  - all_thresholds_produce_negative_annual_excess_in_any_test_year
+  - signal_count_drops_below_50_per_year_and_strategy_becomes_uninvestable
+  validate: *id001
+  test: *id001
+risk: 'LOW-MEDIUM. The bond floor filter could reduce signal count materially,  shrinking
+  the opportunity set to the point where the strategy becomes  uninvestable despite
+  higher per-trade quality. This is the primary failure  mode — not that the filtered
+  signals are worse, but that too few remain.  The falsifier on signal_count_drops_below_50_per_year
+  guards this. Secondary  risk: bond floor computation requires a discount rate assumption;
+  using a  fixed rate may miss time-varying credit spread effects, but this is a  reasonable
+  first-order approximation.
+
+  '
+why_not_repeated_failure: 'Prior failed entry filters (market_drawdown_entry_filter,  contrarian_drawdown_entry_20260522)
+  were global market-level gates keyed to  CSI 300 returns. They failed mechanical
+  thresholds because suppressing all  entries during down markets removed good signals
+  alongside bad ones. This  proposal is a per-CB quality filter — it removes only
+  individual candidates  where the CB price has decoupled from the bond floor anchor,
+  regardless of  overall market conditions. Failing a global timing gate does not
+  imply a  per-security quality gate will also fail. Additionally, no bond-floor-based  entry
+  filter has been tested in any prior run.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_market_drawdown_entry_filter:
+    relationship: different_family
+    reason: global market-level CSI 300 entry gate, not per-CB bond floor quality
+      filter
+- cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522:
+    relationship: different_family
+    reason: contrarian entry during market drawdowns, not per-CB bond floor quality
+      filter
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22:
+    relationship: complementary
+    reason: accepted exit rule that should be combined with this entry filter in future
+      iterations
+implementation_assumption: Bond floor is computed as NPV of remaining contractual
+  cash flows (coupons +  principal) discounted at the bond's par coupon rate or a
+  fixed 3.5% rate.  For delisted CBs, only use dates up to delist_date. For CBs not
+  yet listed,  skip. The executor must handle the bond floor computation internally;
+  no new  data source is required.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 0670e7602a6ba836
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 0670e7602a6ba836
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_bond_floor_entry_filter_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8/proposal.yaml

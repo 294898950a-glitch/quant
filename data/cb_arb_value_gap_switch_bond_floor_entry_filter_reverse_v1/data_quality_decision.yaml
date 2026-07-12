@@ -1,0 +1,26 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_bond_floor_entry_filter_reverse_v1
+spec_path: data/cb_arb_value_gap_switch_bond_floor_entry_filter_reverse_v1/spec.yaml
+validated_at: '2026-05-25T12:50:11'
+summary_sha256: e4e1b81df62a1b3c2721b84e1ab2a90356550bdd446c9988bd93b866f54576a8
+status_code: 2
+confidence_code: 1
+blocking_issues:
+- daily_value_gap_amounts.parquet 缺少 executor 引用的列 bond_floor_value（实际列名为 bond_floor），存在列名不匹配
+- daily_value_gap_amounts.parquet 缺少 executor 引用的列 cb_close（实际列名为 close），存在列名不匹配
+warnings:
+- cb_daily.parquet 缺少推荐列 cb_over_rate, pct_chg，不影响硬性校验，按规则 7 放行
+- cb_call.parquet 缺少推荐列 call_type，不影响硬性校验，按规则 7 放行
+- executor_requirements.required_files 未声明 required_columns 和 required_column_quality，无法做字段级硬性拦截，仅以
+  executor_input_column_hints 做参考比对
+fix_plan:
+- 'rename_field: 在 data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  中将 bond_floor 重命名为 bond_floor_value'
+- 'rename_field: 同文件中将 close 重命名为 cb_close'
+decision_reason: 5 个必需文件均可读且日期覆盖训练/测试期，但 daily_value_gap_amounts 中有 2 个字段名与 executor_input_column_hints
+  不匹配（bond_floor_value / cb_close），可通过 rename_field 修复，其余缺列均为推荐字段，按规则放行
+status: repair_candidate
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 0935a38ace333837

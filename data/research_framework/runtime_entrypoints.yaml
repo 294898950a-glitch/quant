@@ -58,6 +58,12 @@ runtime_context:
       role: forced prompt contract and required reading cards injected into autonomous AI calls
       required: false
       load_scope: code_owned_registry
+    data_inventory:
+      path: data/research_framework/data_inventory.yaml
+      format: yaml
+      role: machine-readable core database inventory; read by ideation for realistic data path selection, not experiment results and not a data-quality approval
+      required: false
+      load_scope: code_owned_registry
     status_code_maps:
       path: data/research_framework/status_code_maps.yaml
       format: yaml

@@ -12,3 +12,4 @@ checks:
   writes_l4_ack_yaml: true
   writes_diagnostic_yaml: true
   no_forbidden_markers: true
+  imports_gatekeeper: true

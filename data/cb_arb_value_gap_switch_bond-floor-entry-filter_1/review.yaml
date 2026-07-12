@@ -1,0 +1,80 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: e96699dcc7db16a8
+interpretation:
+  review_status_code: 2
+  result_summary: Bond-floor entry filter at threshold=1.1 suppressed 87% of train
+    entries, retained only 20.1% of trades (far below 50% minimum), and produced deeply
+    negative excess return in 2020 validation (-130M), failing all three composite
+    criteria simultaneously.
+  main_reason: Trade count retention of 20.1% massively undershoots the 50% hard floor,
+    and 2020 validation excess is -130M (excess_2020_gt_0=false), confirming the filter
+    is destructive rather than selective despite directional train/test improvement.
+  failure_causes:
+  - Train trade count retention 20.1% vs 50% minimum hard floor
+  - 2020 validation excess return deeply negative at -130M
+  - Filter suppression rate 87% is destructive, not selective — baseline 35k trades
+    reduced to 7k in train and only 109 in test
+  next_research_directions:
+  - direction: Relax bond-floor threshold to 1.3x-1.5x
+    why: Train excess was +228M directionally correct; the problem is over-suppression.
+      A looser threshold may preserve signal-quality improvement while recovering
+      trade count and 2020 stability.
+    priority_code: 1
+    priority: high
+  - direction: Use bond-floor proximity as continuous signal weight instead of hard
+      binary filter
+    why: Binary threshold at 1.1x creates a cliff — 87% of signals discarded. A continuous
+      weighting scheme (higher weight near floor, lower weight far from floor) could
+      achieve similar risk-adjustment without destroying trade count.
+    priority_code: 2
+    priority: medium
+  - direction: Abandon instrument-level entry gating in favor of exit-side improvements
+    why: Three entry-gate attempts (market drawdown, contrarian drawdown, bond-floor)
+      have all failed mechanical thresholds. The alpha may be real but entry timing
+      is not the right lever — further work on exit logic (adaptive duration, profit-taking
+      rules) may be higher ROI.
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No distribution analysis of bond-floor ratio across the full dataset — unclear
+    whether 1.1x is near the median or an extreme tail
+  - No year-by-year excess return breakdown by bond-floor ratio bucket to diagnose
+    why 2020 specifically fails
+  - No comparison of which specific trade types (gap direction, sector, market cap)
+    survive vs get suppressed by the filter
+  review_status: reject
+closed_directions:
+- mechanic_tag: close_to_bond_floor_threshold
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 55a66125a0bfda53
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

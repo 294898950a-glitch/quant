@@ -1,0 +1,20 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+spec_path: data/cb_arb_value_gap_switch_moneyness-entry-filter_v1_1/spec.yaml
+validated_at: '2026-05-24T12:48:41'
+summary_sha256: 23648cc08bd6c2f6b44da3ce5ef20a8a84ee7ff643fd7cc011f5e9866b98c111
+status_code: 1
+confidence_code: 2
+blocking_issues: []
+warnings:
+- 数据摘要未包含 required_column_quality 中各字段的逐列空值计数，无法直接验证 nonnull 字段（ts_code/stk_code/close/open/high/low/vol/trade_date）是否完全无空值
+- 未验证 cb_daily 的 OHLC 价格关系完整性（high>=max(open,close)、low<=min(open,close)、价格>0）
+- 未验证 stk_daily_qfq 的 close 字段是否存在零值或负值
+fix_plan: []
+decision_reason: 9 个必需文件全部存在且可读，所有 required_columns 在对应数据文件中均存在，训练/测试日期区间（2019-2026）完全被行情数据覆盖，executor_input_column_hints
+  与输入数据实际字段无冲突，无阻塞问题
+status: pass
+confidence: medium
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: cc5b43b1afb34e3e

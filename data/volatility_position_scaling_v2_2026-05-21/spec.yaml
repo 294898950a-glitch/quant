@@ -54,7 +54,7 @@ artifacts_required:
 - report.yaml
 - l4_ack.yaml
 - diagnostic.yaml
-status: READY
+status: COMPLETE
 auxiliary_metrics:
 - train_excess_return
 - test_excess_return
@@ -240,3 +240,4 @@ ideation_provenance:
   response_hash: 1aa1e4045055dc97
   compiler_decision: READY
   compiler_reason: all guarded checks passed
+updated_at: '2026-05-21T19:45:26Z'

@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: cb_arb_value_gap_switch_signal_persistence_entry_20260523_executor_code
+source: data/cb_arb_value_gap_switch_signal_persistence_entry_20260523/generated_executor/evaluate_cb_arb_consecutive_day_persistence_entry_gate.py
+compliance_errors:
+- 'compliance_failed: import_reachability_probe_failed: TimeoutExpired: Command ''[''/usr/bin/python3'',
+  ''-E'', ''-c'', "import importlib.util, sys, traceback;spec = importlib.util.spec_from_file_location(''check'',
+  r''/home/jay/projects/quant/data/cb_arb_value_gap_switch_signal_persistence_entry_20260523/generated_executor/evaluate_cb_arb_consecutive_day_persistence_entry_gate.py'');m
+  = importlib.util.module_from_spec(spec);sys.modules[spec.name] = m;spec.loader.exec_module(m)"]''
+  timed out after 20 seconds'
+required_fix: Add 'from scripts.gatekeeper import GateKeeper' to the generated executor
+  and call the GateKeeper lifecycle methods (before_run_grid / after_run_grid). See
+  scripts/evaluate_cb_arb_exit_gap_closing_percentile.py and scripts/evaluate_cb_arb_iv_percentile_exit.py
+  for the canonical pattern. Do not request manual allowlist; the install path will
+  remain blocked until the import is in place.
+noted_at: '2026-06-20T23:56:25+00:00'
+dry_run: false

@@ -25,7 +25,7 @@ follow_up_actions:
   for context.
 status: COMPLETE
 generated_by: scripts/probe_report_synth.py
-generated_at: '2026-05-24T05:22:24+00:00'
+generated_at: '2026-05-24T06:36:01+00:00'
 evaluator_report:
   probe_type: reverse_rank_value_gap
   cost_model_enabled: false

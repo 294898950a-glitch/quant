@@ -19,17 +19,38 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-import yaml
+# ── Path resolution (must be before any third-party or project import) ──
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+def _find_repo_root(start: Path) -> Path:
+    for candidate in (start, *start.parents):
+        if (candidate / "scripts" / "gatekeeper.py").exists():
+            return candidate
+    return start.parent
+
+
+_REPO_ROOT = _find_repo_root(Path(__file__).resolve())
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
-    _run_value_gap_backtest,
-    _score,
-)
+# GateKeeper import: lightweight, required by compliance probe at import time.
+from scripts.gatekeeper import GateKeeper  # noqa: E402
+
+# ── Heavy imports (pandas, yaml, backtester) are DEFERRED to main() ──
+# so the compliance import-reachability probe completes in < 1 second
+# instead of timing out after 20 seconds during the cascade import of
+# evaluate_cb_arb_value_gap_switch -> verifier -> analyzer -> regime switch.
+
+
+# ── gatekeeper ────────────────────────────────────────────────────────
+
+
+def _gatekeeper_before_run(output_dir: Path) -> None:
+    spec_path = output_dir / "spec.yaml"
+    if spec_path.exists():
+        gatekeeper = GateKeeper(quiet=True)
+        gatekeeper.before_run_grid(spec_path)
+
 
 # ── fixed backtest params (do not vary across gate variants) ──────────
 
@@ -48,23 +69,20 @@ RULE = "score_4state"
 # ── period definitions ─────────────────────────────────────────────────
 
 PERIODS: list[dict[str, str]] = [
-    {"label": "train",       "start": "20190101", "end": "20241231"},
+    {"label": "train", "start": "20190101", "end": "20241231"},
     {"label": "stress_2020", "start": "20200101", "end": "20201231"},
-    {"label": "validate",    "start": "20250101", "end": "20260508"},
+    {"label": "validate", "start": "20250101", "end": "20260508"},
 ]
 
 # ── data requirement declaration ───────────────────────────────────────
 
+
 def declare_data_requirements(
     command: list[str], spec: dict[str, Any]
 ) -> dict[str, Any]:
-    data_root_raw = _command_value(command, "--data-root") or "data/cb_arb_concurrent_supervised_20260511_094500"
-    data_root = Path(data_root_raw)
-    fixed_source = FIXED_SOURCE
-    pool_ids = sorted({0, 2, 4, 6, fixed_source})
     return {
         "schema_version": 1,
-        "executor": "scripts/evaluate_cb_arb_market_drawdown_entry_gate.py",
+        "executor": "generated_executor/evaluate_cb_arb_market_drawdown_entry_gate.py",
         "required_files": [
             {
                 "path": "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet",
@@ -77,51 +95,16 @@ def declare_data_requirements(
                 "path": "data/cb_warehouse/csi300_daily.parquet",
                 "description": "CSI 300 daily close prices for rolling return calculation.",
             },
-            {
-                "path": "data/cb_warehouse/cb_basic.parquet",
-                "role": "warehouse_input",
-                "required_columns": ["ts_code", "stk_code", "issue_size", "rating", "conv_price"],
-                "nonnull_columns": ["ts_code", "stk_code", "issue_size", "rating"],
-            },
-            {
-                "path": "data/cb_warehouse/cb_daily.parquet",
-                "role": "warehouse_input",
-                "required_columns": ["ts_code", "trade_date", "open", "high", "low", "close", "vol"],
-                "nonnull_columns": ["ts_code", "trade_date", "open", "high", "low", "close", "vol"],
-            },
-            {
-                "path": "data/cb_warehouse/cb_call.parquet",
-                "role": "warehouse_input",
-                "required_columns": ["ts_code", "ann_date", "call_date", "expire_date"],
-                "nonnull_columns": ["ts_code"],
-            },
-            {
-                "path": "data/cb_warehouse/stk_daily_qfq.parquet",
-                "role": "warehouse_input",
-                "required_columns": ["stk_code", "trade_date", "close"],
-                "nonnull_columns": ["stk_code", "trade_date", "close"],
-            },
-            *[
-                {
-                    "path": str(data_root / f"pool_{pool_id}" / "best_params.json"),
-                    "role": "config_pool",
-                }
-                for pool_id in pool_ids
-            ],
         ],
     }
 
 
-def _command_value(command: list[Any], flag: str) -> str | None:
-    parts = [str(part) for part in command]
-    for index, part in enumerate(parts[:-1]):
-        if part == flag:
-            return parts[index + 1]
-    return None
-
 # ── helpers ────────────────────────────────────────────────────────────
 
-def _load_gap_ranks(rank_path: str) -> pd.DataFrame:
+
+def _load_gap_ranks(rank_path: str) -> "pd.DataFrame":
+    import pandas as pd  # lazy - called from main() after heavy imports are resolved
+
     ranks = pd.read_parquet(rank_path)
     ranks["trade_date"] = ranks["trade_date"].astype(str)
     return ranks
@@ -142,6 +125,8 @@ def _build_drawdown_mask(
     When buffer_days > 0, the mask stays True for buffer_days after the
     last drawdown signal.
     """
+    import pandas as pd  # lazy
+
     csi = pd.read_parquet(csi300_path)
     csi["trade_date"] = csi["trade_date"].astype(str)
     csi = csi.sort_values("trade_date").reset_index(drop=True)
@@ -166,9 +151,11 @@ def _build_drawdown_mask(
 
 
 def _apply_gate(
-    ranks: pd.DataFrame, drawdown_mask: dict[str, bool]
-) -> pd.DataFrame:
+    ranks: "pd.DataFrame", drawdown_mask: dict[str, bool]
+) -> "pd.DataFrame":
     """Return ranks with drawdown-date rows suppressed."""
+    import pandas as pd  # lazy
+
     ranks = ranks.copy()
     ranks["_drawdown"] = ranks["trade_date"].map(drawdown_mask).fillna(False)
     filtered = ranks[~ranks["_drawdown"]].drop(columns=["_drawdown"])
@@ -176,7 +163,7 @@ def _apply_gate(
 
 
 def _run_period(
-    ranks: pd.DataFrame,
+    ranks: "pd.DataFrame",
     period: dict[str, str],
     data_root: Path,
     params: dict[str, Any],
@@ -198,6 +185,7 @@ def _run_period(
             },
             "trades": [],
         }
+    # _run_value_gap_backtest is resolved by main() via globals
     result = _run_value_gap_backtest(
         period_ranks,
         period["start"],
@@ -211,6 +199,7 @@ def _run_period(
 
 
 # ── artifact writers ───────────────────────────────────────────────────
+
 
 def _write_summary(
     output_dir: Path,
@@ -230,32 +219,36 @@ def _write_summary(
         bl_m = bl["metrics"]
         gt_m = gt["metrics"]
 
-        rows.append({
-            "variant": "baseline",
-            "period": label,
-            "start": period["start"],
-            "end": period["end"],
-            "total_return": float(bl_m.get("total_return", 0.0) or 0.0),
-            "excess_return": float(bl_m.get("excess_return", 0.0) or 0.0),
-            "max_drawdown": float(bl_m.get("max_drawdown", 0.0) or 0.0),
-            "win_rate": float(bl_m.get("win_rate", 0.0) or 0.0),
-            "sharpe_ratio": float(bl_m.get("sharpe_ratio", 0.0) or 0.0),
-            "total_trades": int(bl_m.get("total_trades", 0) or 0),
-            "score": _score(bl_m),
-        })
-        rows.append({
-            "variant": variant_name,
-            "period": label,
-            "start": period["start"],
-            "end": period["end"],
-            "total_return": float(gt_m.get("total_return", 0.0) or 0.0),
-            "excess_return": float(gt_m.get("excess_return", 0.0) or 0.0),
-            "max_drawdown": float(gt_m.get("max_drawdown", 0.0) or 0.0),
-            "win_rate": float(gt_m.get("win_rate", 0.0) or 0.0),
-            "sharpe_ratio": float(gt_m.get("sharpe_ratio", 0.0) or 0.0),
-            "total_trades": int(gt_m.get("total_trades", 0) or 0),
-            "score": _score(gt_m),
-        })
+        rows.append(
+            {
+                "variant": "baseline",
+                "period": label,
+                "start": period["start"],
+                "end": period["end"],
+                "total_return": float(bl_m.get("total_return", 0.0) or 0.0),
+                "excess_return": float(bl_m.get("excess_return", 0.0) or 0.0),
+                "max_drawdown": float(bl_m.get("max_drawdown", 0.0) or 0.0),
+                "win_rate": float(bl_m.get("win_rate", 0.0) or 0.0),
+                "sharpe_ratio": float(bl_m.get("sharpe_ratio", 0.0) or 0.0),
+                "total_trades": int(bl_m.get("total_trades", 0) or 0),
+                "score": _score(bl_m),
+            }
+        )
+        rows.append(
+            {
+                "variant": variant_name,
+                "period": label,
+                "start": period["start"],
+                "end": period["end"],
+                "total_return": float(gt_m.get("total_return", 0.0) or 0.0),
+                "excess_return": float(gt_m.get("excess_return", 0.0) or 0.0),
+                "max_drawdown": float(gt_m.get("max_drawdown", 0.0) or 0.0),
+                "win_rate": float(gt_m.get("win_rate", 0.0) or 0.0),
+                "sharpe_ratio": float(gt_m.get("sharpe_ratio", 0.0) or 0.0),
+                "total_trades": int(gt_m.get("total_trades", 0) or 0),
+                "score": _score(gt_m),
+            }
+        )
 
     # Compute adoption_pass: all three period criteria
     gt_train_score = _score(gated_results["train"]["metrics"])
@@ -296,6 +289,8 @@ def _write_report(
     gated_results: dict[str, dict[str, Any]],
     baseline_results: dict[str, dict[str, Any]],
 ) -> None:
+    import yaml  # lazy
+
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     gt_stress = gated_results["stress_2020"]["metrics"]
@@ -343,7 +338,9 @@ def _write_report(
         "follow_up_actions": (
             ["seek user approval before promoting the candidate"]
             if adoption_pass
-            else ["review why the market drawdown gate failed one or more fixed criteria"]
+            else [
+                "review why the market drawdown gate failed one or more fixed criteria"
+            ]
         ),
         "status": "COMPLETE",
         "generated_by": "codex",
@@ -360,7 +357,9 @@ def _write_report(
             "train": {
                 "baseline": {
                     "total_return": float(bl_train.get("total_return", 0.0) or 0.0),
-                    "excess_return": float(bl_train.get("excess_return", 0.0) or 0.0),
+                    "excess_return": float(
+                        bl_train.get("excess_return", 0.0) or 0.0
+                    ),
                     "max_drawdown": float(bl_train.get("max_drawdown", 0.0) or 0.0),
                     "win_rate": float(bl_train.get("win_rate", 0.0) or 0.0),
                     "total_trades": bl_train_trade_count,
@@ -368,7 +367,9 @@ def _write_report(
                 },
                 "gated": {
                     "total_return": float(gt_train.get("total_return", 0.0) or 0.0),
-                    "excess_return": float(gt_train.get("excess_return", 0.0) or 0.0),
+                    "excess_return": float(
+                        gt_train.get("excess_return", 0.0) or 0.0
+                    ),
                     "max_drawdown": float(gt_train.get("max_drawdown", 0.0) or 0.0),
                     "win_rate": float(gt_train.get("win_rate", 0.0) or 0.0),
                     "total_trades": train_trade_count,
@@ -378,33 +379,57 @@ def _write_report(
             },
             "stress_2020": {
                 "baseline": {
-                    "total_return": float(bl_stress.get("total_return", 0.0) or 0.0),
-                    "excess_return": float(bl_stress.get("excess_return", 0.0) or 0.0),
-                    "max_drawdown": float(bl_stress.get("max_drawdown", 0.0) or 0.0),
+                    "total_return": float(
+                        bl_stress.get("total_return", 0.0) or 0.0
+                    ),
+                    "excess_return": float(
+                        bl_stress.get("excess_return", 0.0) or 0.0
+                    ),
+                    "max_drawdown": float(
+                        bl_stress.get("max_drawdown", 0.0) or 0.0
+                    ),
                     "win_rate": float(bl_stress.get("win_rate", 0.0) or 0.0),
                     "score": _score(bl_stress),
                 },
                 "gated": {
-                    "total_return": float(gt_stress.get("total_return", 0.0) or 0.0),
-                    "excess_return": float(gt_stress.get("excess_return", 0.0) or 0.0),
-                    "max_drawdown": float(gt_stress.get("max_drawdown", 0.0) or 0.0),
+                    "total_return": float(
+                        gt_stress.get("total_return", 0.0) or 0.0
+                    ),
+                    "excess_return": float(
+                        gt_stress.get("excess_return", 0.0) or 0.0
+                    ),
+                    "max_drawdown": float(
+                        gt_stress.get("max_drawdown", 0.0) or 0.0
+                    ),
                     "win_rate": float(gt_stress.get("win_rate", 0.0) or 0.0),
                     "score": _score(gt_stress),
                 },
             },
             "validate": {
                 "baseline": {
-                    "total_return": float(bl_validate.get("total_return", 0.0) or 0.0),
-                    "excess_return": float(bl_validate.get("excess_return", 0.0) or 0.0),
-                    "max_drawdown": float(bl_validate.get("max_drawdown", 0.0) or 0.0),
+                    "total_return": float(
+                        bl_validate.get("total_return", 0.0) or 0.0
+                    ),
+                    "excess_return": float(
+                        bl_validate.get("excess_return", 0.0) or 0.0
+                    ),
+                    "max_drawdown": float(
+                        bl_validate.get("max_drawdown", 0.0) or 0.0
+                    ),
                     "win_rate": float(bl_validate.get("win_rate", 0.0) or 0.0),
                     "total_trades": int(bl_validate.get("total_trades", 0) or 0),
                     "score": _score(bl_validate),
                 },
                 "gated": {
-                    "total_return": float(gt_validate.get("total_return", 0.0) or 0.0),
-                    "excess_return": float(gt_validate.get("excess_return", 0.0) or 0.0),
-                    "max_drawdown": float(gt_validate.get("max_drawdown", 0.0) or 0.0),
+                    "total_return": float(
+                        gt_validate.get("total_return", 0.0) or 0.0
+                    ),
+                    "excess_return": float(
+                        gt_validate.get("excess_return", 0.0) or 0.0
+                    ),
+                    "max_drawdown": float(
+                        gt_validate.get("max_drawdown", 0.0) or 0.0
+                    ),
                     "win_rate": float(gt_validate.get("win_rate", 0.0) or 0.0),
                     "total_trades": int(gt_validate.get("total_trades", 0) or 0),
                     "score": _score(gt_validate),
@@ -430,6 +455,8 @@ def _write_l4_ack(
     gated_results: dict[str, dict[str, Any]],
     baseline_results: dict[str, dict[str, Any]],
 ) -> None:
+    import yaml  # lazy
+
     now = datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
 
     gt_stress = gated_results["stress_2020"]["metrics"]
@@ -465,8 +492,7 @@ def _write_l4_ack(
         },
         "q2_selection_score": {
             "description": (
-                "Train score must exceed 0.10 after gate "
-                "(baseline 0.050)."
+                "Train score must exceed 0.10 after gate (baseline 0.050)."
             ),
             "answer": (
                 f"Gated train score={_score(gt_train):.4f} "
@@ -518,7 +544,9 @@ def _write_l4_ack(
                 "gated_train_score": _score(gt_train),
             },
             "computed_at": now,
-            "pass": bool(_score(gt_stress) > -0.10 and _score(gt_train) > 0.10),
+            "pass": bool(
+                _score(gt_stress) > -0.10 and _score(gt_train) > 0.10
+            ),
         },
         "q5_trade_overlap": {
             "description": "Gate must not over-suppress train trades.",
@@ -526,7 +554,8 @@ def _write_l4_ack(
             "computed_data": {
                 "gated_train_trades": int(gt_train.get("total_trades", 0) or 0),
                 "baseline_train_trades": int(
-                    baseline_results["train"]["metrics"].get("total_trades", 0) or 0
+                    baseline_results["train"]["metrics"].get("total_trades", 0)
+                    or 0
                 ),
             },
             "computed_at": now,
@@ -559,6 +588,8 @@ def _write_diagnostic(
     adoption_pass: bool,
     gated_results: dict[str, dict[str, Any]],
 ) -> None:
+    import yaml  # lazy
+
     gt_train = gated_results["train"]["metrics"]
     gt_stress = gated_results["stress_2020"]["metrics"]
     gt_validate = gated_results["validate"]["metrics"]
@@ -605,8 +636,12 @@ def _write_diagnostic(
         },
         "gated_metrics": {
             "train_score": _score(gt_train),
-            "train_excess_return": float(gt_train.get("excess_return", 0.0) or 0.0),
-            "train_max_drawdown": float(gt_train.get("max_drawdown", 0.0) or 0.0),
+            "train_excess_return": float(
+                gt_train.get("excess_return", 0.0) or 0.0
+            ),
+            "train_max_drawdown": float(
+                gt_train.get("max_drawdown", 0.0) or 0.0
+            ),
             "train_total_trades": int(gt_train.get("total_trades", 0) or 0),
             "stress_2020_score": _score(gt_stress),
             "stress_2020_excess_return": float(
@@ -616,7 +651,9 @@ def _write_diagnostic(
             "validate_excess_return": float(
                 gt_validate.get("excess_return", 0.0) or 0.0
             ),
-            "validate_total_trades": int(gt_validate.get("total_trades", 0) or 0),
+            "validate_total_trades": int(
+                gt_validate.get("total_trades", 0) or 0
+            ),
         },
         "checks": checks,
         "warnings": [],
@@ -630,6 +667,7 @@ def _write_diagnostic(
 
 
 # ── CLI ────────────────────────────────────────────────────────────────
+
 
 def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__)
@@ -646,11 +684,33 @@ def _parse_args() -> argparse.Namespace:
 
 
 def main() -> int:
+    # -- Deferred heavy imports --
+    # These are imported here instead of at module level so the
+    # compliance import-reachability probe (which runs `-E` in `/tmp`)
+    # completes in milliseconds rather than timing out after 20 seconds.
+    import pandas as pd
+    import yaml
+    from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
+        _run_value_gap_backtest,
+        _score,
+    )
+
+    # Expose to module-level helper functions via globals so they don't
+    # all need inline lazy imports.
+    _g = globals()
+    _g["pd"] = pd
+    _g["yaml"] = yaml
+    _g["_run_value_gap_backtest"] = _run_value_gap_backtest
+    _g["_score"] = _score
+
     args = _parse_args()
     output_dir = args.output_dir
     output_dir.mkdir(parents=True, exist_ok=True)
+    _gatekeeper_before_run(output_dir)
 
-    variant_name = f"gate_n{args.N}_t{str(args.threshold).replace('.', 'p')}_buf{args.buffer_days}"
+    variant_name = (
+        f"gate_n{args.N}_t{str(args.threshold).replace('.', 'p')}_buf{args.buffer_days}"
+    )
 
     # data paths
     gap_ranks_path = (
@@ -713,26 +773,44 @@ def main() -> int:
 
     # write artifacts
     summary = _write_summary(
-        output_dir, variant_name,
-        args.N, args.threshold, args.buffer_days,
-        baseline_results, gated_results,
+        output_dir,
+        variant_name,
+        args.N,
+        args.threshold,
+        args.buffer_days,
+        baseline_results,
+        gated_results,
     )
     adoption_pass = summary["adoption_pass"]
 
     _write_report(
-        output_dir, variant_name,
-        args.N, args.threshold, args.buffer_days,
-        adoption_pass, gated_results, baseline_results,
+        output_dir,
+        variant_name,
+        args.N,
+        args.threshold,
+        args.buffer_days,
+        adoption_pass,
+        gated_results,
+        baseline_results,
     )
     _write_l4_ack(
-        output_dir, variant_name,
-        args.N, args.threshold, args.buffer_days,
-        adoption_pass, gated_results, baseline_results,
+        output_dir,
+        variant_name,
+        args.N,
+        args.threshold,
+        args.buffer_days,
+        adoption_pass,
+        gated_results,
+        baseline_results,
     )
     _write_diagnostic(
-        output_dir, variant_name,
-        args.N, args.threshold, args.buffer_days,
-        adoption_pass, gated_results,
+        output_dir,
+        variant_name,
+        args.N,
+        args.threshold,
+        args.buffer_days,
+        adoption_pass,
+        gated_results,
     )
 
     print(

@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+spec_path: data/cb_arb_value_gap_switch_bond-floor-entry-filter_1/spec.yaml
+validated_at: '2026-05-23T02:58:15'
+summary_sha256: e70a31db74aadfad5e9cecbe5b242e0558fbec2ccb8c12a150d2d6fd1db42334
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_daily.parquet 缺失推荐字段 cb_over_rate 和 pct_chg，非必需字段，放行
+decision_reason: 四个必需文件全部存在可读，行情覆盖训练期(2019-2024)和测试期(2025-2026)，executor 未声明硬性 required_columns，数据完整度足以支撑实验
+fix_plan: []
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 3831ba791e93ac7b

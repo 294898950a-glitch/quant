@@ -1,0 +1,14 @@
+proposal_id: cb_arb_iv_percentile_exit_v1_20260521
+missing_executor:
+  id: cb_arb_iv_percentile_exit_executor
+  family: iv_regime_exit
+  description: 'Evaluate the IV‑regime exit proposal. Compute daily implied volatility
+    for each held CB (via inverted convertible bond pricing model or stock‑vol proxy),
+    calculate a rolling 252‑day percentile rank, and exit positions when IV exceeds
+    a given threshold (e.g., 90th percentile). Grid‑search over IV thresholds and
+    min‑hold days.
+
+    '
+mechanics:
+- new_exit_rule
+reason: no strict executor match

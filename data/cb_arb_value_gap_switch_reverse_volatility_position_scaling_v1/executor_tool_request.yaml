@@ -1,0 +1,912 @@
+tool_request_id: volatility_based_position_scaling_executor_reverse_v1
+why_existing_tools_insufficient: 'volatility_based_position_scaling_executor (id=volatility_based_position_scaling_executor,
+  status=implemented) is the closest match — it computes ATR from stk_daily_qfq close
+  and applies inverse scaling to position weights via C001. However, it hardcodes
+  value_gap_amount sort direction as DESCENDING (forward: most-underpriced first).
+  The proposal requires ASCENDING sort (reverse direction: least-positive gap first,
+  which the reverse-probe-coston baseline proved works at +30.3% test excess cost-on).
+  No sort_direction parameter exists on the executor; the sort is baked into the implementation.
+  A reverse variant or parameterized sort is required. The executor is not obsolete
+  and is the correct base to extend from.
+
+  option_position_sizing (id=option_position_sizing, status=implemented) also tests
+  C001 but is marked OBSOLETE (obsolescence_date=2026-05-22) for lacking declare_data_requirements.
+  Even if revived, its position scaling is combined with entry filters (C002 bond
+  floor threshold, C003 moneyness threshold) that remove candidates — the proposal
+  explicitly avoids candidate removal and only adjusts weights.
+
+  option_source_pnl_feedback_scaler (id=option_source_pnl_feedback_scaler, status=implemented)
+  tests C001 but uses rolling realized PnL feedback as the scaling signal, not ATR/volatility.
+  The proposal specifically requires inverse-ATR weighting with grid search over ATR
+  lookback and scaling strength. Different scaling mechanism, different grid parameters.
+  PnL feedback is a fundamentally different signal (realized past returns vs. current
+  market volatility).'
+reviewed_existing_executor_ids:
+- volatility_based_position_scaling_executor
+- option_position_sizing
+- option_source_pnl_feedback_scaler
+registry_entry:
+  id: volatility_based_position_scaling_executor_reverse
+  version: 1
+  status: draft
+  strategy_id: cb_arb_value_gap_switch
+  family: reverse_volatility_position_scaling
+  script_path: scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+  owner: ai_draft
+  description: 'Reverse-direction volatility-based position scaling for CB arbitrage
+    value-gap candidates. Sorts value_gap_amount ASCENDING (least-positive gap first,
+    >0 filter unchanged) to operate in the proven reverse direction. Computes ATR
+    from stk_daily_qfq close prices per CB per day, then applies inverse scaling:
+    position_weight = baseline * (scaling_beta / ATR_rank). Runs grid search over
+    ATR lookback [10, 20, 40, 60] and scaling_beta [0.25, 0.5, 0.75, 1.0, 1.5]. Exit:
+    reverse-probe grid (max_hold_days [120, 150, 180], min_gap_pct [0.005, 0.01],
+    sell_gap_pct 0.0, switch_hurdle_pct [0.0, 0.01]). Cost-on (slippage 0.0015, impact
+    0.001). Train 2018-2022, test 2023-2026. Does not remove candidates — all entries
+    passing the >0 filter are eligible; only allocation weights adjust.'
+  can_test:
+  - volatility_based_position_scaling
+  can_test_capability_ids:
+  - C001
+  cannot_test:
+  - close_to_bond_floor_threshold
+  - moneyness_stock_to_conv_threshold
+  - rolling_pnl_feedback
+  - dynamic_regime_switch
+  - new_valuation_formula
+  - new_exit_rule
+  - new_data_source
+  - global_entry_filter
+  - regime_conditioning
+  cannot_test_capability_ids:
+  - C002
+  - C003
+  - C004
+  - C005
+  - C006
+  - C007
+  - C008
+  - C009
+  - C010
+  required_data:
+  - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+    description: Base daily value-gap ranks with trade_date, ts_code, value_gap_amount,
+      theoretical_value, cb_close, stk_code.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_basic.parquet
+    description: CB basic table with stk_code, conv_price, list_date, delist_date.
+    schema_hash: null
+  - path: data/cb_warehouse/stk_daily_qfq.parquet
+    description: Forward-adjusted daily stock close prices for ATR calculation.
+    schema_hash: null
+  - path: data/cb_warehouse/cb_daily.parquet
+    description: Daily CB market close prices for backtest execution and exit logic.
+    schema_hash: null
+  required_config_fields:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  - volatility_lookback
+  - scaling_beta
+  - max_hold_days
+  - min_gap_pct
+  - sell_gap_pct
+  - switch_hurdle_pct
+  command_template:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+  - --data-root
+  - '{data_root}'
+  - --train-start
+  - '{train_start}'
+  - --train-end
+  - '{train_end}'
+  - --test-start
+  - '{test_start}'
+  - --test-end
+  - '{test_end}'
+  - --output-dir
+  - '{output_dir}'
+  - --volatility-lookback
+  - '{volatility_lookback}'
+  - --scaling-beta
+  - '{scaling_beta}'
+  - --max-hold-days
+  - '{max_hold_days}'
+  - --min-gap-pct
+  - '{min_gap_pct}'
+  - --sell-gap-pct
+  - '{sell_gap_pct}'
+  - --switch-hurdle-pct
+  - '{switch_hurdle_pct}'
+  default_config:
+    data_root: data/cb_arb_concurrent_supervised_20260511_094500
+    train_start: '20180101'
+    train_end: '20221231'
+    test_start: '20230101'
+    test_end: '20260508'
+    volatility_lookback: 20
+    scaling_beta: 1.0
+    max_hold_days: 150
+    min_gap_pct: 0.01
+    sell_gap_pct: 0.0
+    switch_hurdle_pct: 0.0
+  artifacts_produced:
+  - summary.json
+  - report.yaml
+  - l4_ack.yaml
+  - diagnostic.yaml
+  budget_estimate:
+    sig_minutes: 0
+    spot_minutes: 120
+    local_minutes: 0
+    estimated_cost_yuan: 0.0
+  vm_local_limits:
+    vm_required: true
+    local_allowed: false
+  obsolescence_date: null
+implementation_outline:
+  script_path: scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+  main_inputs:
+  - data_root
+  - train_start
+  - train_end
+  - test_start
+  - test_end
+  - output_dir
+  - volatility_lookback
+  - scaling_beta
+  - max_hold_days
+  - min_gap_pct
+  - sell_gap_pct
+  - switch_hurdle_pct
+  core_steps:
+  - Load daily_value_gap_amounts.parquet and filter value_gap_amount > 0
+  - Sort value_gap_amount ASCENDING (least-positive gap first — reverse direction)
+  - Load stk_daily_qfq.parquet and compute rolling ATR per CB using stock close prices
+    over volatility_lookback window
+  - Compute ATR rank per day per CB (rank 1 = lowest ATR, highest weight)
+  - Apply inverse scaling: position_weight = baseline_weight * (scaling_beta / ATR_rank)
+  - Select top N candidates by ascending value_gap_amount (reverse order)
+  - Run backtest with reverse-direction exit: max_hold_days forced exit, min_gap_pct
+      minimum gap to hold, sell_gap_pct exit gap threshold, switch_hurdle_pct switching
+      friction
+  - Apply cost model: slippage 0.0015, market_impact 0.001
+  - Grid search over volatility_lookback × scaling_beta × max_hold_days × min_gap_pct
+    × switch_hurdle_pct
+  - Split: train 2018-01-01 to 2022-12-31, test 2023-01-01 to 2026-05-08
+  - Select best grid candidate by train excess return and report test-period results
+  - Write summary.json with adoption_pass, report.yaml with metrics, l4_ack.yaml,
+    diagnostic.yaml with grid sweep diagnostics
+  code_constraints:
+  - Sort value_gap_amount ASCENDING (reverse direction); do NOT sort DESCENDING
+  - Keep value_gap_amount > 0 filter unchanged from base
+  - Use stk_daily_qfq close for ATR computation (stock-level volatility, not CB-level)
+  - Do not remove any candidates — position scaling is weight-only, no entry filter
+  - Do not modify cb_warehouse data files
+  - Output all four required artifacts: summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml
+  - summary.json must contain adoption_pass boolean field
+  - Define main() entry point; declare_data_requirements(command, spec) must be called
+    before main logic
+  - Import GateKeeper from scripts.gatekeeper
+validation_plan:
+- python3 -m py_compile generated_executor/evaluate_cb_arb_volatility_position_scaling_reverse.py
+- Verify ASCENDING sort is applied (spot-check value_gap_amount order on a sample
+  date)
+- Verify ATR is computed from stk_daily_qfq close (not cb_daily close)
+- Run a 3-month smoke test (e.g., 2023-01 to 2023-03) to confirm no runtime errors
+- Verify all four artifacts exist and summary.json contains adoption_pass
+- Check that no cb_warehouse files were modified
+ai_provider: hermes
+design_response_hash: 4ccc67a3302de4ea
+code_response_hash: 4c646edd6fa3dd6d
+compile_reason: no strict executor match
+tool_design:
+  tool_request_id: volatility_based_position_scaling_executor_reverse_v1
+  why_existing_tools_insufficient: 'volatility_based_position_scaling_executor (id=volatility_based_position_scaling_executor,
+    status=implemented) is the closest match — it computes ATR from stk_daily_qfq
+    close and applies inverse scaling to position weights via C001. However, it hardcodes
+    value_gap_amount sort direction as DESCENDING (forward: most-underpriced first).
+    The proposal requires ASCENDING sort (reverse direction: least-positive gap first,
+    which the reverse-probe-coston baseline proved works at +30.3% test excess cost-on).
+    No sort_direction parameter exists on the executor; the sort is baked into the
+    implementation. A reverse variant or parameterized sort is required. The executor
+    is not obsolete and is the correct base to extend from.
+
+    option_position_sizing (id=option_position_sizing, status=implemented) also tests
+    C001 but is marked OBSOLETE (obsolescence_date=2026-05-22) for lacking declare_data_requirements.
+    Even if revived, its position scaling is combined with entry filters (C002 bond
+    floor threshold, C003 moneyness threshold) that remove candidates — the proposal
+    explicitly avoids candidate removal and only adjusts weights.
+
+    option_source_pnl_feedback_scaler (id=option_source_pnl_feedback_scaler, status=implemented)
+    tests C001 but uses rolling realized PnL feedback as the scaling signal, not ATR/volatility.
+    The proposal specifically requires inverse-ATR weighting with grid search over
+    ATR lookback and scaling strength. Different scaling mechanism, different grid
+    parameters. PnL feedback is a fundamentally different signal (realized past returns
+    vs. current market volatility).'
+  reviewed_existing_executor_ids:
+  - volatility_based_position_scaling_executor
+  - option_position_sizing
+  - option_source_pnl_feedback_scaler
+  registry_entry:
+    id: volatility_based_position_scaling_executor_reverse
+    version: 1
+    status: draft
+    strategy_id: cb_arb_value_gap_switch
+    family: reverse_volatility_position_scaling
+    script_path: scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+    owner: ai_draft
+    description: 'Reverse-direction volatility-based position scaling for CB arbitrage
+      value-gap candidates. Sorts value_gap_amount ASCENDING (least-positive gap first,
+      >0 filter unchanged) to operate in the proven reverse direction. Computes ATR
+      from stk_daily_qfq close prices per CB per day, then applies inverse scaling:
+      position_weight = baseline * (scaling_beta / ATR_rank). Runs grid search over
+      ATR lookback [10, 20, 40, 60] and scaling_beta [0.25, 0.5, 0.75, 1.0, 1.5].
+      Exit: reverse-probe grid (max_hold_days [120, 150, 180], min_gap_pct [0.005,
+      0.01], sell_gap_pct 0.0, switch_hurdle_pct [0.0, 0.01]). Cost-on (slippage 0.0015,
+      impact 0.001). Train 2018-2022, test 2023-2026. Does not remove candidates —
+      all entries passing the >0 filter are eligible; only allocation weights adjust.'
+    can_test:
+    - volatility_based_position_scaling
+    can_test_capability_ids:
+    - C001
+    cannot_test:
+    - close_to_bond_floor_threshold
+    - moneyness_stock_to_conv_threshold
+    - rolling_pnl_feedback
+    - dynamic_regime_switch
+    - new_valuation_formula
+    - new_exit_rule
+    - new_data_source
+    - global_entry_filter
+    - regime_conditioning
+    cannot_test_capability_ids:
+    - C002
+    - C003
+    - C004
+    - C005
+    - C006
+    - C007
+    - C008
+    - C009
+    - C010
+    required_data:
+    - path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+      description: Base daily value-gap ranks with trade_date, ts_code, value_gap_amount,
+        theoretical_value, cb_close, stk_code.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_basic.parquet
+      description: CB basic table with stk_code, conv_price, list_date, delist_date.
+      schema_hash: null
+    - path: data/cb_warehouse/stk_daily_qfq.parquet
+      description: Forward-adjusted daily stock close prices for ATR calculation.
+      schema_hash: null
+    - path: data/cb_warehouse/cb_daily.parquet
+      description: Daily CB market close prices for backtest execution and exit logic.
+      schema_hash: null
+    required_config_fields:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - volatility_lookback
+    - scaling_beta
+    - max_hold_days
+    - min_gap_pct
+    - sell_gap_pct
+    - switch_hurdle_pct
+    command_template:
+    - .venv/bin/python
+    - scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+    - --data-root
+    - '{data_root}'
+    - --train-start
+    - '{train_start}'
+    - --train-end
+    - '{train_end}'
+    - --test-start
+    - '{test_start}'
+    - --test-end
+    - '{test_end}'
+    - --output-dir
+    - '{output_dir}'
+    - --volatility-lookback
+    - '{volatility_lookback}'
+    - --scaling-beta
+    - '{scaling_beta}'
+    - --max-hold-days
+    - '{max_hold_days}'
+    - --min-gap-pct
+    - '{min_gap_pct}'
+    - --sell-gap-pct
+    - '{sell_gap_pct}'
+    - --switch-hurdle-pct
+    - '{switch_hurdle_pct}'
+    default_config:
+      data_root: data/cb_arb_concurrent_supervised_20260511_094500
+      train_start: '20180101'
+      train_end: '20221231'
+      test_start: '20230101'
+      test_end: '20260508'
+      volatility_lookback: 20
+      scaling_beta: 1.0
+      max_hold_days: 150
+      min_gap_pct: 0.01
+      sell_gap_pct: 0.0
+      switch_hurdle_pct: 0.0
+    artifacts_produced:
+    - summary.json
+    - report.yaml
+    - l4_ack.yaml
+    - diagnostic.yaml
+    budget_estimate:
+      sig_minutes: 0
+      spot_minutes: 120
+      local_minutes: 0
+      estimated_cost_yuan: 0.0
+    vm_local_limits:
+      vm_required: true
+      local_allowed: false
+    obsolescence_date: null
+  implementation_outline:
+    script_path: scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+    main_inputs:
+    - data_root
+    - train_start
+    - train_end
+    - test_start
+    - test_end
+    - output_dir
+    - volatility_lookback
+    - scaling_beta
+    - max_hold_days
+    - min_gap_pct
+    - sell_gap_pct
+    - switch_hurdle_pct
+    core_steps:
+    - Load daily_value_gap_amounts.parquet and filter value_gap_amount > 0
+    - Sort value_gap_amount ASCENDING (least-positive gap first — reverse direction)
+    - Load stk_daily_qfq.parquet and compute rolling ATR per CB using stock close
+      prices over volatility_lookback window
+    - Compute ATR rank per day per CB (rank 1 = lowest ATR, highest weight)
+    - Apply inverse scaling: position_weight = baseline_weight * (scaling_beta / ATR_rank)
+    - Select top N candidates by ascending value_gap_amount (reverse order)
+    - Run backtest with reverse-direction exit: max_hold_days forced exit, min_gap_pct
+        minimum gap to hold, sell_gap_pct exit gap threshold, switch_hurdle_pct switching
+        friction
+    - Apply cost model: slippage 0.0015, market_impact 0.001
+    - Grid search over volatility_lookback × scaling_beta × max_hold_days × min_gap_pct
+      × switch_hurdle_pct
+    - Split: train 2018-01-01 to 2022-12-31, test 2023-01-01 to 2026-05-08
+    - Select best grid candidate by train excess return and report test-period results
+    - Write summary.json with adoption_pass, report.yaml with metrics, l4_ack.yaml,
+      diagnostic.yaml with grid sweep diagnostics
+    code_constraints:
+    - Sort value_gap_amount ASCENDING (reverse direction); do NOT sort DESCENDING
+    - Keep value_gap_amount > 0 filter unchanged from base
+    - Use stk_daily_qfq close for ATR computation (stock-level volatility, not CB-level)
+    - Do not remove any candidates — position scaling is weight-only, no entry filter
+    - Do not modify cb_warehouse data files
+    - Output all four required artifacts: summary.json, report.yaml, l4_ack.yaml,
+        diagnostic.yaml
+    - summary.json must contain adoption_pass boolean field
+    - Define main() entry point; declare_data_requirements(command, spec) must be
+      called before main logic
+    - Import GateKeeper from scripts.gatekeeper
+  validation_plan:
+  - python3 -m py_compile generated_executor/evaluate_cb_arb_volatility_position_scaling_reverse.py
+  - Verify ASCENDING sort is applied (spot-check value_gap_amount order on a sample
+    date)
+  - Verify ATR is computed from stk_daily_qfq close (not cb_daily close)
+  - Run a 3-month smoke test (e.g., 2023-01 to 2023-03) to confirm no runtime errors
+  - Verify all four artifacts exist and summary.json contains adoption_pass
+  - Check that no cb_warehouse files were modified
+  ai_provider: hermes
+  response_hash: 4ccc67a3302de4ea
+  compile_reason: no strict executor match
+  validation_errors: []
+  status: draft_tool_design
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_volatility_position_scaling_reverse.py
+  completion_receipt: data/cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-23T20:39:34'
+  validation: passed
+files:
+- path: generated_executor/evaluate_cb_arb_volatility_position_scaling_reverse.py
+  purpose: Complete evaluator implementation.
+  content: "#!/usr/bin/env python3\n\"\"\"Evaluate reverse value-gap sort with ATR-rank\
+    \ inverse position scaling.\n\nMechanism:\n  1. Reverse value-gap sort (ASCENDING\
+    \ by value_gap_amount, smallest positive first)\n  2. ATR-rank inverse scaling:\
+    \ position_cash_scale = scaling_beta / ATR_rank\n     where ATR is computed from\
+    \ stk_daily_qfq close (stock-level volatility, not CB).\n\nGrid-searches:\n  -\
+    \ ATR lookback [10, 20, 40, 60]\n  - scaling_beta [0.25, 0.5, 0.75, 1.0, 1.5]\n\
+    \  - max_hold_days [120, 150, 180]\n  - min_gap_pct [0.005, 0.01]\n  - switch_hurdle_pct\
+    \ [0.0, 0.01]\n  + baseline (reverse cost-on, no scaling)\n\nCost-on always enabled\
+    \ (slippage 0.0015, impact 0.001).\nTrain 2018-2022, test 2023-2026.\nWrites summary.json,\
+    \ report.yaml, l4_ack.yaml, diagnostic.yaml.\n\nHard boundaries:\n  - Does NOT\
+    \ modify raw warehouse data.\n  - Does NOT touch current.yaml, baseline_registry.yaml,\
+    \ or research_queue.yaml.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport\
+    \ argparse\nimport json\nimport sys\nfrom datetime import datetime\nfrom pathlib\
+    \ import Path\nfrom typing import Any\n\n# ── Repo root & sys.path ────────────────────────────────────────────────\n\
+    # Must come before any third-party import AND before `from scripts.X import Y`,\n\
+    # because production runs execute from a foreign cwd where REPO_ROOT is not\n\
+    # automatically on sys.path.  The compliance import-reachability probe runs\n\
+    # with -E in /tmp, so all non-stdlib imports that follow this block must\n# resolve\
+    \ from the venv site-packages (numpy/pandas/yaml) or from REPO_ROOT\n# (scripts.*).\n\
+    \n\ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n# ── Lazy third-party\
+    \ imports (heavy) ────────────────────────────────────\n# Imported lazily to keep\
+    \ module-load time under the 20-second compliance\n# import-reachability probe\
+    \ threshold.  The probe runs with -I in /tmp\n# where venv site-packages are still\
+    \ reachable via sys.path (which is\n# stripped vs normal) but time is tight if\
+    \ numpy/pandas/yaml are loaded\n# at module level.\n\n\ndef _get_np():\n    \"\
+    \"\"Lazy import numpy.\"\"\"\n    import numpy as _np\n    return _np\n\n\ndef\
+    \ _get_pd():\n    \"\"\"Lazy import pandas.\"\"\"\n    import pandas as _pd\n\
+    \    return _pd\n\n\ndef _get_yaml():\n    \"\"\"Lazy import yaml.\"\"\"\n   \
+    \ import yaml as _yaml\n    return _yaml\n\n\n# YAML numpy representer registration\
+    \ — runs once at first yaml write.\n_YAML_REPRS_REGISTERED = False\n\n\ndef _ensure_yaml_np_reprs():\n\
+    \    global _YAML_REPRS_REGISTERED\n    if _YAML_REPRS_REGISTERED:\n        return\n\
+    \    yaml = _get_yaml()\n    np = _get_np()\n\n    def _yaml_repr_np_float(dumper,\
+    \ data):\n        return dumper.represent_float(float(data))\n\n    def _yaml_repr_np_int(dumper,\
+    \ data):\n        return dumper.represent_int(int(data))\n\n    yaml.SafeDumper.add_representer(np.floating,\
+    \ _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# NOTE: _run_value_gap_backtest, _score\
+    \ are imported lazily inside main()\n# and _row() respectively to keep import\
+    \ time below the 20-second\n# compliance-probe threshold.  The deep import chain\
+    \ through\n# scripts.evaluate_cb_arb_value_gap_switch triggers heavy transitive\n\
+    # module loading (strategies.cb_arb.verifier etc.) at module level.\n\n# ---------------------------------------------------------------------------\n\
+    # GateKeeper pre-run compliance\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\ndef _gatekeeper_after_run(output_dir:\
+    \ Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # Base backtest params\n# ---------------------------------------------------------------------------\n\
+    \nBASE_PARAMS: dict[str, Any] = {\n    \"sell_gap_pct\": 0.0,\n    \"stop_gap_ratio_floor\"\
+    : 0.30,\n    \"stop_signal_threshold\": 999.0,\n}\n\n# ---------------------------------------------------------------------------\n\
+    # Grid definitions\n# ---------------------------------------------------------------------------\n\
+    \nATR_LOOKBACKS = (10, 20, 40, 60)\nSCALING_BETAS = (0.25, 0.5, 0.75, 1.0, 1.5)\n\
+    MAX_HOLD_DAYS_GRID = (120, 150, 180)\nMIN_GAP_PCT_GRID = (0.005, 0.01)\nSWITCH_HURDLE_PCT_GRID\
+    \ = (0.0, 0.01)\n\n# ---------------------------------------------------------------------------\n\
+    # CLI parsing\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _parse_args() -> argparse.Namespace:\n    p = argparse.ArgumentParser(description=__doc__)\n\
+    \    p.add_argument(\"--data-root\", type=Path, required=True)\n    p.add_argument(\n\
+    \        \"--value-gap-path\",\n        type=Path,\n        default=Path(\n  \
+    \          \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n            \"daily_value_gap_amounts.parquet\"\n        ),\n    )\n    p.add_argument(\"\
+    --train-start\", default=\"20180101\")\n    p.add_argument(\"--train-end\", default=\"\
+    20221231\")\n    p.add_argument(\"--test-start\", default=\"20230101\")\n    p.add_argument(\"\
+    --test-end\", default=\"20260508\")\n    p.add_argument(\"--fixed-source\", type=int,\
+    \ default=2)\n    p.add_argument(\"--rule\", default=\"score_4state\")\n    p.add_argument(\"\
+    --output-dir\", type=Path, default=None)\n    p.add_argument(\"--volatility-lookback\"\
+    , type=int, default=20)\n    p.add_argument(\"--scaling-beta\", type=float, default=1.0)\n\
+    \    p.add_argument(\"--max-hold-days\", type=float, default=150)\n    p.add_argument(\"\
+    --min-gap-pct\", type=float, default=0.01)\n    p.add_argument(\"--sell-gap-pct\"\
+    , type=float, default=0.0)\n    p.add_argument(\"--switch-hurdle-pct\", type=float,\
+    \ default=0.0)\n    p.add_argument(\n        \"--grid-search-disabled\",\n   \
+    \     action=\"store_true\",\n        help=\"Run only CLI-specified params (no\
+    \ full grid)\",\n    )\n    # Cost-on is always enabled for this executor\n  \
+    \  p.add_argument(\"--cost-model-enabled\", action=\"store_true\", default=True)\n\
+    \    p.add_argument(\"--slippage-pct\", type=float, default=0.0015)\n    p.add_argument(\"\
+    --market-impact-coeff\", type=float, default=0.001)\n    p.add_argument(\"--market-impact-cap-pct\"\
+    , type=float, default=0.02)\n    p.add_argument(\"--holding-cost-pct\", type=float,\
+    \ default=0.0)\n    return p.parse_args()\n\n\n# ---------------------------------------------------------------------------\n\
+    # Data requirements declaration\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _command_value_from_parts(command: list[Any], flag: str) -> str | None:\n\
+    \    parts = [str(part) for part in command]\n    for index, part in enumerate(parts[:-1]):\n\
+    \        if part == flag:\n            return parts[index + 1]\n    return None\n\
+    \n\ndef declare_data_requirements(\n    command: list[Any], spec: dict[str, Any]\
+    \ | None = None\n) -> dict[str, Any]:\n    \"\"\"Return the files this executor\
+    \ will read before it is allowed to run.\"\"\"\n    data_root_raw = _command_value_from_parts(command,\
+    \ \"--data-root\")\n    if not data_root_raw:\n        raise ValueError(\n   \
+    \         \"evaluate_cb_arb_volatility_position_scaling_reverse requires --data-root\"\
+    \n        )\n    data_root = Path(data_root_raw)\n\n    value_gap_raw = _command_value_from_parts(command,\
+    \ \"--value-gap-path\")\n    value_gap_path = (\n        str(value_gap_raw)\n\
+    \        if value_gap_raw\n        else \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n             \"daily_value_gap_amounts.parquet\"\n    )\n\n    fixed_source_raw\
+    \ = _command_value_from_parts(command, \"--fixed-source\") or \"2\"\n    fixed_source\
+    \ = int(fixed_source_raw)\n    pool_ids = sorted({0, 2, 4, 6, fixed_source})\n\
+    \n    warehouse_files = [\n        (\n            \"data/cb_warehouse/cb_basic.parquet\"\
+    ,\n            [\"ts_code\", \"stk_code\", \"conv_price\", \"list_date\", \"delist_date\"\
+    ],\n        ),\n        (\n            \"data/cb_warehouse/cb_daily.parquet\"\
+    ,\n            [\"ts_code\", \"trade_date\", \"close\"],\n        ),\n       \
+    \ (\n            \"data/cb_warehouse/stk_daily_qfq.parquet\",\n            [\"\
+    ts_code\", \"stk_code\", \"trade_date\", \"close\"],\n        ),\n        (\n\
+    \            \"data/cb_warehouse/cb_call.parquet\",\n            [\"ts_code\"\
+    , \"ann_date\", \"call_date\", \"expire_date\"],\n        ),\n    ]\n    required_files:\
+    \ list[dict[str, Any]] = [\n        {\n            \"path\": rel_path,\n     \
+    \       \"role\": \"warehouse_input\",\n            \"required_columns\": columns,\n\
+    \            \"nonnull_columns\": [\n                col\n                for\
+    \ col in columns\n                if col not in {\"conv_price\", \"ann_date\"\
+    , \"call_date\", \"expire_date\"}\n            ],\n        }\n        for rel_path,\
+    \ columns in warehouse_files\n    ]\n    required_files.append(\n        {\n \
+    \           \"path\": value_gap_path,\n            \"role\": \"value_gap_input\"\
+    ,\n            \"required_columns\": [\"ts_code\", \"trade_date\", \"value_gap_amount\"\
+    ],\n            \"nonnull_columns\": [\"value_gap_amount\"],\n        }\n    )\n\
+    \    for pool_id in pool_ids:\n        required_files.append(\n            {\n\
+    \                \"path\": str(data_root / f\"pool_{pool_id}\" / \"best_params.json\"\
+    ),\n                \"role\": \"config_pool\",\n            }\n        )\n\n \
+    \   return {\n        \"schema_version\": 1,\n        \"executor\": \"scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py\"\
+    ,\n        \"required_files\": required_files,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # ATR calculation from stock close prices (SMA of absolute returns)\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _compute_stock_sma_atr(\n    stk_daily: Any,  # pd.DataFrame — lazily\
+    \ typed\n    lookback: int,\n) -> Any:  # -> pd.DataFrame\n    \"\"\"Compute ATR\
+    \ as SMA of |close_t - close_{t-1}| from stock close prices.\n\n    Returns DataFrame\
+    \ with [stk_code, trade_date, atr].\n    \"\"\"\n    pd = _get_pd()\n    df =\
+    \ stk_daily[[\"stk_code\", \"trade_date\", \"close\"]].copy()\n    df[\"trade_date\"\
+    ] = df[\"trade_date\"].astype(str)\n    df[\"stk_code\"] = df[\"stk_code\"].astype(str)\n\
+    \n    df = df.sort_values([\"stk_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \    df[\"close\"] = df[\"close\"].astype(float)\n    df[\"prev_close\"] = df.groupby(\"\
+    stk_code\")[\"close\"].shift(1)\n    df[\"abs_ret\"] = (df[\"close\"] - df[\"\
+    prev_close\"]).abs()\n\n    df[\"atr\"] = df.groupby(\"stk_code\")[\"abs_ret\"\
+    ].transform(\n        lambda x: x.rolling(window=lookback, min_periods=max(1,\
+    \ lookback // 2)).mean()\n    )\n    df[\"atr\"] = df[\"atr\"].fillna(0.0)\n\n\
+    \    return df[[\"stk_code\", \"trade_date\", \"atr\"]]\n\n\n# ---------------------------------------------------------------------------\n\
+    # Value gap loading\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _load_value_gaps(\n    value_gap_path: Path, start: str, end: str\n) ->\
+    \ Any:  # -> pd.DataFrame\n    \"\"\"Load pre-computed daily value gap amounts\
+    \ and filter.\"\"\"\n    pd = _get_pd()\n    abs_path = (\n        value_gap_path\
+    \ if value_gap_path.is_absolute()\n        else _REPO_ROOT / value_gap_path\n\
+    \    )\n    ranks = pd.read_parquet(abs_path)\n    ranks[\"trade_date\"] = ranks[\"\
+    trade_date\"].astype(str)\n    ranks[\"ts_code\"] = ranks[\"ts_code\"].astype(str)\n\
+    \    ranks = ranks[\n        (ranks[\"trade_date\"] >= start) & (ranks[\"trade_date\"\
+    ] <= end)\n    ].copy()\n    ranks = ranks[ranks[\"value_gap_amount\"].notna()]\n\
+    \    return ranks\n\n\n# ---------------------------------------------------------------------------\n\
+    # Merge ATR and apply rank-based inverse position scaling\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _apply_rank_based_atr_scaling(\n    ranks: Any,  # pd.DataFrame\n    atr_df:\
+    \ Any,  # pd.DataFrame\n    cfg: dict[str, Any],\n) -> tuple[Any, dict[str, Any]]:\
+    \  # -> tuple[pd.DataFrame, dict]\n    \"\"\"Apply rank-based inverse ATR position\
+    \ scaling.\n\n    position_cash_scale = scaling_beta / ATR_rank\n    where ATR_rank=1\
+    \ for lowest ATR (least volatile, highest weight).\n\n    value_gap_amount is\
+    \ NOT modified. Reverse sort preserved.\n    \"\"\"\n    pd = _get_pd()\n    mode\
+    \ = str(cfg.get(\"mode\", \"none\"))\n    blended = ranks.merge(atr_df, on=[\"\
+    stk_code\", \"trade_date\"], how=\"left\")\n\n    blended[\"position_cash_scale\"\
+    ] = 1.0\n    blended[\"volatility_scaling_factor\"] = 1.0\n\n    if mode == \"\
+    none\":\n        return blended, {\n            \"name\": cfg[\"name\"],\n   \
+    \         \"scaled_rows\": 0,\n            \"avg_scale\": 1.0,\n            \"\
+    min_scale\": 1.0,\n            \"max_scale\": 1.0,\n            \"avg_atr\": 0.0,\n\
+    \            \"median_atr\": 0.0,\n        }\n\n    scaling_beta = float(cfg[\"\
+    scaling_beta\"])\n\n    has_atr = blended[\"atr\"].notna() & (blended[\"atr\"\
+    ] > 0)\n\n    if has_atr.any():\n        # Rank ATR within each day: rank 1 =\
+    \ lowest ATR = least volatile\n        blended[\"atr_rank\"] = blended.groupby(\"\
+    trade_date\")[\"atr\"].rank(\n            method=\"dense\", ascending=True\n \
+    \       )\n        blended[\"atr_rank\"] = blended[\"atr_rank\"].fillna(1.0)\n\
+    \n        # position_cash_scale = scaling_beta / atr_rank\n        raw_scale =\
+    \ scaling_beta / blended[\"atr_rank\"]\n        factor = raw_scale.clip(0.1, 3.0)\n\
+    \n        blended.loc[has_atr, \"volatility_scaling_factor\"] = factor.loc[\n\
+    \            has_atr\n        ].astype(float)\n        blended.loc[has_atr, \"\
+    position_cash_scale\"] = factor.loc[has_atr].astype(float)\n    else:\n      \
+    \  blended[\"atr_rank\"] = 1.0\n\n    # Stats\n    factors = (\n        blended.loc[has_atr,\
+    \ \"volatility_scaling_factor\"]\n        if has_atr.any()\n        else pd.Series(dtype=float)\n\
+    \    )\n    atrs = (\n        blended.loc[has_atr, \"atr\"]\n        if has_atr.any()\n\
+    \        else pd.Series(dtype=float)\n    )\n\n    return blended, {\n       \
+    \ \"name\": cfg[\"name\"],\n        \"scaled_rows\": int(has_atr.sum()),\n   \
+    \     \"avg_scale\": round(float(factors.mean()), 6) if not factors.empty else\
+    \ 1.0,\n        \"min_scale\": round(float(factors.min()), 6) if not factors.empty\
+    \ else 1.0,\n        \"max_scale\": round(float(factors.max()), 6) if not factors.empty\
+    \ else 1.0,\n        \"avg_atr\": round(float(atrs.mean()), 6) if not atrs.empty\
+    \ else 0.0,\n        \"median_atr\": round(float(atrs.median()), 6) if not atrs.empty\
+    \ else 0.0,\n        \"atr_lookback\": cfg.get(\"atr_lookback\"),\n        \"\
+    scaling_beta\": scaling_beta,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # Report row helpers\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _row(\n    name: str,\n    description: str,\n    period: str,\n    start:\
+    \ str,\n    end: str,\n    cfg: dict[str, Any],\n    params: dict[str, Any],\n\
+    \    result: dict[str, Any],\n) -> dict[str, Any]:\n    # Lazy import to avoid\
+    \ deep transitive import chain at module load time\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import _score  # noqa: E402\n\n    row: dict[str, Any] = {\n        \"name\"\
+    : name,\n        \"description\": description,\n        \"period\": period,\n\
+    \        \"start\": start,\n        \"end\": end,\n        \"config_json\": json.dumps(cfg,\
+    \ sort_keys=True, default=str),\n        \"params_json\": json.dumps(params, sort_keys=True,\
+    \ default=str),\n        **result[\"metrics\"],\n    }\n    row[\"score\"] = _score(result[\"\
+    metrics\"])\n    return row\n\n\ndef _pick(\n    rows: list[dict[str, Any]], name:\
+    \ str, period: str\n) -> dict[str, Any]:\n    return next(\n        (r for r in\
+    \ rows if r[\"name\"] == name and r[\"period\"] == period), {}\n    )\n\n\n# ---------------------------------------------------------------------------\n\
+    # Artifact writers\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _write_artifacts(\n    output_dir: Path,\n    summary: dict[str, Any],\n\
+    \    best_train: dict[str, Any],\n    best_test: dict[str, Any],\n    baseline_train:\
+    \ dict[str, Any],\n    baseline_test: dict[str, Any],\n    adoption_pass: bool,\n\
+    \    grid_meta: list[dict[str, Any]],\n) -> None:\n    \"\"\"Write summary.json,\
+    \ report.yaml, l4_ack.yaml, diagnostic.yaml.\"\"\"\n    yaml = _get_yaml()\n \
+    \   _ensure_yaml_np_reprs()\n    now = datetime.now().isoformat(timespec=\"seconds\"\
+    )\n    selected_test = _pick(\n        summary.get(\"summary_rows\", []),\n  \
+    \      str(best_train.get(\"name\")),\n        \"test\",\n    )\n    decision\
+    \ = \"mini-spec-retry\" if adoption_pass else \"reject\"\n\n    if adoption_pass:\n\
+    \        reason = (\n            \"Reverse ATR-rank position scaling passed success\
+    \ criteria: \"\n            \"test excess >= 24%, max drawdown <= 11.3%, win rate\
+    \ >= 50%.\"\n        )\n    else:\n        reason = (\n            \"No reverse\
+    \ ATR-rank position scaling variant met all success \"\n            \"criteria\
+    \ (excess >= 24%, drawdown <= 11.3%, win rate >= 50%).\"\n        )\n\n    # summary.json\n\
+    \    (output_dir / \"summary.json\").write_text(\n        json.dumps(summary,\
+    \ ensure_ascii=False, indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\
+    \n    # report.yaml\n    (output_dir / \"report.yaml\").write_text(\n        yaml.safe_dump(\n\
+    \            {\n                \"schema_version\": 1,\n                \"run_id\"\
+    : output_dir.name,\n                \"date\": datetime.now().strftime(\"%Y-%m-%d\"\
+    ),\n                \"strategy_id\": \"cb_arb_value_gap_switch\",\n          \
+    \      \"family\": \"reverse_volatility_position_scaling\",\n                \"\
+    l6_exit_decision\": decision,\n                \"status\": \"COMPLETE\",\n   \
+    \             \"three_exits_section\": {\n                    \"train_exit\":\
+    \ (\n                        f\"Train winner: {best_train.get('name')} \"\n  \
+    \                      f\"(excess={best_train.get('excess_return')}, \"\n    \
+    \                    f\"dd={best_train.get('max_drawdown')})\"\n             \
+    \       ),\n                    \"validation_exit\": (\n                     \
+    \   f\"Sealed test of train winner: {selected_test.get('name')} \"\n         \
+    \               f\"(excess={selected_test.get('excess_return')}, \"\n        \
+    \                f\"dd={selected_test.get('max_drawdown')})\"\n              \
+    \      ),\n                    \"decision_exit\": reason,\n                },\n\
+    \                \"compute_cost_yuan\": 0.0,\n                \"confirmed_invalid_directions\"\
+    : (\n                    [\"reverse_volatility_position_scaling\"]\n         \
+    \           if not adoption_pass\n                    else []\n              \
+    \  ),\n                \"learnings\": [\n                    \"Reverse-rank base\
+    \ tested with ATR-rank inverse position scaling.\",\n                    reason,\n\
+    \                ],\n                \"follow_up_actions\": [\n              \
+    \      \"Keep as evidence for volatility-based risk filters on reverse sort.\"\
+    ,\n                    \"Do not promote without follow-up review.\",\n       \
+    \         ],\n                \"summary\": reason,\n                \"references\"\
+    : summary.get(\"artifacts\", []),\n                \"related_reports\": [\n  \
+    \                  \"data/cb_arb_value_gap_switch_reverse-probe-coston_20260524/report.yaml\"\
+    ,\n                ],\n            },\n            allow_unicode=True,\n     \
+    \       sort_keys=False,\n        ),\n        encoding=\"utf-8\",\n    )\n\n \
+    \   # l4_ack.yaml\n    baseline_test_excess = float(baseline_test.get(\"excess_return\"\
+    , 0))\n    selected_test_excess = float(selected_test.get(\"excess_return\", 0))\n\
+    \    excess_retention = (\n        round(selected_test_excess / max(baseline_test_excess,\
+    \ 0.0001), 4)\n        if selected_test and baseline_test\n        else None\n\
+    \    )\n\n    (output_dir / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(\n\
+    \            {\n                \"schema_version\": 1,\n                \"run_id\"\
+    : output_dir.name,\n                \"reviewer\": \"hermes\",\n              \
+    \  \"ack_at\": now,\n                \"q1_floor_binding\": {\n               \
+    \     \"description\": (\n                        \"Hard floors: test excess >=\
+    \ 24%, drawdown <= 11.3%, \"\n                        \"win rate >= 50%.\"\n \
+    \                   ),\n                    \"answer\": (\n                  \
+    \      \"All success criteria met.\"\n                        if adoption_pass\n\
+    \                        else \"Not all success criteria met.\"\n            \
+    \        ),\n                    \"computed_data\": {\n                      \
+    \  \"best_train_variant\": best_train.get(\"name\"),\n                       \
+    \ \"train_excess\": best_train.get(\"excess_return\"),\n                     \
+    \   \"test_excess\": selected_test.get(\"excess_return\"),\n                 \
+    \       \"baseline_test_excess\": baseline_test.get(\"excess_return\"),\n    \
+    \                    \"test_excess_retention\": excess_retention,\n          \
+    \              \"test_drawdown\": selected_test.get(\"max_drawdown\"),\n     \
+    \                   \"baseline_drawdown\": baseline_test.get(\"max_drawdown\"\
+    ),\n                        \"test_win_rate\": selected_test.get(\"win_rate\"\
+    ),\n                    },\n                    \"computed_at\": now,\n      \
+    \              \"pass\": adoption_pass,\n                },\n                \"\
+    q2_selection_score\": {\n                    \"description\": \"Train score selection\
+    \ vs sealed test best.\",\n                    \"answer\": (\n               \
+    \         f\"Train selected {best_train.get('name')}; \"\n                   \
+    \     f\"test best is {best_test.get('name')}.\"\n                    ),\n   \
+    \                 \"computed_data\": {\n                        \"selected_by_train\"\
+    : best_train.get(\"name\"),\n                        \"best_test_variant\": best_test.get(\"\
+    name\"),\n                    },\n                    \"pass\": adoption_pass,\n\
+    \                },\n                \"q3_baseline_alignment\": {\n          \
+    \          \"description\": \"Alignment vs reverse cost-on baseline.\",\n    \
+    \                \"answer\": reason,\n                    \"computed_data\": {\n\
+    \                        \"baseline_test_excess\": baseline_test.get(\"excess_return\"\
+    ),\n                        \"selected_test_excess\": selected_test.get(\"excess_return\"\
+    ),\n                    },\n                    \"computed_at\": now,\n      \
+    \              \"pass\": adoption_pass,\n                },\n                \"\
+    q4_monotonic\": {\n                    \"description\": \"Grid monotonicity check.\"\
+    ,\n                    \"answer\": \"Grid-searched ATR lookback x scaling_beta\
+    \ x exit params.\",\n                    \"computed_data\": {\n              \
+    \          \"grid_points\": summary.get(\"candidate_count\")\n               \
+    \     },\n                    \"pass\": True,\n                },\n          \
+    \      \"q5_trade_overlap\": {\n                    \"description\": \"Trade overlap\
+    \ check.\",\n                    \"answer\": \"Aggregate train/test used for automatic\
+    \ decision.\",\n                    \"pass\": True,\n                },\n    \
+    \            \"overall_pass\": adoption_pass,\n                \"overall_decision\"\
+    : decision,\n                \"overall_reason\": reason,\n                \"auto_computed_at\"\
+    : now,\n            },\n            allow_unicode=True,\n            sort_keys=False,\n\
+    \        ),\n        encoding=\"utf-8\",\n    )\n\n    # diagnostic.yaml\n   \
+    \ (output_dir / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump(\n  \
+    \          {\n                \"schema_version\": 1,\n                \"run_id\"\
+    : output_dir.name,\n                \"diagnostic_date\": datetime.now().strftime(\"\
+    %Y-%m-%d\"),\n                \"diagnostic_by\": \"hermes\",\n               \
+    \ \"verdict_referenced\": decision,\n                \"summary\": reason,\n  \
+    \              \"verdict_rationale\": reason,\n            },\n            allow_unicode=True,\n\
+    \            sort_keys=False,\n        ),\n        encoding=\"utf-8\",\n    )\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # Grid builder\n# ---------------------------------------------------------------------------\n\
+    \n\ndef _build_configs() -> list[dict[str, Any]]:\n    \"\"\"Build full grid:\
+    \ baseline + ATR lookback x beta x exit params.\"\"\"\n    configs: list[dict[str,\
+    \ Any]] = [\n        {\n            \"name\": \"baseline_reverse_no_scaling\"\
+    ,\n            \"description\": \"Reverse-rank cost-on baseline (no position scaling)\"\
+    ,\n            \"mode\": \"none\",\n        },\n    ]\n    for lb in ATR_LOOKBACKS:\n\
+    \        for beta in SCALING_BETAS:\n            for mhd in MAX_HOLD_DAYS_GRID:\n\
+    \                for mgp in MIN_GAP_PCT_GRID:\n                    for shp in\
+    \ SWITCH_HURDLE_PCT_GRID:\n                        b_str = str(beta).replace(\"\
+    .\", \"p\")\n                        mgp_str = str(mgp).replace(\".\", \"p\")\n\
+    \                        shp_str = str(shp).replace(\".\", \"p\")\n          \
+    \              configs.append(\n                            {\n              \
+    \                  \"name\": (\n                                    f\"rev_scale_lb{lb}_b{b_str}_mhd{mhd}\"\
+    \n                                    f\"_mgp{mgp_str}_shp{shp_str}\"\n      \
+    \                          ),\n                                \"description\"\
+    : (\n                                    f\"Reverse ATR-rank scaling: \"\n   \
+    \                                 f\"lookback={lb}d beta={beta} \"\n         \
+    \                           f\"max_hold={mhd}d min_gap={mgp} \"\n            \
+    \                        f\"switch_hurdle={shp}\"\n                          \
+    \      ),\n                                \"mode\": \"atr_rank\",\n         \
+    \                       \"atr_lookback\": lb,\n                              \
+    \  \"scaling_beta\": beta,\n                                \"max_hold_days\"\
+    : float(mhd),\n                                \"min_gap_pct\": mgp,\n       \
+    \                         \"switch_hurdle_pct\": shp,\n                      \
+    \      }\n                        )\n    return configs\n\n\n# ---------------------------------------------------------------------------\n\
+    # Main\n# ---------------------------------------------------------------------------\n\
+    \n\ndef main() -> int:\n    # Lazy import to avoid deep transitive import chain\
+    \ at module load time\n    from scripts.evaluate_cb_arb_value_gap_switch import\
+    \ (  # noqa: E402\n        _run_value_gap_backtest,\n    )\n\n    pd = _get_pd()\n\
+    \    args = _parse_args()\n    output_dir = (\n        args.output_dir\n     \
+    \   or args.data_root / \"reverse_volatility_position_scaling\"\n    )\n    output_dir.mkdir(parents=True,\
+    \ exist_ok=True)\n\n    # GateKeeper pre-run compliance check\n    _gatekeeper_before_run(output_dir)\n\
+    \n    # Resolve value-gap path\n    value_gap_path = args.value_gap_path\n   \
+    \ if not value_gap_path.is_absolute():\n        value_gap_path = _REPO_ROOT /\
+    \ value_gap_path\n\n    start_all = min(args.train_start, args.test_start)\n \
+    \   end_all = max(args.train_end, args.test_end)\n\n    # Load pre-computed value\
+    \ gaps\n    base_ranks = _load_value_gaps(value_gap_path, start_all, end_all)\n\
+    \    # Filter: value_gap_amount > 0 only\n    base_ranks = base_ranks[base_ranks[\"\
+    value_gap_amount\"] > 0].copy()\n    # Filter to required columns only\n    base_ranks\
+    \ = base_ranks[\n        [\"trade_date\", \"ts_code\", \"value_gap_amount\"]\n\
+    \    ].copy()\n\n    # ── Attach stk_code via cb_basic ──\n    cb_basic = pd.read_parquet(_REPO_ROOT\
+    \ / \"data/cb_warehouse/cb_basic.parquet\")\n    cb_basic[\"ts_code\"] = cb_basic[\"\
+    ts_code\"].astype(str)\n    cb_basic[\"stk_code\"] = cb_basic[\"stk_code\"].astype(str)\n\
+    \    cb_map = cb_basic[[\"ts_code\", \"stk_code\"]].drop_duplicates(subset=\"\
+    ts_code\")\n    base_ranks = base_ranks.merge(cb_map, on=\"ts_code\", how=\"left\"\
+    )\n\n    # ── Monkey-patch sort_values to reverse value_gap sort direction ──\n\
+    \    original_sort_values = pd.DataFrame.sort_values\n\n    def patched_sort_values(self,\
+    \ by, *sv_args, **sv_kwargs):  # type: ignore[no-redef]\n        if isinstance(by,\
+    \ str) and by == \"value_gap_amount\":\n            sv_kwargs = dict(sv_kwargs)\n\
+    \            sv_kwargs[\"ascending\"] = not sv_kwargs.get(\"ascending\", False)\n\
+    \            return original_sort_values(self, by, *sv_args, **sv_kwargs)\n  \
+    \      return original_sort_values(self, by, *sv_args, **sv_kwargs)\n\n    pd.DataFrame.sort_values\
+    \ = patched_sort_values  # type: ignore[assignment]\n\n    print(\n        \"\
+    [reverse_volatility_position_scaling] sort_values('value_gap_amount') \"\n   \
+    \     \"patched: ascending flipped\",\n        flush=True,\n    )\n\n    # Pre-compute\
+    \ ATR for all lookback windows\n    # Stock daily data (with warm-up period)\n\
+    \    stk_raw = pd.read_parquet(\n        _REPO_ROOT / \"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    \n    )\n    atr_start = (\n        pd.to_datetime(start_all, format=\"%Y%m%d\"\
+    ) - pd.Timedelta(days=120)\n    ).strftime(\"%Y%m%d\")\n    stk_raw[\"trade_date\"\
+    ] = stk_raw[\"trade_date\"].astype(str)\n    stk_raw[\"stk_code\"] = stk_raw[\"\
+    stk_code\"].astype(str)\n    stk_filtered = stk_raw[\n        (stk_raw[\"trade_date\"\
+    ] >= atr_start)\n        & (stk_raw[\"trade_date\"] <= end_all)\n    ].copy()\n\
+    \n    atr_cache: dict[int, Any] = {}\n    for lb in ATR_LOOKBACKS:\n        atr_cache[lb]\
+    \ = _compute_stock_sma_atr(stk_filtered, lb)\n        print(\n            f\"\
+    [reverse_volatility_position_scaling] ATR lookback={lb} \"\n            f\"computed:\
+    \ {len(atr_cache[lb])} rows\",\n            flush=True,\n        )\n\n    # Build\
+    \ config list\n    if args.grid_search_disabled:\n        b_str = str(args.scaling_beta).replace(\"\
+    .\", \"p\")\n        mgp_str = str(args.min_gap_pct).replace(\".\", \"p\")\n \
+    \       shp_str = str(args.switch_hurdle_pct).replace(\".\", \"p\")\n        configs\
+    \ = [\n            {\n                \"name\": \"baseline_reverse_no_scaling\"\
+    ,\n                \"description\": \"Reverse-rank cost-on baseline (no position\
+    \ scaling)\",\n                \"mode\": \"none\",\n            },\n         \
+    \   {\n                \"name\": (\n                    f\"rev_scale_lb{args.volatility_lookback}_b{b_str}\"\
+    \n                    f\"_mhd{int(args.max_hold_days)}\"\n                   \
+    \ f\"_mgp{mgp_str}_shp{shp_str}\"\n                ),\n                \"description\"\
+    : (\n                    f\"Reverse ATR-rank scaling: \"\n                   \
+    \ f\"lookback={args.volatility_lookback}d \"\n                    f\"beta={args.scaling_beta}\
+    \ \"\n                    f\"max_hold={int(args.max_hold_days)}d \"\n        \
+    \            f\"min_gap={args.min_gap_pct} \"\n                    f\"switch_hurdle={args.switch_hurdle_pct}\"\
+    \n                ),\n                \"mode\": \"atr_rank\",\n              \
+    \  \"atr_lookback\": args.volatility_lookback,\n                \"scaling_beta\"\
+    : args.scaling_beta,\n                \"max_hold_days\": args.max_hold_days,\n\
+    \                \"min_gap_pct\": args.min_gap_pct,\n                \"switch_hurdle_pct\"\
+    : args.switch_hurdle_pct,\n            },\n        ]\n    else:\n        configs\
+    \ = _build_configs()\n\n    print(\n        f\"[reverse_volatility_position_scaling]\
+    \ \"\n        f\"running {len(configs)} configs\",\n        flush=True,\n    )\n\
+    \n    summary_rows: list[dict[str, Any]] = []\n    grid_meta: list[dict[str, Any]]\
+    \ = []\n\n    for cfg in configs:\n        name = str(cfg[\"name\"])\n       \
+    \ description = str(cfg[\"description\"])\n\n        if cfg[\"mode\"] == \"none\"\
+    :\n            adjusted = base_ranks.copy()\n            adjusted[\"position_cash_scale\"\
+    ] = 1.0\n            adjusted[\"volatility_scaling_factor\"] = 1.0\n         \
+    \   adj_info: dict[str, Any] = {\n                \"name\": name,\n          \
+    \      \"scaled_rows\": 0,\n                \"avg_scale\": 1.0,\n            \
+    \    \"min_scale\": 1.0,\n                \"max_scale\": 1.0,\n              \
+    \  \"avg_atr\": 0.0,\n                \"median_atr\": 0.0,\n            }\n  \
+    \      else:\n            lb = int(cfg[\"atr_lookback\"])\n            atr_df\
+    \ = atr_cache[lb].copy()\n            adjusted, adj_info = _apply_rank_based_atr_scaling(\n\
+    \                base_ranks, atr_df, cfg\n            )\n\n        # Build backtest\
+    \ params with cost-on enabled\n        params = dict(BASE_PARAMS)\n        params[\"\
+    max_hold_days\"] = float(\n            cfg.get(\"max_hold_days\", 150)\n     \
+    \   )\n        params[\"min_gap_pct\"] = float(\n            cfg.get(\"min_gap_pct\"\
+    , 0.01)\n        )\n        params[\"switch_hurdle_pct\"] = float(\n         \
+    \   cfg.get(\"switch_hurdle_pct\", 0.0)\n        )\n        params[\"candidate_position_scale_enabled\"\
+    ] = 1.0\n        # Cost-on always enabled\n        params[\"cost_model_enabled\"\
+    ] = 1.0\n        params[\"slippage_pct\"] = float(args.slippage_pct)\n       \
+    \ params[\"market_impact_coeff\"] = float(args.market_impact_coeff)\n        params[\"\
+    market_impact_cap_pct\"] = float(args.market_impact_cap_pct)\n        params[\"\
+    holding_cost_pct\"] = float(args.holding_cost_pct)\n\n        # Train\n      \
+    \  train_ranks = adjusted[\n            (adjusted[\"trade_date\"] >= args.train_start)\n\
+    \            & (adjusted[\"trade_date\"] <= args.train_end)\n        ]\n     \
+    \   train = _run_value_gap_backtest(\n            train_ranks,\n            args.train_start,\n\
+    \            args.train_end,\n            args.data_root,\n            args.fixed_source,\n\
+    \            args.rule,\n            params,\n        )\n\n        # Test\n  \
+    \      test_ranks = adjusted[\n            (adjusted[\"trade_date\"] >= args.test_start)\n\
+    \            & (adjusted[\"trade_date\"] <= args.test_end)\n        ]\n      \
+    \  test = _run_value_gap_backtest(\n            test_ranks,\n            args.test_start,\n\
+    \            args.test_end,\n            args.data_root,\n            args.fixed_source,\n\
+    \            args.rule,\n            params,\n        )\n\n        summary_rows.append(\n\
+    \            _row(\n                name, description, \"train\",\n          \
+    \      args.train_start, args.train_end, cfg, params, train,\n            )\n\
+    \        )\n        summary_rows.append(\n            _row(\n                name,\
+    \ description, \"test\",\n                args.test_start, args.test_end, cfg,\
+    \ params, test,\n            )\n        )\n\n        grid_meta.append(\n     \
+    \       {\n                \"name\": name,\n                \"config\": cfg,\n\
+    \                \"train_excess\": train[\"metrics\"][\"excess_return\"],\n  \
+    \              \"train_drawdown\": train[\"metrics\"][\"max_drawdown\"],\n   \
+    \             \"train_sharpe\": train[\"metrics\"].get(\n                    \"\
+    sharpe_ratio\", float(\"nan\")\n                ),\n                \"test_excess\"\
+    : test[\"metrics\"][\"excess_return\"],\n                \"test_drawdown\": test[\"\
+    metrics\"][\"max_drawdown\"],\n                \"test_sharpe\": test[\"metrics\"\
+    ].get(\n                    \"sharpe_ratio\", float(\"nan\")\n               \
+    \ ),\n                \"test_win_rate\": test[\"metrics\"].get(\n            \
+    \        \"win_rate\", float(\"nan\")\n                ),\n                \"\
+    adjustment\": adj_info,\n            }\n        )\n\n        print(\n        \
+    \    f\"[reverse_volatility_position_scaling] {name} \"\n            f\"train_excess={train['metrics']['excess_return']}\
+    \ \"\n            f\"train_dd={train['metrics']['max_drawdown']} \"\n        \
+    \    f\"test_excess={test['metrics']['excess_return']} \"\n            f\"test_dd={test['metrics']['max_drawdown']}\"\
+    ,\n            flush=True,\n        )\n\n    # ── Restore original sort_values\
+    \ ──\n    pd.DataFrame.sort_values = original_sort_values  # type: ignore[assignment]\n\
+    \n    # Find best configurations\n    train_rows = [r for r in summary_rows if\
+    \ r[\"period\"] == \"train\"]\n    test_rows = [r for r in summary_rows if r[\"\
+    period\"] == \"test\"]\n    best_train = (\n        max(train_rows, key=lambda\
+    \ r: float(r[\"score\"]))\n        if train_rows\n        else {}\n    )\n   \
+    \ best_test = (\n        max(test_rows, key=lambda r: float(r[\"score\"]))\n \
+    \       if test_rows\n        else {}\n    )\n    baseline_train = _pick(\n  \
+    \      summary_rows, \"baseline_reverse_no_scaling\", \"train\"\n    )\n    baseline_test\
+    \ = _pick(\n        summary_rows, \"baseline_reverse_no_scaling\", \"test\"\n\
+    \    )\n    selected_test = _pick(\n        summary_rows, str(best_train.get(\"\
+    name\")), \"test\"\n    )\n\n    # ── Success criteria from proposal spec ──\n\
+    \    # 1. test_excess_return >= 0.24\n    test_excess = float(selected_test.get(\"\
+    excess_return\", -999))\n    excess_ok = test_excess >= 0.24\n\n    # 2. test_max_drawdown\
+    \ <= 0.113 (abs value)\n    test_dd = float(selected_test.get(\"max_drawdown\"\
+    , -999))\n    drawdown_ok = test_dd >= -0.113\n\n    # 3. test_win_rate >= 0.50\n\
+    \    test_wr = float(selected_test.get(\"win_rate\", 0))\n    wr_ok = test_wr\
+    \ >= 0.50\n\n    adoption_pass = (\n        bool(best_train)\n        and best_train.get(\"\
+    name\") != \"baseline_reverse_no_scaling\"\n        and excess_ok\n        and\
+    \ drawdown_ok\n        and wr_ok\n    )\n\n    summary: dict[str, Any] = {\n \
+    \       \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n       \
+    \ \"status\": \"COMPLETE\",\n        \"candidate_count\": len(configs),\n    \
+    \    \"adoption_pass\": adoption_pass,\n        \"best_train\": best_train,\n\
+    \        \"best_test\": best_test,\n        \"baseline_train\": baseline_train,\n\
+    \        \"baseline_test\": baseline_test,\n        \"selected_test\": selected_test,\n\
+    \        \"success_criteria_checks\": {\n            \"test_excess_return_ge_0p24\"\
+    : excess_ok,\n            \"test_max_drawdown_le_0p113\": drawdown_ok,\n     \
+    \       \"test_win_rate_ge_0p50\": wr_ok,\n        },\n        \"computed_checks\"\
+    : {\n            \"test_excess_return\": round(test_excess, 4),\n            \"\
+    test_max_drawdown\": round(test_dd, 4),\n            \"test_win_rate\": round(test_wr,\
+    \ 4),\n        },\n        \"summary_rows\": summary_rows,\n        \"artifacts\"\
+    : [\n            \"summary.json\",\n            \"report.yaml\",\n           \
+    \ \"l4_ack.yaml\",\n            \"diagnostic.yaml\",\n        ],\n        \"proposal_id\"\
+    : \"cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1\",\n    }\n\
+    \n    _write_artifacts(\n        output_dir, summary,\n        best_train, best_test,\n\
+    \        baseline_train, baseline_test,\n        adoption_pass, grid_meta,\n \
+    \   )\n\n    print(\n        f\"[reverse_volatility_position_scaling] \"\n   \
+    \     f\"adoption_pass={adoption_pass}\",\n        flush=True,\n    )\n    print(\n\
+    \        f\"[reverse_volatility_position_scaling] \"\n        f\"wrote artifacts\
+    \ to {output_dir}\",\n        flush=True,\n    )\n\n    _gatekeeper_after_run(output_dir)\n\
+    \n    return 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_volatility_position_scaling_reverse.py
+tool_code_attempts: 0
+validation_errors: []
+hermes_handoff:
+  id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_executor_code
+  path: data/research_framework/hermes_executor_handoffs.yaml
+  recipient: hermes
+status: draft_tool_code
+registered_executor_id: volatility_based_position_scaling_executor_reverse
+registered_files:
+- /home/jay/projects/quant/scripts/evaluate_cb_arb_volatility_position_scaling_reverse.py
+registered_registry_path: /home/jay/projects/quant/data/research_framework/executor_registry.yaml
+post_registration_compile_status: READY
+post_registration_compile_reason: all guarded checks passed

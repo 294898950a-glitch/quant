@@ -1,0 +1,55 @@
+schema_version: 1
+run_id: market_drawdown_entry_gate_v1_20260521
+reviewer: codex
+ack_at: '2026-05-22T04:09:47'
+q1_floor_binding:
+  description: '2020 stress repair: gated score must exceed -0.10 (baseline -0.240).'
+  answer: Gated 2020 score=-0.2309 (baseline=-0.2302), pass=False
+  computed_data:
+    gated_2020_score: -0.230852
+    baseline_2020_score: -0.230156
+    gated_2020_excess_return: -0.187236
+  computed_at: '2026-05-22T04:09:47'
+  pass: false
+q2_selection_score:
+  description: Train score must exceed 0.10 after gate (baseline 0.050).
+  answer: Gated train score=0.0240 (baseline=0.1048), pass=False
+  computed_data:
+    gated_train_score: 0.024009
+    baseline_train_score: 0.104848
+    gated_train_max_drawdown: -0.296944
+  computed_at: '2026-05-22T04:09:47'
+  pass: false
+q3_baseline_alignment:
+  description: Validate score must remain >= 0.28 after gate (baseline 0.355).
+  answer: Gated validate score=0.4413 (baseline=0.4413), pass=True
+  computed_data:
+    gated_validate_score: 0.441301
+    baseline_validate_score: 0.441301
+    gated_validate_trades: 212
+  computed_at: '2026-05-22T04:09:47'
+  pass: true
+q4_monotonic:
+  description: Candidate must improve 2020 stress score without breaking train score.
+  answer: 2020 pass=False; train pass=False
+  computed_data:
+    gated_2020_score: -0.230852
+    gated_train_score: 0.024009
+  computed_at: '2026-05-22T04:09:47'
+  pass: false
+q5_trade_overlap:
+  description: Gate must not over-suppress train trades.
+  answer: Train trade count remains within the evaluated suppression guard.
+  computed_data:
+    gated_train_trades: 1009
+    baseline_train_trades: 988
+  computed_at: '2026-05-22T04:09:47'
+  pass: true
+q6_trigger_timing:
+  applicable: false
+q7_path_contamination:
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: One or more fixed period criteria failed.
+auto_computed_at: '2026-05-22T04:09:47'

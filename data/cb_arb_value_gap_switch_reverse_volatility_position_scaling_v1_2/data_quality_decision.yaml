@@ -1,0 +1,19 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_2
+spec_path: data/cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_2/spec.yaml
+validated_at: '2026-05-25T15:21:33'
+summary_sha256: 8705377db14b663f63e1ce2ea6117ac9705c735ed948efcb033215f2c0b3d9d7
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- daily_value_gap_amounts.parquet 最早日期为 20190102，训练期前段 20180101-20181231 无覆盖，实际有效训练窗口缩短约一年
+- cb_basic.parquet 中 list_date 有 1 行空值（共 1012 行）
+- cb_basic.parquet 中 delist_date 有 338 行空值，对应尚未退市债券，属于正常业务形态
+fix_plan: []
+decision_reason: 所有必需文件和字段齐全，测试期全覆盖，value_gap 数据仅缺训练期第一年，不阻塞实验运行
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: ec8ebf1b8d242dd0

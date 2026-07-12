@@ -2,7 +2,6 @@ b25004d6f63600c76d822debbe57e626  editor_writes.jsonl
 03b0ca92e230a5bfdec2d339cf9a45f0  heartbeat
 43f6e560e98f47d4d857038d1987ead6  outbox.jsonl
 4464b77dd342bde0a56973adf2ebd7c5  runs.jsonl
-b992211ad2a34feebbfd7af6747e4024  runs.jsonl.local-backup-3
 a3da280f14f9f43dc8f1de6da88a8891  sealed_pools.json
 d62070c086f26ed11bec176bcc192274  state.json
 0d6ddcb83a5833e9e07f540f271c6dcd  tried_directions.jsonl

@@ -1,0 +1,88 @@
+{
+  "adoption_pass": false,
+  "checks": {
+    "test_excess_improved": true,
+    "test_dd_not_worse": true,
+    "train_dd_not_worse": true,
+    "drawdown_2020_not_worse": true,
+    "test_sharpe_ok": false
+  },
+  "periods": {
+    "train": {
+      "refined": {
+        "total_pnl": 5.264726,
+        "trade_count": 4712,
+        "win_rate": 0.1358,
+        "avg_win": 0.11662,
+        "avg_loss": -0.017036,
+        "max_drawdown": -12.122543,
+        "sharpe_ratio": -0.0034
+      },
+      "baseline": {
+        "total_pnl": -73692.763625,
+        "trade_count": 3893,
+        "win_rate": 0.0285,
+        "avg_win": 59.1745,
+        "avg_loss": -21.221875,
+        "max_drawdown": -73672.102013,
+        "sharpe_ratio": 0.0004
+      },
+      "excess_return": 73698.028351
+    },
+    "test": {
+      "refined": {
+        "total_pnl": 1.294208,
+        "trade_count": 1358,
+        "win_rate": 0.2437,
+        "avg_win": 0.118695,
+        "avg_loss": -0.036995,
+        "max_drawdown": -5.517861,
+        "sharpe_ratio": -0.0128
+      },
+      "baseline": {
+        "total_pnl": -19697.208983,
+        "trade_count": 772,
+        "win_rate": 0.0181,
+        "avg_win": 33.068108,
+        "avg_loss": -26.59652,
+        "max_drawdown": -19671.938226,
+        "sharpe_ratio": -0.0467
+      },
+      "excess_return": 19698.503191
+    },
+    "validate_2020": {
+      "refined": {
+        "total_pnl": 4.142842,
+        "trade_count": 620,
+        "win_rate": 0.25,
+        "avg_win": 0.119569,
+        "avg_loss": -0.030947,
+        "max_drawdown": -8.141341,
+        "sharpe_ratio": 0.0007
+      },
+      "baseline": {
+        "total_pnl": -27153.360753,
+        "trade_count": 633,
+        "win_rate": 0.0616,
+        "avg_win": 13.122041,
+        "avg_loss": -46.574277,
+        "max_drawdown": -24989.755668,
+        "sharpe_ratio": -0.0297
+      },
+      "excess_return": 27157.503595
+    }
+  },
+  "config": {
+    "train_start": "20190101",
+    "train_end": "20241231",
+    "test_start": "20250101",
+    "test_end": "20260508"
+  },
+  "refined_data_summary": {
+    "total_rows": 736216,
+    "train_rows": 543589,
+    "test_rows": 138870,
+    "avg_gap_train": 11.145225,
+    "avg_gap_test": 21.192296
+  }
+}

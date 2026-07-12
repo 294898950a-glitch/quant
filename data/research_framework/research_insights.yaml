@@ -358,6 +358,78 @@ key_insights:
         to skip same-family proposals when the family has accumulated >= N rejects
         without an overturning insight.
 
+  - id: asymmetric_payoff_mechanism_2026_05_27
+    priority: critical
+    summary: "The forward value_gap signal has high win rate (~64%) but uniformly negative cumulative excess. Mechanism: most positions converge slightly (small win), but a minority don't converge and collapse hard (large loss). Win rate × small win < loss rate × large loss. This explains why all overlay categories fail uniformly — they don't change payoff asymmetry."
+    facts:
+      pattern_observed_across_runs:
+        - run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_3
+          train: {trades: 3893, win_rate: 0.641, excess: -98499, max_dd: -89068}
+          test: {trades: 772, win_rate: 0.649, excess: -23801, max_dd: -44416}
+          validate_2020: {trades: 633, win_rate: 0.581, excess: -23809, max_dd: -284516}
+        - note: "Same exact metrics replicated across pnl_feedback v1_1/v1_2/v1_3 (3 independent runs of same family, identical numbers — confirms structural not noise)"
+      asymmetry_quantified: "win_rate 64-65% > 50%, but per-trade average_win << average_loss. Payoff inversion: more frequent winners do not compensate for less frequent but much larger losers."
+      overlay_attempts_and_why_each_failed:
+        - category: "entry filters (moneyness, bond_floor, contrarian, drawdown_gate)"
+          mechanism_of_failure: "Reduce trade count but do NOT change per-trade payoff distribution. bond_floor filter retained only 20% of trades and excess was still deeply negative. The asymmetry is in the underlying population, not in which subset you select."
+        - category: "exit overlays (regime_adaptive, profit_take, trailing_gap, pnl_feedback, iv_percentile)"
+          mechanism_of_failure: "Exit rules only cut losses faster after entry. But the entry already commits to the asymmetric distribution. regime_adaptive_exit's train/test excess was identical to baseline (regime switch had NO effect — proves the issue is structural, not regime-dependent). pnl_feedback dampened exposure but did not avoid the structural cost."
+        - category: "position scaling (volatility ATR, iv-weighted)"
+          mechanism_of_failure: "Scales position size proportionally. Smaller positions = smaller losses but also smaller wins — proportional shrinkage doesn't change the sign of expected payoff."
+        - category: "valuation formula (credit-adjusted new_valuation_v1)"
+          mechanism_of_failure_PARTIAL_SUCCESS: "new_valuation_v1 (credit-adjusted) DID reduce max_drawdown by 4 orders of magnitude (-250M → -12). This is the FIRST overlay that materially changed the payoff distribution. But test sharpe was -0.0128, missing the 0 hard floor by ~0.013. Formula change reduced the catastrophic tail but did not yet push average payoff positive — likely because only the 'credit-distressed' subset of the bad tail was caught; momentum-driven distress was not."
+    root_cause_hypothesis: |
+      value_gap_amount conflates two distinct populations:
+      (A) Transiently-discounted bonds: small convergence within days/weeks. These form the 64% winners.
+      (B) Fundamentally-discounted bonds: discount is justified by issuer credit deterioration, downward momentum, or liquidity-mediated forced selling. These do NOT converge; they continue widening. These form the 36% catastrophic losers.
+
+      Filters can't separate (A) from (B) by looking at gap size alone — both share the same gap distribution. Exit rules can't separate them because the bad outcome is determined by characteristics existing at entry. Only modifying the underlying valuation to incorporate credit + momentum + liquidity can separate (A) from (B).
+    decision_use: |
+      Ideator (Hermes) — DO NOT propose more single-dimension overlays on the existing value_gap_amount signal (no more entry filters by single attribute, no more exit rule grids on the same base, no more single-axis position scaling). They will all fail in the same way: 64/36 asymmetric payoff is unchanged by any of those mechanisms.
+
+      Acceptable directions, by priority:
+        1. EXTEND new_valuation_v1 — add momentum and/or liquidity terms on top of credit adjustment.
+           Specifically: combine credit-spread adjustment (already in new_valuation_v1) with a downward-momentum penalty (e.g., 20d-60d return rank) so that population (B) is pushed out of the candidate pool entirely. Target: test_sharpe ≥ 0.05 while keeping max_dd ≤ -50M.
+        2. TRADE-LEVEL DIAGNOSTIC — run a non-strategy probe that pulls the 36% losing trades from any rejected run and computes their pre-entry attributes (credit_spread_delta_30d, return_60d, days_to_call, turnover) vs the 64% winners. This produces evidence about which attributes actually discriminate population (A) from (B), feeding back into direction (1) more precisely.
+        3. duration_adaptive_exit (the only adopted family) AS A SAFETY NET — keep it stacked on top of any new direction. It works because it truncates exposure in time, which is orthogonal to entry-side fixes.
+      Forbidden directions (will be auto-skipped by Research Delta Gate):
+        - any more single-attribute entry filter on the current value_gap_amount base
+        - any more exit rule grid that doesn't combine with a signal-side fix
+        - position scaling that doesn't change which population is selected
+        - reverse-direction variants (already disproven by 3 reject chain)
+    follow_ups:
+      - extend_new_valuation_with_momentum_term
+      - trade_level_credit_vs_momentum_diagnostic
+      - keep_duration_adaptive_as_safety_net
+    mandatory_evaluator_requirements: |
+      Every grid-style evaluator MUST parallelize across grid points.
+      Observed: spot is 8-core SA9.2XLARGE16; existing evaluators
+      (evaluate_cb_arb_exit_gap_closing_percentile, pnl_feedback_scaling_grid,
+      volatility_position_scaling) ran the grid in a serial 3-deep for-loop,
+      using 1 core and wasting 7. Result: a 96-candidate grid took ~8 hours
+      instead of ~1 hour.
+
+      Required pattern for grid evaluators:
+        from concurrent.futures import ThreadPoolExecutor
+        n_workers = max(1, (os.cpu_count() or 1) - 1)
+        grid_points = [(p1, p2, p3) for p1 in P1 for p2 in P2 for p3 in P3]
+        with ThreadPoolExecutor(max_workers=n_workers) as pool:
+            results = list(pool.map(eval_one, grid_points))
+        # then aggregate results serially
+
+      Use ThreadPoolExecutor (not multiprocessing.Pool) because:
+        - inner backtest is pandas/numpy heavy → releases GIL → threads parallelize fine
+        - avoids pickle of 488k-row DataFrames to each worker
+        - shared dataframes stay in single process memory
+
+      eval_one should accept just the grid-point tuple and read shared
+      dataframes via closure (or module globals); it must NOT mutate
+      shared state. Aggregate excess_return / best_candidate after the
+      parallel section, in serial.
+
+      evaluate_cb_arb_exit_gap_closing_percentile.py was patched
+      2026-05-27 to use this pattern as the reference implementation.
+
 open_threads:
   - id: promote_absolute_value_gap_ranking_to_core
     priority: high

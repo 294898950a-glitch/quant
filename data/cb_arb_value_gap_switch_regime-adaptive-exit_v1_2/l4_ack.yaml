@@ -1,0 +1,61 @@
+acknowledged: true
+adoption_pass: false
+reason: Regime-adaptive exit evaluated with high_vol_decay=0.5, low_vol_decay=0.7,
+  lookback=126
+status: completed
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-23T14:35:01.840277Z'
+  description: Auto-filled q1_floor_binding description from review.
+  answer: regime-adaptive exit failed both hard floors — adoption_pass=false and zero
+    excess improvement over static baseline, with identical -1.0 returns across all
+    conditions suggesting the regime classifier collapsed to no differentiation
+  pass: false
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-23T14:35:01.840290Z'
+  description: Auto-filled q2_selection_score description from review.
+  answer: regime-adaptive exit failed both hard floors — adoption_pass=false and zero
+    excess improvement over static baseline, with identical -1.0 returns across all
+    conditions suggesting the regime classifier collapsed to no differentiation
+  pass: false
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-23T14:35:01.840293Z'
+  description: Auto-filled q3_baseline_alignment description from review.
+  answer: regime-adaptive exit failed both hard floors — adoption_pass=false and zero
+    excess improvement over static baseline, with identical -1.0 returns across all
+    conditions suggesting the regime classifier collapsed to no differentiation
+  pass: false
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-23T14:35:01.840296Z'
+  description: Auto-filled q4_monotonic description from review.
+  answer: regime-adaptive exit failed both hard floors — adoption_pass=false and zero
+    excess improvement over static baseline, with identical -1.0 returns across all
+    conditions suggesting the regime classifier collapsed to no differentiation
+  pass: false
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-23T14:35:01.840299Z'
+  description: Auto-filled q5_trade_overlap description from review.
+  answer: regime-adaptive exit failed both hard floors — adoption_pass=false and zero
+    excess improvement over static baseline, with identical -1.0 returns across all
+    conditions suggesting the regime classifier collapsed to no differentiation
+  pass: false
+auto_computed_at: '2026-05-23T14:35:01.840302Z'
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+reviewer: codex
+ack_at: '2026-05-23T23:04:28+00:00'
+overall_pass: false
+overall_decision: reject
+overall_reason: adoption_pass=false violates the required hard floor and excess_improvement_test
+  of 0.0 shows no gain over the duration-adaptive baseline
+normalized_at: '2026-05-23T23:04:28+00:00'
+normalized_by: normalize_report_schema

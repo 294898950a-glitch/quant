@@ -1,0 +1,138 @@
+proposal_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_1
+strategy_id: cb_arb_value_gap_switch
+family: pnl_feedback_scaling_grid
+hypothesis: 'The forward value-gap signal is anti-alpha (cumulative excess negative),
+  but PnL drawdowns are not uniformly distributed — losing streaks cluster in identifiable
+  cold periods where the model''s gap estimates systematically fail. Scaling position
+  sizes inversely with rolling realized PnL (reduce exposure after drawdowns, restore
+  after recovery) will cut cost drag during cold periods without culling candidates
+  or changing entry eligibility. This is a damage-control overlay: it won''t turn
+  a negative signal positive, but it can reduce max drawdown and improve risk-adjusted
+  metrics by suppressing the worst trades. Unlike entry filters (moneyness, bond floor)
+  that removed candidates and killed the reverse signal''s +30.3% excess, PnL feedback
+  preserves the full candidate pool — it only adjusts allocation weights.
+
+  Repeated-reject-family check: the repeated_reject_families list contains only `moneyness_stock_to_conv_threshold`.
+  This proposal targets `pnl_feedback_scaling_grid`, which has zero prior runs and
+  is not in any repeated-reject or closed-family list. The three required questions
+  (signal invalid? direction reversed? execution wrong?) do not apply to a never-tested
+  family. That said, the underlying forward-direction signal is known anti-alpha —
+  this proposal acknowledges that and targets cost-drag reduction rather than sign
+  flipping.
+
+  '
+source_insight: 'Active critical insights list is empty. The driving evidence comes
+  from the cost-realism wall finding: cost-on degradation of -7.47pp for the forward
+  direction, vs. -6.76pp for legacy cb_arb. Cost drag is a structural problem across
+  both forward and reverse directions. PnL feedback scaling directly attacks this
+  mechanism by reducing position sizes during losing streaks, when the strategy is
+  most likely to be trading into noise. The reverse-probe +30.3% test excess proves
+  the signal has directional information; PnL feedback tests whether sizing discipline
+  can reduce the forward direction''s largest losses without requiring a sort flip
+  (which has been exhausted across 5 closed reverse families).
+
+  '
+expected_improvement: 'Reduce cost-on max drawdown from -35.16% toward -25% or better,
+  reduce cost degradation from -7.47pp toward -4pp or better, and improve test-period
+  Sharpe relative to baseline cb_arb-value-gap-switch-medium-signal-cost-on-20260516.
+  Cumulative excess is expected to remain negative but less negative.
+
+  '
+capability_ids:
+- C004
+required_executor: evaluate_cb_arb_pnl_feedback_scaling_grid
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  description: 'Grid search over lookback_window in [10, 20, 40, 60] trading days
+    and scaling_beta in [0.25, 0.5, 0.75]. Position weight = baseline_weight * max(0.25,
+    1 - scaling_beta * trailing_drawdown_from_peak), where trailing_drawdown_from_peak
+    is the rolling PnL drawdown computed over the lookback window. All candidates
+    with value_gap_amount > 0 remain eligible (no entry filter). Exit uses existing
+    baseline logic (duration-adaptive exit from 2026-05-22 acceptance: min_hold_days=5,
+    initial_threshold_fraction=0.7, decay_period_factor=0.5). Train 2018-2022, test
+    2023-2026. Cost-on evaluation with standard slippage 0.0015 and market impact
+    0.001. Compare best grid point against baseline cb_arb-value-gap-switch-medium-signal-cost-on-20260516.
+
+    '
+success_criteria:
+  criteria:
+  - cost_on_max_drawdown <= 0.25
+  - cost_degradation_pp <= 0.04
+  - test_period_sharpe > baseline_test_sharpe
+falsifiers:
+  train: &id001
+  - cost_on_max_drawdown > 0.30
+  - cost_degradation_pp > 0.06
+  - test_period_cumulative_excess <= baseline_test_cumulative_excess
+  validate: *id001
+  test: *id001
+risk: 'Low risk. PnL feedback is a non-destructive overlay — it does not remove candidates
+  or change entry/exit rules. Worst case: scaling parameters have no effect and results
+  match baseline exactly. The structural risk is that anti-alpha signal is fundamentally
+  unsalvageable by sizing alone, in which case this confirms that forward-direction
+  research should be abandoned in favor of reviving the reverse direction (which would
+  require user approval to reopen closed families).
+
+  '
+why_not_repeated_failure: 'This is the first proposal in the pnl_feedback_scaling_grid
+  family. It is structurally distinct from the five failed moneyness-entry-filter
+  runs and the one failed bond-floor- entry-filter run, all of which culled candidates
+  via boolean masks and destroyed signal quality. PnL feedback scaling preserves every
+  candidate and only adjusts allocation weights, making it strictly less destructive.
+  It also differs from the reverse-probe family (3 runs, all no_adoption_decision_unusable)
+  which tested sort-direction flips rather than sizing adjustments within the forward
+  direction.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+- cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+implementation_assumption: Executor computes daily strategy-level PnL from trade records,
+  derives rolling drawdown from peak over configurable lookback window, and applies
+  inverse scaling to baseline position weights. Uses existing baseline entry ranking
+  (value_gap_amount descending, >0 filter) and exit logic (duration-adaptive). Requires
+  no new data sources beyond daily_value_gap_amounts.parquet + warehouse parquet files
+  already in data inventory.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: e2997e4ed162550b
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: e2997e4ed162550b
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_pnl_feedback_scaling_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1_1/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=pnl_feedback_scaling_grid, capability_ids=['C004']);
+    no critical-insight reference; queue depth=0.
+  evidence:
+    family: pnl_feedback_scaling_grid
+    capability_ids:
+    - C004
+    cites_critical: null
+    queue_depth: 0

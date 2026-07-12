@@ -1,0 +1,165 @@
+{
+  "schema_version": 1,
+  "run_id": "cb_arb_value_gap_switch_regime_adaptive_exit_v1",
+  "status": "COMPLETE",
+  "adoption_pass": true,
+  "decision": "mini-spec-retry",
+  "params": {
+    "regime_lookback": 126,
+    "high_vol_decay_factor": 0.5,
+    "low_vol_decay_factor": 0.7,
+    "initial_threshold_fraction": 0.7,
+    "min_hold_days": 5,
+    "effective_max_hold_days": 45,
+    "swept_regime_lookbacks": [
+      63,
+      126,
+      252
+    ],
+    "swept_high_vol_factors": [
+      0.3,
+      0.5,
+      0.7
+    ],
+    "swept_low_vol_factors": [
+      0.5,
+      0.7,
+      0.9
+    ],
+    "swept_initial_thresholds": [
+      0.6,
+      0.7,
+      0.8
+    ],
+    "total_grid_combos": 81
+  },
+  "baseline": {
+    "train": {
+      "total_pnl": -872139688.64,
+      "trade_count": 3893,
+      "win_rate": 0.0285,
+      "avg_win": 711041.09,
+      "avg_loss": -251471.51,
+      "avg_hold_days": 68.8,
+      "max_drawdown": -913542945.83,
+      "gap_closed_exits": 3743,
+      "regime_decay_exits": 0,
+      "force_closes": 150
+    },
+    "test": {
+      "total_pnl": -259842942.3,
+      "trade_count": 772,
+      "win_rate": 0.0181,
+      "avg_win": 472929.37,
+      "avg_loss": -351535.56,
+      "avg_hold_days": 28.6,
+      "max_drawdown": -261221511.15,
+      "gap_closed_exits": 750,
+      "regime_decay_exits": 0,
+      "force_closes": 22
+    },
+    "validate_2020": {
+      "total_pnl": -312618660.61,
+      "trade_count": 633,
+      "win_rate": 0.0616,
+      "avg_win": 141786.53,
+      "avg_loss": -535603.26,
+      "avg_hold_days": 52.0,
+      "max_drawdown": -312481445.81,
+      "gap_closed_exits": 499,
+      "regime_decay_exits": 0,
+      "force_closes": 134
+    }
+  },
+  "train": {
+    "total_pnl": -694843112.0,
+    "trade_count": 36887,
+    "win_rate": 0.4156,
+    "avg_win": 180206.82,
+    "avg_loss": -160400.54,
+    "avg_hold_days": 6.3,
+    "max_drawdown": -1149887144.87,
+    "gap_closed_exits": 3529,
+    "regime_decay_exits": 33214,
+    "force_closes": 144,
+    "excess_return": 177296576.64
+  },
+  "test": {
+    "total_pnl": -21947283.66,
+    "trade_count": 2970,
+    "win_rate": 0.4249,
+    "avg_win": 269529.56,
+    "avg_loss": -211998.59,
+    "avg_hold_days": 6.3,
+    "max_drawdown": -118247970.24,
+    "gap_closed_exits": 700,
+    "regime_decay_exits": 2248,
+    "force_closes": 22,
+    "excess_return": 237895658.64
+  },
+  "validate_2020": {
+    "total_pnl": -30827228.55,
+    "trade_count": 4614,
+    "win_rate": 0.4567,
+    "avg_win": 313737.32,
+    "avg_loss": -275975.97,
+    "avg_hold_days": 6.2,
+    "max_drawdown": -340740986.48,
+    "gap_closed_exits": 462,
+    "regime_decay_exits": 4049,
+    "force_closes": 103,
+    "excess_return": 281791432.06
+  },
+  "best_candidate": {
+    "regime_lookback": 252,
+    "high_vol_decay_factor": 0.3,
+    "low_vol_decay_factor": 0.9,
+    "initial_threshold_fraction": 0.7,
+    "train": {
+      "total_pnl": -694843112.0,
+      "trade_count": 36887,
+      "win_rate": 0.4156,
+      "avg_win": 180206.82,
+      "avg_loss": -160400.54,
+      "avg_hold_days": 6.3,
+      "max_drawdown": -1149887144.87,
+      "gap_closed_exits": 3529,
+      "regime_decay_exits": 33214,
+      "force_closes": 144,
+      "excess_return": 177296576.64
+    },
+    "test": {
+      "total_pnl": -21947283.66,
+      "trade_count": 2970,
+      "win_rate": 0.4249,
+      "avg_win": 269529.56,
+      "avg_loss": -211998.59,
+      "avg_hold_days": 6.3,
+      "max_drawdown": -118247970.24,
+      "gap_closed_exits": 700,
+      "regime_decay_exits": 2248,
+      "force_closes": 22,
+      "excess_return": 237895658.64
+    },
+    "validate_2020": {
+      "total_pnl": -30827228.55,
+      "trade_count": 4614,
+      "win_rate": 0.4567,
+      "avg_win": 313737.32,
+      "avg_loss": -275975.97,
+      "avg_hold_days": 6.2,
+      "max_drawdown": -340740986.48,
+      "gap_closed_exits": 462,
+      "regime_decay_exits": 4049,
+      "force_closes": 103,
+      "excess_return": 281791432.06
+    }
+  },
+  "candidate_count": 81,
+  "artifacts": [
+    "summary.json",
+    "report.yaml",
+    "l4_ack.yaml",
+    "diagnostic.yaml"
+  ]
+}

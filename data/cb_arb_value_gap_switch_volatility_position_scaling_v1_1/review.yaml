@@ -1,0 +1,71 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_volatility_position_scaling_v1_1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_volatility_position_scaling_v1_1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 10
+  artifacts_hash: ffa6056ba84e4900
+interpretation:
+  review_status_code: 2
+  result_summary: No ATR-based volatility scaling variant outperformed the unweighted
+    baseline in any evaluation window (train, 2020 repair, or sealed test), confirming
+    that position-level risk adjustment fails to salvage the forward value-gap signal.
+  main_reason: Volatility-weighted position sizing failed all three evaluation windows,
+    mirroring the earlier failure of entry-filter overlays (moneyness, bond floor)
+    and reinforcing that the forward value-gap ranking signal itself — not its execution
+    mechanics — is the root problem.
+  failure_causes:
+  - All volatility scaling variants underperformed the no-scaling baseline across
+    train, 2020 repair, and sealed test
+  - The noise-reduction-overlay hypothesis (ATR-weighted sizing) proved no more effective
+    than earlier candidate-culling overlays for this signal
+  next_research_directions:
+  - direction: Abandon forward value-gap signal family entirely
+    why: Three independent overlay strategies (entry filters ×5 attempts, reverse
+      probe, volatility scaling) have now failed to produce a viable forward-direction
+      strategy; the signal itself is likely anti-alpha and further overlays are a
+      sunk-cost trap
+    priority_code: 1
+    priority: high
+  - direction: Reopen reverse value-gap direction despite critical-insight closure
+    why: The reverse-probe showed +30.3% test excess cost-on versus forward's -10.47%,
+      yet the direction was closed by value_gap_rank_is_anti_alpha_2026_05_24; strong
+      quantitative evidence of reversal may warrant challenging that closure
+    priority_code: 2
+    priority: medium
+  - direction: Shift ideation to entirely different signal families
+    why: Both forward and reverse value-gap directions are exhausted or closed; the
+      next tick should prioritize unexplored signal families from the ideation pool
+      rather than further value-gap variants
+    priority_code: 2
+    priority: medium
+  evidence_gaps: []
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: e15489f66e946656
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 10

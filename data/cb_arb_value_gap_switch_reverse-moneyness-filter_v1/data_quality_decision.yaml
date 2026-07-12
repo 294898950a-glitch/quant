@@ -1,0 +1,20 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse-moneyness-filter_v1
+spec_path: data/cb_arb_value_gap_switch_reverse-moneyness-filter_v1/spec.yaml
+validated_at: '2026-05-25T10:07:13'
+summary_sha256: 2f9e56b463ad4f41d0c3f7ce73db3000218f31e8696f5cea18120c4b6b8bc8ee
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- executor_input_column_hints 引用了 'daily_conv' 这个数据源（字段 conv_price_prior, trade_date,
+  ts_code），但 required_files 中没有对应文件；这是源码提示而非硬性输入要求，放行
+- daily_value_gap_amounts.parquet 的行情起始日为 20190102，train_start 为 20190101，差 1 天但 2019-01-01
+  为非交易日，不影响覆盖
+fix_plan: []
+decision_reason: 4 个必需文件全部存在可读，所有 required_columns 均已覆盖，非空字段声明完整，训练与测试日期均在行情数据范围内，无阻塞性问题
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: e96f6a0e18cbcf74

@@ -1,0 +1,149 @@
+proposal_id: cb_arb_value_gap_switch_momentum_extended_valuation_v1
+strategy_id: cb_arb_value_gap_switch
+family: extended_valuation_momentum
+hypothesis: 'Extending the credit-adjusted valuation formula from new_valuation_v1
+  with a downward-momentum penalty on the underlying stock will separate the two populations
+  conflated in value_gap_amount — transiently-discounted bonds (A, 64% small winners)
+  from fundamentally-discounted bonds (B, 36% catastrophic losers).  The credit adjustment
+  alone caught credit-distressed issuers (reducing max_drawdown from -250M to -12),
+  but momentum-driven distress was not captured, leaving the payoff distribution still
+  negative. Adding a momentum penalty (e.g. stock 20d-60d return rank, or 60d cumulative
+  return) to the theoretical value computation will push population (B) below the
+  entry threshold, eliminating or substantially reducing the catastrophic tail.  Target:
+  test_sharpe ≥ 0.05 while keeping max_drawdown ≤ -50M, compared against the duration-adaptive-exit
+  baseline.
+
+  '
+source_insight: asymmetric_payoff_mechanism_2026_05_27
+expected_improvement: 'new_valuation_v1 reduced max_drawdown ~20,000x (-250M → -12)
+  but test_sharpe remained -0.0128 (missing the 0 hard floor by ~0.013).  The remaining
+  negative tail is attributed to momentum-driven distress not captured by credit adjustment
+  alone.  Adding a momentum penalty should eliminate enough of population (B) to flip
+  test_sharpe positive while preserving at least 50% of the win-rate advantage.  This
+  is the first direction with mechanistic evidence that it can actually change the
+  payoff distribution — unlike all filters, exit rules, and scaling overlays that
+  uniformly failed.
+
+  '
+capability_ids:
+- C006
+required_executor: evaluate_cb_arb_valuation_formula_momentum
+required_data:
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+required_data_fields:
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - stk_code
+  - maturity_date
+  - coupon_rate
+  - par_value
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  - theoretical_value
+test_design:
+  description: 'Extend new_valuation_v1''s credit-adjusted theoretical value by applying
+    a multiplicative momentum penalty: theoretical_value_momentum = credit_adjusted_TV
+    × (1 - momentum_penalty_weight × max(0, -stock_momentum_zscore)).  The momentum_zscore
+    is computed from the stock''s 60d cumulative return relative to the cross-sectional
+    distribution on each day.  Grid search over momentum_penalty_weight in {0.1, 0.2,
+    0.3, 0.5} and momentum_lookback_days in {20, 40, 60}.  Backtest uses reverse-probe
+    exit logic (max_hold_days ∈ {120, 150, 180}, min_gap_pct ∈ {0.005, 0.01}, sell_gap_pct=0.0,
+    switch_hurdle_pct ∈ {0.0, 0.01}) with cost-on evaluation (slippage=0.0015, market_impact=0.001).  Train
+    2018-2022, test 2023-2026.  Compare best candidate against both new_valuation_v1
+    (baseline for formula improvement) and duration-adaptive-exit (baseline for exit
+    quality).
+
+    '
+success_criteria:
+  criteria:
+  - test_cumulative_excess_compound_gt: 0.0
+  - test_sharpe_gt: 0.0
+  - test_max_drawdown_gt: -50.0
+  - test_win_rate_gt: 0.5
+falsifiers:
+  train: &id001
+  - test_sharpe_lte: -0.05
+  - test_max_drawdown_lte: -100.0
+  - momentum penalty reduces trade count below 100 in test period
+  - best candidate test_sharpe not statistically distinguishable from new_valuation_v1
+    test_sharpe (-0.0128) at p < 0.10
+  - momentum_penalty_weight best value is 0.0 (degenerate — momentum adds nothing
+    beyond credit adjustment)
+  validate: *id001
+  test: *id001
+risk: 'Medium.  The new_valuation_v1 partial success provides strong mechanistic evidence
+  that formula-side changes work where all overlays failed.  But the path from -0.0128
+  sharpe to positive sharpe may require more than momentum alone — liquidity terms
+  or bid-ask spread adjustments may also be needed. Two risks: (1) momentum and credit
+  distress are correlated enough that momentum adds no incremental discrimination
+  over credit alone; (2) the remaining losers after credit adjustment are driven by
+  factors momentum doesn''t capture (e.g. forced selling by institutions, regulatory
+  events).
+
+  '
+why_not_repeated_failure: 'This is NOT a repeated failure.  The active critical insight
+  asymmetric_payoff_mechanism_2026_05_27 explicitly identifies that all overlay attempts
+  (entry filters, exit rules, position scaling) uniformly fail because they do not
+  change the underlying 64/36 asymmetric payoff distribution — they only select subsets
+  or adjust timing within the same distribution.  new_valuation_v1 is the ONLY direction
+  that materially changed the payoff (max_drawdown -250M → -12), proving formula-side
+  intervention works.  This proposal extends that proven direction with the one missing
+  ingredient identified by the insight: momentum.  It does not repeat any closed family
+  (reverse variants are closed, single-attribute entry filters are forbidden).  It
+  is not a renamed bond-floor or moneyness filter.  It is a direct follow-up to the
+  only partial-success result in the entire run history.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_new_valuation_v1
+- cb_arb_value_gap_switch_regime_adaptive_exit_v1
+- cb_arb_value_gap_switch_pnl_feedback_scaling_v1_3
+- cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+implementation_assumption: The existing evaluate_cb_arb_valuation_formula executor
+  does not implement momentum penalties.  A new executor is required that (1) computes
+  credit-adjusted theoretical value using new_valuation_v1's logic, (2) computes daily
+  stock momentum z-score from stk_daily_qfq close prices, (3) applies the multiplicative
+  momentum penalty to produce a revised value_gap_amount, (4) feeds the revised gaps
+  through the standard backtester with duration-adaptive exit stacked.  This will
+  be a DRAFT proposal; the compiler must generate the executor code.  The mandatory
+  parallelization pattern from the critical insight (ThreadPoolExecutor, os.cpu_count()-1
+  workers) must be applied to the grid search loop.  The GateKeeper import and sys.path
+  boilerplate are required per AGENTS.md compliance rules.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 72aafd68953328db
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 72aafd68953328db
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_momentum_extended_valuation_v1/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=extended_valuation_momentum, capability_ids=['C006']);
+    cites critical insight 'asymmetric_payoff_mechanism_2026_05_27'; queue depth=0.
+  evidence:
+    family: extended_valuation_momentum
+    capability_ids:
+    - C006
+    cites_critical: asymmetric_payoff_mechanism_2026_05_27
+    queue_depth: 0

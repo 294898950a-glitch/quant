@@ -1,0 +1,70 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: ae4c88363676a971
+interpretation:
+  review_status_code: 2
+  result_summary: Moneyness entry filter with threshold 0.0 applied zero filtering
+    (suppression_pct=0.0, all metrics identical to baseline) and failed train and
+    stress_2020 mechanical thresholds.
+  main_reason: The moneyness_threshold=0.0 variant is a degenerate no-op — stock_close/conv_price
+    is always positive so zero candidates were filtered, making it indistinguishable
+    from baseline which already fails.
+  failure_causes:
+  - moneyness_threshold of 0.0 is degenerate and produces zero filtering effect
+  - train excess return remains deeply negative at -0.075 with no improvement over
+    baseline
+  - stress_2020 excess return remains -0.150 with no improvement
+  next_research_directions:
+  - direction: test positive moneyness thresholds above 0.0
+    why: threshold=0.0 was a degenerate boundary case; thresholds like 0.3, 0.5, 0.7
+      would actually filter deep OTM candidates and test whether removing them improves
+      entry quality as hypothesized
+    priority_code: 1
+    priority: high
+  - direction: investigate why baseline train excess is -0.075 but validate excess
+      is +0.332
+    why: the large period divergence (train negative, validate strongly positive)
+      may indicate regime shift, overfitting risk in the validate window, or structural
+      differences between periods worth understanding before further entry filters
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - no positive moneyness thresholds were tested; the hypothesis that filtering deep
+    OTM candidates reduces noise was never actually evaluated
+  - no breakdown of trade-level metrics by moneyness bucket to quantify how signal
+    quality varies across the moneyness spectrum
+  review_status: reject
+closed_directions:
+- mechanic_tag: moneyness_stock_to_conv_threshold
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 898f727ffb75660b
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

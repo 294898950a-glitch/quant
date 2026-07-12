@@ -1,18 +1,19 @@
 schema_version: 1
 run_id: cb_arb_value_gap_switch_full-flip-probe_20260524
 spec_path: data/cb_arb_value_gap_switch_full-flip-probe_20260524/spec.yaml
-validated_at: '2026-05-24T11:18:13'
+validated_at: '2026-05-24T13:48:23'
 summary_sha256: 77098592e630286af02ff2bef4b74ec84b311fab821e79009279ab4519eee09a
 status_code: 1
 confidence_code: 1
 blocking_issues: []
 warnings:
-- cb_daily.parquet 缺少推荐字段 cb_over_rate、pct_chg，不影响实验
-- cb_call.parquet 缺少推荐字段 call_type，不影响实验
+- cb_daily.parquet 缺少推荐字段 cb_over_rate、pct_chg，非硬性输入要求，不影响实验运行
+- cb_call.parquet 缺少推荐字段 call_type，非硬性输入要求，不影响实验运行
 fix_plan: []
-decision_reason: 四个必需文件全部存在可读，日期覆盖完整，核心字段齐全，无空值或价格异常报告，仅推荐字段缺失，直接放行
+decision_reason: 四个必需文件均可读，行情日期完全覆盖训练期(20190101-20241231)和测试期(20250101-20260508)，executor_requirements
+  未声明任何硬性字段约束，无阻塞问题
 status: pass
 confidence: high
 decision_source: ai_data_quality_judge
 ai_provider: hermes
-response_hash: 32f0b4e68dacac72
+response_hash: 883c6e55c0a0fe38

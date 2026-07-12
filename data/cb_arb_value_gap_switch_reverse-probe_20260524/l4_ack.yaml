@@ -1,7 +1,7 @@
 schema_version: 1
 run_id: cb_arb_value_gap_switch_reverse-probe_20260524
 reviewer: claude
-ack_at: '2026-05-24T05:22:24+00:00'
+ack_at: '2026-05-24T06:36:01+00:00'
 overall_decision: mini-spec-retry
 overall_pass: false
 overall_reason: Probe shows positive test_excess=0.381. Evidence for the intervention;
@@ -9,35 +9,41 @@ overall_reason: Probe shows positive test_excess=0.381. Evidence for the interve
 q1_floor_binding:
   description: Probe is evidence-only; q1 hard-floor binding is not applicable.
   answer: not_applicable (probe class)
-  computed_data: {}
-  computed_at: '2026-05-24T05:22:24+00:00'
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-24T06:36:02.039081Z'
   pass: true
   applicable: false
 q2_selection_score:
   description: Probe is evidence-only; q2 selection score is not applicable.
   answer: not_applicable (probe class)
-  computed_data: {}
-  computed_at: '2026-05-24T05:22:24+00:00'
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-24T06:36:02.039092Z'
   pass: true
   applicable: false
 q3_baseline_alignment:
   description: Probe is evidence-only; q3 baseline alignment is not applicable.
   answer: not_applicable (probe class)
-  computed_data: {}
-  computed_at: '2026-05-24T05:22:24+00:00'
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-24T06:36:02.039094Z'
   pass: true
   applicable: false
 q4_monotonic:
   description: Probe is evidence-only; q4 monotonicity is not applicable.
   answer: not_applicable (probe class)
-  computed_data: {}
-  computed_at: '2026-05-24T05:22:24+00:00'
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-24T06:36:02.039096Z'
   pass: true
   applicable: false
 q5_trade_overlap:
   description: Probe is evidence-only; q5 trade overlap is not applicable.
   answer: not_applicable (probe class)
-  computed_data: {}
-  computed_at: '2026-05-24T05:22:24+00:00'
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-24T06:36:02.039097Z'
   pass: true
   applicable: false
+auto_computed_at: '2026-05-24T06:36:02.039111Z'

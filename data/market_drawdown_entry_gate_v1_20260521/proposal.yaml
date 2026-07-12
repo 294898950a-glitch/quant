@@ -1,0 +1,71 @@
+proposal_id: market_drawdown_entry_gate_v1_20260521
+strategy_id: cb_arb_value_gap_switch
+family: entry_gate
+hypothesis: 'A simple market-level entry gate based on a rolling CSI 300 drawdown
+  will filter out entries during broad market stress, reducing maximum drawdown and
+  improving risk-adjusted returns while preserving excess returns.
+
+  '
+source_insight: 'The baseline strategy experienced a sharp drawdown and negative excess
+  in 2020, and the recent test period shows a max drawdown of -0.0978. Broad market
+  declines may coincide with value traps in convertible‑bond arbitrage signals, so
+  suppressing entries during such periods could improve downside protection.
+
+  '
+expected_improvement: 'Reduce max drawdown in the test period from -0.0978 to below
+  -0.08, lift 2020 total return from -0.09 toward zero, and maintain test excess return
+  above 0.25.
+
+  '
+capability_ids:
+- C009
+required_executor: market_drawdown_entry_gate_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
+test_design:
+  description: 'Grid search across lookback windows [20, 50, 100] trading days, return
+    thresholds [-5%, -10%, -15%], and buffer days [0, 2]. Train: 2019‑2024 (with 2020
+    repair year). Sealed test: 2025-01-01 to 2026-05-08. Baseline: current no‑gate
+    strategy. Select candidate that minimizes max drawdown while keeping test excess
+    return > 0.
+
+    '
+success_criteria:
+  criteria:
+  - Selected candidate test excess return > 0.25
+  - Selected candidate test max drawdown < -0.08
+  - Selected candidate 2020 total return > -0.05
+falsifiers:
+  train: &id001
+  - No grid candidate achieves test excess return > 0.25
+  - No grid candidate reduces max drawdown by at least 10% relative to the baseline
+  - Best candidate’s 2020 total return remains ≤ -0.05
+  validate: *id001
+  test: *id001
+risk: 'The gate may filter out too many profitable entries, causing a loss of excess
+  return. However, the thresholds are modest and the risk is considered low.
+
+  '
+why_not_repeated_failure: 'This is a purely market-level drawdown entry filter, distinct
+  from the closed option‑specific entry gate families (global_option_entry_gate, regime_conditioned_option_entry_gate)
+  and from the forbidden regime‑classifier variants. It has not been tested under
+  the current main strategy.
+
+  '
+related_prior_runs: []
+implementation_assumption: The executor market_drawdown_entry_gate_executor is implemented
+  and can be invoked by the runner. It will load the daily value‑gap amounts and CSI
+  300 data, apply the boolean entry mask, and run the standard backtester without
+  modifying scoring, sizing, or exit logic.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: d1b77aaa0bb7e087
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: d1b77aaa0bb7e087
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/market_drawdown_entry_gate_v1_20260521/proposal.yaml

@@ -1,0 +1,73 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+date: '2026-05-24'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  adoption_pass: false
+  selected_variant: moneyness_t0p0
+  criteria:
+    stress_2020_score_gt: -0.1
+    train_score_gt: 0.1
+    validate_score_gte: 0.28
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- moneyness_t0p0
+learnings:
+- Moneyness entry filter evaluated against train, 2020 stress, and validate periods.
+follow_up_actions:
+- review why the moneyness entry filter failed one or more fixed criteria
+status: COMPLETE
+generated_by: hermes
+generated_at: '2026-05-24T12:10:07'
+variant: moneyness_t0p0
+params:
+  moneyness_threshold: 0.0
+adoption_pass: false
+decision: failed_mechanical_thresholds
+metrics:
+  train:
+    baseline:
+      total_return: 0.19749
+      excess_return: -0.074824
+      max_drawdown: -0.315518
+      win_rate: 0.4931
+      total_trades: 1592
+      score: -0.153703
+    filtered:
+      total_return: 0.19749
+      excess_return: -0.074824
+      max_drawdown: -0.315518
+      win_rate: 0.4931
+      total_trades: 1592
+      score: -0.153703
+    suppression_pct: 0.0
+  stress_2020:
+    baseline:
+      total_return: -0.045376
+      excess_return: -0.149543
+      max_drawdown: -0.137306
+      win_rate: 0.4076
+      score: -0.18387
+    filtered:
+      total_return: -0.045376
+      excess_return: -0.149543
+      max_drawdown: -0.137306
+      win_rate: 0.4076
+      score: -0.18387
+  validate:
+    baseline:
+      total_return: 0.683957
+      excess_return: 0.331692
+      max_drawdown: -0.126045
+      win_rate: 0.6454
+      total_trades: 361
+      score: 0.300181
+    filtered:
+      total_return: 0.683957
+      excess_return: 0.331692
+      max_drawdown: -0.126045
+      win_rate: 0.6454
+      total_trades: 361
+      score: 0.300181
+warnings: []

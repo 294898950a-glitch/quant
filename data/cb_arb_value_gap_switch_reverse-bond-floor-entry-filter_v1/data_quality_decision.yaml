@@ -1,0 +1,24 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse-bond-floor-entry-filter_v1
+spec_path: data/cb_arb_value_gap_switch_reverse-bond-floor-entry-filter_v1/spec.yaml
+validated_at: '2026-05-25T11:18:59'
+summary_sha256: 526d5bb700d74abd86d3b11ff336bb43ae0b40bcb0b7c5597bdbe9fbc153b236
+status_code: 2
+confidence_code: 1
+blocking_issues:
+- daily_value_gap_amounts.parquet 缺少 executor 引用的字段 bond_floor_value（实际字段为 bond_floor）
+- daily_value_gap_amounts.parquet 缺少 executor 引用的字段 cb_close（实际字段为 close）
+warnings:
+- cb_daily.parquet 缺少推荐字段 cb_over_rate, pct_chg，不影响核心逻辑
+- cb_call.parquet 缺少推荐字段 call_type，不影响核心逻辑
+fix_plan:
+- 'derive_alias: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  bond_floor -> bond_floor_value'
+- 'derive_alias: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  close -> cb_close'
+decision_reason: 所有必需文件存在且可读，日期覆盖完整，但价值缺口数据文件中有两个字段名与 executor 引用名不匹配，可通过别名映射修复
+status: repair_candidate
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: a7b2b588b64d7fed

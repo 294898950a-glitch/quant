@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: cb_arb_value_gap_switch_reverse-duration-adaptive-exit_v1_executor_code
+target_script_path: scripts/evaluate_cb_arb_exit_rule_duration_adaptive_reverse.py
+current_target_sha256: 23aa9a1d91da9276f110e667955e00bc9fcb0fe872eff087a80a339f4079325d
+previous_installed_source: data/cb_arb_value_gap_switch_reverse-duration-adaptive-exit_v1/generated_executor/evaluate_cb_arb_exit_rule_duration_adaptive_reverse.py
+previous_installed_sha256: 23aa9a1d91da9276
+previous_installed_at: '2026-05-24T07:40:02+00:00'
+required_action: Regenerate the executor from the existing spec.yaml + executor_tool_request.yaml
+  in this run dir. The source file under generated_executor/ was lost after the previous
+  install; the current target in scripts/ may not be the latest version. Write a fresh
+  executor that satisfies the original validation requirements (main + declare_data_requirements
+  + summary.json / report.yaml / l4_ack.yaml / diagnostic.yaml output + GateKeeper
+  import). Once written, the standard handoff completion → install validation → install
+  overwrite (compliance repair flow) path will re-land the executor.
+noted_at: '2026-05-24T23:55:04+00:00'
+dry_run: false

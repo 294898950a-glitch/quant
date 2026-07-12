@@ -1,0 +1,88 @@
+{
+  "adoption_pass": false,
+  "adoption_criteria": {
+    "cumulative_excess_compound_test_set_gt_0": false,
+    "cumulative_excess_compound_improvement_vs_baseline_gt_2pp": false,
+    "max_drawdown_vs_benchmark_any_year_le_15pct": false,
+    "any_holdout_year_sharpe_ge_0_5": true
+  },
+  "regime_adaptive": {
+    "train_excess_return": -1.0,
+    "test_excess_return": -1.0,
+    "train_max_drawdown": 4.060271153387153,
+    "test_max_drawdown": -0.0,
+    "max_test_year_drawdown": 5.058516626725686,
+    "trade_count_train": 3544,
+    "trade_count_test": 797
+  },
+  "static_baseline": {
+    "train_excess_return": -1.0,
+    "test_excess_return": -1.0
+  },
+  "year_metrics": {
+    "2019": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": 0.6083304791532387,
+      "trade_count": 584
+    },
+    "2020": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": -0.9418682804974771,
+      "trade_count": 577
+    },
+    "2021": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": -4.144176513295217,
+      "trade_count": 568
+    },
+    "2022": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": -4.320325766485662,
+      "trade_count": 576
+    },
+    "2023": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": -3.6872331099298212,
+      "trade_count": 587
+    },
+    "2024": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": -5.078590848625906,
+      "trade_count": 652
+    },
+    "2025": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": 0.6908802735738583,
+      "trade_count": 569
+    },
+    "2026": {
+      "strategy_return": -1.0,
+      "benchmark_return": 0.0,
+      "excess_return": -1.0,
+      "sharpe": -1.4080932862730178,
+      "trade_count": 228
+    }
+  },
+  "params": {
+    "regime_lookback": 126,
+    "high_vol_decay_factor": 0.5,
+    "low_vol_decay_factor": 0.7,
+    "initial_threshold_fraction": 0.7,
+    "min_hold_days": 5,
+    "effective_max_hold_days": 45
+  }
+}

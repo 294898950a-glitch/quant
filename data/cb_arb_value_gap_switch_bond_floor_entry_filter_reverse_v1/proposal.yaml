@@ -1,0 +1,134 @@
+proposal_id: cb_arb_value_gap_switch_bond_floor_entry_filter_reverse_v1
+strategy_id: cb_arb_value_gap_switch
+family: bond_floor_entry_filter_reverse
+hypothesis: 'The forward bond floor entry filter failed mechanical thresholds, but
+  the reverse-probe critical insight (value_gap_rank_is_anti_alpha_2026_05_24) demonstrates
+  the forward sort direction is anti-alpha. The reverse-sorted base produced +30.3%
+  test excess cost-on — a 41pp swing from sort direction alone. Applying the bond
+  floor proximity constraint to this tradeable reverse base tests whether the entry
+  filter family was rejected only because it was stacked on an anti-alpha base, or
+  if the bond floor constraint itself destroys signal. If the constraint preserves
+  or improves the reverse base''s alpha, this rehabilitates a previously-failed family
+  and narrows the confounder space.
+
+  '
+source_insight: 'value_gap_rank_is_anti_alpha_2026_05_24 — priority #4: reverse-direction
+  variants applied to families that previously failed in forward, to determine if
+  those families were rejected only because they were stacked on an anti-alpha base.
+  The bond floor filter had exactly 1 forward rejection; testing it on the verified
+  tradeable reverse base is the most direct way to disambiguate signal-side vs execution-side
+  failure.
+
+  '
+expected_improvement: 'Best case: bond floor proximity on the reverse base preserves
+  or exceeds the unfiltered reverse baseline (+30.3% test excess cost-on) while reducing
+  max drawdown by screening out CBs trading far above intrinsic debt value. Null case:
+  the filter destroys alpha regardless of sort direction, confirming the constraint
+  itself is signal-destructive — a clean negative that closes this entry filter family
+  without further grid-search iterations.
+
+  '
+capability_ids:
+- C002
+required_executor: evaluate_cb_arb_bond_floor_entry_filter_reverse
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - par_value
+  - coupon_rate
+  - maturity_date
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_call.parquet:
+  - ts_code
+  - ann_date
+  - call_date
+  - is_call
+test_design:
+  description: 'Base: reverse sort (value_gap_amount > 0 filter unchanged, sort ascending
+    — least-positive gaps first). Bond floor computed from par_value and coupon_rate
+    per CB per day. Entry mask: cb_close / bond_floor - 1 <= bond_floor_distance_pct.
+    Grid over bond_floor_distance_pct ∈ [0.02, 0.05, 0.10, 0.15, 0.20]. Exit parameters
+    pinned to reverse-probe cost-on best: max_hold_days=180, min_gap_pct=0.01, sell_gap_pct=0.0,
+    switch_hurdle_pct=0.0. Cost model ENABLED (slippage 0.0015, market impact 0.001,
+    cap 0.02). Train/test split inherited from baseline. Compare best grid candidate
+    to unfiltered reverse baseline (+30.3% test excess cost-on).
+
+    '
+success_criteria:
+  criteria:
+  - test_cumulative_excess_compound >= 0.0
+  - test_max_drawdown <= reverse_baseline_max_drawdown or test_max_drawdown >= -0.15
+  - test_win_rate >= 0.50
+  - train_cumulative_excess_compound >= 0.0
+falsifiers:
+  train: &id001
+  - all grid candidates produce test_cumulative_excess_compound < 0.0
+  - best candidate test_excess < 0.05 (no meaningful improvement)
+  - test trade count < 100 (filter too restrictive for reverse base)
+  validate: *id001
+  test: *id001
+risk: 'Low: only 5 grid points on a single mechanic applied to a verified tradeable
+  base. Main risk is that bond floor proximity shrinks the reverse-direction candidate
+  pool too aggressively, eliminating the alpha-producing trades. The trade-count falsifier
+  catches this. Not a data-mining concern — the base is pre-validated and the constraint
+  is pre-registered.
+
+  '
+why_not_repeated_failure: 'Not a moneyness entry filter variant. The bond floor entry
+  filter has exactly 1 forward rejection (bond-floor-entry-filter_v1, failed_mechanical_thresholds),
+  not 4. The critical insight explicitly reprioritizes reverse-direction tests of
+  previously forward-failed families above new forward experiments. This proposal
+  follows that priority: test whether the bond floor constraint was rejected due to
+  the anti-alpha base, not due to the constraint itself. Passing would rehabilitate
+  a family; failing would cleanly close it with direction-agnostic evidence.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+- cb_arb_value_gap_switch_reverse-probe_20260524
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524
+implementation_assumption: The executor evaluate_cb_arb_bond_floor_entry_filter_reverse
+  is registered under C002 and already exists. It applies reverse sort direction with
+  the bond floor computation, then runs the standard backtest with cost-on evaluation.
+  No new executor code needed. This proposal is runnable as-is.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 24dd317bac958cd7
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 24dd317bac958cd7
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_bond_floor_entry_filter_reverse_v1/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=bond_floor_entry_filter_reverse, capability_ids=['C002']);
+    cites critical insight 'value_gap_rank_is_anti_alpha_2026_05_24'; queue depth=0.
+  evidence:
+    family: bond_floor_entry_filter_reverse
+    capability_ids:
+    - C002
+    cites_critical: value_gap_rank_is_anti_alpha_2026_05_24
+    queue_depth: 0

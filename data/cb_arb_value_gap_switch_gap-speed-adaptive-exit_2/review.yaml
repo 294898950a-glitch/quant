@@ -1,0 +1,73 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: true
+    selected_name: best_candidate
+  artifacts_hash: ff4a4c86555092c3
+interpretation:
+  review_status_code: 3
+  result_summary: The run tested only duration-adaptive parameter grid variants, not
+    the gap-speed-adaptive hypothesis it was proposed to test; the executor used (exit_rule_duration_adaptive)
+    is identical to the previously accepted run, and no gap-convergence-speed dimension
+    appears in any candidate parameters.
+  main_reason: Executor mismatch — the hypothesis proposed modulating decay rate by
+    gap trajectory but zero gap-speed parameters were introduced or tested; all 27
+    grid combos vary only min_hold_days, initial_threshold_fraction, and decay_period_factor,
+    exactly as the prior duration-adaptive run.
+  failure_causes:
+  - Gap-speed-adaptive hypothesis was never tested; the executor used is exit_rule_duration_adaptive
+    with no gap-trajectory dimension
+  - No gap-convergence-speed metric or parameter exists in any candidate, so the core
+    hypothesis remains completely unevaluated
+  next_research_directions:
+  - direction: Implement actual gap-speed-adaptive executor with decay-rate modulation
+      based on recent gap trajectory
+    why: The hypothesis is logically sound and builds on a proven framework but was
+      never executed; a new executor that varies decay_period_factor as a function
+      of gap convergence/divergence would properly test the claim
+    priority_code: 1
+    priority: high
+  - direction: Re-run with stricter proposal-to-executor alignment gate to prevent
+      title/hypothesis mismatch
+    why: This run passed proposal_gate with a gap-speed hypothesis but was handed
+      a duration-adaptive executor, indicating a spec-compilation or executor-matching
+      gap in the pipeline
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No cost_degradation metric for best_candidate to verify the hard floor `cost_degradation_pp_improved_vs_baseline_neg_7_47pp`
+  - No gap-convergence-speed metric computed or tracked in any candidate; the core
+    independent variable of the hypothesis is absent from all data
+  - The proposal_gate approved a spec with capability_ids [C007] and mechanics [new_exit_rule]
+    but the executor dispatched was exit_rule_duration_adaptive, which is an existing
+    executor from the prior accepted run — the matching logic produced a false positive
+  review_status: inconclusive
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: a3e8ce6ba6ffc7fa
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: true
+    selected_name: best_candidate

@@ -1,0 +1,33 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1_2
+date: '2026-05-23'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  adoption_pass: false
+  review_summary: 按市场波动状态动态调整退出阈值的方案在两个周期中超额收益均为-1.0，与静态基线完全相同，零改善且绝对收益严重为负。
+  review_main_reason: 政策自适应退出改进幅度为零（train和test的超额收益均与基线持平于-1.0），且绝对收益深度为负，未通过任何硬性门槛。
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- 'cb_arb_value_gap_switch_regime_adaptive_exit_v1_2: rejected by review; evidence-only,
+  not promoted'
+learnings:
+- Evaluator ran end-to-end for cb_arb_value_gap_switch_regime_adaptive_exit_v1_2;
+  report normalized by normalize_report_schema.
+follow_up_actions:
+- Evidence-only record; do not promote to truth without user approval.
+status: COMPLETE
+normalized_at: '2026-05-23T23:04:29+00:00'
+normalized_by: normalize_report_schema
+evaluator_report:
+  adoption_pass: false
+  excess_improvement_test: 0.0
+  max_test_year_drawdown: 5.058516626725686
+  test_excess_return_regime_adaptive: -1.0
+  test_excess_return_static_baseline: -1.0
+  test_max_drawdown: -0.0
+  test_trades: 797
+  train_excess_return_regime_adaptive: -1.0
+  train_excess_return_static_baseline: -1.0
+  train_max_drawdown: 4.060271153387153
+  train_trades: 3544

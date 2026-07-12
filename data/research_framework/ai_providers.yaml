@@ -1,60 +1,30 @@
 schema_version: 1
-active_provider: deepseek
+active_provider: hermes
 policy:
   allowed_entrypoint: scripts/run_strategy_ideation_once.py
   allowed_entrypoints:
-  - scripts/run_strategy_ideation_once.py
-  - scripts/review_result.py
-  - scripts/validate_data_quality.py
-  - scripts/repair_data_quality.py
-  background_call_allowed: false
-  provider_must_be_registered: true
-providers:
-  claude:
-    enabled: false
-    kind: command_adapter
-    model: sonnet
-    allowed_entrypoint: scripts/run_strategy_ideation_once.py
-    prompt_mode: stdin
-    timeout_seconds: 240
-    command:
-    - claude
-    - -p
-    - --output-format
-    - text
-    - --model
-    - sonnet
-    - --max-budget-usd
-    - '0.5'
-    - --tools
-    - ''
-  codex:
-    enabled: false
-    kind: registered_external
-    model: codex
-    allowed_entrypoint: scripts/run_strategy_ideation_once.py
-    note: Registered but not enabled until a non-interactive command contract is confirmed.
-  openai:
-    enabled: false
-    kind: registered_external
-    api_key_env: OPENAI_API_KEY
-    model: gpt
-    allowed_entrypoint: scripts/run_strategy_ideation_once.py
-    note: Registered provider; requires adapter/client wiring before activation.
-  deepseek:
-    enabled: true
-    kind: openai_chat_completion
-    api_key_env: DEEPSEEK_API_KEY
-    api_key_file: /mnt/c/Users/陈教授/Desktop/key/DEEPSEEK_API_KEY - tencent.txt
-    base_url: https://api.deepseek.com
-    model: deepseek-v4-pro
-    allowed_entrypoint: scripts/run_strategy_ideation_once.py
-    allowed_entrypoints:
     - scripts/run_strategy_ideation_once.py
     - scripts/review_result.py
     - scripts/validate_data_quality.py
     - scripts/repair_data_quality.py
-    timeout_seconds: 240
-    temperature: 0.2
-    max_tokens: 8192
-    note: Active provider for project-owned strategy ideation; direct API call through OpenAI-compatible chat completions.
+  background_call_allowed: false
+  provider_must_be_registered: true
+providers:
+  hermes:
+    enabled: true
+    kind: command_adapter
+    model: hermes
+    allowed_entrypoint: scripts/run_strategy_ideation_once.py
+    allowed_entrypoints:
+      - scripts/run_strategy_ideation_once.py
+      - scripts/review_result.py
+      - scripts/validate_data_quality.py
+      - scripts/repair_data_quality.py
+    prompt_mode: stdin
+    timeout_seconds: 600
+    command:
+      - python3
+      - scripts/hermes_provider_adapter.py
+      - --timeout-seconds
+      - "600"
+    note: "Active registered provider. Uses Hermes command adapter; no direct OpenAI-compatible API key is configured."

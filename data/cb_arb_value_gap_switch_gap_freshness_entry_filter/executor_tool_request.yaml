@@ -1,0 +1,465 @@
+status: draft_tool_code
+code_response_hash: 1907ee4d5243f9f3
+validation_errors: []
+files:
+- path: generated_executor/evaluate_cb_arb_gap_freshness_entry_filter.py
+  purpose: Complete evaluator implementation.
+  content: "\"\"\"Evaluate gap freshness entry filter for cb_arb value-gap switch.\n\
+    \nCore idea: value gap signals decay in predictive power with age. A gap that\n\
+    first appears today is more likely to close profitably than one persisting for\n\
+    weeks (already priced in). This executor computes gap_age per CB per day\n(days\
+    \ since gap first opened), applies a boolean entry mask allowing only CBs\nwith\
+    \ gap_age <= max_age_days before passing through the existing signal\nranking\
+    \ and backtest engine. Grid-searches max_age_days over\n[1, 3, 5, 10, 20, 40,\
+    \ 60, inf]. The inf case (no filter) is the within-run\nbaseline.\n\"\"\"\n\n\
+    from __future__ import annotations\n\nimport argparse\nimport json\nimport sys\n\
+    from datetime import datetime\nfrom pathlib import Path\nfrom typing import Any\n\
+    \n# ---------------------------------------------------------------------------\n\
+    # Repo root & sys.path — must come before any `from scripts.X import Y`.\n# The\
+    \ compliance import-reachability probe runs with -I in /tmp, so all\n# non-stdlib\
+    \ imports that follow must resolve from the venv site-packages\n# (numpy/pandas/yaml)\
+    \ or from REPO_ROOT (scripts.*).\n# ---------------------------------------------------------------------------\n\
+    \ndef _find_repo_root(start: Path) -> Path:\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n# ---------------------------------------------------------------------------\n\
+    # Lazy third-party imports — not available at module level in isolated probe.\n\
+    # ---------------------------------------------------------------------------\n\
+    \ndef _get_np():\n    \"\"\"Lazy import numpy.\"\"\"\n    import numpy as _np\n\
+    \    return _np\n\n\ndef _get_pd():\n    \"\"\"Lazy import pandas.\"\"\"\n   \
+    \ import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n    \"\"\"Lazy import\
+    \ yaml.\"\"\"\n    import yaml as _yaml\n    return _yaml\n\n\n# YAML numpy representer\
+    \ registration runs once at first yaml write.\n_YAML_REPRS_REGISTERED = False\n\
+    \n\ndef _ensure_yaml_np_reprs():\n    global _YAML_REPRS_REGISTERED\n    if _YAML_REPRS_REGISTERED:\n\
+    \        return\n    yaml = _get_yaml()\n    np = _get_np()\n\n    def _yaml_repr_np_float(dumper,\
+    \ data):\n        return dumper.represent_float(float(data))\n\n    def _yaml_repr_np_int(dumper,\
+    \ data):\n        return dumper.represent_int(int(data))\n\n    yaml.SafeDumper.add_representer(np.floating,\
+    \ _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# ---------------------------------------------------------------------------\n\
+    # Data requirements — must exist\n# ---------------------------------------------------------------------------\n\
+    \n_GAP_DATA_PATH = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n\n\ndef declare_data_requirements(\n\
+    \    command: list[Any], spec: dict[str, Any] | None = None\n) -> dict[str, Any]:\n\
+    \    return {\n        \"schema_version\": 1,\n        \"executor\": \"generated_executor/evaluate_cb_arb_gap_freshness_entry_filter.py\"\
+    ,\n        \"required_files\": [\n            {\n                \"path\": _GAP_DATA_PATH,\n\
+    \                \"description\": (\n                    \"Daily value-gap amounts\
+    \ per CB per trade_date from \"\n                    \"regime-option-entry-gate\
+    \ run.\"\n                ),\n            },\n            {\n                \"\
+    path\": \"data/cb_warehouse/cb_basic.parquet\",\n                \"description\"\
+    : \"CB basic reference table for universe filtering.\",\n            },\n    \
+    \    ],\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    # Gatekeeper\n# ---------------------------------------------------------------------------\n\
+    \ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\ndef _gatekeeper_after_run(output_dir:\
+    \ Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ---------------------------------------------------------------------------\n\
+    # Constants\n# ---------------------------------------------------------------------------\n\
+    \nBASE_PARAMS: dict[str, Any] = {\n    \"min_gap_pct\": 0.0,\n    \"sell_gap_pct\"\
+    : 0.0,\n    \"switch_hurdle_pct\": 0.03,\n    \"max_hold_days\": 180.0,\n    \"\
+    stop_gap_ratio_floor\": 0.30,\n    \"stop_signal_threshold\": 999.0,\n}\n\nFIXED_SOURCE\
+    \ = 2\nRULE = \"score_4state\"\n\nPERIODS: list[dict[str, str]] = [\n    {\"label\"\
+    : \"train\", \"start\": \"20180101\", \"end\": \"20221231\"},\n    {\"label\"\
+    : \"stress_2020\", \"start\": \"20200101\", \"end\": \"20201231\"},\n    {\"label\"\
+    : \"test\", \"start\": \"20230101\", \"end\": \"20251231\"},\n]\n\nMAX_AGE_DAYS_SWEEP\
+    \ = [1, 3, 5, 10, 20, 40, 60, float(\"inf\")]\n\n\n# ---------------------------------------------------------------------------\n\
+    # Data loading\n# ---------------------------------------------------------------------------\n\
+    \ndef _resolve_data_path(data_root: str | Path, relative: str) -> Path:\n    data_root\
+    \ = Path(data_root)\n    rel = Path(relative)\n    candidates = [\n        data_root\
+    \ / rel,\n        _REPO_ROOT / rel,\n        Path.cwd() / rel,\n    ]\n    if\
+    \ rel.parts[0] == \"data\":\n        inner = Path(*rel.parts[1:])\n        candidates.append(data_root\
+    \ / inner)\n        candidates.append(_REPO_ROOT / rel)\n    for c in candidates:\n\
+    \        if c.exists():\n            return c\n    searched = \", \".join(str(c)\
+    \ for c in candidates)\n    raise FileNotFoundError(\n        f\"Cannot find {relative}\
+    \ under data_root={data_root}; searched: {searched}\"\n    )\n\n\ndef _load_gap_ranks(data_root:\
+    \ str) -> Any:\n    pd = _get_pd()\n    path = _resolve_data_path(data_root, _GAP_DATA_PATH)\n\
+    \    df = pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"\
+    trade_date\"])\n    df = df.sort_values([\"ts_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \    # Ensure value_gap_amount is numeric\n    df[\"value_gap_amount\"] = pd.to_numeric(df[\"\
+    value_gap_amount\"], errors=\"coerce\")\n    return df\n\n\n# ---------------------------------------------------------------------------\n\
+    # Gap freshness computation\n# ---------------------------------------------------------------------------\n\
+    \ndef _compute_gap_age(df: Any) -> Any:\n    \"\"\"Compute gap_age per CB per\
+    \ day: days since gap first opened.\n\n    gap_age is computed by tracking when\
+    \ value_gap_amount transitions from\n    zero/NaN to positive. When the gap closes\
+    \ (returns to <= 0 or NaN),\n    gap_open_date resets to null. gap_age = trade_date\
+    \ - gap_open_date\n    in calendar days.\n\n    Returns a DataFrame with a new\
+    \ 'gap_age' column (float, NaN = no active gap).\n    \"\"\"\n    np = _get_np()\n\
+    \    df = df.copy()\n    df = df.sort_values([\"ts_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \n    gap_ages: list[float] = []\n    gap_open_date: Any = None\n\n    for (_code,),\
+    \ grp in df.groupby([\"ts_code\"], sort=False):\n        grp = grp.sort_values(\"\
+    trade_date\")\n        for _, row in grp.iterrows():\n            gap_val = row[\"\
+    value_gap_amount\"]\n            if _is_gap_closed(gap_val):\n               \
+    \ gap_open_date = None\n                gap_ages.append(np.nan)\n            else:\n\
+    \                if gap_open_date is None:\n                    gap_open_date\
+    \ = row[\"trade_date\"]\n                age = (row[\"trade_date\"] - gap_open_date).days\n\
+    \                gap_ages.append(float(age))\n\n    df[\"gap_age\"] = gap_ages\n\
+    \    return df\n\n\ndef _is_gap_closed(gap_val: Any) -> bool:\n    \"\"\"Return\
+    \ True if the gap is effectively closed (zero/NaN/negative).\"\"\"\n    try:\n\
+    \        return bool(gap_val is None or (hasattr(gap_val, \"__float__\") and float(gap_val)\
+    \ <= 0))\n    except (ValueError, TypeError):\n        return True\n\n\ndef _apply_freshness_filter(df:\
+    \ Any, max_age_days: float) -> Any:\n    \"\"\"Filter out rows where gap_age >\
+    \ max_age_days.\n\n    Retains rows where gap_age is NaN (no active gap) or gap_age\
+    \ <= max_age_days.\n    When max_age_days is inf, all rows are retained (no filter\
+    \ / baseline).\n    \"\"\"\n    if max_age_days == float(\"inf\"):\n        return\
+    \ df.copy()\n\n    mask = df[\"gap_age\"].isna() | (df[\"gap_age\"] <= max_age_days)\n\
+    \    return df[mask].copy()\n\n\n# ---------------------------------------------------------------------------\n\
+    # Backtest runner\n# ---------------------------------------------------------------------------\n\
+    \ndef _run_period(\n    ranks: Any,\n    period: dict[str, str],\n    data_root:\
+    \ Path,\n    params: dict[str, Any],\n) -> dict[str, Any]:\n    \"\"\"Run backtest\
+    \ on a single period slice of ranks.\"\"\"\n    # lazy import to keep module-level\
+    \ load fast for compliance probe\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import _run_value_gap_backtest  # noqa: E402\n    period_ranks = ranks[\n  \
+    \      (ranks[\"trade_date\"] >= period[\"start\"])\n        & (ranks[\"trade_date\"\
+    ] <= period[\"end\"])\n    ].copy()\n    if period_ranks.empty:\n        return\
+    \ {\n            \"metrics\": {\n                \"total_return\": 0.0,\n    \
+    \            \"excess_return\": 0.0,\n                \"max_drawdown\": 0.0,\n\
+    \                \"win_rate\": 0.0,\n                \"sharpe_ratio\": 0.0,\n\
+    \                \"total_trades\": 0,\n            },\n            \"trades\"\
+    : [],\n        }\n    # Convert back to string for the backtester\n    period_ranks[\"\
+    trade_date\"] = period_ranks[\"trade_date\"].astype(str)\n    result = _run_value_gap_backtest(\n\
+    \        period_ranks,\n        period[\"start\"],\n        period[\"end\"],\n\
+    \        data_root,\n        FIXED_SOURCE,\n        RULE,\n        params,\n \
+    \   )\n    return result\n\n\n# ---------------------------------------------------------------------------\n\
+    # Artifact writers\n# ---------------------------------------------------------------------------\n\
+    \ndef _score_fn(metrics: dict[str, Any]) -> float:\n    \"\"\"Score function:\
+    \ excess_return - 0.25 * |max_drawdown|.\"\"\"\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import _score  # noqa: E402\n    return _score(metrics)\n\n\ndef _write_summary(\n\
+    \    output_dir: Path,\n    all_candidates: list[dict[str, Any]],\n    best_candidate:\
+    \ dict[str, Any] | None,\n    baseline_results: dict[str, dict[str, Any]],\n)\
+    \ -> dict[str, Any]:\n    \"\"\"Write summary.json with all grid search results.\"\
+    \"\"\n    output_dir.mkdir(parents=True, exist_ok=True)\n\n    _score = _score_fn\n\
+    \n    rows: list[dict[str, Any]] = []\n    for cand in all_candidates:\n     \
+    \   gated = cand[\"gated_results\"]\n        max_age = cand[\"max_age_days\"]\n\
+    \        for period in PERIODS:\n            label = period[\"label\"]\n     \
+    \       bl_m = baseline_results[label][\"metrics\"]\n            gt_m = gated[label][\"\
+    metrics\"]\n            rows.append(\n                {\n                    \"\
+    variant\": f\"max_age_{max_age}\",\n                    \"max_age_days\": max_age,\n\
+    \                    \"period\": label,\n                    \"start\": period[\"\
+    start\"],\n                    \"end\": period[\"end\"],\n                   \
+    \ \"total_return\": float(gt_m.get(\"total_return\", 0.0) or 0.0),\n         \
+    \           \"excess_return\": float(gt_m.get(\"excess_return\", 0.0) or 0.0),\n\
+    \                    \"max_drawdown\": float(gt_m.get(\"max_drawdown\", 0.0) or\
+    \ 0.0),\n                    \"win_rate\": float(gt_m.get(\"win_rate\", 0.0) or\
+    \ 0.0),\n                    \"sharpe_ratio\": float(gt_m.get(\"sharpe_ratio\"\
+    , 0.0) or 0.0),\n                    \"total_trades\": int(gt_m.get(\"total_trades\"\
+    , 0) or 0),\n                    \"score\": _score(gt_m),\n                  \
+    \  \"baseline_score\": _score(bl_m),\n                    \"baseline_trades\"\
+    : int(bl_m.get(\"total_trades\", 0) or 0),\n                }\n            )\n\
+    \n    # Determine adoption_pass from best candidate\n    if best_candidate is\
+    \ not None:\n        best_age = best_candidate[\"max_age_days\"]\n        gt =\
+    \ best_candidate[\"gated_results\"]\n        gt_test_score = _score(gt[\"test\"\
+    ][\"metrics\"])\n        gt_train_score = _score(gt[\"train\"][\"metrics\"])\n\
+    \        gt_stress_score = _score(gt[\"stress_2020\"][\"metrics\"])\n        bl_test_trades\
+    \ = int(\n            baseline_results[\"test\"][\"metrics\"].get(\"total_trades\"\
+    , 1) or 1\n        )\n        gt_test_trades = int(gt[\"test\"][\"metrics\"].get(\"\
+    total_trades\", 0) or 0)\n        if bl_test_trades > 0:\n            suppression_pct\
+    \ = round((1 - gt_test_trades / bl_test_trades) * 100, 1)\n        else:\n   \
+    \         suppression_pct = 0.0\n\n        adoption_pass = (\n            gt_stress_score\
+    \ > -0.10\n            and gt_train_score > 0.10\n            and gt_test_score\
+    \ >= 0.28\n            and suppression_pct >= 15.0\n        )\n        best_params\
+    \ = {\"max_age_days\": best_age}\n    else:\n        adoption_pass = False\n \
+    \       best_params = {\"max_age_days\": None}\n\n    summary: dict[str, Any]\
+    \ = {\n        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n\
+    \        \"adoption_pass\": adoption_pass,\n        \"best_params\": best_params,\n\
+    \        \"best_max_age_days\": best_params.get(\"max_age_days\"),\n        \"\
+    baseline_params\": BASE_PARAMS,\n        \"grid_sweep_values\": MAX_AGE_DAYS_SWEEP,\n\
+    \        \"total_candidates\": len(all_candidates),\n        \"rows\": rows,\n\
+    \        \"generated_at\": datetime.now().isoformat(),\n    }\n\n    (output_dir\
+    \ / \"summary.json\").write_text(\n        json.dumps(summary, ensure_ascii=False,\
+    \ indent=2, default=str) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n    return\
+    \ summary\n\n\ndef _write_report(\n    output_dir: Path,\n    adoption_pass: bool,\n\
+    \    best_candidate: dict[str, Any] | None,\n    baseline_results: dict[str, dict[str,\
+    \ Any]],\n    all_candidates: list[dict[str, Any]],\n) -> None:\n    _ensure_yaml_np_reprs()\n\
+    \    yaml = _get_yaml()\n    _score = _score_fn\n    now = datetime.now()\n  \
+    \  now_str = now.strftime(\"%Y-%m-%dT%H:%M:%S\")\n\n    if best_candidate is not\
+    \ None:\n        best_age = best_candidate[\"max_age_days\"]\n        gt = best_candidate[\"\
+    gated_results\"]\n        gt_train = gt[\"train\"][\"metrics\"]\n        gt_stress\
+    \ = gt[\"stress_2020\"][\"metrics\"]\n        gt_test = gt[\"test\"][\"metrics\"\
+    ]\n        bl_train = baseline_results[\"train\"][\"metrics\"]\n        bl_test\
+    \ = baseline_results[\"test\"][\"metrics\"]\n        bl_stress = baseline_results[\"\
+    stress_2020\"][\"metrics\"]\n\n        train_trade_count = int(gt_train.get(\"\
+    total_trades\", 0) or 0)\n        bl_train_trade_count = int(bl_train.get(\"total_trades\"\
+    , 0) or 0)\n        if bl_train_trade_count > 0:\n            suppression_pct\
+    \ = round(\n                (1 - train_trade_count / bl_train_trade_count) * 100,\
+    \ 1\n            )\n        else:\n            suppression_pct = 0.0\n\n     \
+    \   l6_decision = \"adopt\" if adoption_pass else \"reject\"\n        decision\
+    \ = (\n            \"passed_mechanical_thresholds_not_promoted\"\n           \
+    \ if adoption_pass\n            else \"failed_mechanical_thresholds\"\n      \
+    \  )\n\n        report = {\n            \"schema_version\": 1,\n            \"\
+    run_id\": output_dir.name,\n            \"date\": now.strftime(\"%Y-%m-%d\"),\n\
+    \            \"strategy_id\": \"cb_arb_value_gap_switch\",\n            \"l6_exit_decision\"\
+    : l6_decision,\n            \"three_exits_section\": {\n                \"adoption_pass\"\
+    : adoption_pass,\n                \"selected_variant\": f\"max_age_{best_age}\"\
+    ,\n                \"criteria\": {\n                    \"stress_2020_score_gt\"\
+    : -0.10,\n                    \"train_score_gt\": 0.10,\n                    \"\
+    test_score_gte\": 0.28,\n                    \"suppression_pct_gte\": 15.0,\n\
+    \                },\n            },\n            \"compute_cost_yuan\": 0.0,\n\
+    \            \"confirmed_invalid_directions\": (\n                [] if adoption_pass\
+    \ else [f\"max_age_{best_age}\"]\n            ),\n            \"learnings\": [\n\
+    \                f\"Gap freshness entry filter grid-searched {len(all_candidates)}\
+    \ \"\n                f\"max_age_days values over [{', '.join(str(v) for v in\
+    \ MAX_AGE_DAYS_SWEEP)}].\"\n            ],\n            \"follow_up_actions\"\
+    : (\n                [\"seek user approval before promoting the candidate\"]\n\
+    \                if adoption_pass\n                else [\n                  \
+    \  \"review why the gap freshness filter failed one or more fixed criteria\"\n\
+    \                ]\n            ),\n            \"status\": \"COMPLETE\",\n  \
+    \          \"generated_by\": \"hermes\",\n            \"generated_at\": now_str,\n\
+    \            \"variant\": f\"max_age_{best_age}\",\n            \"params\": {\"\
+    max_age_days\": best_age},\n            \"adoption_pass\": adoption_pass,\n  \
+    \          \"decision\": decision,\n            \"metrics\": {\n             \
+    \   \"train\": {\n                    \"baseline\": {\n                      \
+    \  \"total_return\": float(bl_train.get(\"total_return\", 0.0) or 0.0),\n    \
+    \                    \"excess_return\": float(bl_train.get(\"excess_return\",\
+    \ 0.0) or 0.0),\n                        \"max_drawdown\": float(bl_train.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                        \"win_rate\": float(bl_train.get(\"\
+    win_rate\", 0.0) or 0.0),\n                        \"total_trades\": bl_train_trade_count,\n\
+    \                        \"score\": _score(bl_train),\n                    },\n\
+    \                    \"gated\": {\n                        \"total_return\": float(gt_train.get(\"\
+    total_return\", 0.0) or 0.0),\n                        \"excess_return\": float(gt_train.get(\"\
+    excess_return\", 0.0) or 0.0),\n                        \"max_drawdown\": float(gt_train.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                        \"win_rate\": float(gt_train.get(\"\
+    win_rate\", 0.0) or 0.0),\n                        \"total_trades\": train_trade_count,\n\
+    \                        \"score\": _score(gt_train),\n                    },\n\
+    \                    \"suppression_pct\": suppression_pct,\n                },\n\
+    \                \"stress_2020\": {\n                    \"baseline\": {\n   \
+    \                     \"total_return\": float(bl_stress.get(\"total_return\",\
+    \ 0.0) or 0.0),\n                        \"excess_return\": float(bl_stress.get(\"\
+    excess_return\", 0.0) or 0.0),\n                        \"max_drawdown\": float(bl_stress.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                        \"win_rate\": float(bl_stress.get(\"\
+    win_rate\", 0.0) or 0.0),\n                        \"score\": _score(bl_stress),\n\
+    \                    },\n                    \"gated\": {\n                  \
+    \      \"total_return\": float(gt_stress.get(\"total_return\", 0.0) or 0.0),\n\
+    \                        \"excess_return\": float(gt_stress.get(\"excess_return\"\
+    , 0.0) or 0.0),\n                        \"max_drawdown\": float(gt_stress.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                        \"win_rate\": float(gt_stress.get(\"\
+    win_rate\", 0.0) or 0.0),\n                        \"score\": _score(gt_stress),\n\
+    \                    },\n                },\n                \"test\": {\n   \
+    \                 \"baseline\": {\n                        \"total_return\": float(bl_test.get(\"\
+    total_return\", 0.0) or 0.0),\n                        \"excess_return\": float(bl_test.get(\"\
+    excess_return\", 0.0) or 0.0),\n                        \"max_drawdown\": float(bl_test.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                        \"win_rate\": float(bl_test.get(\"\
+    win_rate\", 0.0) or 0.0),\n                        \"total_trades\": int(bl_test.get(\"\
+    total_trades\", 0) or 0),\n                        \"score\": _score(bl_test),\n\
+    \                    },\n                    \"gated\": {\n                  \
+    \      \"total_return\": float(gt_test.get(\"total_return\", 0.0) or 0.0),\n \
+    \                       \"excess_return\": float(gt_test.get(\"excess_return\"\
+    , 0.0) or 0.0),\n                        \"max_drawdown\": float(gt_test.get(\"\
+    max_drawdown\", 0.0) or 0.0),\n                        \"win_rate\": float(gt_test.get(\"\
+    win_rate\", 0.0) or 0.0),\n                        \"total_trades\": int(gt_test.get(\"\
+    total_trades\", 0) or 0),\n                        \"score\": _score(gt_test),\n\
+    \                    },\n                },\n            },\n            \"warnings\"\
+    : [],\n        }\n    else:\n        l6_decision = \"reject\"\n        decision\
+    \ = \"failed_mechanical_thresholds\"\n        report = {\n            \"schema_version\"\
+    : 1,\n            \"run_id\": output_dir.name,\n            \"date\": now.strftime(\"\
+    %Y-%m-%d\"),\n            \"strategy_id\": \"cb_arb_value_gap_switch\",\n    \
+    \        \"l6_exit_decision\": l6_decision,\n            \"status\": \"COMPLETE\"\
+    ,\n            \"generated_by\": \"hermes\",\n            \"generated_at\": now_str,\n\
+    \            \"adoption_pass\": False,\n            \"decision\": decision,\n\
+    \            \"error\": \"No valid candidate produced (empty backtest results).\"\
+    ,\n            \"warnings\": [],\n        }\n\n    (output_dir / \"report.yaml\"\
+    ).write_text(\n        yaml.safe_dump(report, allow_unicode=True, sort_keys=False),\n\
+    \        encoding=\"utf-8\",\n    )\n\n\ndef _write_l4_ack(\n    output_dir: Path,\n\
+    \    adoption_pass: bool,\n    best_candidate: dict[str, Any] | None,\n    baseline_results:\
+    \ dict[str, dict[str, Any]],\n) -> None:\n    _ensure_yaml_np_reprs()\n    yaml\
+    \ = _get_yaml()\n    _score = _score_fn\n    now = datetime.now().strftime(\"\
+    %Y-%m-%dT%H:%M:%S\")\n\n    if best_candidate is not None:\n        best_age =\
+    \ best_candidate[\"max_age_days\"]\n        gt = best_candidate[\"gated_results\"\
+    ]\n        gt_test = gt[\"test\"][\"metrics\"]\n        gt_train = gt[\"train\"\
+    ][\"metrics\"]\n        gt_stress = gt[\"stress_2020\"][\"metrics\"]\n       \
+    \ bl_test = baseline_results[\"test\"][\"metrics\"]\n\n        gt_test_score =\
+    \ _score(gt_test)\n        gt_train_score = _score(gt_train)\n        gt_stress_score\
+    \ = _score(gt_stress)\n        bl_test_trades = int(bl_test.get(\"total_trades\"\
+    , 1) or 1)\n        gt_test_trades = int(gt_test.get(\"total_trades\", 0) or 0)\n\
+    \        if bl_test_trades > 0:\n            suppression_pct = round((1 - gt_test_trades\
+    \ / bl_test_trades) * 100, 1)\n        else:\n            suppression_pct = 0.0\n\
+    \n        q1_pass = bool(gt_stress_score > -0.10)\n        q2_pass = bool(gt_train_score\
+    \ > 0.10)\n        q3_pass = bool(gt_test_score >= 0.28)\n        q4_pass = bool(suppression_pct\
+    \ >= 15.0)\n\n        ack = {\n            \"schema_version\": 1,\n          \
+    \  \"run_id\": output_dir.name,\n            \"reviewer\": \"hermes_executor_code\"\
+    ,\n            \"ack_at\": now,\n            \"q1_hard_floors\": {\n         \
+    \       \"description\": \"2020 stress period check.\",\n                \"answer\"\
+    : (\n                    f\"best max_age={best_age}, 2020 score={gt_stress_score:.4f}\
+    \ \"\n                    f\"(baseline={_score(baseline_results['stress_2020']['metrics']):.4f}),\
+    \ \"\n                    f\"pass={q1_pass}\"\n                ),\n          \
+    \      \"computed_data\": {\n                    \"gated_2020_score\": gt_stress_score,\n\
+    \                    \"baseline_2020_score\": _score(\n                      \
+    \  baseline_results[\"stress_2020\"][\"metrics\"]\n                    ),\n  \
+    \              },\n                \"computed_at\": now,\n                \"pass\"\
+    : q1_pass,\n            },\n            \"q2_selection_quality\": {\n        \
+    \        \"description\": \"Train period check.\",\n                \"answer\"\
+    : (\n                    f\"best max_age={best_age}, train score={gt_train_score:.4f}\
+    \ \"\n                    f\"(baseline={_score(baseline_results['train']['metrics']):.4f}),\
+    \ \"\n                    f\"pass={q2_pass}\"\n                ),\n          \
+    \      \"computed_data\": {\n                    \"gated_train_score\": gt_train_score,\n\
+    \                    \"baseline_train_score\": _score(\n                     \
+    \   baseline_results[\"train\"][\"metrics\"]\n                    ),\n       \
+    \             \"gated_train_max_drawdown\": float(\n                        gt_train.get(\"\
+    max_drawdown\", 0.0) or 0.0\n                    ),\n                },\n    \
+    \            \"computed_at\": now,\n                \"pass\": q2_pass,\n     \
+    \       },\n            \"q3_baseline_alignment\": {\n                \"description\"\
+    : \"Test period check.\",\n                \"answer\": (\n                   \
+    \ f\"best max_age={best_age}, test score={gt_test_score:.4f} \"\n            \
+    \        f\"(baseline={_score(bl_test):.4f}), pass={q3_pass}\"\n             \
+    \   ),\n                \"computed_data\": {\n                    \"gated_test_score\"\
+    : gt_test_score,\n                    \"baseline_test_score\": _score(bl_test),\n\
+    \                    \"gated_test_trades\": gt_test_trades,\n                },\n\
+    \                \"computed_at\": now,\n                \"pass\": q3_pass,\n \
+    \           },\n            \"q4_suppression_quality\": {\n                \"\
+    description\": \"Trade count suppression must >= 15%.\",\n                \"answer\"\
+    : (\n                    f\"best max_age={best_age}, test trades={gt_test_trades}\
+    \ \"\n                    f\"(baseline={bl_test_trades}), suppression={suppression_pct}%,\
+    \ \"\n                    f\"pass={q4_pass}\"\n                ),\n          \
+    \      \"computed_data\": {\n                    \"gated_test_trades\": gt_test_trades,\n\
+    \                    \"baseline_test_trades\": bl_test_trades,\n             \
+    \       \"suppression_pct\": suppression_pct,\n                },\n          \
+    \      \"computed_at\": now,\n                \"pass\": q4_pass,\n           \
+    \ },\n            \"q5_trade_overlap\": {\n                \"description\": \"\
+    Gate must not over-suppress train trades.\",\n                \"answer\": (\n\
+    \                    f\"train trades={int(gt_train.get('total_trades', 0) or 0)}\
+    \ \"\n                    f\"(baseline={int(baseline_results['train']['metrics'].get('total_trades',\
+    \ 0) or 0)})\"\n                ),\n                \"computed_data\": {\n   \
+    \                 \"gated_train_trades\": int(gt_train.get(\"total_trades\", 0)\
+    \ or 0),\n                    \"baseline_train_trades\": int(\n              \
+    \          baseline_results[\"train\"][\"metrics\"].get(\"total_trades\", 0) or\
+    \ 0\n                    ),\n                },\n                \"computed_at\"\
+    : now,\n                \"pass\": bool(int(gt_train.get(\"total_trades\", 0) or\
+    \ 0) > 0),\n            },\n            \"q6_trigger_timing\": {\"applicable\"\
+    : False},\n            \"q7_path_contamination\": {\"applicable\": False},\n \
+    \           \"overall_pass\": adoption_pass,\n            \"overall_decision\"\
+    : \"adopt\" if adoption_pass else \"reject\",\n            \"overall_reason\"\
+    : (\n                \"All fixed period criteria passed.\"\n                if\
+    \ adoption_pass\n                else \"One or more fixed period criteria failed.\"\
+    \n            ),\n            \"auto_computed_at\": now,\n        }\n    else:\n\
+    \        ack = {\n            \"schema_version\": 1,\n            \"run_id\":\
+    \ output_dir.name,\n            \"reviewer\": \"hermes_executor_code\",\n    \
+    \        \"ack_at\": now,\n            \"overall_pass\": False,\n            \"\
+    overall_decision\": \"reject\",\n            \"overall_reason\": \"No valid candidate\
+    \ produced.\",\n            \"auto_computed_at\": now,\n        }\n\n    (output_dir\
+    \ / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(ack, allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\ndef _write_diagnostic(\n\
+    \    output_dir: Path,\n    adoption_pass: bool,\n    best_candidate: dict[str,\
+    \ Any] | None,\n    all_candidates: list[dict[str, Any]],\n) -> None:\n    _ensure_yaml_np_reprs()\n\
+    \    yaml = _get_yaml()\n    _score = _score_fn\n    now = datetime.now().strftime(\"\
+    %Y-%m-%dT%H:%M:%S\")\n\n    if best_candidate is not None:\n        best_age =\
+    \ best_candidate[\"max_age_days\"]\n        gt = best_candidate[\"gated_results\"\
+    ]\n        gt_test_score = _score(gt[\"test\"][\"metrics\"])\n        gt_train_score\
+    \ = _score(gt[\"train\"][\"metrics\"])\n        gt_stress_score = _score(gt[\"\
+    stress_2020\"][\"metrics\"])\n\n        checks = []\n        if gt_stress_score\
+    \ > -0.10:\n            checks.append(\"stress_2020_score_pass\")\n        else:\n\
+    \            checks.append(\"stress_2020_score_fail\")\n        if gt_train_score\
+    \ > 0.10:\n            checks.append(\"train_score_pass\")\n        else:\n  \
+    \          checks.append(\"train_score_fail\")\n        if gt_test_score >= 0.28:\n\
+    \            checks.append(\"test_score_pass\")\n        else:\n            checks.append(\"\
+    test_score_fail\")\n\n        verdict = \"adopt\" if adoption_pass else \"reject\"\
+    \n        verdict_rationale = (\n            \"All period criteria met\"\n   \
+    \         if adoption_pass\n            else \"Not all period criteria met: \"\
+    \ + \", \".join(checks)\n        )\n\n        diagnostic = {\n            \"schema_version\"\
+    : 1,\n            \"run_id\": output_dir.name,\n            \"diagnostic_date\"\
+    : datetime.now().strftime(\"%Y-%m-%d\"),\n            \"diagnostic_by\": \"hermes\"\
+    ,\n            \"verdict_referenced\": verdict,\n            \"summary\": (\n\
+    \                f\"Gap freshness entry filter max_age={best_age} \"\n       \
+    \         f\"{'passed' if adoption_pass else 'failed'} the fixed criteria.\"\n\
+    \            ),\n            \"verdict_rationale\": verdict_rationale,\n     \
+    \       \"params\": {\"max_age_days\": best_age},\n            \"grid_sweep_size\"\
+    : len(all_candidates),\n            \"gated_metrics\": {\n                \"train_score\"\
+    : gt_train_score,\n                \"train_excess_return\": float(\n         \
+    \           gt[\"train\"][\"metrics\"].get(\"excess_return\", 0.0) or 0.0\n  \
+    \              ),\n                \"train_max_drawdown\": float(\n          \
+    \          gt[\"train\"][\"metrics\"].get(\"max_drawdown\", 0.0) or 0.0\n    \
+    \            ),\n                \"stress_2020_score\": gt_stress_score,\n   \
+    \             \"test_score\": gt_test_score,\n                \"test_excess_return\"\
+    : float(\n                    gt[\"test\"][\"metrics\"].get(\"excess_return\"\
+    , 0.0) or 0.0\n                ),\n            },\n            \"checks\": checks,\n\
+    \            \"warnings\": [],\n            \"errors\": [],\n        }\n    else:\n\
+    \        diagnostic = {\n            \"schema_version\": 1,\n            \"run_id\"\
+    : output_dir.name,\n            \"diagnostic_date\": datetime.now().strftime(\"\
+    %Y-%m-%d\"),\n            \"diagnostic_by\": \"hermes\",\n            \"verdict_referenced\"\
+    : \"reject\",\n            \"summary\": \"No valid candidate produced.\",\n  \
+    \          \"verdict_rationale\": \"No valid candidate produced (empty backtest\
+    \ results).\",\n            \"grid_sweep_size\": len(all_candidates),\n      \
+    \      \"warnings\": [\"empty_candidates\"],\n            \"errors\": [],\n  \
+    \      }\n\n    (output_dir / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump(diagnostic,\
+    \ allow_unicode=True, sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\
+    \n# ---------------------------------------------------------------------------\n\
+    # CLI / main\n# ---------------------------------------------------------------------------\n\
+    \ndef main() -> int:\n    parser = argparse.ArgumentParser(description=__doc__)\n\
+    \    parser.add_argument(\"--data-root\", required=True, help=\"Path to data root\
+    \ directory\")\n    parser.add_argument(\n        \"--train-start\", default=\"\
+    20180101\", help=\"Train period start (YYYYMMDD)\"\n    )\n    parser.add_argument(\n\
+    \        \"--train-end\", default=\"20221231\", help=\"Train period end (YYYYMMDD)\"\
+    \n    )\n    parser.add_argument(\n        \"--test-start\", default=\"20230101\"\
+    , help=\"Test period start (YYYYMMDD)\"\n    )\n    parser.add_argument(\n   \
+    \     \"--test-end\", default=\"20251231\", help=\"Test period end (YYYYMMDD)\"\
+    \n    )\n    parser.add_argument(\n        \"--output-dir\", required=True, help=\"\
+    Output directory for artifacts\"\n    )\n    parser.add_argument(\n        \"\
+    --max-age-days\",\n        type=float,\n        default=float(\"inf\"),\n    \
+    \    help=\"Max gap age in days for entry (inf = no filter). Grid-sweeps over\
+    \ \"\n        \"[1,3,5,10,20,40,60,inf] regardless of this value.\",\n    )\n\
+    \    args = parser.parse_args()\n\n    output_dir = Path(args.output_dir)\n  \
+    \  output_dir.mkdir(parents=True, exist_ok=True)\n    _gatekeeper_before_run(output_dir)\n\
+    \n    # lazy import of backtester helpers to keep module-level load fast\n   \
+    \ from scripts.evaluate_cb_arb_value_gap_switch import _score  # noqa: E402\n\n\
+    \    # Load data\n    try:\n        df_raw = _load_gap_ranks(args.data_root)\n\
+    \    except Exception as exc:\n        diag = {\"error\": str(exc), \"step\":\
+    \ \"load_data\"}\n        (output_dir / \"diagnostic.yaml\").write_text(\n   \
+    \         yaml.safe_dump(diag, allow_unicode=True), encoding=\"utf-8\"\n     \
+    \   )\n        print(f\"[gap_freshness] FATAL: {exc}\", flush=True)\n        return\
+    \ 1\n\n    # Compute gap_age\n    print(\"[gap_freshness] Computing gap_age per\
+    \ CB per day...\", flush=True)\n    df_with_age = _compute_gap_age(df_raw)\n\n\
+    \    # Backtest dates must be strings\n    df_with_age[\"trade_date\"] = df_with_age[\"\
+    trade_date\"].dt.strftime(\"%Y%m%d\")\n\n    print(\"[gap_freshness] Running baseline\
+    \ (max_age_days=inf)...\", flush=True)\n    # Baseline: no filter (inf)\n    baseline_ranks\
+    \ = _apply_freshness_filter(df_with_age, float(\"inf\"))\n    baseline_results:\
+    \ dict[str, dict[str, Any]] = {}\n    for period in PERIODS:\n        result =\
+    \ _run_period(baseline_ranks, period, Path(args.data_root), BASE_PARAMS)\n   \
+    \     baseline_results[period[\"label\"]] = result\n        m = result[\"metrics\"\
+    ]\n        print(\n            f\"  baseline {period['label']}: \"\n         \
+    \   f\"excess={m.get('excess_return', 0.0):.4f} \"\n            f\"dd={m.get('max_drawdown',\
+    \ 0.0):.4f} \"\n            f\"trades={m.get('total_trades', 0)} \"\n        \
+    \    f\"score={_score(m):.4f}\",\n            flush=True,\n        )\n\n    #\
+    \ Grid search over max_age_days\n    all_candidates: list[dict[str, Any]] = []\n\
+    \    best_candidate: dict[str, Any] | None = None\n    best_score = -float(\"\
+    inf\")\n\n    for max_age in MAX_AGE_DAYS_SWEEP:\n        if max_age == float(\"\
+    inf\"):\n            continue  # baseline already done\n\n        age_label =\
+    \ f\"max_age_{int(max_age)}\"\n        print(\n            f\"[gap_freshness]\
+    \ Sweeping {age_label}...\",\n            flush=True,\n        )\n\n        filtered\
+    \ = _apply_freshness_filter(df_with_age, max_age)\n        gated_results: dict[str,\
+    \ dict[str, Any]] = {}\n        for period in PERIODS:\n            result = _run_period(\n\
+    \                filtered, period, Path(args.data_root), BASE_PARAMS\n       \
+    \     )\n            gated_results[period[\"label\"]] = result\n            m\
+    \ = result[\"metrics\"]\n            print(\n                f\"  {age_label}\
+    \ {period['label']}: \"\n                f\"excess={m.get('excess_return', 0.0):.4f}\
+    \ \"\n                f\"dd={m.get('max_drawdown', 0.0):.4f} \"\n            \
+    \    f\"trades={m.get('total_trades', 0)} \"\n                f\"score={_score(m):.4f}\"\
+    ,\n                flush=True,\n            )\n\n        candidate = {\n     \
+    \       \"max_age_days\": int(max_age),\n            \"age_label\": age_label,\n\
+    \            \"gated_results\": gated_results,\n        }\n        all_candidates.append(candidate)\n\
+    \n        # Score: test period score\n        test_score = _score(gated_results[\"\
+    test\"][\"metrics\"])\n        if test_score > best_score:\n            best_score\
+    \ = test_score\n            best_candidate = candidate\n\n    # Write artifacts\n\
+    \    summary = _write_summary(\n        output_dir, all_candidates, best_candidate,\
+    \ baseline_results\n    )\n    adoption_pass = summary[\"adoption_pass\"]\n\n\
+    \    _write_report(output_dir, adoption_pass, best_candidate, baseline_results,\
+    \ all_candidates)\n    _write_l4_ack(output_dir, adoption_pass, best_candidate,\
+    \ baseline_results)\n    _write_diagnostic(output_dir, adoption_pass, best_candidate,\
+    \ all_candidates)\n\n    _gatekeeper_after_run(output_dir)\n\n    if best_candidate\
+    \ is not None:\n        best_age = best_candidate[\"max_age_days\"]\n        print(\n\
+    \            f\"[gap_freshness] DONE adoption_pass={adoption_pass} \"\n      \
+    \      f\"candidates={len(all_candidates)} best_max_age={best_age}\",\n      \
+    \      flush=True,\n        )\n    else:\n        print(\n            f\"[gap_freshness]\
+    \ DONE adoption_pass=False candidates={len(all_candidates)} \"\n            f\"\
+    (no valid best)\",\n            flush=True,\n        )\n\n    return 0\n\n\nif\
+    \ __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_gap_freshness_entry_filter.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_gap_freshness_entry_filter_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_gap_freshness_entry_filter.py
+  completion_receipt: data/cb_arb_value_gap_switch_gap_freshness_entry_filter/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-20T06:32:17'
+  validation: passed

@@ -1,0 +1,194 @@
+schema_version: 1
+run_id: cb_arb_iv_percentile_exit_v1_20260521
+date: '2026-05-21'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'Positions exit when the convertible bond''s implied volatility (or a
+  stock‑vol proxy) exceeds a high rolling percentile (e.g., 90th) after a minimum
+  hold period. This protects profits and limits drawdowns during dislocated or over‑extended
+  regimes without needing an explicit regime classifier.
+
+  '
+source_insight: 'The baseline strategy suffers large drawdowns in 2020 (−17.9%) and
+  train (−32.4%). Recent exit variants (gap decay, profit taking, trailing stops)
+  either produced unusable metrics or failed to beat the baseline. Implied volatility
+  spikes often coincide with adverse price moves, so using IV extremes as an exit
+  signal may capture risk reduction that purely gap‑based rules miss.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - new_exit_rule
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C007
+mechanics:
+- new_exit_rule
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+- path: data/cb_warehouse/cb_daily.parquet
+- path: data/cb_warehouse/csi300_daily.parquet
+hard_floors:
+  criteria:
+  - train max drawdown reduction >= 0.05 (i.e., absolute improvement of 5 pp)
+  - 2020 max drawdown improvement >= 0.05
+  - test excess_return reduction <= 0.05 vs. baseline
+  - overall adoption_pass = true in review
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: no strict executor match
+proposal:
+  proposal_id: cb_arb_iv_percentile_exit_v1_20260521
+  strategy_id: cb_arb_value_gap_switch
+  family: exit_rule_iv_regime
+  hypothesis: 'Positions exit when the convertible bond''s implied volatility (or
+    a stock‑vol proxy) exceeds a high rolling percentile (e.g., 90th) after a minimum
+    hold period. This protects profits and limits drawdowns during dislocated or over‑extended
+    regimes without needing an explicit regime classifier.
+
+    '
+  source_insight: 'The baseline strategy suffers large drawdowns in 2020 (−17.9%)
+    and train (−32.4%). Recent exit variants (gap decay, profit taking, trailing stops)
+    either produced unusable metrics or failed to beat the baseline. Implied volatility
+    spikes often coincide with adverse price moves, so using IV extremes as an exit
+    signal may capture risk reduction that purely gap‑based rules miss.
+
+    '
+  expected_improvement: 'Reduce max drawdown in train and 2020 repair by at least
+    5 percentage points vs. baseline, while preserving test excess return within 0.05
+    of baseline.
+
+    '
+  capability_ids:
+  - C007
+  required_executor:
+    id: cb_arb_iv_percentile_exit_executor
+    family: iv_regime_exit
+    description: 'Evaluate the IV‑regime exit proposal. Compute daily implied volatility
+      for each held CB (via inverted convertible bond pricing model or stock‑vol proxy),
+      calculate a rolling 252‑day percentile rank, and exit positions when IV exceeds
+      a given threshold (e.g., 90th percentile). Grid‑search over IV thresholds and
+      min‑hold days.
+
+      '
+  required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/csi300_daily.parquet
+  test_design:
+    grid:
+      iv_percentile_threshold:
+      - 80
+      - 85
+      - 90
+      - 95
+      - 98
+      min_hold_days:
+      - 1
+      - 3
+      - 5
+      - 10
+    evaluation:
+    - excess_return
+    - max_drawdown
+    - win_rate
+    - Sharpe
+    periods:
+      train:
+      - 2019-01-01
+      - 2024-12-31
+      repair:
+      - 2020-01-01
+      - 2020-12-31
+      test:
+      - 2025-01-01
+      - 2026-05-08
+    baseline: cb_arb-value-gap-switch-medium-signal-cost-on-20260516
+  success_criteria:
+    criteria:
+    - train max drawdown reduction >= 0.05 (i.e., absolute improvement of 5 pp)
+    - 2020 max drawdown improvement >= 0.05
+    - test excess_return reduction <= 0.05 vs. baseline
+    - overall adoption_pass = true in review
+  falsifiers:
+    train:
+    - No grid variant reduces train max drawdown by at least 5 pp
+    - Best variant degrades test excess by more than 0.05
+    - 2020 max drawdown not improved by at least 5 pp
+    - Any variant produces extreme trade frequency (>300% of baseline trade count)
+    validate:
+    - No grid variant reduces train max drawdown by at least 5 pp
+    - Best variant degrades test excess by more than 0.05
+    - 2020 max drawdown not improved by at least 5 pp
+    - Any variant produces extreme trade frequency (>300% of baseline trade count)
+    test:
+    - No grid variant reduces train max drawdown by at least 5 pp
+    - Best variant degrades test excess by more than 0.05
+    - 2020 max drawdown not improved by at least 5 pp
+    - Any variant produces extreme trade frequency (>300% of baseline trade count)
+  risk: 'IV computation for convertible bonds can be noisy due to embedded options
+    and low liquidity; proxy‑based IV (from stock) may lose bond‑floor information.
+    Grid search could overfit to the 2020‑2024 train window; the sealed test period
+    must confirm out‑of‑sample stability.
+
+    '
+  why_not_repeated_failure: 'Previous exit attempts (gap decay, profit‑taking, dynamic
+    trailing, duration‑adaptive) focused on gap contraction metrics. None used implied
+    volatility regime signals. This is a fundamentally different mechanics, not a
+    renaming of a failed family.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  - cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+  - cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  implementation_assumption: A daily implied volatility series can be derived for
+    each convertible bond (from the same pricing model used for theoretical value)
+    or approximated by the underlying stock’s ATM IV. The existing data pipeline already
+    produces daily CB and stock prices, so no new external data source is required.
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: f7bde681e7f8dea8
+  provenance:
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: f7bde681e7f8dea8
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_iv_percentile_exit_v1_20260521/proposal.yaml
+  mechanics:
+  - new_exit_rule
+automation_skip:
+  status: skipped_non_runnable
+  at: '2026-05-22T07:01:56'
+  proposal_status: DRAFT
+  reason: no strict executor match
+  errors: []

@@ -1,0 +1,183 @@
+schema_version: 1
+record_type: backfill
+batch_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+strategy_id: cb_arb_value_gap_switch
+hypothesis_id: cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+data_window:
+  start: unknown
+  end: unknown
+config_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/spec.yaml
+config_hash: 7b90e5600decb8e89f62b33ab5955077
+entrypoint: []
+git_commit: 8dde5e0
+git_dirty:
+- ' M AGENTS.md'
+- ' M data/cb_arb/artifact_hash_manifest.txt'
+- ' M data/cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19/verification_log.jsonl'
+- ' M data/cb_arb_value_gap_switch_dynamic_exit_2026-05-19/verification_log.jsonl'
+- ' M data/cb_arb_value_gap_switch_low-freq-concentrated_2026-05-18/spec.yaml'
+- ' M data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/verification_log.jsonl'
+- ' M data/iv_percentile_exit_v1_20260521/proposal.yaml'
+- ' M data/iv_percentile_exit_v1_20260521/spec.yaml'
+- ' M data/research_framework/ai_providers.yaml'
+- ' M data/research_framework/current.yaml'
+- ' M data/research_framework/executor_registry.yaml'
+- ' M data/research_framework/experiments.yaml'
+- ' M data/research_framework/framework_change_log.jsonl'
+- ' M data/research_framework/hermes_executor_handoffs.yaml'
+- ' M data/research_framework/orchestrator_log.jsonl'
+- ' M data/research_framework/quant_access_audit.jsonl'
+- ' M data/research_framework/recent_results_digest.yaml'
+- ' M data/research_framework/research_queue.yaml'
+- ' M data/research_framework/runtime_entrypoints.yaml'
+- ' M data/unparseable/proposal.yaml'
+- ' M data/volatility_position_scaling_v2_2026-05-21/spec.yaml'
+- ' M framework/autonomous/executor_requirements.py'
+- ' M framework/autonomous/hermes_executor_handoff.py'
+- ' M framework/autonomous/ideation_cycle.py'
+- ' M framework/autonomous/paths.py'
+- ' M framework/autonomous/queue_ideation.py'
+- ' M framework/autonomous/queue_remote_execution.py'
+- ' M framework/autonomous/spec_compiler.py'
+- ' M framework/tests/test_auto_research_pipeline.py'
+- ' M framework/tests/test_autonomous_research_proposal_and_compiler.py'
+- ' M framework/tests/test_hermes_executor_handoff.py'
+- ' M scripts/auto_compute_l4_data.py'
+- ' M scripts/evaluate_cb_arb_exit_rule_duration_adaptive.py'
+- ' M scripts/evaluate_cb_arb_iv_percentile_exit.py'
+- ' M scripts/gatekeeper.py'
+- ' M scripts/research_queue_runner.py'
+- ' M scripts/validate_data_quality.py'
+- ?? data/adaptive_gap_widening_exit_20260521/
+- ?? data/auto_strategy_proposal/
+- ?? data/cb_arb_exit_iv_percentile_20260522/
+- ?? data/cb_arb_iv_exit_2026-05-21/
+- ?? data/cb_arb_iv_percentile_exit_001/
+- ?? data/cb_arb_iv_percentile_exit_2026-05-21_1/
+- ?? data/cb_arb_iv_percentile_exit_2026-05-22/
+- ?? data/cb_arb_iv_percentile_exit_2026-05-22_1/
+- ?? data/cb_arb_iv_percentile_exit_20260522/
+- ?? data/cb_arb_iv_percentile_exit_v1/
+- ?? data/cb_arb_iv_percentile_exit_v1_1/
+- ?? data/cb_arb_iv_percentile_exit_v1_2/
+- ?? data/cb_arb_iv_percentile_exit_v1_20260521/
+- ?? data/cb_arb_iv_percentile_exit_v1_20260521T2010/
+- ?? data/cb_arb_iv_percentile_exit_v1_20260522/
+- ?? data/cb_arb_pnl_adaptive_exit_20260522/
+- ?? data/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22/
+- ?? data/cb_arb_value_gap_switch_duration-exit_2026-05-22/
+- ?? data/cb_arb_value_gap_switch_duration_adaptive_exit_20260521/
+- ?? data/cb_arb_value_gap_switch_duration_adaptive_exit_v1/
+- ?? data/cb_arb_value_gap_switch_duration_adaptive_exit_v1_20260521/
+- ?? data/cb_arb_value_gap_switch_dynamic_entry_threshold_001/
+- ?? data/cb_arb_value_gap_switch_dynamic_regime_2026-05-22/
+- ?? data/cb_arb_value_gap_switch_dynamic_regime_switch_v1/
+- ?? data/cb_arb_value_gap_switch_exit_duration_adaptive_v1/
+- ?? data/cb_arb_value_gap_switch_exit_duration_decay_20260522/
+- ?? data/cb_arb_value_gap_switch_exit_time_decay_gap_v1/
+- ?? data/cb_arb_value_gap_switch_hard_min_hold_v1/
+- ?? data/cb_arb_value_gap_switch_iv_exit_20260522/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_001/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_1/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_20260521_1/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_20260522/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_20260522_1/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_v1/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/
+- ?? data/cb_arb_value_gap_switch_iv_percentile_exit_v1_20260522/
+- ?? data/cb_arb_value_gap_switch_iv_regime_exit/
+- ?? data/cb_arb_value_gap_switch_iv_regime_exit_20260522/
+- ?? data/cb_arb_value_gap_switch_iv_scaling_001/
+- ?? data/cb_arb_value_gap_switch_pnl-adaptive-exit_2026-05-22/
+- ?? data/cb_arb_value_gap_switch_pnl-adaptive-exit_2026-05-22_1/
+- ?? data/cb_arb_value_gap_switch_pnl_adaptive_exit_v1/
+- ?? data/cb_arb_value_gap_switch_pnl_adaptive_exit_v1_1/
+- ?? data/cb_arb_value_gap_switch_pnl_adaptive_exit_v1_2/
+- ?? data/cb_arb_value_gap_switch_pnl_feedback_scaling_20260522/
+- ?? data/cb_arb_value_gap_switch_pnl_feedback_scaling_v1/
+- ?? data/cb_arb_value_gap_switch_pnl_speed_exit_v1/
+- ?? data/cb_arb_value_gap_switch_signal_strength_entry_gate/
+- ?? data/cb_arb_value_gap_switch_valuation_formula_v1/
+- ?? data/cb_arb_value_gap_switch_volatility_penalized_composite_ranking_v1/
+- ?? data/duration_adaptive_exit_v1/
+- ?? data/duration_adaptive_exit_v1_1/
+- ?? data/dynamic_regime_switch_001/
+- ?? data/dynamic_regime_switch_entry_size_001/
+- ?? data/exit_duration_adaptive_gap_decay_001/
+- ?? data/exit_gap_closing_percentile_001/
+- ?? data/exit_rule_duration_adaptive_v1_20260521/
+- ?? data/exit_time_decay_v1/
+- ?? data/gap_reversal_exit_v1_20260522/
+- ?? data/gap_trend_entry_filter_v1/
+- ?? data/ideation_2026-05-21_gap_decay_bond_floor_exit/
+- ?? data/iv_percentile_exit_001/
+- ?? data/iv_percentile_exit_v1/
+- ?? data/iv_percentile_exit_v1_1/
+- ?? data/iv_percentile_exit_v1_20260521/implementation_plan.yaml
+- ?? data/iv_percentile_exit_v2_20260521/
+- ?? data/iv_regime_exit_v1/
+- ?? data/market_drawdown_entry_gate_v1_20260521/
+- ?? data/pnl_adaptive_exit_20260522/
+- ?? data/pnl_adaptive_exit_v1/
+- ?? data/pnl_adaptive_exit_v1_1/
+- ?? data/pnl_adaptive_exit_v1_2/
+- ?? data/pnl_adaptive_exit_v1_20260521/
+- ?? data/pnl_adaptive_exit_v1_3/
+- ?? data/research_framework/data_inventory.yaml
+- ?? data/research_framework/run_manifests/cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22.yaml
+- ?? data/unparseable_1/
+- ?? data/unparseable_2/
+- ?? data/unparseable_3/
+- ?? data/unparseable_4/
+- ?? data/unparseable_5/
+- ?? data/volatility_position_scaling_v2_2026-05-21/adjustment_volatility_position_scaling.csv
+- ?? data/volatility_position_scaling_v2_2026-05-21/auto_pipeline.log
+- ?? data/volatility_position_scaling_v2_2026-05-21/data_quality_decision.yaml
+- ?? data/volatility_position_scaling_v2_2026-05-21/diagnostic.yaml
+- ?? data/volatility_position_scaling_v2_2026-05-21/l4_ack.yaml
+- ?? data/volatility_position_scaling_v2_2026-05-21/report.yaml
+- ?? data/volatility_position_scaling_v2_2026-05-21/review.yaml
+- ?? data/volatility_position_scaling_v2_2026-05-21/summary.json
+- ?? data/volatility_position_scaling_v2_2026-05-21/summary_volatility_position_scaling.csv
+- ?? data/volatility_position_scaling_v2_2026-05-21/verification_log.jsonl
+- ?? data/volatility_position_scaling_v2_2026-05-21/vm_pipeline_stdout.log
+- ?? data/volatility_position_scaling_v2_2026-05-21/yearly_volatility_position_scaling.csv
+- ?? framework/autonomous/data_inventory.py
+- ?? framework/tests/test_data_inventory.py
+- ?? logs/
+- ?? scripts/build_data_inventory.py
+- ?? scripts/hermes_provider_adapter.py
+dirty_policy: allowed_with_list
+data_snapshot: {}
+compute_host: Jay
+compute_cost_yuan: 0.0
+start_at: null
+end_at: '2026-05-22T05:38:04Z'
+exit_code: null
+result_artifact: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1
+artifact_hash: 15834bd96b34056e16ce14da44889b99
+artifact_hash_manifest: null
+result_summary: passed_mechanical_thresholds_not_promoted
+promotion_status: experiment
+reviewer: auto
+verdict_at: '2026-05-22T05:38:04Z'
+automation:
+  compute:
+    estimated_compute_cost_yuan: 0.0
+    decision: backfill_record_only
+  verdict:
+    decision: passed_mechanical_thresholds_not_promoted
+    pass_field: adoption_pass
+    pass_value: true
+    summary_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/summary.json
+    falsifier_flags: {}
+backfill:
+  reason: AGENTS.md 2026-05-22 snapshot cites this run as rejected (train-period excess
+    negative)
+  actor: claude_inconsistency_repair
+  evidence_paths:
+  - data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/review.yaml
+  - data/cb_arb_value_gap_switch_iv_percentile_exit_v1_1/report.yaml
+  new_execution: false
+  may_trigger_next_research: false
+  may_update_current_strategy: false

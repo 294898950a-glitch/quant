@@ -623,10 +623,15 @@ class QueueRemoteExecutionService:
         run_dir = spec_path.parent
         remote_run_dir = f"{remote_repo}/{self.rel(run_dir)}"
         remote_spec = f"{remote_repo}/{self.rel(spec_path)}"
+        # Prefer venv python (which has the required packages — pandas, pyarrow,
+        # scipy, etc.); fall back to system python3 only if no venv exists.
+        # Without this, auto_research_pipeline.py runs under /usr/bin/python3
+        # which lacks pandas/pyarrow and bails out before the evaluator starts.
         cmd = (
             f"cd {shlex.quote(remote_repo)} && "
             f"mkdir -p {shlex.quote(remote_run_dir)} && "
-            f"(nohup python3 scripts/auto_research_pipeline.py {shlex.quote(self.rel(spec_path))} --quiet "
+            f'PY=.venv/bin/python; [ -x "$PY" ] || PY=python3; '
+            f"(nohup $PY scripts/auto_research_pipeline.py {shlex.quote(self.rel(spec_path))} --quiet "
             f"> {shlex.quote(remote_run_dir + '/vm_pipeline_stdout.log')} 2>&1 < /dev/null & "
             f"echo $!)"
         )

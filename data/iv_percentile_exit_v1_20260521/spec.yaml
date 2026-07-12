@@ -4,18 +4,13 @@ date: '2026-05-21'
 strategy_id: cb_arb_value_gap_switch
 l0_entry_id: 1
 l0_source: autonomous strategy ideator from recent_results_digest
-hypothesis: 'Exiting positions when the implied volatility of the convertible bond
-  reaches a high rolling percentile (e.g., ≥ 90th percentile) reduces exposure during
-  market stress and overvaluation, improving risk‑adjusted returns and limiting drawdowns
-  beyond the baseline strategy.
-
-  '
-source_insight: 'Convertible bond options can become temporarily overpriced during
-  volatility spikes, causing the value gap signal to persist while the bond price
-  faces elevated tail risk. Cutting positions when IV is extreme may protect capital
-  and allow re‑entry at more favourable gaps.
-
-  '
+hypothesis: Exiting convertible bond positions when the implied volatility percentile
+  is high (indicating stress/overvaluation of option component) will protect gains
+  and reduce drawdowns, thereby improving risk-adjusted returns over the baseline
+  fixed exit rule.
+source_insight: CB arbitrage value gap strategies often suffer when market-wide volatility
+  spikes, compressing gaps or causing adverse option repricing; a volatility-based
+  exit can lock in profits before those spikes.
 parameter_space:
 - name: mechanics
   range:
@@ -34,57 +29,47 @@ new_data_sources:
 - path: data/cb_warehouse/cb_daily.parquet
 hard_floors:
   criteria:
-  - selected_test.total_return > baseline_test.total_return
-  - selected_test.max_drawdown <= baseline_test.max_drawdown
-  - selected_2020.total_return > baseline_2020.total_return
-  - selected_2020.max_drawdown <= baseline_2020.max_drawdown
-  - selected_test.excess_return > 0
+  - Test period total return > baseline total return
+  - Test period excess return > 0
+  - Test period max drawdown not worse than baseline by more than 2 percentage points
+  - Test period Sharpe ratio > 0.5
+  - 2020 repair year total return > -5% relative to benchmark
 cv_design: single-window
 cv_holdout_years:
 - 2025
 - 2026
 compute_estimate:
   sig_minutes: 0
-  spot_minutes: 60
+  spot_minutes: 0
   local_minutes: 0
   estimated_cost_yuan: 0.0
 stop_conditions:
 - executor match fails
 - required artifacts are missing
 artifacts_required:
-- summary.json
-- report.yaml
-- l4_ack.yaml
-- diagnostic.yaml
-status: READY
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
 auxiliary_metrics:
 - train_excess_return
 - test_excess_return
 - max_drawdown
 escalation:
 - DRAFT requires executor implementation before run
-notes: all guarded checks passed
+notes: proposal required data missing
 proposal:
   proposal_id: iv_percentile_exit_v1_20260521
   strategy_id: cb_arb_value_gap_switch
-  family: new_exit_rule
-  hypothesis: 'Exiting positions when the implied volatility of the convertible bond
-    reaches a high rolling percentile (e.g., ≥ 90th percentile) reduces exposure during
-    market stress and overvaluation, improving risk‑adjusted returns and limiting
-    drawdowns beyond the baseline strategy.
-
-    '
-  source_insight: 'Convertible bond options can become temporarily overpriced during
-    volatility spikes, causing the value gap signal to persist while the bond price
-    faces elevated tail risk. Cutting positions when IV is extreme may protect capital
-    and allow re‑entry at more favourable gaps.
-
-    '
-  expected_improvement: 'Higher Sharpe ratio and lower maximum drawdown on the out‑of‑sample
-    test period and 2020 repair year, while maintaining or improving cumulative excess
-    return.
-
-    '
+  family: exit_rule
+  hypothesis: Exiting convertible bond positions when the implied volatility percentile
+    is high (indicating stress/overvaluation of option component) will protect gains
+    and reduce drawdowns, thereby improving risk-adjusted returns over the baseline
+    fixed exit rule.
+  source_insight: CB arbitrage value gap strategies often suffer when market-wide
+    volatility spikes, compressing gaps or causing adverse option repricing; a volatility-based
+    exit can lock in profits before those spikes.
+  expected_improvement: Higher test-period Sharpe and lower max drawdown, while preserving
+    positive excess return.
   capability_ids:
   - C007
   required_executor: cb_arb_iv_percentile_exit_executor
@@ -95,134 +80,61 @@ proposal:
   - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
   - data/cb_warehouse/cb_daily.parquet
   test_design:
-    description: 'Grid search over IV percentile thresholds (e.g. 80, 85, 90, 95)
-      and minimum hold days (1, 5, 10). For each open position, compute the CB’s implied
-      volatility (via a suitable pricing model or stock‑vol proxy), then calculate
-      its rolling 252‑day percentile rank. Exit the position when IV rank exceeds
-      the threshold, subject to the min‑hold constraint. Evaluate on train (2019‑2024)
-      and select the variant with the highest Sharpe ratio or composite score. Validate
-      on 2020 repair year and on the sealed test period (2025‑01 to present).
-
-      '
+    description: Conduct grid search over IV percentile threshold (e.g., 0.80 to 0.99)
+      and min holding days (1 to 10). Use train period 2019-2024 to select best candidate,
+      then evaluate on 2020 repair year (2020 only) and sealed test period 2025-01-01
+      to 2026-05-08. Compare against baseline strategy.
   success_criteria:
     criteria:
-    - selected_test.total_return > baseline_test.total_return
-    - selected_test.max_drawdown <= baseline_test.max_drawdown
-    - selected_2020.total_return > baseline_2020.total_return
-    - selected_2020.max_drawdown <= baseline_2020.max_drawdown
-    - selected_test.excess_return > 0
+    - Test period total return > baseline total return
+    - Test period excess return > 0
+    - Test period max drawdown not worse than baseline by more than 2 percentage points
+    - Test period Sharpe ratio > 0.5
+    - 2020 repair year total return > -5% relative to benchmark
   falsifiers:
     train:
-    - No grid variant simultaneously beats baseline on both test and 2020 total return
-      and max drawdown.
-    - The selected variant’s test max drawdown exceeds baseline by more than 0.5 pp.
+    - Best candidate fails any success criterion on test set
+    - 2020 repair year total return underperforms baseline by more than 5 percentage
+      points (return delta < -0.05)
     validate:
-    - No grid variant simultaneously beats baseline on both test and 2020 total return
-      and max drawdown.
-    - The selected variant’s test max drawdown exceeds baseline by more than 0.5 pp.
+    - Best candidate fails any success criterion on test set
+    - 2020 repair year total return underperforms baseline by more than 5 percentage
+      points (return delta < -0.05)
     test:
-    - No grid variant simultaneously beats baseline on both test and 2020 total return
-      and max drawdown.
-    - The selected variant’s test max drawdown exceeds baseline by more than 0.5 pp.
-  risk: 'CB IV estimation can be noisy; using a stock‑vol proxy may dilute the regime
-    signal. A very conservative threshold may exit too late to avoid large losses,
-    while a too‑early threshold may cut winning positions prematurely.
-
-    '
-  why_not_repeated_failure: 'Previous exit experiments (dynamic trail, profit‑taking,
-    adaptive gap) relied on gap‑closure or PnL‑based logic. The IV‑percentile exit
-    introduces a market‑wide volatility regime filter that is absent from those attempts
-    and is not covered by the closed `regime_classifier_variant` family (it conditions
-    exit, not entry).
-
-    '
+    - Best candidate fails any success criterion on test set
+    - 2020 repair year total return underperforms baseline by more than 5 percentage
+      points (return delta < -0.05)
+  risk: IV estimation for convertible bonds may be noisy; percentile calculation may
+    be lagging; may miss profitable continuations after volatility spikes.
+  why_not_repeated_failure: Previous exit rule runs (dynamic exit, profit-taking,
+    adaptive sell gap) either produced unusable numeric outputs due to implementation
+    bugs or were rejected based on limited criteria; the IV-percentile exit is a distinct
+    market-regime-based exit not previously tested, and it does not overlap with closed
+    families like option_position_sizing or regime_classifier_variant.
   related_prior_runs:
-  - cb_arb_value_gap_switch_exit_dynamic_trail_20260519
   - cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  - cb_arb_value_gap_switch_exit_dynamic_trail_20260519
   - cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
   - cb_arb_value_gap_switch_adaptive_sell_gap_2026-05-19
-  implementation_assumption: The executor will obtain daily CB implied volatility
-    from either a pre‑computed column in cb_daily.parquet or by inverting an internal
-    CB pricing model; if unavailable, it will fall back to the historical volatility
-    of the underlying stock as a proxy.
+  implementation_assumption: Use daily CB implied volatility approximated from Black-Scholes
+    using stock volatility as proxy or direct CB pricing model; compute 252-day rolling
+    percentile; exit if current IV percentile exceeds threshold.
   ai_provider: deepseek
   prompt_path: framework/autonomous/strategy_ideator.py
-  response_hash: 607c9ed1a09525db
+  response_hash: 247344cd9d8f1371
   provenance:
     ai_provider: deepseek
     prompt_path: framework/autonomous/strategy_ideator.py
-    response_hash: 607c9ed1a09525db
+    response_hash: 247344cd9d8f1371
   rewrite_status: disabled_two_step_flow
   rewrite_rounds_used: 0
   rewrite_last_errors: []
   proposal_path: /home/jay/projects/quant/data/iv_percentile_exit_v1_20260521/proposal.yaml
   mechanics:
   - new_exit_rule
-executor_id: cb_arb_iv_percentile_exit_executor
-command_template:
-- .venv/bin/python
-- scripts/evaluate_cb_arb_iv_percentile_exit.py
-- --data-root
-- '{data_root}'
-- --train-start
-- '{train_start}'
-- --train-end
-- '{train_end}'
-- --test-start
-- '{test_start}'
-- --test-end
-- '{test_end}'
-- --output-dir
-- '{output_dir}'
-- --iv-percentile-threshold
-- '{iv_percentile_threshold}'
-- --min-hold-days
-- '{min_hold_days}'
-budget_estimate:
-  sig_minutes: 0
-  spot_minutes: 150
-  local_minutes: 0
-  estimated_cost_yuan: 0.0
-automation:
-  output_dir: data/iv_percentile_exit_v1_20260521
-  command:
-  - .venv/bin/python
-  - scripts/evaluate_cb_arb_iv_percentile_exit.py
-  - --data-root
-  - data/cb_arb_concurrent_supervised_20260511_094500
-  - --train-start
-  - '20190101'
-  - --train-end
-  - '20241231'
-  - --test-start
-  - '20250101'
-  - --test-end
-  - '20260508'
-  - --output-dir
-  - output/iv_exit_test
-  - --iv-percentile-threshold
-  - '90'
-  - --min-hold-days
-  - '0'
-  sync_paths:
-  - scripts/evaluate_cb_arb_iv_percentile_exit.py
-  - data/cb_warehouse/cb_basic.parquet
-  - data/cb_warehouse/stk_daily_qfq.parquet
-  - data/cb_warehouse/cb_daily.parquet
-  - scripts/auto_research_pipeline.py
-  - scripts/gatekeeper.py
-  - scripts/validate_spec.py
-  - scripts/research_sanity_checker.py
-  - data/research_framework/runtime_entrypoints.yaml
-  - data/research_framework/protocol_rules.yaml
-  - data/research_framework/experiments.yaml
-  - data/research_framework/result_classification_map.yaml
-  verdict:
-    pass_field: adoption_pass
-ideation_provenance:
-  ai_provider: deepseek
-  prompt_path: framework/autonomous/strategy_ideator.py
-  proposal_path: /home/jay/projects/quant/data/iv_percentile_exit_v1_20260521/proposal.yaml
-  response_hash: 607c9ed1a09525db
-  compiler_decision: READY
-  compiler_reason: all guarded checks passed
+automation_skip:
+  status: skipped_non_runnable
+  at: '2026-05-22T06:57:58'
+  proposal_status: DRAFT
+  reason: proposal required data missing
+  errors: []

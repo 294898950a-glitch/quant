@@ -1,0 +1,21 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1
+spec_path: data/cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1/spec.yaml
+validated_at: '2026-05-25T14:39:46'
+summary_sha256: 2b97fb59045ba48f01b2c9679481e07ec1196fda7bb2f561619529fad9ed0eb7
+status_code: 1
+confidence_code: 2
+blocking_issues: []
+warnings:
+- 'cb_basic: delist_date 列为 nonnull_columns 要求字段，存在 338 空值（338/1012），但空值对应尚未退市债券，属数据结构性正常，不影响实验'
+- 'cb_basic: list_date 列为 nonnull_columns 要求字段，存在 1 空值（1/1012），影响可忽略'
+- value_gap_amounts 数据文件覆盖 20190102 至 20260508，训练期前半段 20180101-20190101 无 value_gap
+  数据，训练样本减少约 1 年（约 20% 训练区间），但剩余 4 年数据足够支撑实验
+- executor_input_column_hints 中 df.atr 字段未在任何输入文件的 required_columns 中出现，按规则 10 不作为硬性失败条件，推测为执行器运行时派生字段
+fix_plan: []
+decision_reason: 全部 9 个必需文件存在且可读，必需字段均存在于对应文件，行情数据完整覆盖训练和测试区间；空值和日期缺口属结构性正常或影响可控，不阻塞实验执行
+status: pass
+confidence: medium
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: cc4ecbb599c9014d

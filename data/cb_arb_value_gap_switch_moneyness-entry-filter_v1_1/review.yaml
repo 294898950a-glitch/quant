@@ -1,0 +1,72 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: 72a2e73608d8922f
+interpretation:
+  review_status_code: 2
+  result_summary: Moneyness entry filter at threshold=0.0 had zero effect — 0% candidate
+    suppression, identical metrics to baseline across all periods — so the hypothesis
+    was never actually tested.
+  main_reason: Threshold=0.0 is trivially satisfied by all candidates (stock prices
+    are always positive), making the filter a no-op that contributed no value.
+  failure_causes:
+  - Zero suppression rate — filtered metrics are byte-for-byte identical to baseline
+    in train, stress, and validate periods
+  - Failed train score threshold (filtered score -0.154 vs required >0.1)
+  - Failed stress_2020 score threshold (filtered score -0.184 vs required >-0.1)
+  - Degenerate threshold choice (0.0) means no deep-OTM candidates were ever excluded;
+    the hypothesis was not tested
+  next_research_directions:
+  - direction: Test meaningful moneyness thresholds (e.g. 0.7, 0.8, 0.9, 1.0)
+    why: The current threshold=0.0 is degenerate and never filters; actual filtering
+      at OTM boundaries could still improve signal quality as hypothesized
+    priority_code: 1
+    priority: high
+  - direction: Validate period performance is strong (score 0.30, excess 0.33) — target
+      entry filters that preserve this while improving train/stress
+    why: The core strategy already performs well in recent markets; entry filters
+      should avoid suppressing profitable validate-period signals
+    priority_code: 1
+    priority: high
+  evidence_gaps:
+  - Only threshold=0.0 was evaluated, which is degenerate and does not test the stated
+    hypothesis about deep-OTM signal quality
+  - No sensitivity scan across threshold values to see if filtering has any effect
+    at higher moneyness cutoffs
+  - The 0% suppression rate suggests either a bug in threshold application or a parameter
+    selection error that must be ruled out before concluding the filter direction
+    is invalid
+  review_status: reject
+closed_directions:
+- mechanic_tag: moneyness_stock_to_conv_threshold
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: de60fd58c19a3c2c
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

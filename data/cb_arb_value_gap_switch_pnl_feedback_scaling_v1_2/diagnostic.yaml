@@ -1,0 +1,15 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_2
+diagnostic_date: '2026-05-27'
+diagnostic_by: hermes
+verdict_referenced: reject
+summary: test excess=-23801.75 <= 0; train excess=-98499.72 <= 0; 2020 excess=-23809.36
+  <= 0
+verdict_rationale: test excess=-23801.75 <= 0; train excess=-98499.72 <= 0; 2020 excess=-23809.36
+  <= 0
+warnings: []
+errors: []
+params:
+  lookback_days: 60
+  pnl_scaling_floor: 0.7
+grid_sweep_size: 9

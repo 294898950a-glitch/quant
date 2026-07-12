@@ -1,0 +1,21 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_new_valuation_v1
+spec_path: data/cb_arb_value_gap_switch_new_valuation_v1/spec.yaml
+validated_at: '2026-05-26T14:46:55'
+summary_sha256: dcb06084a5f4583e194dd41ece9508037b923a7906936b81aff3ff580c52bf41
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_daily.parquet 缺少推荐字段 cb_over_rate、pct_chg，不影响硬性输入要求，执行器若不依赖则无碍
+- executor_input_column_hints 提及 stk 需 hist_vol 字段，但 stk_daily_qfq.parquet 原始列中不存在；此为源码参考而非硬性要求，执行器应在运行时从
+  OHLC 派生波动率，若派生失败需在实验中暴露
+- daily_value_gap_amounts.parquet 最早日期为 20190102，训练期起始 20190101 差 1 个自然日（元旦非交易日），实质覆盖无异
+fix_plan: []
+decision_reason: 四份必需文件均存在可读，日期范围覆盖训练和测试期，行数满足最低要求，无 required_columns 硬性字段缺失，无 reported
+  空值或价格异常，放行。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 29baff391c181077

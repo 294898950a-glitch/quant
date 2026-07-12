@@ -1,0 +1,122 @@
+{
+  "adoption_pass": false,
+  "bond_floor_threshold": 1.1,
+  "min_days_below": 1,
+  "discount_rate": 0.03,
+  "exit_params": {
+    "min_hold_days": 5,
+    "initial_threshold_fraction": 0.7,
+    "effective_max_hold_days": 45
+  },
+  "baseline": {
+    "train": {
+      "total_pnl": -218488649.58,
+      "trade_count": 35339,
+      "win_rate": 0.4227,
+      "max_drawdown": -679068554.14,
+      "sharpe_ratio": -0.1784,
+      "avg_hold_days": 6.6
+    },
+    "test": {
+      "total_pnl": -30288454.08,
+      "trade_count": 2807,
+      "win_rate": 0.4325,
+      "max_drawdown": -127589879.69,
+      "sharpe_ratio": -0.2589,
+      "avg_hold_days": 6.8
+    },
+    "validate_2020": {
+      "total_pnl": 88172035.89,
+      "trade_count": 4501,
+      "win_rate": 0.4675,
+      "max_drawdown": -224901173.27,
+      "sharpe_ratio": 0.2995,
+      "avg_hold_days": 6.3
+    }
+  },
+  "filtered": {
+    "train": {
+      "total_pnl": 9890690.57,
+      "trade_count": 7093,
+      "win_rate": 0.4163,
+      "max_drawdown": -97173784.43,
+      "sharpe_ratio": 0.0319,
+      "avg_hold_days": 6.7,
+      "excess_return": 228379340.15,
+      "decay_exits": 6429,
+      "gap_closed_exits": 654,
+      "force_closes": 10
+    },
+    "test": {
+      "total_pnl": 9890460.41,
+      "trade_count": 109,
+      "win_rate": 0.367,
+      "max_drawdown": -2582655.31,
+      "sharpe_ratio": 1.2861,
+      "avg_hold_days": 7.4,
+      "excess_return": 40178914.49,
+      "decay_exits": 92,
+      "gap_closed_exits": 17,
+      "force_closes": 0
+    },
+    "validate_2020": {
+      "total_pnl": -41487280.11,
+      "trade_count": 795,
+      "win_rate": 0.4453,
+      "max_drawdown": -67267198.6,
+      "sharpe_ratio": -0.4952,
+      "avg_hold_days": 6.5,
+      "excess_return": -129659316.0,
+      "decay_exits": 641,
+      "gap_closed_exits": 90,
+      "force_closes": 64
+    }
+  },
+  "trade_count_retention_pct": 20.1,
+  "entry_mask_diagnostics": {
+    "total_rows": 392852,
+    "suppressed_rows": 342308,
+    "allowed_rows": 50544,
+    "suppression_pct": 87.13,
+    "suppression_by_year": {
+      "2019": {
+        "total_rows": 32486,
+        "suppressed": 22112,
+        "suppression_pct": 68.07
+      },
+      "2020": {
+        "total_rows": 49117,
+        "suppressed": 43337,
+        "suppression_pct": 88.23
+      },
+      "2021": {
+        "total_rows": 63994,
+        "suppressed": 51165,
+        "suppression_pct": 79.95
+      },
+      "2022": {
+        "total_rows": 72888,
+        "suppressed": 71376,
+        "suppression_pct": 97.93
+      },
+      "2023": {
+        "total_rows": 86365,
+        "suppressed": 82632,
+        "suppression_pct": 95.68
+      },
+      "2024": {
+        "total_rows": 88002,
+        "suppressed": 71686,
+        "suppression_pct": 81.46
+      }
+    }
+  },
+  "train_period": {
+    "start": "20190101",
+    "end": "20241231"
+  },
+  "test_period": {
+    "start": "20250101",
+    "end": "20260508"
+  }
+}

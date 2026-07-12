@@ -1,0 +1,292 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+date: '2026-05-25'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'The critical insight value_gap_rank_is_anti_alpha_2026_05_24 established
+  that the current value_gap formula is anti-informative under its monotonicity assumption
+  — sorting DESCENDING (most-positive first) destroys alpha while ASCENDING (least-positive
+  first) produces +30.3% test excess cost-on. One of the supported confounders is
+  issuer credit distress masquerading as undervaluation. I hypothesize that incorporating
+  a time-varying credit spread into the theoretical valuation formula will correct
+  this anti-informativeness. Specifically: when a CB trades at a discount because
+  the issuer''s credit quality has deteriorated, the current formula sees a "value
+  gap" where the true explanation is higher default risk. By discounting the bond
+  floor component at a dynamic credit spread rather than a static risk-free rate,
+  the corrected value_gap will penalize credit-distressed names, restoring monotonicity
+  so that DESCENDING-sorted candidates become genuinely undervalued rather than secretly
+  distressed. This addresses the root cause (broken formula) rather than layering
+  filters on a broken signal.
+
+  Re the repeated_reject_families (moneyness_stock_to_conv_threshold, 3 rejections):
+  I choose explanation (1) — the underlying signal is invalid. The moneyness filter
+  failed because it was applied to an anti-informative base signal. Filtering noise
+  yields noise. Fixing the formula at the root makes the forward-direction signal
+  testable, after which moneyness filtering could be revisited on clean ground. But
+  this proposal is formula-level, not filter-level.
+
+  '
+source_insight: 'value_gap_rank_is_anti_alpha_2026_05_24 — reverse-rank probe shows
+  ASCENDING sort wins large where DESCENDING loses; three competing hypotheses collapsed
+  to one: the value_gap formula is anti-informative. One supported confounder is "issuer
+  credit distress masquerading as undervaluation." This proposal directly addresses
+  that confounder by adjusting the valuation formula.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - new_valuation_formula
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C006
+mechanics:
+- new_valuation_formula
+new_data_sources: []
+hard_floors:
+  criteria:
+  - forward_test_excess_cost_on_gt_0pct: true
+  - forward_test_excess_improvement_vs_baseline_pp_gt_5: true
+  - any_holdout_year_sharpe_gt_0.5: true
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 60
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- summary.json
+- report.yaml
+- l4_ack.yaml
+- diagnostic.yaml
+status: ARCHIVED
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: all guarded checks passed
+proposal:
+  proposal_id: cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+  strategy_id: cb_arb_value_gap_switch
+  family: valuation_formula_credit_adjust
+  hypothesis: 'The critical insight value_gap_rank_is_anti_alpha_2026_05_24 established
+    that the current value_gap formula is anti-informative under its monotonicity
+    assumption — sorting DESCENDING (most-positive first) destroys alpha while ASCENDING
+    (least-positive first) produces +30.3% test excess cost-on. One of the supported
+    confounders is issuer credit distress masquerading as undervaluation. I hypothesize
+    that incorporating a time-varying credit spread into the theoretical valuation
+    formula will correct this anti-informativeness. Specifically: when a CB trades
+    at a discount because the issuer''s credit quality has deteriorated, the current
+    formula sees a "value gap" where the true explanation is higher default risk.
+    By discounting the bond floor component at a dynamic credit spread rather than
+    a static risk-free rate, the corrected value_gap will penalize credit-distressed
+    names, restoring monotonicity so that DESCENDING-sorted candidates become genuinely
+    undervalued rather than secretly distressed. This addresses the root cause (broken
+    formula) rather than layering filters on a broken signal.
+
+    Re the repeated_reject_families (moneyness_stock_to_conv_threshold, 3 rejections):
+    I choose explanation (1) — the underlying signal is invalid. The moneyness filter
+    failed because it was applied to an anti-informative base signal. Filtering noise
+    yields noise. Fixing the formula at the root makes the forward-direction signal
+    testable, after which moneyness filtering could be revisited on clean ground.
+    But this proposal is formula-level, not filter-level.
+
+    '
+  source_insight: 'value_gap_rank_is_anti_alpha_2026_05_24 — reverse-rank probe shows
+    ASCENDING sort wins large where DESCENDING loses; three competing hypotheses collapsed
+    to one: the value_gap formula is anti-informative. One supported confounder is
+    "issuer credit distress masquerading as undervaluation." This proposal directly
+    addresses that confounder by adjusting the valuation formula.
+
+    '
+  expected_improvement: 'Forward-direction (DESCENDING) test excess should move from
+    the current ~-10.5% cost-on toward positive territory. The reverse-probe-coston
+    baseline (+30.3% test excess cost-on) provides a ceiling for what a correctly-sorted
+    signal can achieve. A credit-adjusted formula that partially corrects the anti-alpha
+    should produce forward-direction test excess > 0%, with the ideal outcome approaching
+    the reverse-probe magnitude if credit distortion is the dominant confounder. Even
+    a modest improvement (forward test excess 0-10%) would validate the diagnosis
+    and justify further formula refinements (call protection, liquidity adjustments).
+
+    '
+  capability_ids:
+  - C006
+  required_executor: evaluate_cb_arb_valuation_formula
+  required_data: []
+  required_data_fields: {}
+  test_design:
+    description: 'Replace the static risk-free discount rate in the theoretical valuation
+      formula with a time-varying credit spread per CB-day. Compute each CB''s yield-to-maturity
+      from cb_daily.close and its contractual cash flows (coupon_rate, par_value,
+      maturity_date from cb_basic). The spread is YTM minus a risk-free proxy (e.g.,
+      matched-maturity government bond yield or SHIBOR). Apply this spread to discount
+      the bond-floor component. Recompute value_gap_amount with the credit-adjusted
+      formula. Run the standard DESCENDING-sort backtest (forward direction, same
+      exit logic as the accepted duration-adaptive exit: min_hold_days=5, initial_threshold_fraction=0.7,
+      decay_period_factor=0.5). Grid-search over credit-spread cap/multiplier if the
+      executor supports parameterization. Compare against the forward-direction baseline
+      (test excess ~-10.5% cost-on) and, for context, the reverse-probe-coston ceiling
+      (+30.3% test excess cost-on).
+
+      '
+  success_criteria:
+    criteria:
+    - forward_test_excess_cost_on_gt_0pct: true
+    - forward_test_excess_improvement_vs_baseline_pp_gt_5: true
+    - any_holdout_year_sharpe_gt_0.5: true
+  falsifiers:
+    train:
+    - forward_test_excess_cost_on_lt_neg_5pct
+    - forward_test_max_drawdown_gt_25pct
+    - forward_test_win_rate_lt_0.5
+    validate:
+    - forward_test_excess_cost_on_lt_neg_5pct
+    - forward_test_max_drawdown_gt_25pct
+    - forward_test_win_rate_lt_0.5
+    test:
+    - forward_test_excess_cost_on_lt_neg_5pct
+    - forward_test_max_drawdown_gt_25pct
+    - forward_test_win_rate_lt_0.5
+  risk: 'Medium. Credit spread estimation from CB prices has circularity risk — if
+    the CB is mispriced, the derived credit spread inherits the mispricing. A cleaner
+    approach would use issuer-level bond/CDS data, but that requires a new data source
+    (C008). The YTM-from-CB approach is pragmatic but the executor must handle edge
+    cases (zero/negative YTM, near-maturity CBs with small remaining coupons). The
+    executor exists (evaluate_cb_arb_valuation_formula) and should already handle
+    these cases. If credit adjustment alone is insufficient, the falsifiers will trigger,
+    and the next step would be to investigate other confounders (call protection,
+    liquidity) or switch to the reverse-direction path permanently.
+
+    '
+  why_not_repeated_failure: 'This is not a moneyness or bond-floor entry filter variant.
+    The moneyness family (moneyness_stock_to_conv_threshold, 3 rejections) and bond-floor
+    family all failed because they stacked filters on top of an anti-informative base
+    signal. Those were execution-side band-aids on a signal-side problem. This proposal
+    attacks the root cause: the theoretical valuation formula itself. C006 (new_valuation_formula)
+    is a different mechanic from C002 (bond floor threshold) and C003 (moneyness threshold).
+    The family tag is valuation_formula_credit_adjust, which has zero prior runs.
+    The repeated_reject_families rule requires answering three questions for moneyness_stock_to_conv_threshold;
+    I answered them (signal is invalid, not execution or direction) to justify why
+    this formula-level proposal is orthogonal, not a rephrasing.
+
+    '
+  related_prior_runs:
+  - cb_arb_value_gap_switch_reverse-probe_20260524
+  - cb_arb_value_gap_switch_reverse-probe-coston_20260524
+  - cb_arb_value_gap_switch_full-flip-probe_20260524
+  - cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  - cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+  implementation_assumption: The executor evaluate_cb_arb_valuation_formula can accept
+    a credit_spread_method parameter (e.g., "ytm_based" vs "none") and apply it to
+    the bond-floor discount rate. It should compute YTM per CB-day from cb_daily.close
+    and contractual cash flows, derive a spread vs a matched-maturity risk-free rate,
+    and pass the adjusted discount rate into the theoretical value computation. If
+    the executor supports a grid over spread multipliers or caps, those become the
+    tunable space. If it only supports a binary credit_adjust on/off flag, then the
+    grid is a single comparison run. The proposal remains testable either way.
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 5526eadaddbfc6e1
+  provenance:
+    ai_provider: hermes
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 5526eadaddbfc6e1
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_credit_adjusted_valuation_v1/proposal.yaml
+  research_delta_gate:
+    action: advance
+    reason: novel family/capabilities (family=valuation_formula_credit_adjust, capability_ids=['C006']);
+      cites critical insight 'value_gap_rank_is_anti_alpha_2026_05_24'; queue depth=0.
+    evidence:
+      family: valuation_formula_credit_adjust
+      capability_ids:
+      - C006
+      cites_critical: value_gap_rank_is_anti_alpha_2026_05_24
+      queue_depth: 0
+  mechanics:
+  - new_valuation_formula
+  dropped_unmatched_required_data_fields:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+executor_id: evaluate_cb_arb_valuation_formula
+command_template:
+- .venv/bin/python
+- scripts/evaluate_cb_arb_valuation_formula.py
+- --data-root
+- '{data_root}'
+- --train-start
+- '{train_start}'
+- --train-end
+- '{train_end}'
+- --test-start
+- '{test_start}'
+- --test-end
+- '{test_end}'
+- --output-dir
+- '{output_dir}'
+budget_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+automation:
+  output_dir: data/cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+  command:
+  - .venv/bin/python
+  - scripts/evaluate_cb_arb_valuation_formula.py
+  - --data-root
+  - data/cb_arb_concurrent_supervised_20260511_094500
+  - --train-start
+  - '20190101'
+  - --train-end
+  - '20241231'
+  - --test-start
+  - '20250101'
+  - --test-end
+  - '20260508'
+  - --output-dir
+  - data/cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+  sync_paths:
+  - scripts/evaluate_cb_arb_valuation_formula.py
+  - scripts/auto_research_pipeline.py
+  - scripts/gatekeeper.py
+  - scripts/validate_spec.py
+  - scripts/research_sanity_checker.py
+  - data/research_framework/runtime_entrypoints.yaml
+  - data/research_framework/protocol_rules.yaml
+  - data/research_framework/experiments.yaml
+  - data/research_framework/result_classification_map.yaml
+  verdict:
+    pass_field: adoption_pass
+ideation_provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_credit_adjusted_valuation_v1/proposal.yaml
+  response_hash: 5526eadaddbfc6e1
+  compiler_decision: READY
+  compiler_reason: all guarded checks passed
+  dropped_unmatched_required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+updated_at: '2026-05-25T05:52:25Z'

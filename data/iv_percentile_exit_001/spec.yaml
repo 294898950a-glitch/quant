@@ -1,0 +1,160 @@
+schema_version: 1
+run_id: iv_percentile_exit_001
+date: '2026-05-21'
+strategy_id: cb_arb_value_gap_switch
+l0_entry_id: 1
+l0_source: autonomous strategy ideator from recent_results_digest
+hypothesis: 'Exiting positions when the underlying''s implied volatility exceeds a
+  high percentile threshold (e.g., 90th rolling 252-day percentile) reduces drawdowns
+  during volatility events without materially sacrificing returns, especially in stress
+  years like 2020.
+
+  '
+source_insight: 'Baseline strategy suffered a total return of -0.09 and excess return
+  of -0.19 in 2020, with max drawdown -0.18, likely due to holding through IV spikes.
+  Exiting on extreme IV can act as a risk-off switch.
+
+  '
+parameter_space:
+- name: mechanics
+  range:
+  - new_exit_rule
+  type: categorical
+  description: Mechanics resolved from capability_ids requested by the generated proposal.
+capability_ids:
+- C007
+mechanics:
+- new_exit_rule
+new_data_sources:
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- path: data/cb_warehouse/cb_basic.parquet
+- path: data/cb_warehouse/stk_daily_qfq.parquet
+- path: data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+- path: data/cb_warehouse/cb_daily.parquet
+hard_floors:
+  criteria:
+  - test_excess_return >= baseline_test_excess_return  (0.37976)
+  - test_max_drawdown <= baseline_test_max_drawdown (-0.097762, i.e., shallower)
+  - yr2020_total_return > baseline_2020_total_return (-0.090593)
+  - yr2020_max_drawdown < baseline_2020_max_drawdown (-0.179066, i.e., less severe)
+cv_design: single-window
+cv_holdout_years:
+- 2025
+- 2026
+compute_estimate:
+  sig_minutes: 0
+  spot_minutes: 0
+  local_minutes: 0
+  estimated_cost_yuan: 0.0
+stop_conditions:
+- executor match fails
+- required artifacts are missing
+artifacts_required:
+- implementation_plan.yaml
+- spec.yaml
+status: DRAFT
+auxiliary_metrics:
+- train_excess_return
+- test_excess_return
+- max_drawdown
+escalation:
+- DRAFT requires executor implementation before run
+notes: proposal required data missing
+proposal:
+  proposal_id: iv_percentile_exit_001
+  strategy_id: cb_arb_value_gap_switch
+  family: new_exit_rule
+  hypothesis: 'Exiting positions when the underlying''s implied volatility exceeds
+    a high percentile threshold (e.g., 90th rolling 252-day percentile) reduces drawdowns
+    during volatility events without materially sacrificing returns, especially in
+    stress years like 2020.
+
+    '
+  source_insight: 'Baseline strategy suffered a total return of -0.09 and excess return
+    of -0.19 in 2020, with max drawdown -0.18, likely due to holding through IV spikes.
+    Exiting on extreme IV can act as a risk-off switch.
+
+    '
+  expected_improvement: 'Improve risk-adjusted returns, particularly in volatile regimes
+    (e.g., 2020), while preserving the baseline''s strong test performance (2025+).
+
+    '
+  capability_ids:
+  - C007
+  required_executor: cb_arb_iv_percentile_exit_executor
+  required_data:
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+  - data/cb_warehouse/cb_basic.parquet
+  - data/cb_warehouse/stk_daily_qfq.parquet
+  - data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+  - data/cb_warehouse/cb_daily.parquet
+  test_design:
+    description: "Grid search over IV percentile thresholds (80, 85, 90, 95) and min_hold_days\
+      \ (1, 3, 5). \nUse the same training (2019-2024), 2020 repair, and sealed test\
+      \ (2025-01-01 to 2026-05-08) as baseline. \nEvaluate candidates against baseline\
+      \ using total return, excess return, max drawdown, and win rate.\n"
+    metrics:
+    - total_return
+    - excess_return
+    - max_drawdown
+    - win_rate
+    candidate_selection: "Best candidate picked by composite score on training period\
+      \ (2019-2024). \nIf tie, favor lower max drawdown.\n"
+  success_criteria:
+    criteria:
+    - test_excess_return >= baseline_test_excess_return  (0.37976)
+    - test_max_drawdown <= baseline_test_max_drawdown (-0.097762, i.e., shallower)
+    - yr2020_total_return > baseline_2020_total_return (-0.090593)
+    - yr2020_max_drawdown < baseline_2020_max_drawdown (-0.179066, i.e., less severe)
+  falsifiers:
+    train:
+    - No candidate meets all four criteria simultaneously.
+    - Adoption pass requires no degradation of test metrics and clear improvement
+      in 2020 stress period.
+    validate:
+    - No candidate meets all four criteria simultaneously.
+    - Adoption pass requires no degradation of test metrics and clear improvement
+      in 2020 stress period.
+    test:
+    - No candidate meets all four criteria simultaneously.
+    - Adoption pass requires no degradation of test metrics and clear improvement
+      in 2020 stress period.
+  risk: "Implied volatility data may be noisy or unavailable for all CBs; approximation\
+    \ using stock volatility or a simple CB model might introduce errors. \nEarly\
+    \ exit may increase trade count and transaction costs (cost-on simulation must\
+    \ be checked). \nDuring prolonged high vol regimes, the filter could keep the\
+    \ portfolio out of the market for extended periods, missing recoveries.\n"
+  why_not_repeated_failure: "Previous exit rule tests (dynamic_exit, exit_dynamic_trail)\
+    \ produced unusably large returns (likely implementation bugs) and the profit-taking\
+    \ exit did not improve the baseline. \nThis proposal uses a distinct exit signal\
+    \ (IV percentile, not gap retracement) and leverages a new, untested executor\
+    \ (cb_arb_iv_percentile_exit_executor). \nIt does not repeat any closed family\
+    \ or forbidden mechanic.\n"
+  related_prior_runs:
+  - cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+  - cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+  - cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+  implementation_assumption: "IV can be derived from convertible bond pricing models\
+    \ or proxied by stock implied volatility. \nThe executor will compute a rolling\
+    \ 252-day percentile of daily IV for each CB. \nExit command is issued on days\
+    \ when IV exceeds the threshold percentile and min_hold_days have passed since\
+    \ entry."
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 6c2906b9bd2ff3d5
+  provenance:
+    ai_provider: deepseek
+    prompt_path: framework/autonomous/strategy_ideator.py
+    response_hash: 6c2906b9bd2ff3d5
+  rewrite_status: disabled_two_step_flow
+  rewrite_rounds_used: 0
+  rewrite_last_errors: []
+  proposal_path: /home/jay/projects/quant/data/iv_percentile_exit_001/proposal.yaml
+  mechanics:
+  - new_exit_rule
+automation_skip:
+  status: skipped_non_runnable
+  at: '2026-05-22T07:54:27'
+  proposal_status: DRAFT
+  reason: proposal required data missing
+  errors: []

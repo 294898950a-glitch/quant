@@ -1,0 +1,66 @@
+schema_version: 1
+run_id: volatility_position_scaling_v2_2026-05-21
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: volatility_position_scaling_v2_2026-05-21
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 10
+  artifacts_hash: c003977ebe28cd50
+interpretation:
+  review_status_code: 2
+  result_summary: No volatility scaling variant beat baseline across train, 2020 repair,
+    and sealed test.
+  main_reason: All 10 candidates failed to meet at least one hard floor (excess return,
+    max drawdown, win rate, or overfit check) compared to baseline.
+  failure_causes:
+  - Excess return in sealed test below baseline.
+  - Max drawdown in 2020 repair not reduced below baseline.
+  - Win rate not maintaining parity with baseline.
+  - No variant passed combined train/validation/decision strict criteria.
+  next_research_directions:
+  - direction: Archive negative result for meta-learning
+    why: Avoid repeating failed volatility scaling approach; document as counterexample.
+    priority_code: 2
+    priority: medium
+  - direction: Explore alternative risk controls (signal-strength or regime filters)
+    why: Inverse volatility scaling did not improve risk-adjusted returns; other dynamic
+      methods may.
+    priority_code: 1
+    priority: high
+  - direction: Review related option-position-sizing report for insights
+    why: The related report link suggests a parallel path that might yield better
+      results.
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - Only 10 candidate variants tested, possibly missing optimal scaling parameters.
+  - Single-window holdout (2025-2026) limited out-of-sample period, may not generalize
+    to other stress periods.
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: deepseek
+prompt_path: null
+response_hash: d89e55ff012cfb86
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 10

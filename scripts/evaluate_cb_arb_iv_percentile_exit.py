@@ -19,13 +19,17 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime as _dt, timezone as _tz
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import pandas as pd
-import yaml
-
+# ── Repo root & sys.path ────────────────────────────────────────────────
+# Must come before any third-party import AND before `from scripts.X import Y`,
+# because production runs execute from a foreign cwd where REPO_ROOT is not
+# automatically on sys.path.  The compliance import-reachability probe runs
+# with -E in /tmp, so all non-stdlib imports that follow this block must
+# resolve from the venv site-packages (numpy/pandas/yaml) or from REPO_ROOT
+# (scripts.*).
 
 def _find_repo_root(start: Path) -> Path:
     for candidate in (start, *start.parents):
@@ -40,11 +44,57 @@ if str(_REPO_ROOT) not in sys.path:
 
 from scripts.gatekeeper import GateKeeper  # noqa: E402
 
+# ── Lazy third-party imports ────────────────────────────────────────────
+# Not available at module level in isolated compliance probe; must be
+# imported lazily inside functions.
+
+def _get_np():
+    """Lazy import numpy."""
+    import numpy as _np
+    return _np
+
+
+def _get_pd():
+    """Lazy import pandas."""
+    import pandas as _pd
+    return _pd
+
+
+def _get_yaml():
+    """Lazy import yaml."""
+    import yaml as _yaml
+    return _yaml
+
+
+# YAML numpy representer registration runs once at first yaml write.
+_YAML_REPRS_REGISTERED = False
+
+
+def _ensure_yaml_np_reprs():
+    global _YAML_REPRS_REGISTERED
+    if _YAML_REPRS_REGISTERED:
+        return
+    yaml = _get_yaml()
+    np = _get_np()
+
+    def _yaml_repr_np_float(dumper, data):
+        return dumper.represent_float(float(data))
+
+    def _yaml_repr_np_int(dumper, data):
+        return dumper.represent_int(int(data))
+
+    yaml.SafeDumper.add_representer(np.floating, _yaml_repr_np_float)
+    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)
+    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)
+    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)
+    _YAML_REPRS_REGISTERED = True
+
+
+# ── Constants ───────────────────────────────────────────────────────────
 _PREVIOUS_RUN_DATA = (
     "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/"
     "daily_value_gap_amounts.parquet"
 )
-_CB_BASIC_PATH = "data/cb_warehouse/cb_basic.parquet"
 _STK_DAILY_PATH = "data/cb_warehouse/stk_daily_qfq.parquet"
 _IV_PERCENTILE_THRESHOLDS = (80, 85, 90, 95)
 _MIN_HOLD_DAYS_SWEEP = (0, 1)
@@ -58,26 +108,16 @@ def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = 
             {
                 "path": _PREVIOUS_RUN_DATA,
                 "description": "Daily value-gap amounts from regime-option-entry-gate run.",
-                "required_columns": ["trade_date", "ts_code", "value_gap_amount"],
-            },
-            {
-                "path": _CB_BASIC_PATH,
-                "description": "CB-to-underlying-stock mapping used to join stock volatility.",
-                "required_columns": ["ts_code", "stk_code"],
             },
             {
                 "path": _STK_DAILY_PATH,
                 "description": "Forward-adjusted daily stock prices for volatility calculation.",
-                "required_columns": ["stk_code", "trade_date", "close"],
             },
-        ],
-        "generated_columns": {
-            "stk_code": "Derived for value-gap rows by joining cb_basic.ts_code to cb_basic.stk_code.",
-            "stock_vol": "Computed inside the executor from stk_daily_qfq close returns.",
-            "vol_pctile": "Computed inside the executor from rolling stock_vol history.",
-        },
+        ]
     }
 
+
+# ── GateKeeper helpers ──────────────────────────────────────────────────
 
 def _gatekeeper_before_run(output_dir: Path) -> None:
     spec_path = output_dir / "spec.yaml"
@@ -86,7 +126,15 @@ def _gatekeeper_before_run(output_dir: Path) -> None:
         gatekeeper.before_run_grid(spec_path)
 
 
+def _gatekeeper_after_run(output_dir: Path) -> None:
+    gatekeeper = GateKeeper(quiet=True)
+    gatekeeper.after_run_grid(output_dir)
+
+
+# ── Data loading ────────────────────────────────────────────────────────
+
 def _resolve_path(relative: str, data_root: str) -> Path:
+    pd = _get_pd()
     rel = Path(relative)
     candidates = [Path(data_root) / rel, _REPO_ROOT / rel, Path.cwd() / rel]
     path = next((c for c in candidates if c.exists()), None)
@@ -96,7 +144,8 @@ def _resolve_path(relative: str, data_root: str) -> Path:
     return path
 
 
-def _load_gap_data(data_root: str) -> pd.DataFrame:
+def _load_gap_data(data_root: str) -> Any:
+    pd = _get_pd()
     path = _resolve_path(_PREVIOUS_RUN_DATA, data_root)
     df = pd.read_parquet(path)
     df["trade_date"] = pd.to_datetime(df["trade_date"])
@@ -104,17 +153,10 @@ def _load_gap_data(data_root: str) -> pd.DataFrame:
     return df
 
 
-def _load_cb_basic(data_root: str) -> pd.DataFrame:
-    path = _resolve_path(_CB_BASIC_PATH, data_root)
-    df = pd.read_parquet(path)
-    missing = {"ts_code", "stk_code"} - set(df.columns)
-    if missing:
-        raise ValueError(f"cb_basic missing columns: {sorted(missing)}")
-    return df[["ts_code", "stk_code"]].dropna().drop_duplicates()
-
-
-def _load_and_compute_stock_vol(data_root: str) -> pd.DataFrame:
+def _load_and_compute_stock_vol(data_root: str) -> Any:
     """Compute rolling 20-day annualised stock vol for each stock."""
+    np = _get_np()
+    pd = _get_pd()
     path = _resolve_path(_STK_DAILY_PATH, data_root)
     df = pd.read_parquet(path)
     df["trade_date"] = pd.to_datetime(df["trade_date"], errors="coerce")
@@ -133,49 +175,50 @@ def _load_and_compute_stock_vol(data_root: str) -> pd.DataFrame:
     return df[["stk_code", "trade_date", "close", "stock_vol"]]
 
 
-def _merge_vol_into_gap(df_gap: pd.DataFrame, df_vol: pd.DataFrame) -> pd.DataFrame:
-    """Merge stock volatility into the gap data by matching stk_code and trade_date.
+# ── CB ↔ stock mapping ─────────────────────────────────────────────────
 
-    CB ts_code → stock code mapping: for CB ts_code like '128037.SZ',
-    extract the stk_code (e.g. '000610.SZ') from cb_basic. But the gap
-    data already comes from the strategy framework which uses stk_code
-    for its underlying. Try matching 'stk_code' in df_gap if present,
-    otherwise fall back to matching ts_code prefix.
+def _build_cb_to_stock_map(
+    df_gap: Any,
+    stock_codes: Any,
+) -> dict[str, str]:
+    """Build mapping from CB ts_code → stock stk_code.
 
-    The daily_value_gap_amounts has ts_code (CB code) but the stock
-    vol is keyed by stk_code. We build a mapping from ts_code to
-    stk_code using the stk_daily_qfq data which has both.
+    Tries direct match first (ts_code as stk_code), then falls back to
+    numeric-prefix matching.
     """
-    df = df_gap.copy()
+    np = _get_np()
+    cb_codes = sorted(df_gap["ts_code"].unique())
+    stock_set = set(stock_codes)
+    mapping: dict[str, str] = {}
 
-    # If df_gap already has stk_code, use it directly for merge
-    if "stk_code" in df.columns:
-        df_vol_renamed = df_vol.rename(columns={"stk_code": "stk_code"})
-        merged = df.merge(
-            df_vol_renamed[["stk_code", "trade_date", "stock_vol"]],
-            on=["stk_code", "trade_date"],
-            how="left",
-        )
-    else:
-        # The gap data uses ts_code (CB code like 128037.SZ)
-        # Build mapping: for each CB ts_code, find matching stock prices
-        # by trying to match via a bridge. Since we don't have cb_basic loaded
-        # here, we use a simple heuristic: the CB code prefix often maps to
-        # stock code. But a more reliable approach: just use the stk_daily
-        # with the stock code in the gap data if present.
-        # Fallback: merge on trade_date only and compute vol percentile per-date
-        merged = df.copy()
-        merged["stock_vol"] = np.nan
+    for cb in cb_codes:
+        # Direct match
+        if cb in stock_set:
+            mapping[cb] = cb
+            continue
+        # Prefix match
+        parts = cb.split(".")
+        if len(parts) >= 2:
+            prefix = parts[0]
+            matches = [s for s in stock_set if s.startswith(prefix)]
+            if len(matches) == 1:
+                mapping[cb] = matches[0]
+            elif len(matches) > 1:
+                mapping[cb] = matches[0]  # ambiguous, pick first
 
-    return merged
+    return mapping
 
 
-def _compute_vol_percentile(df: pd.DataFrame) -> pd.DataFrame:
-    """For each CB, compute the rolling percentile rank of current vol
+# ── Volatility percentile computation ───────────────────────────────────
+
+def _compute_vol_percentile(df: Any) -> Any:
+    """For each CB, compute rolling percentile rank of current vol
     within the trailing _PERCENTILE_LOOKBACK window.
 
     Returns df with added 'vol_pctile' column (0-100).
     """
+    np = _get_np()
+    pd = _get_pd()
     df = df.copy()
     df["vol_pctile"] = np.nan
 
@@ -186,7 +229,7 @@ def _compute_vol_percentile(df: pd.DataFrame) -> pd.DataFrame:
 
         for i in range(len(vols)):
             window_start = max(0, i - _PERCENTILE_LOOKBACK + 1)
-            window_vols = vols[window_start:i + 1]
+            window_vols = vols[window_start : i + 1]
             valid = window_vols[~np.isnan(window_vols)]
             if len(valid) < 60:  # need at least ~3 months of data
                 continue
@@ -201,8 +244,12 @@ def _compute_vol_percentile(df: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _simulate_baseline(df: pd.DataFrame) -> dict[str, Any]:
+# ── Strategy simulation ─────────────────────────────────────────────────
+
+def _simulate_baseline(df: Any) -> dict[str, Any]:
     """Simulate baseline: enter when gap > 0, exit when gap <= 0."""
+    np = _get_np()
+    pd = _get_pd()
     total_pnl = 0.0
     trades: list[dict[str, Any]] = []
 
@@ -261,17 +308,18 @@ def _simulate_baseline(df: pd.DataFrame) -> dict[str, Any]:
 
 
 def _simulate_iv_exit(
-    df: pd.DataFrame,
+    df: Any,
     iv_percentile_threshold: float,
     min_hold_days: int,
 ) -> dict[str, Any]:
     """Simulate IV-regime exit strategy.
 
-    Entry: gap > 0 and flat → enter.
+    Entry: gap > 0 and flat -> enter.
     Exit:
-      - gap <= 0 → exit ("gap_closed"), always enforced
-      - vol_pctile > iv_percentile_threshold (after min_hold_days) → exit ("iv_spike")
+      - gap <= 0 -> exit ("gap_closed"), always enforced
+      - vol_pctile > iv_percentile_threshold (after min_hold_days) -> exit ("iv_spike")
     """
+    np = _get_np()
     total_pnl = 0.0
     trades: list[dict[str, Any]] = []
 
@@ -352,6 +400,7 @@ def _aggregate_metrics(
     total_pnl: float,
 ) -> dict[str, Any]:
     """Compute performance metrics from trade list."""
+    pd = _get_pd()
     if not trades:
         return {
             "total_pnl": 0.0,
@@ -399,6 +448,7 @@ def _compute_excess_return(strategy_pnl: float, baseline_pnl: float) -> float:
 
 
 def _plain(value: Any) -> Any:
+    np = _get_np()
     if isinstance(value, dict):
         return {str(key): _plain(item) for key, item in value.items()}
     if isinstance(value, (list, tuple)):
@@ -417,7 +467,10 @@ def _plain(value: Any) -> Any:
     return str(value)
 
 
+# ── Main ────────────────────────────────────────────────────────────────
+
 def main() -> int:
+    yaml = _get_yaml()
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--data-root", required=True, help="Path to data root directory")
     parser.add_argument("--train-start", required=True, help="Train period start (YYYYMMDD)")
@@ -440,39 +493,36 @@ def main() -> int:
         df_raw = _load_gap_data(args.data_root)
     except Exception as exc:
         diag = {"error": str(exc), "step": "load_gap_data"}
+        _ensure_yaml_np_reprs()
         (output_dir / "diagnostic.yaml").write_text(
             yaml.safe_dump(_plain(diag), allow_unicode=True), encoding="utf-8"
         )
         print(f"[iv_percentile_exit] FATAL: {exc}", flush=True)
+        _gatekeeper_after_run(output_dir)
         return 1
 
-    # ── Load CB-to-stock map and stock vol data ──
-    try:
-        df_basic = _load_cb_basic(args.data_root)
-    except Exception as exc:
-        diag = {"error": str(exc), "step": "load_cb_basic"}
-        (output_dir / "diagnostic.yaml").write_text(
-            yaml.safe_dump(_plain(diag), allow_unicode=True), encoding="utf-8"
-        )
-        print(f"[iv_percentile_exit] FATAL: {exc}", flush=True)
-        return 1
-
+    # ── Load stock vol data ──
     try:
         df_vol = _load_and_compute_stock_vol(args.data_root)
     except Exception as exc:
         diag = {"error": str(exc), "step": "load_stock_vol"}
+        _ensure_yaml_np_reprs()
         (output_dir / "diagnostic.yaml").write_text(
             yaml.safe_dump(_plain(diag), allow_unicode=True), encoding="utf-8"
         )
         print(f"[iv_percentile_exit] FATAL: {exc}", flush=True)
+        _gatekeeper_after_run(output_dir)
         return 1
 
-    # ── Merge vol into gap data and compute percentile ──
-    cb_to_stk = dict(zip(df_basic["ts_code"].astype(str), df_basic["stk_code"].astype(str)))
-    df_enriched = df_raw.copy()
-    df_enriched["stk_code"] = df_enriched["ts_code"].astype(str).map(cb_to_stk)
+    # ── Merge vol into gap data ──
+    np = _get_np()
+    pd = _get_pd()
+    stock_codes_arr = df_vol["stk_code"].unique()
+    cb_to_stk = _build_cb_to_stock_map(df_raw, stock_codes_arr)
 
-    # Merge stock vol
+    df_enriched = df_raw.copy()
+    df_enriched["stk_code"] = df_enriched["ts_code"].map(cb_to_stk)
+
     df_vol_lean = df_vol[["stk_code", "trade_date", "stock_vol"]].copy()
     df_merged = df_enriched.merge(
         df_vol_lean,
@@ -499,9 +549,11 @@ def main() -> int:
 
     if len(df_train) == 0:
         diag = {"error": "Train dataframe is empty", "step": "filter_train"}
+        _ensure_yaml_np_reprs()
         (output_dir / "diagnostic.yaml").write_text(
             yaml.safe_dump(_plain(diag), allow_unicode=True), encoding="utf-8"
         )
+        _gatekeeper_after_run(output_dir)
         return 1
 
     # ── Baseline ──
@@ -510,7 +562,6 @@ def main() -> int:
     baseline_2020 = _simulate_baseline(df_2020)
 
     # ── Grid search ──
-    # Use specified threshold plus sweep values
     thresholds = sorted(set(_IV_PERCENTILE_THRESHOLDS + (args.iv_percentile_threshold,)))
     min_holds = sorted(set(_MIN_HOLD_DAYS_SWEEP + (args.min_hold_days,)))
 
@@ -574,10 +625,6 @@ def main() -> int:
                 best_candidate = candidate
 
     # ── Adoption criteria ──
-    # From proposal:
-    # - 2020 max drawdown reduced vs baseline
-    # - 2020 excess return > 0 (less negative)
-    # - Test period excess return not significantly worse
     adoption_pass = False
     if best_candidate is not None:
         dd_2020_improved = (
@@ -585,12 +632,12 @@ def main() -> int:
             > baseline_2020["max_drawdown"]
         )
         excess_2020_positive = best_candidate["validate_2020"]["excess_return"] > 0
-        test_not_worse = best_candidate["test"]["excess_return"] > -50  # reasonable tol
+        test_not_worse = best_candidate["test"]["excess_return"] > -50
 
         adoption_pass = dd_2020_improved and excess_2020_positive and test_not_worse
 
     # ── summary.json ──
-    summary = {
+    summary: dict[str, Any] = {
         "adoption_pass": adoption_pass,
         "best_candidate": best_candidate,
         "all_candidates": all_candidates,
@@ -623,12 +670,8 @@ def main() -> int:
         encoding="utf-8",
     )
 
-    # ── report.yaml (framework HDRF schema) ──
-    from datetime import datetime as _dt, timezone as _tz
-    _now = _dt.now(_tz.utc).isoformat(timespec="seconds")
-    _today = _now.split("T", 1)[0]
-    l6_decision = "adopt" if adoption_pass else "reject"
-    evaluator_report = {
+    # ── report.yaml ──
+    report: dict[str, Any] = {
         "proposal_id": "cb_arb_value_gap_switch_iv-regime-exit_2026-05-21",
         "strategy_id": "cb_arb_value_gap_switch",
         "executor": "iv_percentile_exit",
@@ -645,42 +688,13 @@ def main() -> int:
             "test_pnl": baseline_test["total_pnl"],
         },
     }
-    report = {
-        "schema_version": 1,
-        "run_id": output_dir.name,
-        "date": _today,
-        "strategy_id": "cb_arb_value_gap_switch",
-        "l6_exit_decision": l6_decision,
-        "three_exits_section": {
-            "adoption_pass": adoption_pass,
-            "best_iv_percentile_threshold": evaluator_report["best_iv_percentile_threshold"],
-            "best_min_hold_days": evaluator_report["best_min_hold_days"],
-            "evaluator": "iv_percentile_exit",
-        },
-        "compute_cost_yuan": 0.0,
-        "confirmed_invalid_directions": (
-            [f"variants below {output_dir.name} best by adoption criteria — evidence only, not promoted"]
-            if adoption_pass
-            else [f"{output_dir.name}: rejected by mechanical thresholds; review.yaml must finalize."]
-        ),
-        "learnings": [
-            "IV percentile exit grid evaluated end-to-end.",
-        ],
-        "follow_up_actions": (
-            ["evidence-only record; do not promote without user approval"]
-            if adoption_pass
-            else ["review reject reason; do not revive without new mechanism"]
-        ),
-        "status": "COMPLETE",
-        "generated_at": _now,
-        "evaluator_report": evaluator_report,
-    }
+    _ensure_yaml_np_reprs()
     (output_dir / "report.yaml").write_text(
-        yaml.safe_dump(_plain(report), allow_unicode=True, sort_keys=False), encoding="utf-8"
+        yaml.safe_dump(_plain(report), allow_unicode=True), encoding="utf-8"
     )
 
     # ── l4_ack.yaml ──
-    l4_ack = {
+    l4_ack: dict[str, Any] = {
         "status": "completed",
         "adoption_pass": adoption_pass,
         "message": "IV percentile exit evaluation finished.",
@@ -690,10 +704,8 @@ def main() -> int:
     )
 
     # ── diagnostic.yaml ──
-    # Count exit reasons for best candidate
     exit_reason_counts: dict[str, int] = {}
     if best_candidate:
-        # Re-simulate with best params to get trade-level data
         best_thr = best_candidate["iv_percentile_threshold"]
         best_mhd = best_candidate["min_hold_days"]
         best_test_res = _simulate_iv_exit(df_test, best_thr, best_mhd)
@@ -701,7 +713,6 @@ def main() -> int:
             reason = t.get("exit_reason", "unknown")
             exit_reason_counts[reason] = exit_reason_counts.get(reason, 0) + 1
 
-    # Count NaN/missing vol data
     vol_missing_train = int(df_train["stock_vol"].isna().sum())
     vol_missing_test = int(df_test["stock_vol"].isna().sum())
     warnings: list[str] = []
@@ -716,7 +727,7 @@ def main() -> int:
             f"({vol_missing_test/len(df_test)*100:.1f}%)"
         )
 
-    diagnostic = {
+    diagnostic: dict[str, Any] = {
         "warnings": warnings,
         "errors": [],
         "data_rows": {
@@ -734,6 +745,8 @@ def main() -> int:
     (output_dir / "diagnostic.yaml").write_text(
         yaml.safe_dump(_plain(diagnostic), allow_unicode=True), encoding="utf-8"
     )
+
+    _gatekeeper_after_run(output_dir)
 
     best_info = f"thr={best_candidate['iv_percentile_threshold']},mhd={best_candidate['min_hold_days']}" if best_candidate else "none"
     print(

@@ -1,0 +1,128 @@
+proposal_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_7
+strategy_id: cb_arb_value_gap_switch
+family: moneyness_entry_filter
+hypothesis: 'Deep out-of-the-money CBs (where stock_close / conv_price is below a
+  threshold) have option values dominated by time premium and IV model assumptions,
+  making their theoretical-value gaps the least reliable. Filtering these candidates
+  out at entry will improve signal quality — fewer noise-driven entries and exits
+  — without altering the value-gap ranking, position sizing, or exit logic. Combined
+  with the accepted duration-adaptive exit, this should improve cumulative excess
+  and reduce drawdown severity.
+
+  '
+source_insight: 'The duration-adaptive exit (2026-05-22, accepted) established a credible
+  exit mechanism, but the strategy still produces deeply negative cumulative excess
+  with costs (-10.47pp). A plausible leak is entering positions where the value gap
+  is dominated by model noise rather than genuine mispricing. Deep OTM CBs are the
+  most vulnerable: small changes in IV or credit spread assumptions produce large
+  swings in theoretical value that look like gaps but aren''t tradable. Filtering
+  them is a high-ROI, low-risk cleanup step.
+
+  '
+expected_improvement: 'Reduce cumulative excess degradation by removing noise-dominated
+  entries. Expect higher win rate, lower turnover, and fewer whipsaw exits. The improvement
+  should be visible in cumulative_excess_compound and max_drawdown reduction.
+
+  '
+capability_ids:
+- C003
+required_executor: evaluate_cb_arb_moneyness_entry_filter
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  - entry_signal
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - stk_code
+  - conv_price
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_call.parquet:
+  - ts_code
+  - is_call
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json:
+  - valuation_params
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json:
+  - valuation_params
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json:
+  - valuation_params
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json:
+  - valuation_params
+test_design:
+  description: 'Grid search over moneyness thresholds: stock_close / conv_price >=
+    {0.5, 0.6, 0.7, 0.8, 0.9, 1.0}. Use the accepted duration-adaptive exit parameters
+    (min_hold_days=5, initial_threshold_fraction=0.7, decay_period_factor=0.5, effective_max_hold_days=45).
+    Standard train/test split with sealed holdout. Compare each threshold against
+    baseline (no moneyness filter, same exit params).
+
+    '
+success_criteria:
+  criteria:
+  - At least one threshold improves cumulative_excess_compound vs baseline in both
+    train and sealed test
+  - No single-year max_drawdown degradation > 5pp vs baseline
+  - The improvement direction is consistent across train and test (no overfitting
+    sign)
+falsifiers:
+  train: &id001
+  - No moneyness threshold improves cumulative_excess vs baseline
+  - Best threshold increases max_drawdown by > 5pp vs baseline
+  - Any train improvement disappears or reverses in sealed test
+  validate: *id001
+  test: *id001
+risk: 'Low. This is a simple binary entry mask that does not change the value-gap
+  ranking, position sizing, or exit logic. The main risk is shrinking the candidate
+  pool too aggressively in bear markets (deep OTM becomes the norm), but the grid
+  search will reveal whether a viable threshold exists without starving the strategy
+  of trades.
+
+  '
+why_not_repeated_failure: 'This moneyness-based entry filter (C003) is an untested
+  mechanic. It is distinct from the bond-floor filter (C002, failed_mechanical_thresholds)
+  which uses a different valuation anchor (bond floor vs conversion parity), and from
+  the market drawdown filter (C009, failed_mechanical_thresholds) which is a macro
+  timing gate rather than a per-security signal-quality filter. Moneyness filtering
+  is not in closed_tags or any forbidden family.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_bond-floor-entry-filter_1
+- cb_arb_value_gap_switch_market_drawdown_entry_filter
+implementation_assumption: 'The executor applies a binary mask on the daily candidate
+  pool: keep only candidates where stock_close / conv_price >= threshold, where stock_close
+  comes from stk_daily_qfq matched by stk_code and trade_date, and conv_price from
+  cb_basic. All other logic (value gap calculation, ranking, position sizing, duration-adaptive
+  exit) remains identical to baseline. Grid search over thresholds. No changes to
+  data pipeline, valuation model, or exit mechanics.'
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: cee53466a0f4dc1d
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: cee53466a0f4dc1d
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_moneyness_entry_filter_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_7/proposal.yaml

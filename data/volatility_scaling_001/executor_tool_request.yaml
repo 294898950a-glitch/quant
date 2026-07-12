@@ -140,7 +140,7 @@ validation_plan:
 - verify that summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml are produced
 ai_provider: deepseek
 design_response_hash: b58b804bfd2edf70
-code_response_hash: b511c34d094ade31
+code_response_hash: e54c948406118565
 compile_reason: no strict executor match
 tool_design:
   tool_request_id: volatility_based_position_scaling_executor_v1
@@ -295,7 +295,7 @@ tool_code_response:
   generated_executor: generated_executor/evaluate_cb_arb_volatility_position_scaling.py
   completion_receipt: data/volatility_scaling_001/generated_executor/executor_completion.yaml
   finalized_by: hermes_complete
-  finalized_at: '2026-05-22T00:20:35'
+  finalized_at: '2026-06-28T14:07:35'
   validation: passed
 files:
 - path: generated_executor/evaluate_cb_arb_volatility_position_scaling.py
@@ -308,12 +308,12 @@ files:
     excess return.\n\nThis is an evaluation harness only; it does not replace the\
     \ default strategy.\n\"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\n\
     import hashlib\nimport json\nimport sys\nfrom datetime import datetime\nfrom pathlib\
-    \ import Path\nfrom typing import Any\n\nimport numpy as np\nimport pandas as\
-    \ pd\nimport yaml\n\n_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent\n\
-    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
-    \nfrom scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402\n    _gap_source_shares,\n\
-    \    _load_or_build_value_ranks,\n    _run_value_gap_backtest,\n    _score,\n\
-    \    _with_cost_params,\n    _write_csv,\n)\n\n# ---------------------------------------------------------------------------\n\
+    \ import Path\nfrom typing import Any\n\ndef _find_repo_root(start: Path) -> Path:\n\
+    \    for candidate in (start, *start.parents):\n        if (candidate / \"scripts\"\
+    \ / \"gatekeeper.py\").exists():\n            return candidate\n    return start.parent\n\
+    \n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\nif str(_REPO_ROOT)\
+    \ not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\nfrom scripts.gatekeeper\
+    \ import GateKeeper  # noqa: E402\n\n# ---------------------------------------------------------------------------\n\
     # Base backtest params — same as the baseline value-gap switch\n# ---------------------------------------------------------------------------\n\
     \nBASE_PARAMS: dict[str, Any] = {\n    \"min_gap_pct\": 0.0,\n    \"sell_gap_pct\"\
     : 0.0,\n    \"switch_hurdle_pct\": 0.03,\n    \"max_hold_days\": 180.0,\n    \"\
@@ -328,22 +328,26 @@ files:
     : lb,\n            \"scaling_beta\": b,\n        }\n        for lb in VOLATILITY_LOOKBACKS\n\
     \        for b in SCALING_BETAS\n    ],\n]\n\n\n# ---------------------------------------------------------------------------\n\
     # spec binding (same as option_position_sizing)\n# ---------------------------------------------------------------------------\n\
-    \ndef _spec_binding_fields(output_dir: Path) -> dict[str, str]:\n    spec_path\
-    \ = output_dir / \"spec.yaml\"\n    if not spec_path.exists():\n        return\
-    \ {\"spec_run_id\": output_dir.name, \"spec_binding_hash\": \"\"}\n    spec =\
-    \ yaml.safe_load(spec_path.read_text(encoding=\"utf-8\"))\n    if not isinstance(spec,\
-    \ dict):\n        return {\"spec_run_id\": output_dir.name, \"spec_binding_hash\"\
-    : \"\"}\n    binding = {\n        \"run_id\": spec.get(\"run_id\") or output_dir.name,\n\
-    \        \"hypothesis\": spec.get(\"hypothesis\"),\n        \"source_insight\"\
-    : spec.get(\"source_insight\"),\n        \"parameter_space\": spec.get(\"parameter_space\"\
-    ),\n        \"mechanics\": spec.get(\"mechanics\"),\n        \"proposal_id\":\
-    \ ((spec.get(\"automation\") or {}).get(\"proposal_id\")),\n    }\n    payload\
-    \ = json.dumps(binding, ensure_ascii=False, sort_keys=True, default=str)\n   \
-    \ return {\n        \"spec_run_id\": str(binding[\"run_id\"]),\n        \"spec_binding_hash\"\
-    : hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:16],\n    }\n\n\ndef\
-    \ _attach_spec_binding(rows: list[dict[str, Any]], output_dir: Path) -> None:\n\
-    \    binding = _spec_binding_fields(output_dir)\n    for row in rows:\n      \
-    \  row.update(binding)\n\n\n# ---------------------------------------------------------------------------\n\
+    \ndef _spec_binding_fields(output_dir: Path) -> dict[str, str]:\n    import yaml\n\
+    \n    spec_path = output_dir / \"spec.yaml\"\n    if not spec_path.exists():\n\
+    \        return {\"spec_run_id\": output_dir.name, \"spec_binding_hash\": \"\"\
+    }\n    spec = yaml.safe_load(spec_path.read_text(encoding=\"utf-8\"))\n    if\
+    \ not isinstance(spec, dict):\n        return {\"spec_run_id\": output_dir.name,\
+    \ \"spec_binding_hash\": \"\"}\n    binding = {\n        \"run_id\": spec.get(\"\
+    run_id\") or output_dir.name,\n        \"hypothesis\": spec.get(\"hypothesis\"\
+    ),\n        \"source_insight\": spec.get(\"source_insight\"),\n        \"parameter_space\"\
+    : spec.get(\"parameter_space\"),\n        \"mechanics\": spec.get(\"mechanics\"\
+    ),\n        \"proposal_id\": ((spec.get(\"automation\") or {}).get(\"proposal_id\"\
+    )),\n    }\n    payload = json.dumps(binding, ensure_ascii=False, sort_keys=True,\
+    \ default=str)\n    return {\n        \"spec_run_id\": str(binding[\"run_id\"\
+    ]),\n        \"spec_binding_hash\": hashlib.sha256(payload.encode(\"utf-8\")).hexdigest()[:16],\n\
+    \    }\n\n\ndef _attach_spec_binding(rows: list[dict[str, Any]], output_dir: Path)\
+    \ -> None:\n    binding = _spec_binding_fields(output_dir)\n    for row in rows:\n\
+    \        row.update(binding)\n\n\ndef _gatekeeper_before_run(output_dir: Path)\
+    \ -> None:\n    spec_path = output_dir / \"spec.yaml\"\n    if spec_path.exists():\n\
+    \        gatekeeper = GateKeeper(quiet=True)\n        gatekeeper.before_run_grid(spec_path)\n\
+    \n\ndef _gatekeeper_after_run(output_dir: Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n\
+    \    gatekeeper.after_run_grid(output_dir)\n\n\n# ---------------------------------------------------------------------------\n\
     # ATR calculation\n# ---------------------------------------------------------------------------\n\
     \ndef _compute_daily_atr(\n    price_df: pd.DataFrame,\n    ts_col: str,\n   \
     \ date_col: str,\n    lookback: int,\n    high_col: str = \"high\",\n    low_col:\
@@ -352,16 +356,16 @@ files:
     \    Uses Wilder's smoothed ATR: first value is simple mean of TR over lookback,\n\
     \    subsequent values use EMA-style smoothing: ATR_t = (ATR_{t-1}*(n-1) + TR_t)/n.\n\
     \n    Returns a DataFrame with [ts_col, date_col, atr] columns.\n    \"\"\"\n\
-    \    df = price_df.sort_values([ts_col, date_col]).reset_index(drop=True)\n  \
-    \  df[high_col] = df[high_col].astype(float)\n    df[low_col] = df[low_col].astype(float)\n\
-    \    df[close_col] = df[close_col].astype(float)\n\n    # True Range\n    df[\"\
-    prev_close\"] = df.groupby(ts_col)[close_col].shift(1)\n    df[\"tr\"] = np.maximum(\n\
-    \        df[high_col] - df[low_col],\n        np.maximum(\n            (df[high_col]\
-    \ - df[\"prev_close\"]).abs(),\n            (df[low_col] - df[\"prev_close\"]).abs(),\n\
-    \        ),\n    )\n    # Fill leading NaN TR with high-low (first bar has no\
-    \ prev_close)\n    df[\"tr\"] = df[\"tr\"].fillna(df[high_col] - df[low_col])\n\
-    \n    # Wilder smoothed ATR\n    result_rows: list[dict[str, Any]] = []\n    for\
-    \ _ts, group in df.groupby(ts_col):\n        group = group.reset_index(drop=True)\n\
+    \    import numpy as np\n    import pandas as pd\n\n    df = price_df.sort_values([ts_col,\
+    \ date_col]).reset_index(drop=True)\n    df[high_col] = df[high_col].astype(float)\n\
+    \    df[low_col] = df[low_col].astype(float)\n    df[close_col] = df[close_col].astype(float)\n\
+    \n    # True Range\n    df[\"prev_close\"] = df.groupby(ts_col)[close_col].shift(1)\n\
+    \    df[\"tr\"] = np.maximum(\n        df[high_col] - df[low_col],\n        np.maximum(\n\
+    \            (df[high_col] - df[\"prev_close\"]).abs(),\n            (df[low_col]\
+    \ - df[\"prev_close\"]).abs(),\n        ),\n    )\n    # Fill leading NaN TR with\
+    \ high-low (first bar has no prev_close)\n    df[\"tr\"] = df[\"tr\"].fillna(df[high_col]\
+    \ - df[low_col])\n\n    # Wilder smoothed ATR\n    result_rows: list[dict[str,\
+    \ Any]] = []\n    for _ts, group in df.groupby(ts_col):\n        group = group.reset_index(drop=True)\n\
     \        tr_vals = group[\"tr\"].values\n        atr_vals = np.full(len(tr_vals),\
     \ np.nan)\n        if len(tr_vals) >= lookback:\n            atr_vals[lookback\
     \ - 1] = tr_vals[:lookback].mean()\n            for i in range(lookback, len(tr_vals)):\n\
@@ -401,23 +405,27 @@ files:
     \ = _command_value_from_parts(command, \"--base-ranks-path\")\n    warehouse_files\
     \ = [\n        \"data/cb_warehouse/cb_basic.parquet\",\n        \"data/cb_warehouse/cb_daily.parquet\"\
     ,\n        \"data/cb_warehouse/cb_call.parquet\",\n        \"data/cb_warehouse/stk_daily_qfq.parquet\"\
-    ,\n    ]\n    required_files: list[dict[str, str]] = [\n        {\"path\": str(data_root\
-    \ / rel_path), \"role\": \"warehouse_input\"}\n        for rel_path in warehouse_files\n\
-    \    ]\n    if base_ranks_raw:\n        base_ranks_path = Path(base_ranks_raw)\n\
-    \        if not base_ranks_path.is_absolute():\n            base_ranks_path =\
-    \ _REPO_ROOT / base_ranks_path\n        required_files.append(\n            {\"\
-    path\": str(base_ranks_path), \"role\": \"base_ranks_input\"}\n        )\n\n \
-    \   # pool configs needed by the backtest harness\n    fixed_source_raw = _command_value_from_parts(command,\
-    \ \"--fixed-source\") or \"2\"\n    fixed_source = int(fixed_source_raw)\n   \
-    \ pool_ids = sorted({0, 2, 4, 6, fixed_source})\n    required_files.extend(\n\
-    \        {\n            \"path\": str(data_root / f\"pool_{pool_id}\" / \"best_params.json\"\
-    ),\n            \"role\": \"config_pool\",\n        }\n        for pool_id in\
-    \ pool_ids\n    )\n\n    return {\n        \"schema_version\": 1,\n        \"\
-    executor\": \"scripts/evaluate_cb_arb_volatility_position_scaling.py\",\n    \
-    \    \"required_files\": required_files,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
+    ,\n    ]\n    # warehouse_files are repo-relative paths (data/cb_warehouse/...).\
+    \ They\n    # must NOT be joined with data_root — that produces a double \"data/\"\
+    \n    # prefix and the sync gate rejects the path. data_root is only meaningful\n\
+    \    # for run-scoped inputs (pool_X configs below).\n    required_files: list[dict[str,\
+    \ str]] = [\n        {\"path\": rel_path, \"role\": \"warehouse_input\"}\n   \
+    \     for rel_path in warehouse_files\n    ]\n    if base_ranks_raw:\n       \
+    \ base_ranks_path = Path(base_ranks_raw)\n        if not base_ranks_path.is_absolute():\n\
+    \            base_ranks_path = _REPO_ROOT / base_ranks_path\n        required_files.append(\n\
+    \            {\"path\": str(base_ranks_path), \"role\": \"base_ranks_input\"}\n\
+    \        )\n\n    # pool configs needed by the backtest harness\n    fixed_source_raw\
+    \ = _command_value_from_parts(command, \"--fixed-source\") or \"2\"\n    fixed_source\
+    \ = int(fixed_source_raw)\n    pool_ids = sorted({0, 2, 4, 6, fixed_source})\n\
+    \    required_files.extend(\n        {\n            \"path\": str(data_root /\
+    \ f\"pool_{pool_id}\" / \"best_params.json\"),\n            \"role\": \"config_pool\"\
+    ,\n        }\n        for pool_id in pool_ids\n    )\n\n    return {\n       \
+    \ \"schema_version\": 1,\n        \"executor\": \"scripts/evaluate_cb_arb_volatility_position_scaling.py\"\
+    ,\n        \"required_files\": required_files,\n    }\n\n\n# ---------------------------------------------------------------------------\n\
     # rank loading + volatility scaling\n# ---------------------------------------------------------------------------\n\
-    \ndef _load_base_ranks(args: argparse.Namespace, output_dir: Path) -> pd.DataFrame:\n\
-    \    start_all = min(args.train_start, args.test_start)\n    end_all = max(args.train_end,\
+    \ndef _load_base_ranks(args: argparse.Namespace, output_dir: Path):\n    import\
+    \ pandas as pd\n    from scripts.evaluate_cb_arb_value_gap_switch import _load_or_build_value_ranks\n\
+    \n    start_all = min(args.train_start, args.test_start)\n    end_all = max(args.train_end,\
     \ args.test_end)\n    if args.base_ranks_path is not None and Path(args.base_ranks_path).exists():\n\
     \        ranks = pd.read_parquet(args.base_ranks_path)\n    else:\n        ranks\
     \ = _load_or_build_value_ranks(\n            args.data_root,\n            start_all,\n\
@@ -427,26 +435,26 @@ files:
     ] = ranks[\"trade_date\"].astype(str)\n    ranks[\"ts_code\"] = ranks[\"ts_code\"\
     ].astype(str)\n    ranks = ranks[\n        (ranks[\"trade_date\"] >= start_all)\
     \ & (ranks[\"trade_date\"] <= end_all)\n    ]\n    return ranks\n\n\ndef _load_atr_data(\n\
-    \    lookback: int,\n    start: str,\n    end: str,\n) -> pd.DataFrame:\n    \"\
-    \"\"Load cb_daily, compute ATR, return DataFrame with [ts_code, trade_date, atr].\"\
-    \"\"\n    cb = pd.read_parquet(_REPO_ROOT / \"data/cb_warehouse/cb_daily.parquet\"\
+    \    lookback: int,\n    start: str,\n    end: str,\n):\n    import pandas as\
+    \ pd\n    \"\"\"Load cb_daily, compute ATR, return DataFrame with [ts_code, trade_date,\
+    \ atr].\"\"\"\n    cb = pd.read_parquet(_REPO_ROOT / \"data/cb_warehouse/cb_daily.parquet\"\
     )\n    cb[\"trade_date\"] = cb[\"trade_date\"].astype(str)\n    cb[\"ts_code\"\
     ] = cb[\"ts_code\"].astype(str)\n    cb = cb[(cb[\"trade_date\"] >= start) & (cb[\"\
     trade_date\"] <= end)]\n    atr = _compute_daily_atr(cb, \"ts_code\", \"trade_date\"\
-    , lookback)\n    return atr\n\n\ndef _merge_and_scale(\n    ranks: pd.DataFrame,\n\
-    \    atr_df: pd.DataFrame,\n    cfg: dict[str, Any],\n) -> tuple[pd.DataFrame,\
-    \ dict[str, Any]]:\n    \"\"\"Apply volatility scaling to value_gap_amount and\
-    \ position_cash_scale.\n\n    scaling_factor = min(1, 1 / (1 + beta * (ATR / median_ATR\
-    \ - 1)))\n    \"\"\"\n    mode = str(cfg.get(\"mode\", \"none\"))\n    blended\
-    \ = ranks.merge(\n        atr_df, on=[\"ts_code\", \"trade_date\"], how=\"left\"\
-    \n    )\n\n    # Default: no scaling\n    blended[\"position_cash_scale\"] = 1.0\n\
-    \    blended[\"volatility_scaling_factor\"] = 1.0\n\n    if mode == \"none\":\n\
-    \        return blended, {\n            \"name\": cfg[\"name\"],\n           \
-    \ \"adjusted_rows\": 0,\n            \"avg_scale\": 1.0,\n            \"min_scale\"\
-    : 1.0,\n            \"max_scale\": 1.0,\n            \"avg_atr\": 0.0,\n     \
-    \       \"median_atr\": 0.0,\n        }\n\n    lookback = int(cfg[\"volatility_lookback\"\
-    ])\n    beta = float(cfg[\"scaling_beta\"])\n\n    # Compute cross-sectional median\
-    \ ATR per day\n    daily_median = blended.groupby(\"trade_date\")[\"atr\"].transform(\"\
+    , lookback)\n    return atr\n\n\ndef _merge_and_scale(\n    ranks,\n    atr_df,\n\
+    \    cfg: dict[str, Any],\n):\n    import numpy as np\n    import pandas as pd\n\
+    \n    \"\"\"Apply volatility scaling to value_gap_amount and position_cash_scale.\n\
+    \n    scaling_factor = min(1, 1 / (1 + beta * (ATR / median_ATR - 1)))\n    \"\
+    \"\"\n    mode = str(cfg.get(\"mode\", \"none\"))\n    blended = ranks.merge(\n\
+    \        atr_df, on=[\"ts_code\", \"trade_date\"], how=\"left\"\n    )\n\n   \
+    \ # Default: no scaling\n    blended[\"position_cash_scale\"] = 1.0\n    blended[\"\
+    volatility_scaling_factor\"] = 1.0\n\n    if mode == \"none\":\n        return\
+    \ blended, {\n            \"name\": cfg[\"name\"],\n            \"adjusted_rows\"\
+    : 0,\n            \"avg_scale\": 1.0,\n            \"min_scale\": 1.0,\n     \
+    \       \"max_scale\": 1.0,\n            \"avg_atr\": 0.0,\n            \"median_atr\"\
+    : 0.0,\n        }\n\n    lookback = int(cfg[\"volatility_lookback\"])\n    beta\
+    \ = float(cfg[\"scaling_beta\"])\n\n    # Compute cross-sectional median ATR per\
+    \ day\n    daily_median = blended.groupby(\"trade_date\")[\"atr\"].transform(\"\
     median\")\n\n    # Only scale rows where ATR is available\n    has_atr = blended[\"\
     atr\"].notna() & (blended[\"atr\"] > 0)\n    blended[\"volatility_scaling_factor\"\
     ] = 1.0\n\n    if has_atr.any():\n        atr_vals = blended.loc[has_atr, \"atr\"\
@@ -480,20 +488,21 @@ files:
     # report rows and file writing\n# ---------------------------------------------------------------------------\n\
     \ndef _row(\n    name: str,\n    description: str,\n    period: str,\n    start:\
     \ str,\n    end: str,\n    cfg: dict[str, Any],\n    params: dict[str, Any],\n\
-    \    result: dict[str, Any],\n) -> dict[str, Any]:\n    row: dict[str, Any] =\
-    \ {\n        \"name\": name,\n        \"description\": description,\n        \"\
-    period\": period,\n        \"start\": start,\n        \"end\": end,\n        \"\
-    scaling_config_json\": json.dumps(cfg, sort_keys=True),\n        \"params_json\"\
-    : json.dumps(params, sort_keys=True),\n        **result[\"metrics\"],\n    }\n\
-    \    row[\"score\"] = _score(result[\"metrics\"])\n    return row\n\n\ndef _pick(rows:\
-    \ list[dict[str, Any]], name: str, period: str) -> dict[str, Any]:\n    return\
-    \ next((r for r in rows if r[\"name\"] == name and r[\"period\"] == period), {})\n\
-    \n\ndef _year(rows: list[dict[str, Any]], name: str, year: int) -> dict[str, Any]:\n\
-    \    return next(\n        (r for r in rows if r[\"name\"] == name and r[\"period\"\
-    ] == str(year)), {}\n    )\n\n\ndef _write_review_files(\n    output_dir: Path,\n\
-    \    summary: dict[str, Any],\n    best_train: dict[str, Any],\n    best_test:\
-    \ dict[str, Any],\n    baseline_train: dict[str, Any],\n    baseline_test: dict[str,\
-    \ Any],\n    adoption_pass: bool,\n) -> None:\n    now = datetime.now().isoformat(timespec=\"\
+    \    result: dict[str, Any],\n) -> dict[str, Any]:\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import _score\n\n    row: dict[str, Any] = {\n        \"name\": name,\n    \
+    \    \"description\": description,\n        \"period\": period,\n        \"start\"\
+    : start,\n        \"end\": end,\n        \"scaling_config_json\": json.dumps(cfg,\
+    \ sort_keys=True),\n        \"params_json\": json.dumps(params, sort_keys=True),\n\
+    \        **result[\"metrics\"],\n    }\n    row[\"score\"] = _score(result[\"\
+    metrics\"])\n    return row\n\n\ndef _pick(rows: list[dict[str, Any]], name: str,\
+    \ period: str) -> dict[str, Any]:\n    return next((r for r in rows if r[\"name\"\
+    ] == name and r[\"period\"] == period), {})\n\n\ndef _year(rows: list[dict[str,\
+    \ Any]], name: str, year: int) -> dict[str, Any]:\n    return next(\n        (r\
+    \ for r in rows if r[\"name\"] == name and r[\"period\"] == str(year)), {}\n \
+    \   )\n\n\ndef _write_review_files(\n    output_dir: Path,\n    summary: dict[str,\
+    \ Any],\n    best_train: dict[str, Any],\n    best_test: dict[str, Any],\n   \
+    \ baseline_train: dict[str, Any],\n    baseline_test: dict[str, Any],\n    adoption_pass:\
+    \ bool,\n) -> None:\n    import yaml\n\n    now = datetime.now().isoformat(timespec=\"\
     seconds\")\n    decision = \"mini-spec-retry\" if adoption_pass else \"reject\"\
     \n    reason = (\n        \"Volatility scaling variant passed the automatic train/test/2020\
     \ checks; review before promotion.\"\n        if adoption_pass\n        else \"\
@@ -595,29 +604,32 @@ files:
     \   },\n            allow_unicode=True,\n            sort_keys=False,\n      \
     \  ),\n        encoding=\"utf-8\",\n    )\n\n\n# ---------------------------------------------------------------------------\n\
     # main\n# ---------------------------------------------------------------------------\n\
-    \ndef main() -> int:\n    args = _parse_args()\n    output_dir = args.output_dir\
+    \ndef main() -> int:\n    import pandas as pd\n    from scripts.evaluate_cb_arb_value_gap_switch\
+    \ import (\n        _run_value_gap_backtest,\n        _with_cost_params,\n   \
+    \     _write_csv,\n    )\n\n    args = _parse_args()\n    output_dir = args.output_dir\
     \ or args.data_root / \"volatility_position_scaling\"\n    output_dir.mkdir(parents=True,\
-    \ exist_ok=True)\n\n    # Load base ranks (without any scaling)\n    base_ranks\
-    \ = _load_base_ranks(args, output_dir)\n\n    # Determine the full date range\
-    \ for ATR pre-computation per config\n    start_all = min(args.train_start, args.test_start)\n\
-    \    end_all = max(args.train_end, args.test_end)\n\n    summary_rows: list[dict[str,\
-    \ Any]] = []\n    yearly_rows: list[dict[str, Any]] = []\n    adjustment_rows:\
-    \ list[dict[str, Any]] = []\n\n    for cfg in CONFIGS:\n        name = str(cfg[\"\
-    name\"])\n        description = str(cfg[\"description\"])\n\n        if cfg[\"\
-    mode\"] == \"none\":\n            adjusted = base_ranks.copy()\n            adjusted[\"\
-    position_cash_scale\"] = 1.0\n            adjustment: dict[str, Any] = {\n   \
-    \             \"name\": name,\n                \"adjusted_rows\": 0,\n       \
-    \         \"avg_scale\": 1.0,\n                \"min_scale\": 1.0,\n         \
-    \       \"max_scale\": 1.0,\n                \"avg_atr\": 0.0,\n             \
-    \   \"median_atr\": 0.0,\n            }\n        else:\n            lb = int(cfg[\"\
-    volatility_lookback\"])\n            # Need ATR starting lb days before start_all\
-    \ for proper Wilder smoothing\n            atr_start = pd.to_datetime(start_all,\
-    \ format=\"%Y%m%d\") - pd.Timedelta(days=lb * 3)\n            atr_start_str =\
-    \ atr_start.strftime(\"%Y%m%d\")\n            atr_df = _load_atr_data(lb, atr_start_str,\
-    \ end_all)\n            adjusted, adjustment = _merge_and_scale(base_ranks, atr_df,\
-    \ cfg)\n\n        adjustment_rows.append(adjustment)\n\n        # Save adjusted\
-    \ ranks\n        adjusted.to_parquet(\n            output_dir / f\"daily_value_gap_amounts_{name}.parquet\"\
-    , index=False\n        )\n\n        # Backtest params\n        params = _with_cost_params(dict(BASE_PARAMS),\
+    \ exist_ok=True)\n    _gatekeeper_before_run(output_dir)\n\n    # Load base ranks\
+    \ (without any scaling)\n    base_ranks = _load_base_ranks(args, output_dir)\n\
+    \n    # Determine the full date range for ATR pre-computation per config\n   \
+    \ start_all = min(args.train_start, args.test_start)\n    end_all = max(args.train_end,\
+    \ args.test_end)\n\n    summary_rows: list[dict[str, Any]] = []\n    yearly_rows:\
+    \ list[dict[str, Any]] = []\n    adjustment_rows: list[dict[str, Any]] = []\n\n\
+    \    for cfg in CONFIGS:\n        name = str(cfg[\"name\"])\n        description\
+    \ = str(cfg[\"description\"])\n\n        if cfg[\"mode\"] == \"none\":\n     \
+    \       adjusted = base_ranks.copy()\n            adjusted[\"position_cash_scale\"\
+    ] = 1.0\n            adjustment: dict[str, Any] = {\n                \"name\"\
+    : name,\n                \"adjusted_rows\": 0,\n                \"avg_scale\"\
+    : 1.0,\n                \"min_scale\": 1.0,\n                \"max_scale\": 1.0,\n\
+    \                \"avg_atr\": 0.0,\n                \"median_atr\": 0.0,\n   \
+    \         }\n        else:\n            lb = int(cfg[\"volatility_lookback\"])\n\
+    \            # Need ATR starting lb days before start_all for proper Wilder smoothing\n\
+    \            atr_start = pd.to_datetime(start_all, format=\"%Y%m%d\") - pd.Timedelta(days=lb\
+    \ * 3)\n            atr_start_str = atr_start.strftime(\"%Y%m%d\")\n         \
+    \   atr_df = _load_atr_data(lb, atr_start_str, end_all)\n            adjusted,\
+    \ adjustment = _merge_and_scale(base_ranks, atr_df, cfg)\n\n        adjustment_rows.append(adjustment)\n\
+    \n        # Save adjusted ranks\n        adjusted.to_parquet(\n            output_dir\
+    \ / f\"daily_value_gap_amounts_{name}.parquet\", index=False\n        )\n\n  \
+    \      # Backtest params\n        params = _with_cost_params(dict(BASE_PARAMS),\
     \ args)\n\n        # Train\n        train = _run_value_gap_backtest(\n       \
     \     adjusted[\n                (adjusted[\"trade_date\"] >= args.train_start)\n\
     \                & (adjusted[\"trade_date\"] <= args.train_end)\n            ],\n\
@@ -680,7 +692,8 @@ files:
     \            \"diagnostic.yaml\",\n        ],\n    }\n    _write_review_files(\n\
     \        output_dir,\n        summary,\n        best_train,\n        best_test,\n\
     \        baseline_train,\n        baseline_test,\n        adoption_pass,\n   \
-    \ )\n    return 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+    \ )\n    _gatekeeper_after_run(output_dir)\n    return 0\n\n\nif __name__ == \"\
+    __main__\":\n    raise SystemExit(main())\n"
 written_files:
 - generated_executor/evaluate_cb_arb_volatility_position_scaling.py
 tool_code_attempts: 0
@@ -689,7 +702,7 @@ hermes_handoff:
   id: volatility_scaling_001_executor_code
   path: data/research_framework/hermes_executor_handoffs.yaml
   recipient: hermes
-status: registered_tool_code
+status: draft_tool_code
 post_registration_compile_status: READY
 post_registration_compile_reason: all guarded checks passed
 registered_executor_id: volatility_based_position_scaling_executor

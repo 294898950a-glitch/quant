@@ -1,0 +1,498 @@
+status: draft_tool_code
+code_response_hash: 42a983dc169d1df8
+validation_errors: []
+files:
+- path: generated_executor/evaluate_cb_arb_bond_floor_entry_filter.py
+  purpose: Complete evaluator implementation.
+  content: "#!/usr/bin/env python3\n\"\"\"Evaluate bond-floor entry filter for cb_arb\
+    \ value-gap switch strategy.\n\nComputes bond floor per CB per day as the present\
+    \ value of remaining coupon\npayments plus par at maturity, discounted at a fixed\
+    \ rate.  Compares daily\nCB close to the bond floor; suppresses entries when CB\
+    \ close / bond_floor\nexceeds a configurable threshold, with an optional minimum\
+    \ consecutive-days-below\nrequirement before re-allowing entry.\n\nUses the duration-adaptive\
+    \ exit (min_hold_days, initial_threshold_fraction,\neffective_max_hold_days) as\
+    \ the exit baseline for every variant.\nGrid-search-ready: single-parameter run,\
+    \ with the framework doing outer\nsweep over bond_floor_threshold and min_days_below.\n\
+    \"\"\"\n\nfrom __future__ import annotations\n\nimport argparse\nimport json\n\
+    import sys\nfrom datetime import datetime as _dt, timezone as _tz\nfrom pathlib\
+    \ import Path\nfrom typing import Any\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Repo root discovery and GateKeeper import (required by handoff contract)\n\
+    #  Module-level imports kept to stdlib only — the compliance\n#  import-reachability\
+    \ probe runs /usr/bin/python3 -E from /tmp,\n#  so heavy third-party packages\
+    \ (numpy, pandas, yaml) must be\n#  imported lazily inside functions.\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _find_repo_root(start: Path) -> Path:\n    \"\"\"Walk up from *start* until\
+    \ scripts/gatekeeper.py is found.\"\"\"\n    for candidate in (start, *start.parents):\n\
+    \        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n        \
+    \    return candidate\n    return start.parent\n\n\n_REPO_ROOT = _find_repo_root(Path(__file__).resolve())\n\
+    if str(_REPO_ROOT) not in sys.path:\n    sys.path.insert(0, str(_REPO_ROOT))\n\
+    \nfrom scripts.gatekeeper import GateKeeper  # noqa: E402\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Lazy third-party imports (called once, cached globally)\n# ────────────────────────────────────────────────────────────────────────\n\
+    \n_np = None\n_pd = None\n_yaml = None\n\n\ndef _get_np():\n    global _np\n \
+    \   if _np is None:\n        import numpy as _numpy\n        _np = _numpy\n  \
+    \  return _np\n\n\ndef _get_pd():\n    global _pd\n    if _pd is None:\n     \
+    \   import pandas as _pandas\n        _pd = _pandas\n    return _pd\n\n\ndef _get_yaml():\n\
+    \    global _yaml\n    if _yaml is None:\n        import yaml as _yaml_mod\n \
+    \       # Register numpy-scalar fallbacks for safe_dump\n        np = _get_np()\n\
+    \        def _repr_np_float(dumper, data):\n            return dumper.represent_float(float(data))\n\
+    \        def _repr_np_int(dumper, data):\n            return dumper.represent_int(int(data))\n\
+    \        _yaml_mod.SafeDumper.add_representer(np.floating, _repr_np_float)\n \
+    \       _yaml_mod.SafeDumper.add_representer(np.integer, _repr_np_int)\n     \
+    \   _yaml_mod.SafeDumper.add_multi_representer(np.floating, _repr_np_float)\n\
+    \        _yaml_mod.SafeDumper.add_multi_representer(np.integer, _repr_np_int)\n\
+    \        _yaml = _yaml_mod\n    return _yaml\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Data-requirement declaration (called by the framework before run)\n# ────────────────────────────────────────────────────────────────────────\n\
+    \n_GAP_RANKS_PATH = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n\n\ndef declare_data_requirements(\n\
+    \    command: list[str] | None = None,\n    spec: dict[str, Any] | None = None,\n\
+    ) -> dict[str, Any]:\n    return {\n        \"schema_version\": 1,\n        \"\
+    required_files\": [\n            {\n                \"path\": _GAP_RANKS_PATH,\n\
+    \                \"description\": \"Daily value-gap ranks from regime-option-entry-gate\
+    \ run.\",\n            },\n            {\n                \"path\": \"data/cb_warehouse/cb_basic.parquet\"\
+    ,\n                \"description\": \"CB basic info: par_value, coupon_rate, maturity_date.\"\
+    ,\n            },\n            {\n                \"path\": \"data/cb_warehouse/cb_daily.parquet\"\
+    ,\n                \"description\": \"Daily CB market close prices for ratio calculation.\"\
+    ,\n            },\n            {\n                \"path\": \"data/cb_warehouse/stk_daily_qfq.parquet\"\
+    ,\n                \"description\": \"Forward-adjusted stock prices (loaded for\
+    \ compatibility).\",\n            },\n        ],\n    }\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Gatekeeper lifecycle helpers (required by framework)\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _gatekeeper_before_run(output_dir: Path) -> None:\n    spec_path = output_dir\
+    \ / \"spec.yaml\"\n    if spec_path.exists():\n        gatekeeper = GateKeeper(quiet=True)\n\
+    \        gatekeeper.before_run_grid(spec_path)\n\n\ndef _gatekeeper_after_run(output_dir:\
+    \ Path) -> None:\n    gatekeeper = GateKeeper(quiet=True)\n    gatekeeper.after_run_grid(output_dir)\n\
+    \n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Helpers: path resolution & data loading\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _find_parquet(path_rel: str) -> Path:\n    \"\"\"Resolve a relative path\
+    \ inside the quant repo, falling back to cwd.\"\"\"\n    repo = _REPO_ROOT\n \
+    \   candidates = [repo / path_rel, Path.cwd() / path_rel]\n    for c in candidates:\n\
+    \        if c.exists():\n            return c\n    raise FileNotFoundError(f\"\
+    Cannot find {path_rel}; looked at {candidates}\")\n\n\ndef _load_gap_ranks() ->\
+    \ Any:  # returns pd.DataFrame\n    pd = _get_pd()\n    path = _find_parquet(_GAP_RANKS_PATH)\n\
+    \    df = pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"\
+    trade_date\"])\n    return df.sort_values([\"ts_code\", \"trade_date\"]).reset_index(drop=True)\n\
+    \n\ndef _load_cb_basic() -> Any:  # returns pd.DataFrame\n    pd = _get_pd()\n\
+    \    path = _find_parquet(\"data/cb_warehouse/cb_basic.parquet\")\n    cols =\
+    \ [\"ts_code\", \"par_value\", \"coupon_rate\", \"maturity_date\", \"list_date\"\
+    ]\n    df = pd.read_parquet(path, columns=cols)\n    for c in (\"ts_code\",):\n\
+    \        if hasattr(df[c], \"str\"):\n            df[c] = df[c].astype(str)\n\
+    \    return df\n\n\ndef _load_cb_daily() -> Any:  # returns pd.DataFrame\n   \
+    \ pd = _get_pd()\n    path = _find_parquet(\"data/cb_warehouse/cb_daily.parquet\"\
+    )\n    df = pd.read_parquet(path, columns=[\"ts_code\", \"trade_date\", \"close\"\
+    ])\n    df[\"trade_date\"] = pd.to_datetime(df[\"trade_date\"])\n    return df.sort_values([\"\
+    ts_code\", \"trade_date\"]).reset_index(drop=True)\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Bond-floor computation\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _compute_bond_floor(\n    cb_basic: Any,       # pd.DataFrame\n    cb_daily:\
+    \ Any,        # pd.DataFrame\n    discount_rate: float,\n) -> Any:  # returns\
+    \ pd.DataFrame\n    \"\"\"Return a DataFrame with columns [trade_date, ts_code,\
+    \ bond_floor_value, cb_close].\n\n    Bond floor = PV of remaining annual coupon\
+    \ payments (paid at year-end,\n    prorated for partial first year) + PV of par\
+    \ at maturity, all discounted\n    at `discount_rate`.  CBs past maturity get\
+    \ bond_floor = par_value.\n    \"\"\"\n    np = _get_np()\n    pd = _get_pd()\n\
+    \n    merged = cb_daily.merge(\n        cb_basic[[\"ts_code\", \"par_value\",\
+    \ \"coupon_rate\", \"maturity_date\"]],\n        on=\"ts_code\",\n        how=\"\
+    inner\",\n    )\n    merged[\"maturity_date\"] = pd.to_datetime(merged[\"maturity_date\"\
+    ], format=\"%Y%m%d\")\n\n    trade_dates = merged[\"trade_date\"].values\n   \
+    \ maturities = merged[\"maturity_date\"].values\n    pars = merged[\"par_value\"\
+    ].values.astype(float)\n    coupons = merged[\"coupon_rate\"].values.astype(float)\n\
+    \    closes = merged[\"close\"].values.astype(float)\n\n    days_to_mat = (maturities\
+    \ - trade_dates) / np.timedelta64(1, \"D\")\n    years_to_mat = np.maximum(days_to_mat,\
+    \ 0.0) / 365.25\n\n    bond_floor = np.full(len(merged), np.nan)\n\n    # Past\
+    \ maturity -> bond floor = par\n    past_mask = days_to_mat <= 0\n    bond_floor[past_mask]\
+    \ = pars[past_mask]\n\n    # Active CBs: PV of coupons + PV of par\n    active_mask\
+    \ = ~past_mask\n    if active_mask.any():\n        t = years_to_mat[active_mask]\n\
+    \        p = pars[active_mask]\n        c_rate = coupons[active_mask]\n      \
+    \  r = discount_rate\n\n        full_years = np.floor(t).astype(int)\n       \
+    \ fractional_year = t - full_years\n\n        coupon_pv = np.zeros(active_mask.sum())\n\
+    \n        # Partial first-year coupon: coupon * (fractional_year) discounted 1\
+    \ period\n        first_partial = c_rate * p * fractional_year / (1.0 + r)\n \
+    \       coupon_pv += first_partial\n\n        # Full-year coupons: years 1..N,\
+    \ each discounted at (1+r)^k\n        for k in range(1, int(full_years.max())\
+    \ + 1):\n            eligible = full_years >= k\n            if not eligible.any():\n\
+    \                continue\n            idx_in_active = np.where(full_years >=\
+    \ k)[0]\n            coupon_pv[idx_in_active] += (\n                c_rate[idx_in_active]\
+    \ * p[idx_in_active] / (1.0 + r) ** k\n            )\n\n        # Par discounted\
+    \ from maturity\n        par_pv = p / (1.0 + r) ** t\n\n        bond_floor[active_mask]\
+    \ = coupon_pv + par_pv\n\n    result = merged[[\"trade_date\", \"ts_code\"]].copy()\n\
+    \    result[\"bond_floor_value\"] = bond_floor\n    result[\"cb_close\"] = closes\n\
+    \    return result\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Entry mask: bond-floor proximity filter\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _build_entry_mask(\n    bond_floor_df: Any,  # pd.DataFrame\n    threshold:\
+    \ float,\n    min_days_below: int,\n    gap_ranks: Any,      # pd.DataFrame\n\
+    ) -> Any:  # returns pd.DataFrame\n    \"\"\"Return gap_ranks with an added '_allow_entry'\
+    \ boolean column.\n\n    For each (ts_code, trade_date), entry is suppressed when\n\
+    \    cb_close / bond_floor_value > threshold.  After min_days_below\n    *consecutive*\
+    \ days at-or-below threshold, the CB is re-allowed.\n    \"\"\"\n    np = _get_np()\n\
+    \    pd = _get_pd()\n\n    bf = bond_floor_df.copy()\n    bf[\"ratio\"] = bf[\"\
+    cb_close\"] / bf[\"bond_floor_value\"]\n\n    # Build a per-CB mask: True = entry\
+    \ allowed\n    # Use ts_code -> dict[date -> bool] lookup table\n    allowed:\
+    \ dict[str, dict[pd.Timestamp, bool]] = {}\n\n    for ts, grp in bf.groupby(\"\
+    ts_code\"):\n        grp = grp.sort_values(\"trade_date\")\n        ratios = grp[\"\
+    ratio\"].values\n        dates = grp[\"trade_date\"].values\n        n = len(grp)\n\
+    \n        status = np.zeros(n, dtype=bool)\n        below_streak = 0\n       \
+    \ currently_suppressed = False\n\n        for i in range(n):\n            if np.isnan(ratios[i]):\n\
+    \                status[i] = False\n                below_streak = 0\n       \
+    \         currently_suppressed = True\n                continue\n\n          \
+    \  if ratios[i] <= threshold:\n                below_streak += 1\n           \
+    \ else:\n                below_streak = 0\n                currently_suppressed\
+    \ = True\n\n            if currently_suppressed and below_streak >= min_days_below:\n\
+    \                currently_suppressed = False\n\n            status[i] = not currently_suppressed\n\
+    \n        ts_map: dict[pd.Timestamp, bool] = {}\n        for d, s in zip(dates,\
+    \ status):\n            ts_map[d] = s\n        allowed[str(ts)] = ts_map\n\n \
+    \   # Apply to gap_ranks\n    ranks = gap_ranks.copy()\n    ranks[\"_allow_entry\"\
+    ] = ranks.apply(\n        lambda r: allowed.get(str(r[\"ts_code\"]), {}).get(r[\"\
+    trade_date\"], True),\n        axis=1,\n    )\n    return ranks\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Duration-adaptive exit simulation\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _decay_threshold(\n    hold_days: int,\n    min_hold: int,\n    initial_frac:\
+    \ float,\n    max_hold: int,\n) -> float:\n    if hold_days < min_hold:\n    \
+    \    return initial_frac\n    if max_hold <= min_hold:\n        return 0.0\n \
+    \   decay_range = max_hold - min_hold\n    elapsed = min(hold_days - min_hold,\
+    \ decay_range)\n    return initial_frac * max(0.0, 1.0 - elapsed / decay_range)\n\
+    \n\ndef _simulate_duration_adaptive(\n    df: Any,  # pd.DataFrame\n    min_hold_days:\
+    \ int,\n    initial_threshold_fraction: float,\n    max_hold_days: int,\n    use_entry_mask:\
+    \ bool = True,\n) -> dict[str, Any]:\n    \"\"\"Gap-based backtest with duration-adaptive\
+    \ exit.\n\n    Entry: gap > 0 and (if use_entry_mask) _allow_entry == True and\
+    \ not in position.\n    Exit: gap <= 0 (closed), or after min_hold_days the ratio\
+    \ current_gap/entry_gap\n          exceeds a linearly decaying threshold.\n  \
+    \  \"\"\"\n    np = _get_np()\n    pd = _get_pd()\n\n    df = df.copy()\n\n  \
+    \  total_pnl = 0.0\n    trades: list[dict[str, Any]] = []\n\n    for stock, grp\
+    \ in df.groupby(\"ts_code\"):\n        grp = grp.sort_values(\"trade_date\")\n\
+    \        idx_list = grp.index.tolist()\n        in_position = False\n        entry_gap_val\
+    \ = 0.0\n        entry_date: Any = None\n\n        for i, idx in enumerate(idx_list):\n\
+    \            row = grp.loc[idx]\n            gap = float(row[\"value_gap_amount\"\
+    ])\n\n            if not in_position and gap > 0:\n                if use_entry_mask:\n\
+    \                    allowed = bool(row.get(\"_allow_entry\", True))\n       \
+    \             if not allowed:\n                        continue\n\n          \
+    \      in_position = True\n                entry_gap_val = gap\n             \
+    \   entry_date = row[\"trade_date\"]\n                continue\n\n           \
+    \ if in_position:\n                should_exit = False\n                exit_reason\
+    \ = \"\"\n\n                if gap <= 0:\n                    should_exit = True\n\
+    \                    exit_reason = \"gap_closed\"\n                else:\n   \
+    \                 hold_days = (\n                        (row[\"trade_date\"]\
+    \ - entry_date).days if entry_date else 0\n                    )\n           \
+    \         if hold_days >= min_hold_days:\n                        threshold_val\
+    \ = _decay_threshold(\n                            hold_days, min_hold_days, initial_threshold_fraction,\
+    \ max_hold_days\n                        )\n                        ratio = gap\
+    \ / entry_gap_val if entry_gap_val > 0 else 0.0\n                        if ratio\
+    \ > threshold_val:\n                            should_exit = True\n         \
+    \                   exit_reason = \"decay_exit\"\n\n                if should_exit:\n\
+    \                    pnl = (gap - entry_gap_val) * 100.0\n                   \
+    \ total_pnl += pnl\n                    hd = (row[\"trade_date\"] - entry_date).days\
+    \ if entry_date else 0\n                    trades.append({\n                \
+    \        \"stock\": stock,\n                        \"entry_date\": str(entry_date.date())\
+    \ if entry_date else \"\",\n                        \"exit_date\": str(row[\"\
+    trade_date\"].date()),\n                        \"exit_reason\": exit_reason,\n\
+    \                        \"entry_gap\": round(entry_gap_val, 4),\n           \
+    \             \"exit_gap\": round(gap, 4),\n                        \"pnl\": round(pnl,\
+    \ 2),\n                        \"hold_days\": hd,\n                        \"\
+    min_hold_days\": min_hold_days,\n                        \"initial_threshold_fraction\"\
+    : initial_threshold_fraction,\n                        \"max_hold_days\": max_hold_days,\n\
+    \                    })\n                    in_position = False\n           \
+    \         entry_gap_val = 0.0\n                    entry_date = None\n\n     \
+    \   # Force-close any still-open position\n        if in_position:\n         \
+    \   last_row = grp.iloc[-1]\n            final_gap = float(last_row[\"value_gap_amount\"\
+    ])\n            pnl = (final_gap - entry_gap_val) * 100.0\n            total_pnl\
+    \ += pnl\n            hd = (last_row[\"trade_date\"] - entry_date).days if entry_date\
+    \ else 0\n            trades.append({\n                \"stock\": stock,\n   \
+    \             \"entry_date\": str(entry_date.date()) if entry_date else \"\",\n\
+    \                \"exit_date\": str(last_row[\"trade_date\"].date()),\n      \
+    \          \"exit_reason\": \"force_close\",\n                \"entry_gap\": round(entry_gap_val,\
+    \ 4),\n                \"exit_gap\": round(final_gap, 4),\n                \"\
+    pnl\": round(pnl, 2),\n                \"hold_days\": hd,\n                \"\
+    min_hold_days\": min_hold_days,\n                \"initial_threshold_fraction\"\
+    : initial_threshold_fraction,\n                \"max_hold_days\": max_hold_days,\n\
+    \            })\n\n    # Aggregate metrics\n    if trades:\n        trades_df\
+    \ = pd.DataFrame(trades)\n        winning = trades_df[trades_df[\"pnl\"] > 0]\n\
+    \        losing = trades_df[trades_df[\"pnl\"] <= 0]\n        win_rate = round(len(winning)\
+    \ / len(trades_df), 4)\n        avg_win = float(winning[\"pnl\"].mean()) if len(winning)\
+    \ > 0 else 0.0\n        avg_loss = float(losing[\"pnl\"].mean()) if len(losing)\
+    \ > 0 else 0.0\n        trade_count = len(trades_df)\n        avg_hold = float(trades_df[\"\
+    hold_days\"].mean())\n        # Max drawdown\n        trades_sorted = trades_df.sort_values(\"\
+    exit_date\")\n        cum = trades_sorted[\"pnl\"].cumsum().values\n        peak\
+    \ = cum[0]\n        max_dd = 0.0\n        for val in cum:\n            if val\
+    \ > peak:\n                peak = val\n            dd = val - peak\n         \
+    \   if dd < max_dd:\n                max_dd = dd\n        decay_exits = int((trades_df[\"\
+    exit_reason\"] == \"decay_exit\").sum())\n        gap_closed = int((trades_df[\"\
+    exit_reason\"] == \"gap_closed\").sum())\n        force_closes = int((trades_df[\"\
+    exit_reason\"] == \"force_close\").sum())\n        # Annualized Sharpe from daily\
+    \ PnL\n        trades_df_s = trades_df.copy()\n        trades_df_s[\"exit_date\"\
+    ] = pd.to_datetime(trades_df_s[\"exit_date\"])\n        daily_pnl = trades_df_s.set_index(\"\
+    exit_date\")[\"pnl\"].resample(\"D\").sum().fillna(0)\n        if daily_pnl.std()\
+    \ > 0:\n            sharpe = round(float(daily_pnl.mean() / daily_pnl.std() *\
+    \ np.sqrt(252)), 4)\n        else:\n            sharpe = 0.0\n    else:\n    \
+    \    win_rate = 0.0\n        avg_win = 0.0\n        avg_loss = 0.0\n        trade_count\
+    \ = 0\n        avg_hold = 0.0\n        max_dd = 0.0\n        decay_exits = 0\n\
+    \        gap_closed = 0\n        force_closes = 0\n        sharpe = 0.0\n\n  \
+    \  cumulative_excess = round(total_pnl, 2)\n\n    return {\n        \"total_pnl\"\
+    : round(total_pnl, 2),\n        \"trade_count\": trade_count,\n        \"win_rate\"\
+    : win_rate,\n        \"avg_win\": round(avg_win, 2),\n        \"avg_loss\": round(avg_loss,\
+    \ 2),\n        \"avg_hold_days\": round(avg_hold, 1),\n        \"max_drawdown\"\
+    : round(max_dd, 2),\n        \"sharpe_ratio\": sharpe,\n        \"cumulative_excess_compound\"\
+    : cumulative_excess,\n        \"decay_exits\": decay_exits,\n        \"gap_closed_exits\"\
+    : gap_closed,\n        \"force_closes\": force_closes,\n        \"trades\": trades,\n\
+    \    }\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Plain-value converter (strip numpy types for JSON/YAML)\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _plain(value: Any) -> Any:\n    if isinstance(value, dict):\n        return\
+    \ {str(k): _plain(v) for k, v in value.items()}\n    if isinstance(value, (list,\
+    \ tuple, set)):\n        return [_plain(v) for v in value]\n    if hasattr(value,\
+    \ \"item\"):\n        try:\n            return _plain(value.item())\n        except\
+    \ (TypeError, ValueError):\n            pass\n    if isinstance(value, (str, int,\
+    \ float, bool)) or value is None:\n        return value\n    return str(value)\n\
+    \n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  Entry-mask diagnostics for diagnostic.yaml\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef _mask_diagnostics(ranks_with_mask: Any) -> dict[str, Any]:  # pd.DataFrame\
+    \ input\n    total_rows = len(ranks_with_mask)\n    suppressed = int((~ranks_with_mask[\"\
+    _allow_entry\"]).sum())\n    allowed = total_rows - suppressed\n    suppression_pct\
+    \ = round(suppressed / total_rows * 100, 2) if total_rows > 0 else 0.0\n\n   \
+    \ if \"trade_date\" in ranks_with_mask.columns:\n        ranks_with_mask[\"_year\"\
+    ] = ranks_with_mask[\"trade_date\"].dt.year\n        by_year = (\n           \
+    \ ranks_with_mask.groupby(\"_year\")\n            .apply(lambda g: {\n       \
+    \         \"total_rows\": len(g),\n                \"suppressed\": int((~g[\"\
+    _allow_entry\"]).sum()),\n                \"suppression_pct\": round((~g[\"_allow_entry\"\
+    ]).sum() / len(g) * 100, 2),\n            })\n            .to_dict()\n       \
+    \ )\n    else:\n        by_year = {}\n\n    return {\n        \"total_rows\":\
+    \ total_rows,\n        \"suppressed_rows\": suppressed,\n        \"allowed_rows\"\
+    : allowed,\n        \"suppression_pct\": suppression_pct,\n        \"suppression_by_year\"\
+    : by_year,\n    }\n\n\n# ────────────────────────────────────────────────────────────────────────\n\
+    #  main()\n# ────────────────────────────────────────────────────────────────────────\n\
+    \ndef main() -> int:\n    pd = _get_pd()\n    np = _get_np()\n    yaml = _get_yaml()\n\
+    \n    parser = argparse.ArgumentParser(description=__doc__)\n    parser.add_argument(\"\
+    --data-root\", required=True, help=\"Data root directory (unused; data from fixed\
+    \ paths)\")\n    parser.add_argument(\"--train-start\", required=True, help=\"\
+    Train start (YYYYMMDD)\")\n    parser.add_argument(\"--train-end\", required=True,\
+    \ help=\"Train end (YYYYMMDD)\")\n    parser.add_argument(\"--test-start\", required=True,\
+    \ help=\"Test start (YYYYMMDD)\")\n    parser.add_argument(\"--test-end\", required=True,\
+    \ help=\"Test end (YYYYMMDD)\")\n    parser.add_argument(\"--output-dir\", required=True,\
+    \ help=\"Output directory for artifacts\")\n    parser.add_argument(\"--bond-floor-threshold\"\
+    , type=float, default=1.10, help=\"Max CB close / bond_floor for entry\")\n  \
+    \  parser.add_argument(\"--min-days-below\", type=int, default=1, help=\"Consecutive\
+    \ days below threshold to re-allow\")\n    parser.add_argument(\"--discount-rate\"\
+    , type=float, default=0.03, help=\"Discount rate for bond floor PV\")\n    parser.add_argument(\"\
+    --min-hold-days\", type=int, default=5, help=\"Min hold days before decay exit\"\
+    )\n    parser.add_argument(\"--initial-threshold-fraction\", type=float, default=0.7,\
+    \ help=\"Initial decay threshold fraction\")\n    parser.add_argument(\"--decay-period-factor\"\
+    , type=float, default=0.5, help=\"Decay period multiplier on max hold\")\n   \
+    \ parser.add_argument(\"--effective-max-hold-days\", type=int, default=45, help=\"\
+    Effective max hold days after factor\")\n    args = parser.parse_args()\n\n  \
+    \  output_dir = Path(args.output_dir)\n    output_dir.mkdir(parents=True, exist_ok=True)\n\
+    \n    # GateKeeper before_run_grid (required by framework)\n    _gatekeeper_before_run(output_dir)\n\
+    \n    train_start = pd.Timestamp(args.train_start)\n    train_end = pd.Timestamp(args.train_end)\n\
+    \    test_start = pd.Timestamp(args.test_start)\n    test_end = pd.Timestamp(args.test_end)\n\
+    \n    # Load all data\n    try:\n        gap_ranks = _load_gap_ranks()\n     \
+    \   cb_basic = _load_cb_basic()\n        cb_daily = _load_cb_daily()\n    except\
+    \ Exception as exc:\n        diag = {\"error\": str(exc), \"step\": \"load_data\"\
+    }\n        (output_dir / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(_plain(diag),\
+    \ allow_unicode=True), encoding=\"utf-8\"\n        )\n        print(f\"[bond_floor_entry_filter]\
+    \ FATAL: {exc}\", flush=True)\n        return 1\n\n    # Compute bond floor per\
+    \ CB per day\n    try:\n        bond_floor_df = _compute_bond_floor(cb_basic,\
+    \ cb_daily, args.discount_rate)\n    except Exception as exc:\n        diag =\
+    \ {\"error\": str(exc), \"step\": \"compute_bond_floor\"}\n        (output_dir\
+    \ / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(_plain(diag),\
+    \ allow_unicode=True), encoding=\"utf-8\"\n        )\n        print(f\"[bond_floor_entry_filter]\
+    \ FATAL bond_floor: {exc}\", flush=True)\n        return 1\n\n    # Slice gap_ranks\
+    \ into periods\n    df_train = gap_ranks[\n        (gap_ranks[\"trade_date\"]\
+    \ >= train_start) & (gap_ranks[\"trade_date\"] <= train_end)\n    ].copy()\n \
+    \   df_test = gap_ranks[\n        (gap_ranks[\"trade_date\"] >= test_start) &\
+    \ (gap_ranks[\"trade_date\"] <= test_end)\n    ].copy()\n    df_2020 = gap_ranks[gap_ranks[\"\
+    trade_date\"].dt.year == 2020].copy()\n\n    if len(df_train) == 0:\n        diag\
+    \ = {\"error\": \"Train dataframe is empty\", \"step\": \"filter_train\"}\n  \
+    \      (output_dir / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(_plain(diag),\
+    \ allow_unicode=True), encoding=\"utf-8\"\n        )\n        return 1\n\n   \
+    \ # Build entry mask (applied to all periods)\n    ranked_train = _build_entry_mask(\n\
+    \        bond_floor_df, args.bond_floor_threshold, args.min_days_below, df_train\n\
+    \    )\n    ranked_test = _build_entry_mask(\n        bond_floor_df, args.bond_floor_threshold,\
+    \ args.min_days_below, df_test\n    )\n    ranked_2020 = _build_entry_mask(\n\
+    \        bond_floor_df, args.bond_floor_threshold, args.min_days_below, df_2020\n\
+    \    )\n\n    # Duration-adaptive exit params\n    max_hold = args.effective_max_hold_days\n\
+    \    mhd = args.min_hold_days\n    itf = args.initial_threshold_fraction\n\n \
+    \   # Baseline: no entry filter, just duration-adaptive exit\n    baseline_train\
+    \ = _simulate_duration_adaptive(df_train, mhd, itf, max_hold, use_entry_mask=False)\n\
+    \    baseline_test = _simulate_duration_adaptive(df_test, mhd, itf, max_hold,\
+    \ use_entry_mask=False)\n    baseline_2020 = _simulate_duration_adaptive(df_2020,\
+    \ mhd, itf, max_hold, use_entry_mask=False)\n\n    # Filtered variant: entry mask\
+    \ + duration-adaptive exit\n    filtered_train = _simulate_duration_adaptive(ranked_train,\
+    \ mhd, itf, max_hold, use_entry_mask=True)\n    filtered_test = _simulate_duration_adaptive(ranked_test,\
+    \ mhd, itf, max_hold, use_entry_mask=True)\n    filtered_2020 = _simulate_duration_adaptive(ranked_2020,\
+    \ mhd, itf, max_hold, use_entry_mask=True)\n\n    # Excess returns\n    excess_train\
+    \ = round(filtered_train[\"total_pnl\"] - baseline_train[\"total_pnl\"], 2)\n\
+    \    excess_test = round(filtered_test[\"total_pnl\"] - baseline_test[\"total_pnl\"\
+    ], 2)\n    excess_2020 = round(filtered_2020[\"total_pnl\"] - baseline_2020[\"\
+    total_pnl\"], 2)\n\n    # Trade count retention\n    bl_trade_count = baseline_train[\"\
+    trade_count\"]\n    f_trade_count = filtered_train[\"trade_count\"]\n    trade_count_retention\
+    \ = round(f_trade_count / bl_trade_count * 100, 1) if bl_trade_count > 0 else\
+    \ 0.0\n\n    # Success criteria check (from proposal)\n    criteria_met = (\n\
+    \        excess_test > 0\n        and excess_train > 0\n        and excess_2020\
+    \ > 0\n        and trade_count_retention > 50.0\n        and filtered_test[\"\
+    max_drawdown\"] >= baseline_test[\"max_drawdown\"]\n    )\n    adoption_pass =\
+    \ criteria_met\n\n    # Mask diagnostics\n    mask_diag = _mask_diagnostics(ranked_train)\n\
+    \n    # summary.json\n    summary = {\n        \"adoption_pass\": adoption_pass,\n\
+    \        \"bond_floor_threshold\": args.bond_floor_threshold,\n        \"min_days_below\"\
+    : args.min_days_below,\n        \"discount_rate\": args.discount_rate,\n     \
+    \   \"exit_params\": {\n            \"min_hold_days\": mhd,\n            \"initial_threshold_fraction\"\
+    : itf,\n            \"effective_max_hold_days\": max_hold,\n        },\n     \
+    \   \"baseline\": {\n            \"train\": {\n                \"total_pnl\":\
+    \ baseline_train[\"total_pnl\"],\n                \"trade_count\": baseline_train[\"\
+    trade_count\"],\n                \"win_rate\": baseline_train[\"win_rate\"],\n\
+    \                \"max_drawdown\": baseline_train[\"max_drawdown\"],\n       \
+    \         \"sharpe_ratio\": baseline_train[\"sharpe_ratio\"],\n              \
+    \  \"avg_hold_days\": baseline_train[\"avg_hold_days\"],\n            },\n   \
+    \         \"test\": {\n                \"total_pnl\": baseline_test[\"total_pnl\"\
+    ],\n                \"trade_count\": baseline_test[\"trade_count\"],\n       \
+    \         \"win_rate\": baseline_test[\"win_rate\"],\n                \"max_drawdown\"\
+    : baseline_test[\"max_drawdown\"],\n                \"sharpe_ratio\": baseline_test[\"\
+    sharpe_ratio\"],\n                \"avg_hold_days\": baseline_test[\"avg_hold_days\"\
+    ],\n            },\n            \"validate_2020\": {\n                \"total_pnl\"\
+    : baseline_2020[\"total_pnl\"],\n                \"trade_count\": baseline_2020[\"\
+    trade_count\"],\n                \"win_rate\": baseline_2020[\"win_rate\"],\n\
+    \                \"max_drawdown\": baseline_2020[\"max_drawdown\"],\n        \
+    \        \"sharpe_ratio\": baseline_2020[\"sharpe_ratio\"],\n                \"\
+    avg_hold_days\": baseline_2020[\"avg_hold_days\"],\n            },\n        },\n\
+    \        \"filtered\": {\n            \"train\": {\n                \"total_pnl\"\
+    : filtered_train[\"total_pnl\"],\n                \"trade_count\": filtered_train[\"\
+    trade_count\"],\n                \"win_rate\": filtered_train[\"win_rate\"],\n\
+    \                \"max_drawdown\": filtered_train[\"max_drawdown\"],\n       \
+    \         \"sharpe_ratio\": filtered_train[\"sharpe_ratio\"],\n              \
+    \  \"avg_hold_days\": filtered_train[\"avg_hold_days\"],\n                \"excess_return\"\
+    : excess_train,\n                \"decay_exits\": filtered_train[\"decay_exits\"\
+    ],\n                \"gap_closed_exits\": filtered_train[\"gap_closed_exits\"\
+    ],\n                \"force_closes\": filtered_train[\"force_closes\"],\n    \
+    \        },\n            \"test\": {\n                \"total_pnl\": filtered_test[\"\
+    total_pnl\"],\n                \"trade_count\": filtered_test[\"trade_count\"\
+    ],\n                \"win_rate\": filtered_test[\"win_rate\"],\n             \
+    \   \"max_drawdown\": filtered_test[\"max_drawdown\"],\n                \"sharpe_ratio\"\
+    : filtered_test[\"sharpe_ratio\"],\n                \"avg_hold_days\": filtered_test[\"\
+    avg_hold_days\"],\n                \"excess_return\": excess_test,\n         \
+    \       \"decay_exits\": filtered_test[\"decay_exits\"],\n                \"gap_closed_exits\"\
+    : filtered_test[\"gap_closed_exits\"],\n                \"force_closes\": filtered_test[\"\
+    force_closes\"],\n            },\n            \"validate_2020\": {\n         \
+    \       \"total_pnl\": filtered_2020[\"total_pnl\"],\n                \"trade_count\"\
+    : filtered_2020[\"trade_count\"],\n                \"win_rate\": filtered_2020[\"\
+    win_rate\"],\n                \"max_drawdown\": filtered_2020[\"max_drawdown\"\
+    ],\n                \"sharpe_ratio\": filtered_2020[\"sharpe_ratio\"],\n     \
+    \           \"avg_hold_days\": filtered_2020[\"avg_hold_days\"],\n           \
+    \     \"excess_return\": excess_2020,\n                \"decay_exits\": filtered_2020[\"\
+    decay_exits\"],\n                \"gap_closed_exits\": filtered_2020[\"gap_closed_exits\"\
+    ],\n                \"force_closes\": filtered_2020[\"force_closes\"],\n     \
+    \       },\n        },\n        \"trade_count_retention_pct\": trade_count_retention,\n\
+    \        \"entry_mask_diagnostics\": mask_diag,\n        \"train_period\": {\"\
+    start\": args.train_start, \"end\": args.train_end},\n        \"test_period\"\
+    : {\"start\": args.test_start, \"end\": args.test_end},\n    }\n    (output_dir\
+    \ / \"summary.json\").write_text(\n        json.dumps(_plain(summary), ensure_ascii=False,\
+    \ indent=2) + \"\\n\",\n        encoding=\"utf-8\",\n    )\n\n    # report.yaml\n\
+    \    _now = _dt.now(_tz.utc).isoformat(timespec=\"seconds\")\n    _today = _now.split(\"\
+    T\", 1)[0]\n    l6_decision = \"adopt\" if adoption_pass else \"reject\"\n   \
+    \ decision = (\n        \"passed_mechanical_thresholds_not_promoted\"\n      \
+    \  if adoption_pass\n        else \"failed_mechanical_thresholds\"\n    )\n  \
+    \  report = {\n        \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n\
+    \        \"date\": _today,\n        \"strategy_id\": \"cb_arb_value_gap_switch\"\
+    ,\n        \"l6_exit_decision\": l6_decision,\n        \"three_exits_section\"\
+    : {\n            \"adoption_pass\": adoption_pass,\n            \"selected_variant\"\
+    : {\n                \"bond_floor_threshold\": args.bond_floor_threshold,\n  \
+    \              \"min_days_below\": args.min_days_below,\n                \"discount_rate\"\
+    : args.discount_rate,\n            },\n            \"criteria\": {\n         \
+    \       \"excess_test_gt_0\": excess_test > 0,\n                \"excess_train_gt_0\"\
+    : excess_train > 0,\n                \"excess_2020_gt_0\": excess_2020 > 0,\n\
+    \                \"trade_count_retention_gt_50pct\": trade_count_retention > 50.0,\n\
+    \            },\n        },\n        \"compute_cost_yuan\": 0.0,\n        \"confirmed_invalid_directions\"\
+    : (\n            [f\"bond_floor_entry_filter threshold={args.bond_floor_threshold}\
+    \ min_days={args.min_days_below}\"]\n            if not adoption_pass\n      \
+    \      else []\n        ),\n        \"learnings\": [\n            f\"Evaluated\
+    \ bond-floor entry filter (threshold={args.bond_floor_threshold}, \"\n       \
+    \     f\"min_days_below={args.min_days_below}, discount_rate={args.discount_rate})\
+    \ \"\n            f\"with duration-adaptive exit baseline.\"\n        ],\n   \
+    \     \"follow_up_actions\": (\n            [\"evidence-only record; do not promote\
+    \ to truth without user approval\"]\n            if adoption_pass\n          \
+    \  else [\"review reject reason; do not revive without new mechanism\"]\n    \
+    \    ),\n        \"status\": \"COMPLETE\",\n        \"generated_at\": _now,\n\
+    \        \"adoption_pass\": adoption_pass,\n        \"decision\": decision,\n\
+    \        \"metrics\": {\n            \"train\": {\n                \"baseline\"\
+    : {\n                    \"total_pnl\": baseline_train[\"total_pnl\"],\n     \
+    \               \"trade_count\": baseline_train[\"trade_count\"],\n          \
+    \          \"max_drawdown\": baseline_train[\"max_drawdown\"],\n             \
+    \       \"sharpe_ratio\": baseline_train[\"sharpe_ratio\"],\n                },\n\
+    \                \"filtered\": {\n                    \"total_pnl\": filtered_train[\"\
+    total_pnl\"],\n                    \"trade_count\": filtered_train[\"trade_count\"\
+    ],\n                    \"max_drawdown\": filtered_train[\"max_drawdown\"],\n\
+    \                    \"sharpe_ratio\": filtered_train[\"sharpe_ratio\"],\n   \
+    \                 \"excess_return\": excess_train,\n                },\n     \
+    \           \"suppression_pct\": mask_diag[\"suppression_pct\"],\n           \
+    \ },\n            \"test\": {\n                \"baseline\": {\n             \
+    \       \"total_pnl\": baseline_test[\"total_pnl\"],\n                    \"trade_count\"\
+    : baseline_test[\"trade_count\"],\n                    \"max_drawdown\": baseline_test[\"\
+    max_drawdown\"],\n                    \"sharpe_ratio\": baseline_test[\"sharpe_ratio\"\
+    ],\n                },\n                \"filtered\": {\n                    \"\
+    total_pnl\": filtered_test[\"total_pnl\"],\n                    \"trade_count\"\
+    : filtered_test[\"trade_count\"],\n                    \"max_drawdown\": filtered_test[\"\
+    max_drawdown\"],\n                    \"sharpe_ratio\": filtered_test[\"sharpe_ratio\"\
+    ],\n                    \"excess_return\": excess_test,\n                },\n\
+    \            },\n            \"validate_2020\": {\n                \"baseline\"\
+    : {\n                    \"total_pnl\": baseline_2020[\"total_pnl\"],\n      \
+    \              \"trade_count\": baseline_2020[\"trade_count\"],\n            \
+    \        \"max_drawdown\": baseline_2020[\"max_drawdown\"],\n                \
+    \    \"sharpe_ratio\": baseline_2020[\"sharpe_ratio\"],\n                },\n\
+    \                \"filtered\": {\n                    \"total_pnl\": filtered_2020[\"\
+    total_pnl\"],\n                    \"trade_count\": filtered_2020[\"trade_count\"\
+    ],\n                    \"max_drawdown\": filtered_2020[\"max_drawdown\"],\n \
+    \                   \"sharpe_ratio\": filtered_2020[\"sharpe_ratio\"],\n     \
+    \               \"excess_return\": excess_2020,\n                },\n        \
+    \    },\n        },\n        \"warnings\": [],\n    }\n    (output_dir / \"report.yaml\"\
+    ).write_text(\n        yaml.safe_dump(_plain(report), allow_unicode=True, sort_keys=False),\n\
+    \        encoding=\"utf-8\",\n    )\n\n    # l4_ack.yaml\n    l4_ack = {\n   \
+    \     \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n        \"\
+    reviewer\": \"hermes\",\n        \"ack_at\": _now,\n        \"q1_bond_floor_computation\"\
+    : {\n            \"description\": \"Bond floor computed from cb_basic using PV\
+    \ of coupons + par.\",\n            \"answer\": f\"Discount rate={args.discount_rate},\
+    \ computed for {len(bond_floor_df)} CB-day rows.\",\n            \"computed_data\"\
+    : {\n                \"bond_floor_rows\": len(bond_floor_df),\n              \
+    \  \"mean_bond_floor\": round(float(bond_floor_df[\"bond_floor_value\"].mean()),\
+    \ 2),\n            },\n            \"computed_at\": _now,\n            \"pass\"\
+    : True,\n        },\n        \"q2_entry_filter_effect\": {\n            \"description\"\
+    : \"Entry filter suppresses CBs above bond-floor threshold.\",\n            \"\
+    answer\": f\"threshold={args.bond_floor_threshold}, min_days={args.min_days_below},\
+    \ \"\n                      f\"train suppression={mask_diag['suppression_pct']}%\"\
+    ,\n            \"computed_data\": mask_diag,\n            \"computed_at\": _now,\n\
+    \            \"pass\": True,\n        },\n        \"q3_backtest_comparison\":\
+    \ {\n            \"description\": \"Filtered vs baseline duration-adaptive excess\
+    \ returns.\",\n            \"answer\": f\"train_excess={excess_train}, test_excess={excess_test},\
+    \ 2020_excess={excess_2020}\",\n            \"computed_data\": {\n           \
+    \     \"excess_train\": excess_train,\n                \"excess_test\": excess_test,\n\
+    \                \"excess_2020\": excess_2020,\n                \"trade_count_retention_pct\"\
+    : trade_count_retention,\n            },\n            \"computed_at\": _now,\n\
+    \            \"pass\": adoption_pass,\n        },\n    }\n    (output_dir / \"\
+    l4_ack.yaml\").write_text(\n        yaml.safe_dump(_plain(l4_ack), allow_unicode=True,\
+    \ sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n    # diagnostic.yaml\n\
+    \    diagnostic = {\n        \"warnings\": [],\n        \"errors\": [],\n    \
+    \    \"data_rows\": {\n            \"gap_ranks\": len(gap_ranks),\n          \
+    \  \"cb_basic\": len(cb_basic),\n            \"cb_daily\": len(cb_daily),\n  \
+    \          \"bond_floor_computed\": len(bond_floor_df),\n            \"train\"\
+    : len(df_train),\n            \"test\": len(df_test),\n            \"validate_2020\"\
+    : len(df_2020),\n        },\n        \"bond_floor_stats\": {\n            \"mean\"\
+    : round(float(bond_floor_df[\"bond_floor_value\"].mean()), 2),\n            \"\
+    min\": round(float(bond_floor_df[\"bond_floor_value\"].min()), 2),\n         \
+    \   \"max\": round(float(bond_floor_df[\"bond_floor_value\"].max()), 2),\n   \
+    \         \"pct_non_finite\": round(\n                float((~np.isfinite(bond_floor_df[\"\
+    bond_floor_value\"])).mean()) * 100, 2\n            ),\n        },\n        \"\
+    bond_floor_ratio_stats\": {\n            \"threshold\": args.bond_floor_threshold,\n\
+    \            \"min_days_below\": args.min_days_below,\n            \"discount_rate\"\
+    : args.discount_rate,\n        },\n        \"entry_mask_diagnostics\": mask_diag,\n\
+    \        \"baseline_trade_count\": bl_trade_count,\n        \"filtered_trade_count\"\
+    : f_trade_count,\n        \"trade_count_retention_pct\": trade_count_retention,\n\
+    \        \"exit_params\": {\n            \"min_hold_days\": mhd,\n           \
+    \ \"initial_threshold_fraction\": itf,\n            \"effective_max_hold_days\"\
+    : max_hold,\n        },\n    }\n    (output_dir / \"diagnostic.yaml\").write_text(\n\
+    \        yaml.safe_dump(_plain(diagnostic), allow_unicode=True, sort_keys=False),\n\
+    \        encoding=\"utf-8\",\n    )\n\n    # GateKeeper after_run_grid\n    _gatekeeper_after_run(output_dir)\n\
+    \n    # Done\n    print(\n        f\"[bond_floor_entry_filter] adoption_pass={adoption_pass}\
+    \ \"\n        f\"threshold={args.bond_floor_threshold} \"\n        f\"min_days={args.min_days_below}\
+    \ \"\n        f\"excess_train={excess_train} \"\n        f\"excess_test={excess_test}\
+    \ \"\n        f\"excess_2020={excess_2020} \"\n        f\"trade_retention={trade_count_retention}%\
+    \ \"\n        f\"suppression={mask_diag['suppression_pct']}%\",\n        flush=True,\n\
+    \    )\n\n    return 0\n\n\nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_bond_floor_entry_filter.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_bond_floor_entry_filter_20260522_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_bond_floor_entry_filter.py
+  completion_receipt: data/cb_arb_value_gap_switch_bond_floor_entry_filter_20260522/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-20T06:30:04'
+  validation: passed

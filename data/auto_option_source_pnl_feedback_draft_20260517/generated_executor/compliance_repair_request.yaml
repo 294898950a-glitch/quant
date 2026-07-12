@@ -1,0 +1,16 @@
+schema_version: 1
+handoff_id: auto_option_source_pnl_feedback_draft_20260517_executor_code
+source: data/auto_option_source_pnl_feedback_draft_20260517/generated_executor/evaluate_cb_arb_option_pnl_feedback_v2.py
+compliance_errors:
+- 'compliance_failed: import_reachability_probe_failed: TimeoutExpired: Command ''[''/usr/bin/python3'',
+  ''-E'', ''-c'', "import importlib.util, sys, traceback;spec = importlib.util.spec_from_file_location(''check'',
+  r''/home/jay/projects/quant/data/auto_option_source_pnl_feedback_draft_20260517/generated_executor/evaluate_cb_arb_option_pnl_feedback_v2.py'');m
+  = importlib.util.module_from_spec(spec);sys.modules[spec.name] = m;spec.loader.exec_module(m)"]''
+  timed out after 20 seconds'
+required_fix: Add 'from scripts.gatekeeper import GateKeeper' to the generated executor
+  and call the GateKeeper lifecycle methods (before_run_grid / after_run_grid). See
+  scripts/evaluate_cb_arb_exit_gap_closing_percentile.py and scripts/evaluate_cb_arb_iv_percentile_exit.py
+  for the canonical pattern. Do not request manual allowlist; the install path will
+  remain blocked until the import is in place.
+noted_at: '2026-06-26T22:38:57+00:00'
+dry_run: false

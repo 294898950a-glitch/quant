@@ -1,0 +1,66 @@
+proposal_id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+strategy_id: cb_arb_value_gap_switch
+family: exit_rule_iv_percentile
+hypothesis: Exiting positions when the convertible bond's implied volatility exceeds
+  a high rolling percentile (e.g., 90th) reduces exposure during volatile market regimes,
+  cutting tail drawdowns while preserving mean reversion profits from value gaps.
+source_insight: The baseline strategy experienced significant drawdown in 2020 (-17.9%)
+  and overall high max drawdown (0.35). IV is known to spike during market stress,
+  and holding through such spikes often leads to further losses as gap expansion and
+  CB selloffs accelerate.
+expected_improvement: Reduce max drawdown by at least 5 percentage points and improve
+  cumulative excess return by at least 3 percentage points over the baseline in the
+  test period.
+capability_ids:
+- C007
+required_executor: cb_arb_iv_percentile_exit_executor
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/baseline_trade_pnl.parquet
+test_design:
+  description: Grid search over IV percentile thresholds (80, 85, 90, 95) and min_hold_days
+    (1, 3, 5). For each candidate, run the baseline entry logic but replace the exit
+    rule with IV-percentile exit. Compare against baseline on train (2019-2024), 2020
+    repair, and sealed test (2025-2026). Evaluate adoption pass criteria based on
+    cumulative excess and drawdown limits.
+success_criteria:
+  description: At least one candidate achieves adoption_pass=True, meaning it passes
+    the decision contract thresholds (cumulative excess compound > 0, no single-year
+    drawdown vs benchmark > 15%, holdout Sharpe > 0.5). Additionally, prefer candidate
+    with highest test excess return or lowest drawdown.
+falsifiers:
+  train: No candidate beats baseline on all three evaluation periods; or any candidate
+    that passes train fails on 2020 repair or test; or all candidates suffer adoption_pass=False.
+  validate: No candidate beats baseline on all three evaluation periods; or any candidate
+    that passes train fails on 2020 repair or test; or all candidates suffer adoption_pass=False.
+  test: No candidate beats baseline on all three evaluation periods; or any candidate
+    that passes train fails on 2020 repair or test; or all candidates suffer adoption_pass=False.
+risk: The IV calculation may be noisy due to data limitations (CB implied vol requires
+  model inversion). The exit may fire too frequently, reducing trade count and potentially
+  missing profitable gap closes. Careful threshold selection needed.
+why_not_repeated_failure: This proposal is not a rehash of dynamic exit-gap decay
+  or profit-taking exit, which focused on gap retracement. It specifically uses implied
+  volatility regime to manage exposure, which has not been tested in any prior run.
+  Also distinct from market drawdown entry gate which suppresses entries; this targets
+  exits.
+related_prior_runs:
+- cb_arb_value_gap_switch_dynamic_exit_2026-05-19
+- cb_arb_value_gap_switch_exit_dynamic_trail_20260519
+- cb_arb_value_gap_switch_profit-taking-exit_2026-05-19
+implementation_assumption: The executor uses a daily IV estimate derived from stock
+  volatility proxy (e.g., historical/implied vol of underlying) or inverted CB pricing.
+  Will use installed Python libraries and data from cb_warehouse.
+ai_provider: deepseek
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: f39a51b3cae98b41
+provenance:
+  ai_provider: deepseek
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: f39a51b3cae98b41
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_iv_percentile_exit_v1/proposal.yaml

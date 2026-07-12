@@ -1,0 +1,115 @@
+proposal_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_1
+strategy_id: cb_arb_value_gap_switch
+family: regime_adaptive_exit
+hypothesis: 'The duration-adaptive exit accepted on 2026-05-22 (min_hold_days=5, initial_threshold_fraction=0.7,
+  decay_period_factor=0.5, effective_max_hold_days=45) uses a single fixed decay schedule
+  regardless of market conditions. In high-volatility or trending-down regimes, value
+  gaps close at different speeds than in calm or rising regimes. A single schedule
+  inevitably either exits too early in fast-closing regimes (leaving money on the
+  table) or too late in slow-closing regimes (allowing gaps to re-widen). Conditioning
+  the decay parameters on a daily market regime classifier will improve cumulative
+  excess by tailoring exit patience to the prevailing environment — tighter thresholds
+  in volatile/declining regimes where gaps close fast, more patient thresholds in
+  calm/rising regimes where gaps drift slowly.
+
+  '
+source_insight: 'The accepted duration-adaptive exit proves that time-decaying exit
+  thresholds work better than fixed exits. But the one-size-fits-all parameter set
+  is an obvious weakness: market regimes vary substantially, and CB gap-closing dynamics
+  are regime-dependent. The natural refinement is to let the decay schedule adapt
+  to the regime.
+
+  '
+expected_improvement: '2-4 percentage points improvement in cumulative excess compound
+  return over the fixed-parameter duration-adaptive baseline, by reducing premature
+  exits in slow-closing regimes and preventing gap re-widening damage in fast-closing
+  or deteriorating regimes.
+
+  '
+capability_ids:
+- C005
+required_executor: evaluate_cb_arb_regime_adaptive_exit
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/csi300_daily.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  - entry_gap
+  data/cb_warehouse/csi300_daily.parquet:
+  - trade_date
+  - close
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  method: grid_search
+  fixed_params:
+    min_hold_days: 5
+  grid_dimensions:
+  - regime_method:
+    - csi300_rolling_return_quantile
+    - csi300_realized_vol_quantile
+  - regime_count:
+    - 2
+    - 3
+  - per_regime_initial_threshold_fraction: grid over 0.3-0.9 per regime
+  - per_regime_decay_period_factor: grid over 0.2-0.8 per regime
+  baseline: fixed-parameter duration-adaptive exit with accepted best params
+  train_test_split: same as baseline run
+success_criteria:
+  criteria:
+  - cumulative_excess_compound beats fixed-parameter baseline by at least 1pp
+  - no single-year max_drawdown worse than baseline by more than 2pp
+  - at least one candidate passes adoption gate
+falsifiers:
+  train: &id001
+  - all regime-conditioned candidates underperform fixed-parameter baseline on cumulative_excess_compound
+  - regime conditioning increases any single-year max_drawdown vs baseline by more
+    than 3pp
+  - failed_mechanical_thresholds
+  - adoption_pass is False for all candidates
+  validate: *id001
+  test: *id001
+risk: medium
+why_not_repeated_failure: 'The closed tags regime_classifier_variant and regime_conditioned_option_entry_gate
+  are about conditioning entry eligibility on market regime — suppressing entries
+  entirely during adverse conditions. Those directions failed (market_drawdown_entry_filter,
+  contrarian_drawdown_entry, bond-floor-entry-filter all hit failed_mechanical_thresholds).
+  This proposal does not touch entry at all. It conditions the exit decay schedule
+  on regime, which is a fundamentally different mechanic: we still enter on the same
+  value-gap signal, but we adjust how patiently we hold based on the environment.
+  The closed tag regime_classifier_variant is about classifier variants for entry
+  gating, not about exit parameter conditioning.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_market_drawdown_entry_filter
+- cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+implementation_assumption: The executor computes a daily regime label from CSI300
+  rolling return quantiles or realized volatility quantiles, then applies per-regime
+  initial_threshold_fraction and decay_period_factor values to the existing duration-adaptive
+  exit logic. The grid search varies regime definition hyperparameters alongside per-regime
+  decay parameters. No changes to entry logic, position sizing, or universe construction.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: b2bb6cc8a6ea75b8
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: b2bb6cc8a6ea75b8
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_regime-adaptive-exit_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_regime-adaptive-exit_v1_1/proposal.yaml

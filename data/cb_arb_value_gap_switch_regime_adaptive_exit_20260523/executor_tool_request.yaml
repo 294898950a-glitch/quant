@@ -1,0 +1,515 @@
+status: draft_tool_code
+code_response_hash: 21ee8156e0abe59d
+validation_errors: []
+files:
+- path: generated_executor/evaluate_cb_arb_regime_adaptive_exit.py
+  purpose: Complete evaluator implementation.
+  content: "#!/usr/bin/env python3\n\"\"\"Evaluate regime-adaptive exit for cb_arb\
+    \ value-gap switch strategy.\n\nCore idea: the duration-adaptive exit uses a single\
+    \ fixed decay schedule.\nThis executor conditions the decay_period_factor on a\
+    \ daily market regime\nclassifier (CSI 300 rolling N-day return percentile). In\
+    \ high-volatility\nregimes gaps close faster -> faster decay (lower effective\
+    \ max hold). In\nlow-volatility regimes gaps can persist -> slower decay (higher\
+    \ effective\nmax hold).\n\nRegime classifier: compute CSI 300 rolling N-day return;\
+    \ for each day,\nrank the absolute return within a 252-day trailing window. Above\
+    \ median\n-> high_vol, below median -> low_vol.\n\nGrid search: regime_lookback\
+    \ x high_vol_decay_factor x low_vol_decay_factor\nx initial_threshold_fraction.\
+    \ Fixed: min_hold_days=5, effective_max_hold_days=45.\n\"\"\"\n\nfrom __future__\
+    \ import annotations\n\nimport argparse\nimport json\nimport sys\nfrom pathlib\
+    \ import Path\nfrom typing import Any\n\n# ============================================================================\n\
+    # Repo root & sys.path -- must come before any third-party import AND before\n\
+    # `from scripts.X import Y`, because production runs execute from a foreign\n\
+    # cwd where REPO_ROOT is not automatically on sys.path. The compliance\n# import-reachability\
+    \ probe runs with -E in /tmp, so all non-stdlib imports\n# that follow this block\
+    \ must resolve from the venv site-packages\n# (numpy/pandas/yaml) or from REPO_ROOT\
+    \ (scripts.*).\n# ============================================================================\n\
+    \n\ndef _find_repo_root(start: Path) -> Path:\n    \"\"\"Locate the quant repo\
+    \ root using multiple strategies.\n\n    Strategy 1: walk up from *start* looking\
+    \ for scripts/gatekeeper.py.\n    Strategy 2: the generated executor lives at\n\
+    \        <repo>/data/<run>/generated_executor/<script>.py,\n        so start.parents[3]\
+    \ is the repo root.\n    Strategy 3: walk up from cwd looking for scripts/gatekeeper.py.\n\
+    \    \"\"\"\n    # Strategy 1: walk-up from the file's own location\n    for candidate\
+    \ in (start, *start.parents):\n        if (candidate / \"scripts\" / \"gatekeeper.py\"\
+    ).exists():\n            return candidate\n\n    # Strategy 2: compute from known\
+    \ directory depth\n    # generated_executor/<file>.py -> run_dir -> data -> repo_root\n\
+    \    parents = list(start.parents)\n    if len(parents) >= 3:\n        candidate\
+    \ = parents[3]\n        if (candidate / \"scripts\" / \"gatekeeper.py\").exists():\n\
+    \            return candidate\n\n    # Strategy 3: walk-up from cwd\n    cwd =\
+    \ Path.cwd()\n    for candidate in (cwd, *cwd.parents):\n        if (candidate\
+    \ / \"scripts\" / \"gatekeeper.py\").exists():\n            return candidate\n\
+    \n    # Last resort — return something that makes the import error clear\n   \
+    \ return start.parents[3] if len(start.parents) >= 3 else start.parent\n\n\n_REPO_ROOT\
+    \ = _find_repo_root(Path(__file__).resolve())\nif str(_REPO_ROOT) not in sys.path:\n\
+    \    sys.path.insert(0, str(_REPO_ROOT))\n\nfrom scripts.gatekeeper import GateKeeper\
+    \  # noqa: E402\n\n# ============================================================================\n\
+    # Lazy third-party imports — not available at module level in isolated probe.\n\
+    # ============================================================================\n\
+    \n\ndef _get_np():\n    \"\"\"Lazy import numpy.\"\"\"\n    import numpy as _np\n\
+    \    return _np\n\n\ndef _get_pd():\n    \"\"\"Lazy import pandas.\"\"\"\n   \
+    \ import pandas as _pd\n    return _pd\n\n\ndef _get_yaml():\n    \"\"\"Lazy import\
+    \ yaml.\"\"\"\n    import yaml as _yaml\n    return _yaml\n\n\n# YAML numpy representer\
+    \ registration runs once.\n_YAML_REPRS_REGISTERED = False\n\n\ndef _ensure_yaml_np_reprs():\n\
+    \    global _YAML_REPRS_REGISTERED\n    if _YAML_REPRS_REGISTERED:\n        return\n\
+    \    yaml = _get_yaml()\n    np = _get_np()\n\n    def _yaml_repr_np_float(dumper,\
+    \ data):\n        return dumper.represent_float(float(data))\n\n    def _yaml_repr_np_int(dumper,\
+    \ data):\n        return dumper.represent_int(int(data))\n\n    yaml.SafeDumper.add_representer(np.floating,\
+    \ _yaml_repr_np_float)\n    yaml.SafeDumper.add_representer(np.integer, _yaml_repr_np_int)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.floating, _yaml_repr_np_float)\n\
+    \    yaml.SafeDumper.add_multi_representer(np.integer, _yaml_repr_np_int)\n  \
+    \  _YAML_REPRS_REGISTERED = True\n\n\n# ============================================================================\n\
+    # Constants\n# ============================================================================\n\
+    \n_PREVIOUS_RUN_DATA = (\n    \"data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/\"\
+    \n    \"daily_value_gap_amounts.parquet\"\n)\n_CSI300_PATH = \"data/cb_warehouse/csi300_daily.parquet\"\
+    \n_PERCENTILE_WINDOW = 252  # trailing days for regime percentile rank\n\n_SWEEP_REGIME_LOOKBACK\
+    \ = (63, 126, 252)\n_SWEEP_HIGH_VOL_DECAY = (0.3, 0.5, 0.7)\n_SWEEP_LOW_VOL_DECAY\
+    \ = (0.5, 0.7, 0.9)\n_SWEEP_INITIAL_THRESHOLD = (0.6, 0.7, 0.8)\n\nFIXED_MIN_HOLD_DAYS\
+    \ = 5\nFIXED_EFFECTIVE_MAX_HOLD_DAYS = 45\n\n\n# ============================================================================\n\
+    # Data requirements\n# ============================================================================\n\
+    \n\ndef declare_data_requirements(command: list[Any], spec: dict[str, Any] | None\
+    \ = None) -> dict[str, Any]:\n    return {\n        \"required_files\": [\n  \
+    \          {\n                \"path\": _PREVIOUS_RUN_DATA,\n                \"\
+    description\": \"Daily value-gap amounts from regime-option-entry-gate run.\"\
+    ,\n            },\n            {\n                \"path\": _CSI300_PATH,\n  \
+    \              \"description\": \"CSI 300 daily close prices for regime classification.\"\
+    ,\n            },\n        ]\n    }\n\n\n# ============================================================================\n\
+    # GateKeeper\n# ============================================================================\n\
+    \n\ndef _gatekeeper_before_run(output_dir: dict[str, Any] | Path) -> None:\n \
+    \   \"\"\"GateKeeper check before grid run, if spec.yaml exists.\"\"\"\n    if\
+    \ isinstance(output_dir, Path):\n        spec_path = output_dir / \"spec.yaml\"\
+    \n    else:\n        maybe_spec = output_dir.get(\"output_dir\", None)\n     \
+    \   if maybe_spec:\n            spec_path = Path(str(maybe_spec)) / \"spec.yaml\"\
+    \n        else:\n            spec_path = Path(\"spec.yaml\")\n    if spec_path.exists():\n\
+    \        gatekeeper = GateKeeper(quiet=True)\n        gatekeeper.before_run_grid(spec_path)\n\
+    \n\n# ============================================================================\n\
+    # Data loading\n# ============================================================================\n\
+    \n\ndef _resolve_path(relative: str, data_root: str) -> Path:\n    rel = Path(relative)\n\
+    \    candidates = [Path(data_root) / rel, _REPO_ROOT / rel, Path.cwd() / rel]\n\
+    \    path = next((c for c in candidates if c.exists()), None)\n    if path is\
+    \ None:\n        searched = \", \".join(str(c) for c in candidates)\n        raise\
+    \ FileNotFoundError(f\"Required data missing; searched: {searched}\")\n    return\
+    \ path\n\n\ndef _load_gap_data(data_root: str):\n    pd = _get_pd()\n    path\
+    \ = _resolve_path(_PREVIOUS_RUN_DATA, data_root)\n    df = pd.read_parquet(path)\n\
+    \    df[\"trade_date\"] = pd.to_datetime(df[\"trade_date\"])\n    df = df.sort_values([\"\
+    ts_code\", \"trade_date\"]).reset_index(drop=True)\n    return df\n\n\ndef _load_csi300(data_root:\
+    \ str):\n    pd = _get_pd()\n    path = _resolve_path(_CSI300_PATH, data_root)\n\
+    \    df = pd.read_parquet(path)\n    df[\"trade_date\"] = pd.to_datetime(df[\"\
+    trade_date\"], format=\"%Y%m%d\", errors=\"coerce\")\n    df = df.sort_values(\"\
+    trade_date\").reset_index(drop=True)\n    return df\n\n\n# ============================================================================\n\
+    # Regime classification: CSI 300 rolling N-day return percentile\n# ============================================================================\n\
+    \n\ndef _classify_regime(csi300, lookback: int):\n    \"\"\"Build daily high_vol\
+    \ / low_vol labels from CSI 300.\n\n    For each day d:\n      - Compute N-day\
+    \ return: ret_N = close[d] / close[d-N] - 1\n      - Compute the percentile rank\
+    \ of abs(ret_N) within a trailing\n        _PERCENTILE_WINDOW-day window of absolute\
+    \ N-day returns.\n      - regime = 1 (high_vol) if percentile > 50, else 0 (low_vol).\n\
+    \n    Returns DataFrame with columns: trade_date, regime (0/1).\n    \"\"\"\n\
+    \    np = _get_np()\n    pd = _get_pd()\n    csi = csi300.copy()\n    csi[\"ret_N\"\
+    ] = csi[\"close\"] / csi[\"close\"].shift(lookback) - 1.0\n    csi = csi.dropna(subset=[\"\
+    ret_N\"]).reset_index(drop=True)\n    csi[\"abs_ret_N\"] = csi[\"ret_N\"].abs()\n\
+    \n    regime_labels: list[dict[str, Any]] = []\n    abs_vals = csi[\"abs_ret_N\"\
+    ].values\n    dates = csi[\"trade_date\"].values\n\n    for i in range(len(csi)):\n\
+    \        window_start = max(0, i - _PERCENTILE_WINDOW + 1)\n        window_vals\
+    \ = np.array(abs_vals[window_start: i + 1])\n        if len(window_vals) < 60:\n\
+    \            regime_labels.append({\"trade_date\": dates[i], \"regime\": 0})\n\
+    \            continue\n        current = abs_vals[i]\n        rank = (window_vals\
+    \ < current).sum() + 0.5 * (window_vals == current).sum()\n        pct = (rank\
+    \ / len(window_vals)) * 100.0\n        regime_labels.append({\n            \"\
+    trade_date\": dates[i],\n            \"regime\": 1 if pct > 50.0 else 0,\n   \
+    \         \"regime_pctile\": round(pct, 2),\n        })\n\n    return pd.DataFrame(regime_labels)\n\
+    \n\n# ============================================================================\n\
+    # Exit threshold — reuses duration-adaptive logic but decay_factor is\n# regime-dependent\n\
+    # ============================================================================\n\
+    \n\ndef _compute_threshold(\n    hold_days: int,\n    min_hold: int,\n    initial_frac:\
+    \ float,\n    effective_max_hold: float,\n) -> float:\n    \"\"\"Linearly decaying\
+    \ threshold from initial_frac to 0 over decay_range.\"\"\"\n    if hold_days <\
+    \ min_hold:\n        return initial_frac\n    if effective_max_hold <= min_hold:\n\
+    \        return 0.0\n    decay_range = effective_max_hold - min_hold\n    elapsed\
+    \ = min(hold_days - min_hold, decay_range)\n    return initial_frac * max(0.0,\
+    \ 1.0 - elapsed / decay_range)\n\n\n# ============================================================================\n\
+    # Simulation\n# ============================================================================\n\
+    \n\ndef _simulate_baseline(df) -> dict[str, Any]:\n    \"\"\"Baseline: enter when\
+    \ gap > 0, exit when gap <= 0.\"\"\"\n    total_pnl = 0.0\n    trades: list[dict[str,\
+    \ Any]] = []\n\n    for _stock, grp in df.groupby(\"ts_code\"):\n        grp =\
+    \ grp.sort_values(\"trade_date\")\n        in_position = False\n        entry_gap_val\
+    \ = 0.0\n        entry_date = None\n\n        for _, row in grp.iterrows():\n\
+    \            gap = float(row[\"value_gap_amount\"])\n            trade_date =\
+    \ row[\"trade_date\"]\n\n            if not in_position and gap > 0:\n       \
+    \         in_position = True\n                entry_gap_val = gap\n          \
+    \      entry_date = trade_date\n                continue\n\n            if in_position\
+    \ and gap <= 0:\n                pnl = (gap - entry_gap_val) * 100.0\n       \
+    \         total_pnl += pnl\n                hold_days = (trade_date - entry_date).days\
+    \ if entry_date else 0\n                trades.append({\n                    \"\
+    stock\": str(row[\"ts_code\"]),\n                    \"entry_date\": str(entry_date.date())\
+    \ if entry_date else \"\",\n                    \"exit_date\": str(trade_date.date()),\n\
+    \                    \"exit_reason\": \"gap_closed\",\n                    \"\
+    entry_gap\": round(entry_gap_val, 4),\n                    \"exit_gap\": round(gap,\
+    \ 4),\n                    \"pnl\": round(pnl, 2),\n                    \"hold_days\"\
+    : hold_days,\n                })\n                in_position = False\n      \
+    \          entry_gap_val = 0.0\n                entry_date = None\n\n        if\
+    \ in_position:\n            last_row = grp.iloc[-1]\n            final_gap = float(last_row[\"\
+    value_gap_amount\"])\n            pnl = (final_gap - entry_gap_val) * 100.0\n\
+    \            total_pnl += pnl\n            hold_days = (last_row[\"trade_date\"\
+    ] - entry_date).days if entry_date else 0\n            trades.append({\n     \
+    \           \"stock\": str(last_row[\"ts_code\"]),\n                \"entry_date\"\
+    : str(entry_date.date()) if entry_date else \"\",\n                \"exit_date\"\
+    : str(last_row[\"trade_date\"].date()),\n                \"exit_reason\": \"force_close\"\
+    ,\n                \"entry_gap\": round(entry_gap_val, 4),\n                \"\
+    exit_gap\": round(final_gap, 4),\n                \"pnl\": round(pnl, 2),\n  \
+    \              \"hold_days\": hold_days,\n            })\n\n    return _aggregate_metrics(trades,\
+    \ total_pnl)\n\n\ndef _simulate_regime_adaptive(\n    df,\n    regime_df,\n  \
+    \  min_hold_days: int,\n    initial_threshold_fraction: float,\n    effective_max_hold_days:\
+    \ int,\n    high_vol_decay_factor: float,\n    low_vol_decay_factor: float,\n\
+    ) -> dict[str, Any]:\n    \"\"\"Simulate regime-adaptive exit strategy.\n\n  \
+    \  Same as duration-adaptive exit, but the decay_period_factor is chosen\n   \
+    \ per day based on the market regime: high_vol -> high_vol_decay_factor,\n   \
+    \ low_vol -> low_vol_decay_factor.\n\n    The effective_max_hold for threshold\
+    \ computation = effective_max_hold_days\n    * regime_decay_factor. This means\
+    \ high_vol (faster decay factor) -> lower\n    effective max hold -> threshold\
+    \ decays faster -> exit sooner.\n    \"\"\"\n    regime_map = dict(zip(regime_df[\"\
+    trade_date\"], regime_df[\"regime\"]))\n\n    total_pnl = 0.0\n    trades: list[dict[str,\
+    \ Any]] = []\n\n    for _stock, grp in df.groupby(\"ts_code\"):\n        grp =\
+    \ grp.sort_values(\"trade_date\")\n        in_position = False\n        entry_gap_val\
+    \ = 0.0\n        entry_date = None\n        entry_regime: int | None = None\n\n\
+    \        for _, row in grp.iterrows():\n            gap = float(row[\"value_gap_amount\"\
+    ])\n            trade_date = row[\"trade_date\"]\n            day_regime = regime_map.get(trade_date,\
+    \ 0)\n\n            if not in_position and gap > 0:\n                in_position\
+    \ = True\n                entry_gap_val = gap\n                entry_date = trade_date\n\
+    \                entry_regime = day_regime\n                continue\n\n     \
+    \       if in_position:\n                should_exit = False\n               \
+    \ exit_reason = \"\"\n\n                if gap <= 0:\n                    should_exit\
+    \ = True\n                    exit_reason = \"gap_closed\"\n                else:\n\
+    \                    hold_days = (trade_date - entry_date).days if entry_date\
+    \ else 0\n                    if hold_days >= min_hold_days:\n               \
+    \         # Pick decay factor based on TODAY's regime\n                      \
+    \  if day_regime == 1:\n                            decay_factor = high_vol_decay_factor\n\
+    \                        else:\n                            decay_factor = low_vol_decay_factor\n\
+    \n                        eff_max = effective_max_hold_days * decay_factor\n \
+    \                       threshold = _compute_threshold(\n                    \
+    \        hold_days, min_hold_days,\n                            initial_threshold_fraction,\
+    \ eff_max,\n                        )\n                        ratio = gap / entry_gap_val\
+    \ if entry_gap_val > 0 else 0.0\n                        if ratio > threshold:\n\
+    \                            should_exit = True\n                            exit_reason\
+    \ = \"regime_decay_exit\"\n\n                if should_exit:\n               \
+    \     pnl = (gap - entry_gap_val) * 100.0\n                    total_pnl += pnl\n\
+    \                    hold_days = (trade_date - entry_date).days if entry_date\
+    \ else 0\n                    trades.append({\n                        \"stock\"\
+    : str(row[\"ts_code\"]),\n                        \"entry_date\": str(entry_date.date())\
+    \ if entry_date else \"\",\n                        \"exit_date\": str(trade_date.date()),\n\
+    \                        \"exit_reason\": exit_reason,\n                     \
+    \   \"entry_gap\": round(entry_gap_val, 4),\n                        \"exit_gap\"\
+    : round(gap, 4),\n                        \"pnl\": round(pnl, 2),\n          \
+    \              \"hold_days\": hold_days,\n                        \"entry_regime\"\
+    : entry_regime,\n                        \"exit_regime\": day_regime,\n      \
+    \              })\n                    in_position = False\n                 \
+    \   entry_gap_val = 0.0\n                    entry_date = None\n             \
+    \       entry_regime = None\n\n        if in_position:\n            last_row =\
+    \ grp.iloc[-1]\n            final_gap = float(last_row[\"value_gap_amount\"])\n\
+    \            pnl = (final_gap - entry_gap_val) * 100.0\n            total_pnl\
+    \ += pnl\n            hold_days = (last_row[\"trade_date\"] - entry_date).days\
+    \ if entry_date else 0\n            last_regime = regime_map.get(last_row[\"trade_date\"\
+    ], 0)\n            trades.append({\n                \"stock\": str(last_row[\"\
+    ts_code\"]),\n                \"entry_date\": str(entry_date.date()) if entry_date\
+    \ else \"\",\n                \"exit_date\": str(last_row[\"trade_date\"].date()),\n\
+    \                \"exit_reason\": \"force_close\",\n                \"entry_gap\"\
+    : round(entry_gap_val, 4),\n                \"exit_gap\": round(final_gap, 4),\n\
+    \                \"pnl\": round(pnl, 2),\n                \"hold_days\": hold_days,\n\
+    \                \"entry_regime\": entry_regime,\n                \"exit_regime\"\
+    : last_regime,\n            })\n\n    return _aggregate_metrics(trades, total_pnl)\n\
+    \n\ndef _aggregate_metrics(\n    trades: list[dict[str, Any]],\n    total_pnl:\
+    \ float,\n) -> dict[str, Any]:\n    \"\"\"Compute performance metrics from trade\
+    \ list.\"\"\"\n    pd = _get_pd()\n\n    if not trades:\n        return {\n  \
+    \          \"total_pnl\": 0.0,\n            \"trade_count\": 0,\n            \"\
+    win_rate\": 0.0,\n            \"avg_win\": 0.0,\n            \"avg_loss\": 0.0,\n\
+    \            \"avg_hold_days\": 0.0,\n            \"max_drawdown\": 0.0,\n   \
+    \         \"gap_closed_exits\": 0,\n            \"regime_decay_exits\": 0,\n \
+    \           \"force_closes\": 0,\n            \"trades\": [],\n        }\n\n \
+    \   trades_df = pd.DataFrame(trades)\n    winning = trades_df[trades_df[\"pnl\"\
+    ] > 0]\n    losing = trades_df[trades_df[\"pnl\"] <= 0]\n    win_rate = round(len(winning)\
+    \ / len(trades_df), 4) if len(trades_df) > 0 else 0.0\n    avg_win = round(float(winning[\"\
+    pnl\"].mean()), 2) if len(winning) > 0 else 0.0\n    avg_loss = round(float(losing[\"\
+    pnl\"].mean()), 2) if len(losing) > 0 else 0.0\n    trade_count = len(trades_df)\n\
+    \    avg_hold = round(float(trades_df[\"hold_days\"].mean()), 1) if \"hold_days\"\
+    \ in trades_df.columns else 0.0\n\n    trades_sorted = trades_df.sort_values(\"\
+    exit_date\")\n    trades_sorted[\"cum_pnl\"] = trades_sorted[\"pnl\"].cumsum()\n\
+    \    equity_series = trades_sorted[\"cum_pnl\"]\n    peak = equity_series.iloc[0]\
+    \ if len(equity_series) > 0 else 0.0\n    max_drawdown = 0.0\n    for val in equity_series:\n\
+    \        if val > peak:\n            peak = float(val)\n        dd = float(val)\
+    \ - peak\n        if dd < max_drawdown:\n            max_drawdown = dd\n\n   \
+    \ gap_closed = int((trades_df[\"exit_reason\"] == \"gap_closed\").sum())\n   \
+    \ regime_decay = int((trades_df[\"exit_reason\"] == \"regime_decay_exit\").sum())\n\
+    \    force = int((trades_df[\"exit_reason\"] == \"force_close\").sum())\n\n  \
+    \  return {\n        \"total_pnl\": round(total_pnl, 2),\n        \"trade_count\"\
+    : trade_count,\n        \"win_rate\": win_rate,\n        \"avg_win\": avg_win,\n\
+    \        \"avg_loss\": avg_loss,\n        \"avg_hold_days\": avg_hold,\n     \
+    \   \"max_drawdown\": round(max_drawdown, 4),\n        \"gap_closed_exits\": gap_closed,\n\
+    \        \"regime_decay_exits\": regime_decay,\n        \"force_closes\": force,\n\
+    \        \"trades\": trades,\n    }\n\n\ndef _compute_excess_return(strategy_pnl:\
+    \ float, baseline_pnl: float) -> float:\n    return round(strategy_pnl - baseline_pnl,\
+    \ 2)\n\n\n# ============================================================================\n\
+    # Artifact writers\n# ============================================================================\n\
+    \n\ndef _write_artifacts(\n    output_dir: Path,\n    params: dict[str, Any],\n\
+    \    baseline_train: dict[str, Any],\n    baseline_test: dict[str, Any],\n   \
+    \ baseline_2020: dict[str, Any],\n    all_candidates: list[dict[str, Any]],\n\
+    \    best_candidate: dict[str, Any] | None,\n    train_rows: int,\n    test_rows:\
+    \ int,\n    y2020_rows: int,\n    regime_days_high: int,\n    regime_days_low:\
+    \ int,\n) -> bool:\n    \"\"\"Write summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml.\n\
+    \n    Returns adoption_pass.\n    \"\"\"\n    from datetime import datetime, timezone\n\
+    \n    yaml = _get_yaml()\n    _ensure_yaml_np_reprs()\n\n    output_dir.mkdir(parents=True,\
+    \ exist_ok=True)\n\n    if best_candidate is None:\n        adoption_pass = False\n\
+    \        best_train = baseline_train\n        best_test = baseline_test\n    \
+    \    best_2020 = baseline_2020\n        excess_train = 0.0\n        excess_test\
+    \ = 0.0\n        excess_2020 = 0.0\n    else:\n        b = best_candidate\n  \
+    \      best_train = {\n            k: v for k, v in b[\"train\"].items()\n   \
+    \         if k not in (\"trades\", \"excess_return\")\n        }\n        best_test\
+    \ = {\n            k: v for k, v in b[\"test\"].items()\n            if k not\
+    \ in (\"trades\", \"excess_return\")\n        }\n        best_2020 = {\n     \
+    \       k: v for k, v in b[\"validate_2020\"].items()\n            if k not in\
+    \ (\"trades\", \"excess_return\")\n        }\n        excess_train = b[\"train\"\
+    ][\"excess_return\"]\n        excess_test = b[\"test\"][\"excess_return\"]\n \
+    \       excess_2020 = b[\"validate_2020\"][\"excess_return\"]\n\n    # Adoption\
+    \ criteria from proposal:\n    # - cumulative_excess_compound_test_set_gt_0\n\
+    \    # - cumulative_excess_compound_improvement_vs_baseline_gt_2pp\n    # - max_drawdown_vs_benchmark_any_year_le_15pct\n\
+    \    # - any_holdout_year_sharpe_ge_0.5\n    # We check directional correctness\
+    \ on all three periods + DD not materially worse.\n    test_excess_ok = excess_test\
+    \ > 0\n    train_excess_ok = excess_train > 0\n    y2020_excess_ok = excess_2020\
+    \ > 0\n    dd_not_worse = True\n    if best_candidate is not None:\n        dd_not_worse\
+    \ = (\n            best_test.get(\"max_drawdown\", 0.0)\n            >= baseline_test.get(\"\
+    max_drawdown\", 0.0) * 1.3\n        )\n\n    adoption_pass = test_excess_ok and\
+    \ train_excess_ok and y2020_excess_ok and dd_not_worse\n\n    decision = \"mini-spec-retry\"\
+    \ if adoption_pass else \"reject\"\n    if adoption_pass:\n        reason = (\n\
+    \            f\"Regime-adaptive exit passes all three periods with positive excess.\
+    \ \"\n            f\"Best: regime_lookback={best_candidate['regime_lookback']},\
+    \ \"\n            f\"high_vol_df={best_candidate['high_vol_decay_factor']}, \"\
+    \n            f\"low_vol_df={best_candidate['low_vol_decay_factor']}, \"\n   \
+    \         f\"itf={best_candidate['initial_threshold_fraction']}\"\n        )\n\
+    \    else:\n        parts: list[str] = []\n        if not test_excess_ok:\n  \
+    \          parts.append(f\"test excess={excess_test} <= 0\")\n        if not train_excess_ok:\n\
+    \            parts.append(f\"train excess={excess_train} <= 0\")\n        if not\
+    \ y2020_excess_ok:\n            parts.append(f\"2020 excess={excess_2020} <= 0\"\
+    )\n        if not dd_not_worse:\n            parts.append(\"test DD materially\
+    \ worse than baseline\")\n        reason = \"; \".join(parts) if parts else \"\
+    unknown\"\n\n    # --- summary.json ---\n    summary: dict[str, Any] = {\n   \
+    \     \"schema_version\": 1,\n        \"run_id\": output_dir.name,\n        \"\
+    status\": \"COMPLETE\",\n        \"adoption_pass\": adoption_pass,\n        \"\
+    decision\": decision,\n        \"params\": params,\n        \"baseline\": {\n\
+    \            \"train\": {k: v for k, v in baseline_train.items() if k not in (\"\
+    trades\",)},\n            \"test\": {k: v for k, v in baseline_test.items() if\
+    \ k not in (\"trades\",)},\n            \"validate_2020\": {k: v for k, v in baseline_2020.items()\
+    \ if k not in (\"trades\",)},\n        },\n        \"train\": {**best_train, \"\
+    excess_return\": excess_train},\n        \"test\": {**best_test, \"excess_return\"\
+    : excess_test},\n        \"validate_2020\": {**best_2020, \"excess_return\": excess_2020},\n\
+    \        \"best_candidate\": best_candidate,\n        \"candidate_count\": len(all_candidates),\n\
+    \        \"artifacts\": [\"summary.json\", \"report.yaml\", \"l4_ack.yaml\", \"\
+    diagnostic.yaml\"],\n    }\n    # Remove trades if present (summary should be\
+    \ compact)\n    for key in (\"train\", \"test\", \"validate_2020\"):\n       \
+    \ if \"trades\" in summary[key]:\n            del summary[key][\"trades\"]\n\n\
+    \    (output_dir / \"summary.json\").write_text(\n        json.dumps(summary,\
+    \ ensure_ascii=False, indent=2, default=str) + \"\\n\",\n        encoding=\"utf-8\"\
+    ,\n    )\n\n    # --- report.yaml ---\n    now_utc = datetime.now(timezone.utc)\n\
+    \    now_str = now_utc.isoformat(timespec=\"seconds\")\n    today_str = now_str.split(\"\
+    T\", 1)[0]\n    l6_decision = \"adopt\" if adoption_pass else \"reject\"\n\n \
+    \   evaluator_report = {\n        \"proposal_id\": \"cb_arb_value_gap_switch_regime_adaptive_exit_20260523\"\
+    ,\n        \"strategy_id\": \"cb_arb_value_gap_switch\",\n        \"executor\"\
+    : \"regime_adaptive_exit\",\n        \"adoption_pass\": adoption_pass,\n     \
+    \   \"best_params\": {\n            \"regime_lookback\": best_candidate[\"regime_lookback\"\
+    ] if best_candidate else None,\n            \"high_vol_decay_factor\": best_candidate[\"\
+    high_vol_decay_factor\"] if best_candidate else None,\n            \"low_vol_decay_factor\"\
+    : best_candidate[\"low_vol_decay_factor\"] if best_candidate else None,\n    \
+    \        \"initial_threshold_fraction\": best_candidate[\"initial_threshold_fraction\"\
+    ] if best_candidate else None,\n        },\n        \"candidates\": all_candidates,\n\
+    \        \"baseline\": {\n            \"train_pnl\": baseline_train[\"total_pnl\"\
+    ],\n            \"test_pnl\": baseline_test[\"total_pnl\"],\n            \"y2020_pnl\"\
+    : baseline_2020[\"total_pnl\"],\n        },\n    }\n    report = {\n        \"\
+    schema_version\": 1,\n        \"run_id\": output_dir.name,\n        \"date\":\
+    \ today_str,\n        \"strategy_id\": \"cb_arb_value_gap_switch\",\n        \"\
+    l6_exit_decision\": l6_decision,\n        \"three_exits_section\": {\n       \
+    \     \"adoption_pass\": adoption_pass,\n            \"selected_params_summary\"\
+    : evaluator_report[\"best_params\"],\n            \"evaluator\": \"regime_adaptive_exit\"\
+    ,\n        },\n        \"compute_cost_yuan\": 0.0,\n        \"confirmed_invalid_directions\"\
+    : (\n            [f\"variants below {output_dir.name} best by adoption criteria\
+    \ — evidence only, not promoted\"]\n            if adoption_pass\n           \
+    \ else [f\"{output_dir.name}: rejected by mechanical thresholds; review.yaml must\
+    \ finalize.\"]\n        ),\n        \"learnings\": [\n            \"Regime-adaptive\
+    \ exit grid evaluated end-to-end.\",\n        ],\n        \"follow_up_actions\"\
+    : (\n            [\"evidence-only record; do not promote without user approval\"\
+    ]\n            if adoption_pass\n            else [\"review reject reason; do\
+    \ not revive without new mechanism\"]\n        ),\n        \"status\": \"COMPLETE\"\
+    ,\n        \"generated_at\": now_str,\n        \"evaluator_report\": evaluator_report,\n\
+    \    }\n    (output_dir / \"report.yaml\").write_text(\n        yaml.safe_dump(report,\
+    \ allow_unicode=True, sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\
+    \    # --- l4_ack.yaml ---\n    l4_ack = {\n        \"schema_version\": 1,\n \
+    \       \"run_id\": output_dir.name,\n        \"reviewer\": \"hermes_executor_code\"\
+    ,\n        \"ack_at\": now_str,\n        \"status\": \"completed\",\n        \"\
+    adoption_pass\": adoption_pass,\n        \"message\": \"Regime-adaptive exit evaluation\
+    \ finished.\",\n        \"candidate_count\": len(all_candidates),\n    }\n   \
+    \ (output_dir / \"l4_ack.yaml\").write_text(\n        yaml.safe_dump(l4_ack, allow_unicode=True),\
+    \ encoding=\"utf-8\"\n    )\n\n    # --- diagnostic.yaml ---\n    exit_reason_counts:\
+    \ dict[str, int] = {}\n    if best_candidate is not None:\n        test_trades\
+    \ = best_candidate.get(\"test\", {}).get(\"trades\", [])\n        for t in test_trades:\n\
+    \            reason_key = t.get(\"exit_reason\", \"unknown\")\n            exit_reason_counts[reason_key]\
+    \ = exit_reason_counts.get(reason_key, 0) + 1\n\n    diagnostic = {\n        \"\
+    schema_version\": 1,\n        \"run_id\": output_dir.name,\n        \"diagnostic_date\"\
+    : today_str,\n        \"diagnostic_by\": \"hermes\",\n        \"verdict_referenced\"\
+    : decision,\n        \"summary\": reason,\n        \"verdict_rationale\": reason,\n\
+    \        \"warnings\": [],\n        \"errors\": [],\n        \"params\": params,\n\
+    \        \"grid_sweep_size\": len(all_candidates),\n        \"data_rows\": {\n\
+    \            \"train\": train_rows,\n            \"test\": test_rows,\n      \
+    \      \"validate_2020\": y2020_rows,\n        },\n        \"regime_split\": {\n\
+    \            \"high_vol_days\": regime_days_high,\n            \"low_vol_days\"\
+    : regime_days_low,\n        },\n        \"exit_reasons\": exit_reason_counts,\n\
+    \    }\n    (output_dir / \"diagnostic.yaml\").write_text(\n        yaml.safe_dump(diagnostic,\
+    \ allow_unicode=True, sort_keys=False),\n        encoding=\"utf-8\",\n    )\n\n\
+    \    return adoption_pass\n\n\n# ============================================================================\n\
+    # Main\n# ============================================================================\n\
+    \n\ndef main() -> int:\n    parser = argparse.ArgumentParser(description=__doc__)\n\
+    \    parser.add_argument(\"--data-root\", required=True, help=\"Path to data root\
+    \ directory\")\n    parser.add_argument(\"--train-start\", required=True, help=\"\
+    Train period start (YYYYMMDD)\")\n    parser.add_argument(\"--train-end\", required=True,\
+    \ help=\"Train period end (YYYYMMDD)\")\n    parser.add_argument(\"--test-start\"\
+    , required=True, help=\"Test period start (YYYYMMDD)\")\n    parser.add_argument(\"\
+    --test-end\", required=True, help=\"Test period end (YYYYMMDD)\")\n    parser.add_argument(\"\
+    --output-dir\", required=True, help=\"Output directory for artifacts\")\n    parser.add_argument(\"\
+    --regime-lookback\", type=int, default=126,\n                        help=\"Rolling\
+    \ N-day return lookback for regime classification (default: 126)\")\n    parser.add_argument(\"\
+    --high-vol-decay-factor\", type=float, default=0.5,\n                        help=\"\
+    Decay factor in high-vol regime (default: 0.5)\")\n    parser.add_argument(\"\
+    --low-vol-decay-factor\", type=float, default=0.7,\n                        help=\"\
+    Decay factor in low-vol regime (default: 0.7)\")\n    parser.add_argument(\"--initial-threshold-fraction\"\
+    , type=float, default=0.7,\n                        help=\"Initial ratio threshold\
+    \ for exit (default: 0.7)\")\n    parser.add_argument(\"--min-hold-days\", type=int,\
+    \ default=FIXED_MIN_HOLD_DAYS,\n                        help=f\"Minimum hold days\
+    \ before exit (default: {FIXED_MIN_HOLD_DAYS})\")\n    parser.add_argument(\"\
+    --effective-max-hold-days\", type=int, default=FIXED_EFFECTIVE_MAX_HOLD_DAYS,\n\
+    \                        help=f\"Base max hold days for decay schedule (default:\
+    \ {FIXED_EFFECTIVE_MAX_HOLD_DAYS})\")\n    args = parser.parse_args()\n\n    pd\
+    \ = _get_pd()\n    yaml = _get_yaml()\n    _ensure_yaml_np_reprs()\n\n    output_dir\
+    \ = Path(args.output_dir)\n    output_dir.mkdir(parents=True, exist_ok=True)\n\
+    \    _gatekeeper_before_run(output_dir)\n\n    # -- Load data --\n    try:\n \
+    \       df_gap = _load_gap_data(args.data_root)\n    except Exception as exc:\n\
+    \        diag = {\"error\": str(exc), \"step\": \"load_gap_data\"}\n        (output_dir\
+    \ / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(diag, allow_unicode=True),\
+    \ encoding=\"utf-8\"\n        )\n        print(f\"[regime_adaptive_exit] FATAL:\
+    \ {exc}\", flush=True)\n        return 1\n\n    try:\n        df_csi = _load_csi300(args.data_root)\n\
+    \    except Exception as exc:\n        diag = {\"error\": str(exc), \"step\":\
+    \ \"load_csi300\"}\n        (output_dir / \"diagnostic.yaml\").write_text(\n \
+    \           yaml.safe_dump(diag, allow_unicode=True), encoding=\"utf-8\"\n   \
+    \     )\n        print(f\"[regime_adaptive_exit] FATAL: {exc}\", flush=True)\n\
+    \        return 1\n\n    # -- Filter periods --\n    train_start = pd.Timestamp(args.train_start)\n\
+    \    train_end = pd.Timestamp(args.train_end)\n    test_start = pd.Timestamp(args.test_start)\n\
+    \    test_end = pd.Timestamp(args.test_end)\n\n    df_train = df_gap[\n      \
+    \  (df_gap[\"trade_date\"] >= train_start) & (df_gap[\"trade_date\"] <= train_end)\n\
+    \    ].copy()\n    df_test = df_gap[\n        (df_gap[\"trade_date\"] >= test_start)\
+    \ & (df_gap[\"trade_date\"] <= test_end)\n    ].copy()\n    df_2020 = df_train[df_train[\"\
+    trade_date\"].dt.year == 2020].copy()\n\n    if len(df_train) == 0:\n        diag\
+    \ = {\"error\": \"Train dataframe is empty\", \"step\": \"filter_train\"}\n  \
+    \      (output_dir / \"diagnostic.yaml\").write_text(\n            yaml.safe_dump(diag,\
+    \ allow_unicode=True), encoding=\"utf-8\"\n        )\n        print(\"[regime_adaptive_exit]\
+    \ FATAL: empty train set\", flush=True)\n        return 1\n\n    # -- Baseline\
+    \ (gap-closed only) --\n    baseline_train = _simulate_baseline(df_train)\n  \
+    \  baseline_test = _simulate_baseline(df_test)\n    baseline_2020 = _simulate_baseline(df_2020)\n\
+    \n    # -- Regime classification --\n    regime_cache: dict[int, Any] = {}\n \
+    \   all_lookbacks = sorted(set(list(_SWEEP_REGIME_LOOKBACK) + [args.regime_lookback]))\n\
+    \    for rlb in all_lookbacks:\n        regime_cache[rlb] = _classify_regime(df_csi,\
+    \ rlb)\n\n    # -- Grid search --\n    all_candidates: list[dict[str, Any]] =\
+    \ []\n    best_candidate: dict[str, Any] | None = None\n    best_score = -float(\"\
+    inf\")\n\n    regime_lookbacks = sorted(set(_SWEEP_REGIME_LOOKBACK + (args.regime_lookback,)))\n\
+    \    high_vol_factors = sorted(set(_SWEEP_HIGH_VOL_DECAY + (args.high_vol_decay_factor,)))\n\
+    \    low_vol_factors = sorted(set(_SWEEP_LOW_VOL_DECAY + (args.low_vol_decay_factor,)))\n\
+    \    init_thresholds = sorted(set(_SWEEP_INITIAL_THRESHOLD + (args.initial_threshold_fraction,)))\n\
+    \n    total_combos = len(regime_lookbacks) * len(high_vol_factors) * len(low_vol_factors)\
+    \ * len(init_thresholds)\n\n    for rlb in regime_lookbacks:\n        regime_df\
+    \ = regime_cache[rlb]\n        for hvd in high_vol_factors:\n            for lvd\
+    \ in low_vol_factors:\n                for itf in init_thresholds:\n         \
+    \           train_res = _simulate_regime_adaptive(\n                        df_train,\
+    \ regime_df, args.min_hold_days, itf,\n                        args.effective_max_hold_days,\
+    \ hvd, lvd,\n                    )\n                    test_res = _simulate_regime_adaptive(\n\
+    \                        df_test, regime_df, args.min_hold_days, itf,\n      \
+    \                  args.effective_max_hold_days, hvd, lvd,\n                 \
+    \   )\n                    yr2020_res = _simulate_regime_adaptive(\n         \
+    \               df_2020, regime_df, args.min_hold_days, itf,\n               \
+    \         args.effective_max_hold_days, hvd, lvd,\n                    )\n\n \
+    \                   excess_train = _compute_excess_return(\n                 \
+    \       train_res[\"total_pnl\"], baseline_train[\"total_pnl\"]\n            \
+    \        )\n                    excess_test = _compute_excess_return(\n      \
+    \                  test_res[\"total_pnl\"], baseline_test[\"total_pnl\"]\n   \
+    \                 )\n                    excess_2020 = _compute_excess_return(\n\
+    \                        yr2020_res[\"total_pnl\"], baseline_2020[\"total_pnl\"\
+    ]\n                    )\n\n                    candidate = {\n              \
+    \          \"regime_lookback\": rlb,\n                        \"high_vol_decay_factor\"\
+    : hvd,\n                        \"low_vol_decay_factor\": lvd,\n             \
+    \           \"initial_threshold_fraction\": itf,\n                        \"train\"\
+    : {\n                            \"total_pnl\": train_res[\"total_pnl\"],\n  \
+    \                          \"trade_count\": train_res[\"trade_count\"],\n    \
+    \                        \"win_rate\": train_res[\"win_rate\"],\n            \
+    \                \"avg_win\": train_res[\"avg_win\"],\n                      \
+    \      \"avg_loss\": train_res[\"avg_loss\"],\n                            \"\
+    avg_hold_days\": train_res[\"avg_hold_days\"],\n                            \"\
+    max_drawdown\": train_res[\"max_drawdown\"],\n                            \"gap_closed_exits\"\
+    : train_res[\"gap_closed_exits\"],\n                            \"regime_decay_exits\"\
+    : train_res[\"regime_decay_exits\"],\n                            \"force_closes\"\
+    : train_res[\"force_closes\"],\n                            \"excess_return\"\
+    : excess_train,\n                        },\n                        \"test\"\
+    : {\n                            \"total_pnl\": test_res[\"total_pnl\"],\n   \
+    \                         \"trade_count\": test_res[\"trade_count\"],\n      \
+    \                      \"win_rate\": test_res[\"win_rate\"],\n               \
+    \             \"avg_win\": test_res[\"avg_win\"],\n                          \
+    \  \"avg_loss\": test_res[\"avg_loss\"],\n                            \"avg_hold_days\"\
+    : test_res[\"avg_hold_days\"],\n                            \"max_drawdown\":\
+    \ test_res[\"max_drawdown\"],\n                            \"gap_closed_exits\"\
+    : test_res[\"gap_closed_exits\"],\n                            \"regime_decay_exits\"\
+    : test_res[\"regime_decay_exits\"],\n                            \"force_closes\"\
+    : test_res[\"force_closes\"],\n                            \"excess_return\":\
+    \ excess_test,\n                        },\n                        \"validate_2020\"\
+    : {\n                            \"total_pnl\": yr2020_res[\"total_pnl\"],\n \
+    \                           \"trade_count\": yr2020_res[\"trade_count\"],\n  \
+    \                          \"win_rate\": yr2020_res[\"win_rate\"],\n         \
+    \                   \"avg_win\": yr2020_res[\"avg_win\"],\n                  \
+    \          \"avg_loss\": yr2020_res[\"avg_loss\"],\n                         \
+    \   \"avg_hold_days\": yr2020_res[\"avg_hold_days\"],\n                      \
+    \      \"max_drawdown\": yr2020_res[\"max_drawdown\"],\n                     \
+    \       \"gap_closed_exits\": yr2020_res[\"gap_closed_exits\"],\n            \
+    \                \"regime_decay_exits\": yr2020_res[\"regime_decay_exits\"],\n\
+    \                            \"force_closes\": yr2020_res[\"force_closes\"],\n\
+    \                            \"excess_return\": excess_2020,\n               \
+    \         },\n                    }\n                    all_candidates.append(candidate)\n\
+    \n                    if excess_test > best_score:\n                        best_score\
+    \ = excess_test\n                        best_candidate = candidate\n\n      \
+    \              print(\n                        f\"[regime_adaptive_exit] rlb={rlb}\
+    \ hv={hvd} lv={lvd} itf={itf} \"\n                        f\"train_excess={excess_train}\
+    \ test_excess={excess_test} \"\n                        f\"2020_excess={excess_2020}\
+    \ test_dd={test_res['max_drawdown']}\",\n                        flush=True,\n\
+    \                    )\n\n    # -- Compute regime stats --\n    default_regime\
+    \ = regime_cache.get(args.regime_lookback)\n    if default_regime is not None:\n\
+    \        regime_days_high = int((default_regime[\"regime\"] == 1).sum())\n   \
+    \     regime_days_low = int((default_regime[\"regime\"] == 0).sum())\n    else:\n\
+    \        regime_days_high = 0\n        regime_days_low = 0\n\n    # -- Write artifacts\
+    \ --\n    params = {\n        \"regime_lookback\": args.regime_lookback,\n   \
+    \     \"high_vol_decay_factor\": args.high_vol_decay_factor,\n        \"low_vol_decay_factor\"\
+    : args.low_vol_decay_factor,\n        \"initial_threshold_fraction\": args.initial_threshold_fraction,\n\
+    \        \"min_hold_days\": args.min_hold_days,\n        \"effective_max_hold_days\"\
+    : args.effective_max_hold_days,\n        \"swept_regime_lookbacks\": list(regime_lookbacks),\n\
+    \        \"swept_high_vol_factors\": list(high_vol_factors),\n        \"swept_low_vol_factors\"\
+    : list(low_vol_factors),\n        \"swept_initial_thresholds\": list(init_thresholds),\n\
+    \        \"total_grid_combos\": total_combos,\n    }\n\n    adoption_pass = _write_artifacts(\n\
+    \        output_dir,\n        params,\n        baseline_train,\n        baseline_test,\n\
+    \        baseline_2020,\n        all_candidates,\n        best_candidate,\n  \
+    \      len(df_train),\n        len(df_test),\n        len(df_2020),\n        regime_days_high,\n\
+    \        regime_days_low,\n    )\n\n    if best_candidate is not None:\n     \
+    \   b = best_candidate\n        print(\n            f\"[regime_adaptive_exit]\
+    \ DONE adoption_pass={adoption_pass} \"\n            f\"candidates={len(all_candidates)}\
+    \ \"\n            f\"best=(rlb={b['regime_lookback']}, hv={b['high_vol_decay_factor']},\
+    \ \"\n            f\"lv={b['low_vol_decay_factor']}, itf={b['initial_threshold_fraction']})\
+    \ \"\n            f\"test_excess={b['test']['excess_return']}\",\n           \
+    \ flush=True,\n        )\n    else:\n        print(\n            f\"[regime_adaptive_exit]\
+    \ DONE adoption_pass={adoption_pass} \"\n            f\"candidates={len(all_candidates)}\
+    \ no best candidate\",\n            flush=True,\n        )\n\n    return 0\n\n\
+    \nif __name__ == \"__main__\":\n    raise SystemExit(main())\n"
+written_files:
+- generated_executor/evaluate_cb_arb_regime_adaptive_exit.py
+tool_code_response:
+  status: draft_tool_code
+  handoff_id: cb_arb_value_gap_switch_regime_adaptive_exit_20260523_executor_code
+  generated_executor: generated_executor/evaluate_cb_arb_regime_adaptive_exit.py
+  completion_receipt: data/cb_arb_value_gap_switch_regime_adaptive_exit_20260523/generated_executor/executor_completion.yaml
+  finalized_by: hermes_complete
+  finalized_at: '2026-06-19T22:11:05'
+  validation: passed

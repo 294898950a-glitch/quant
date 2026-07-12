@@ -1,0 +1,44 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1
+diagnostic_date: '2026-05-27'
+diagnostic_by: hermes
+verdict_referenced: mini-spec-retry
+summary: 'Regime-adaptive exit passes all three periods with positive excess. Best:
+  regime_lookback=252, high_vol_df=0.3, low_vol_df=0.9, itf=0.7'
+verdict_rationale: 'Regime-adaptive exit passes all three periods with positive excess.
+  Best: regime_lookback=252, high_vol_df=0.3, low_vol_df=0.9, itf=0.7'
+warnings: []
+errors: []
+params:
+  regime_lookback: 126
+  high_vol_decay_factor: 0.5
+  low_vol_decay_factor: 0.7
+  initial_threshold_fraction: 0.7
+  min_hold_days: 5
+  effective_max_hold_days: 45
+  swept_regime_lookbacks:
+  - 63
+  - 126
+  - 252
+  swept_high_vol_factors:
+  - 0.3
+  - 0.5
+  - 0.7
+  swept_low_vol_factors:
+  - 0.5
+  - 0.7
+  - 0.9
+  swept_initial_thresholds:
+  - 0.6
+  - 0.7
+  - 0.8
+  total_grid_combos: 81
+grid_sweep_size: 81
+data_rows:
+  train: 392852
+  test: 95787
+  validate_2020: 49117
+regime_split:
+  high_vol_days: 2788
+  low_vol_days: 2996
+exit_reasons: {}

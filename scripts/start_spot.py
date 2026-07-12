@@ -86,12 +86,15 @@ def main() -> int:
     if inst.InstanceState == "RUNNING":
         print("already running")
         return 0
-    if inst.InstanceState not in {"STOPPED", "STARTING"}:
+    # SHUTDOWN is what Tencent reports right after a spot preemption /
+    # IsolateInstances — StartInstances reactivates the instance from this
+    # state too, so we treat it the same as STOPPED here.
+    if inst.InstanceState not in {"STOPPED", "STARTING", "SHUTDOWN"}:
         # PENDING / TERMINATING / etc — not safe to issue StartInstances.
         print(f"refusing to start from state={inst.InstanceState}", file=sys.stderr)
         return 1
 
-    if inst.InstanceState == "STOPPED":
+    if inst.InstanceState in {"STOPPED", "SHUTDOWN"}:
         sreq = models.StartInstancesRequest()
         sreq.InstanceIds = [args.instance_id]
         sresp = client.StartInstances(sreq)

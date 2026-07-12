@@ -1,0 +1,17 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_credit_adjusted_valuation_v1
+spec_path: data/cb_arb_value_gap_switch_credit_adjusted_valuation_v1/spec.yaml
+validated_at: '2026-05-25T13:52:03'
+summary_sha256: 2291f257c4986f5c920a3451996faf6628b9f05c10d2421ee0a1eeb369e338e4
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- 数据摘要未提供空值统计与价格完整性检查（开高低收关系、价格≤0），但 required_column_quality 未定义非空要求，按规则放行
+fix_plan: []
+decision_reason: 全部8个必需文件存在且可读，所有必需字段均在文件中存在，行情日期范围覆盖训练和测试全周期，无阻塞性问题
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 7f3b03f2b7ce6dd4

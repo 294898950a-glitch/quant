@@ -1,0 +1,19 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_5
+spec_path: data/cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_5/spec.yaml
+validated_at: '2026-05-25T18:41:17'
+summary_sha256: 7af1ff4940dde2a85142c0f3ec288ef6b915e94d6495bb7756c22dec055a6e20
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- value_gap 数据最早日期 20190102，训练起始日 20180101，2018 年无 value_gap 覆盖；训练实际可用期为 2019-2022，其余行情数据完整
+- cb_basic.list_date 存在 1 行空值（1011 行有效），影响可忽略
+- cb_basic.delist_date 空值 338 行对应未退市存续债券，属于正常业务状态，非数据缺陷
+fix_plan: []
+decision_reason: 全部必需文件存在可读，必需字段无缺失，行情覆盖训练测试全区间（value_gap 缺 2018 年但不阻断实验），无关键字段质量硬伤，放行。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: ec6385a6cf023a2b

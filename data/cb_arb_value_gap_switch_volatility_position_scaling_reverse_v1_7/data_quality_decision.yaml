@@ -1,0 +1,27 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_7
+spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_reverse_v1_7/spec.yaml
+validated_at: '2026-05-25T18:00:48'
+summary_sha256: 77d648f4afc37bfa71b8823cdf867ccfacfb22144943d963ba5bf4dd7b0c7242
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- 'cb_basic.list_date: 1 null row (nonnull constraint violated), executor likely drops
+  this single row'
+- 'cb_basic.delist_date: 338 null rows (nonnull constraint violated, but expected
+  for active bonds — 33.4% still listed)'
+- daily_value_gap_amounts trade_date range starts 20190102, training period starts
+  20180101 — first year of training (~2018) lacks value_gap coverage; remaining ~4
+  years of training data (2019-2022) intact
+- executor_input_column_hints references 'atr' column in 'df' group, but no input
+  file contains 'atr' — not a hard requirement per rule 10, executor likely computes
+  it at runtime from OHLC data
+fix_plan: []
+decision_reason: 所有必需文件存在且可读，所有 required_columns 均存在于对应文件中，行情数据覆盖训练和测试期；仅有的质量问题是 cb_basic
+  极少量 null 值（1行 list_date、338行 delist_date 均为活跃券预期行为）和 value_gap 数据晚于训练期起点一年，均不构成阻塞
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: fb5dcd3813a6e2f3

@@ -1,0 +1,114 @@
+proposal_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+strategy_id: cb_arb_value_gap_switch
+family: moneyness_entry_filter
+hypothesis: Restricting entries to candidates where stock_close / conv_price >= threshold
+  screens out deep OTM CBs whose theoretical values are dominated by IV assumptions
+  and time premium. This improves signal quality by filtering model noise, leading
+  to higher cumulative excess and lower drawdown relative to baseline.
+source_insight: Deep OTM CB option values are dominated by time premium and IV assumptions,
+  making theoretical-value gaps least reliable and most likely to represent model
+  noise rather than tradable mispricing. The accepted duration-adaptive exit (2026-05-22)
+  improved exit timing but entry-side signal quality remains unaddressed. Prior bond-floor
+  entry filter (C002) failed mechanical thresholds — moneyness attacks signal quality
+  from a different dimension (model noise vs downside protection).
+expected_improvement: Reduce max drawdown by 3-5pp while preserving or improving cumulative
+  excess returns, by eliminating noise-dominated signals from deep OTM candidates.
+capability_ids:
+- C003
+required_executor: evaluate_cb_arb_moneyness_entry_filter
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json
+- data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - stk_code
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_call.parquet:
+  - ts_code
+  - ann_date
+  - call_date
+  - is_call
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_0/best_params.json:
+  - all
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_2/best_params.json:
+  - all
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_4/best_params.json:
+  - all
+  data/cb_arb_concurrent_supervised_20260511_094500/pool_6/best_params.json:
+  - all
+test_design:
+  description: Grid search over moneyness thresholds stock_close/conv_price >= [0.5,
+    0.6, 0.7, 0.8, 0.9, 1.0] using baseline duration-adaptive exit parameters (min_hold_days=5,
+    initial_threshold_fraction=0.7, decay_period_factor=0.5, effective_max_hold_days=45).
+    Compare each grid point against baseline on cumulative excess compound, max drawdown,
+    and yearly Sharpe. Standard train/test split with cost-on evaluation.
+success_criteria:
+  criteria:
+  - cumulative_excess_compound > baseline_cost_on_cumulative_excess
+  - max_drawdown < baseline_cost_on_max_drawdown
+  - at_least_one_holdout_year_sharpe >= 0.5
+falsifiers:
+  train: &id001
+  - cumulative_excess_compound <= baseline_cost_on_cumulative_excess
+  - max_drawdown >= baseline_cost_on_max_drawdown
+  - all_holdout_years_sharpe < 0.5
+  validate: *id001
+  test: *id001
+risk: Overly aggressive thresholds (>= 0.9) may reduce trade count below statistical
+  reliability. Grid includes lenient thresholds (0.5, 0.6) to test this. Deep OTM
+  CBs are also the ones with highest potential gap closure — filtering them may cap
+  upside in bull regimes.
+why_not_repeated_failure: Moneyness filtering (C003) is fundamentally different from
+  bond-floor filtering (C002, failed_mechanical_thresholds). Bond-floor uses CB_price
+  / bond_floor as a downside protection gate; moneyness uses stock_close / conv_price
+  to screen out deep OTM candidates whose theoretical values are unreliable due to
+  IV/time-premium dominance. Bond floor failure mode was likely filtering genuine
+  mispricing opportunities; moneyness targets a distinct failure mode — model noise
+  in theoretical value calculation for deep OTM CBs. Also distinct from market_drawdown_entry_filter
+  and contrarian_drawdown_entry which filter on market-level conditions rather than
+  individual candidate signal quality.
+related_prior_runs:
+- cb_arb_value_gap_switch_bond-floor-entry-filter_1
+- cb_arb_value_gap_switch_market_drawdown_entry_filter
+- cb_arb_value_gap_switch_contrarian_drawdown_entry_20260522
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+implementation_assumption: Executor computes stock_close / conv_price for each candidate
+  on each trade date using stk_daily_qfq.close and cb_basic.conv_price, applies boolean
+  mask to exclude candidates below threshold, and passes filtered candidates to the
+  existing backtest pipeline with duration-adaptive exit. Uses cb_call.parquet to
+  exclude called/expired CBs. Grid search wrapper runs multiple thresholds and reports
+  per-threshold metrics.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: c2a30b45847e4bee
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: c2a30b45847e4bee
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_moneyness_entry_filter_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_moneyness_entry_filter_v1_4/proposal.yaml

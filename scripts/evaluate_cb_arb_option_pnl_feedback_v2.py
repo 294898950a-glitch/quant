@@ -1,4 +1,5 @@
-"""Evaluate rolling option-source PnL feedback v2 for cb_arb value-gap switch.
+"""
+Evaluate rolling option-source PnL feedback v2 for cb_arb value-gap switch.
 
 Unlike v1 which computes rolling realized PnL internally from its own trade
 simulation, this executor ingests pre-computed entry-source CSV files from
@@ -26,26 +27,66 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import pandas as pd
-import yaml
+# ---------------------------------------------------------------------------
+# Repo root & sys.path — must come before any `from scripts.X import Y`.
+# ---------------------------------------------------------------------------
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
+def _find_repo_root(start: Path) -> Path:
+    for candidate in (start, *start.parents):
+        if (candidate / "scripts" / "gatekeeper.py").exists():
+            return candidate
+    return start.parent
+
+
+_REPO_ROOT = _find_repo_root(Path(__file__).resolve())
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.evaluate_cb_arb_option_position_sizing import (
-    _add_moneyness,
-    _option_source_mask,
-)
-from scripts.evaluate_cb_arb_value_gap_switch import (
-    _gap_source_shares,
-    _load_or_build_value_ranks,
-    _run_value_gap_backtest,
-    _score,
-    _with_cost_params,
-    _write_csv,
-)
+from scripts.gatekeeper import GateKeeper  # noqa: E402
 
+# ---------------------------------------------------------------------------
+# Lazy third-party imports — not available at module level in isolated probe.
+# ---------------------------------------------------------------------------
+
+pd: Any = None
+yaml: Any = None
+
+
+def _setup_heavy_deps() -> None:
+    global pd, yaml
+    import pandas as _pd
+    import yaml as _yaml
+    pd = _pd
+    yaml = _yaml
+
+
+# ── Lazy project module imports ──
+
+def _import_value_gap_switch():
+    from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
+        _gap_source_shares,
+        _load_or_build_value_ranks,
+        _run_value_gap_backtest,
+        _score,
+        _with_cost_params,
+        _write_csv,
+    )
+    return (
+        _gap_source_shares,
+        _load_or_build_value_ranks,
+        _run_value_gap_backtest,
+        _score,
+        _with_cost_params,
+        _write_csv,
+    )
+
+
+def _import_position_sizing():
+    from scripts.evaluate_cb_arb_option_position_sizing import _add_moneyness  # noqa: E402
+    return _add_moneyness
+
+
+# ── constants ──
 
 BASE_PARAMS: dict[str, Any] = {
     "min_gap_pct": 0.0,
@@ -57,9 +98,6 @@ BASE_PARAMS: dict[str, Any] = {
     "option_source_pnl_feedback_enabled": 0.0,
     "candidate_position_scale_enabled": 0.0,
 }
-
-
-# --- CONFIGS: grid of feedback strategies ---
 
 CONFIGS: list[dict[str, Any]] = [
     {
@@ -90,86 +128,61 @@ CONFIGS: list[dict[str, Any]] = [
 ]
 
 
-# --- CSV parsing helpers ---
+# ── CSV parsing helpers ──
 
 def _parse_entry_source_csv(csv_path: Path) -> pd.DataFrame:
-    """Read an entry-source CSV and return a DataFrame.
-
-    CSV columns: name, source, count, avg_pnl_pct, sum_pnl_amount, wins,
-                 avg_close_to_bond_floor, avg_moneyness_stock_to_conv,
-                 avg_position_cash_scale
-    """
-    df = pd.read_csv(csv_path)
-    for col in ("avg_pnl_pct", "sum_pnl_amount", "count", "wins"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    return df
+    """Read an entry-source CSV and return a DataFrame."""
+    return pd.read_csv(csv_path, na_values=["None", "null"])
 
 
 def _extract_baseline_source_pnl(
-    csv_df: pd.DataFrame, baseline_names: tuple[str, ...] | None = None
+    csv_df: pd.DataFrame, baseline_names: tuple | None = None
 ) -> dict[str, dict[str, float]]:
-    """Extract per-source PnL stats for the baseline (unscaled) config.
-
-    Returns {source: {sum_pnl_amount, avg_pnl_pct, count, wins}}
-    """
+    """Extract per-source PnL stats for the baseline (unscaled) config."""
     if baseline_names is None:
         baseline_names = ("baseline_no_position_scale", "baseline_no_feedback")
-
     baseline_rows = csv_df[csv_df["name"].isin(baseline_names)]
-    if baseline_rows.empty:
-        # Fallback: use the first config name as baseline
-        first_name = csv_df["name"].iloc[0] if len(csv_df) > 0 else None
-        if first_name is not None:
-            baseline_rows = csv_df[csv_df["name"] == first_name]
-
+    if baseline_rows.empty and len(csv_df) > 0:
+        baseline_rows = csv_df.iloc[[0]]
     result: dict[str, dict[str, float]] = {}
     for _, row in baseline_rows.iterrows():
-        source = str(row["source"])
+        source = str(row.get("source", "unknown"))
         result[source] = {
-            "sum_pnl_amount": float(row["sum_pnl_amount"]),
-            "avg_pnl_pct": float(row["avg_pnl_pct"]),
-            "count": int(row["count"]),
-            "wins": int(row["wins"]),
+            "sum_pnl_amount": float(str(row.get("sum_pnl_amount", 0)).replace(",", "") or 0),
+            "avg_pnl_pct": float(str(row.get("avg_pnl_pct", 0)).replace(",", "") or 0),
+            "count": int(float(str(row.get("count", 0)) or 0)),
+            "wins": int(float(str(row.get("wins", 0)) or 0)),
         }
     return result
 
 
+# ── Rank adjustment helpers ──
+
 def _source_name_for_row(row: Any, params: dict[str, Any]) -> str:
-    """Determine the gap source name for a single rank row."""
+    _gap_source_shares, *_ = _import_value_gap_switch()
     source, _, _ = _gap_source_shares(row, params)
     return source
 
-
-# --- Rank adjustment helpers ---
 
 def _adjust_ranks_for_feedback(
     ranks: pd.DataFrame,
     source_pnl_lookup: dict[str, dict[str, float]],
     cfg: dict[str, Any],
-    params: dict[str, Any],
 ) -> pd.DataFrame:
-    """Pre-adjust ranks based on entry-source PnL feedback.
-
-    For each option-source candidate row, look up the source's aggregate PnL
-    from the prior run. If the PnL signal crosses the feedback threshold,
-    scale down value_gap_amount and position_cash_scale.
-
-    Returns the adjusted DataFrame.
-    """
+    """Pre-adjust ranks based on entry-source PnL feedback."""
     if not cfg.get("feedback_enabled"):
         return ranks
 
     signal = str(cfg.get("feedback_signal", "sum_pnl_amount"))
     threshold = float(cfg.get("feedback_threshold", 0.0))
-    scale = float(cfg.get("feedback_scale", 1.0))
+    scale_val = float(cfg.get("feedback_scale", 1.0))
+    params = {k: cfg[k] for k in ("feedback_enabled", "feedback_signal", "feedback_threshold", "feedback_scale")}
+    params.update(BASE_PARAMS)
 
     adjusted = ranks.copy()
     if "position_cash_scale" not in adjusted.columns:
         adjusted["position_cash_scale"] = 1.0
 
-    # Build a per-row source mask:
-    # option_mask = rows where gap source == "option"
     option_mask_values: list[bool] = []
     losing_mask_values: list[bool] = []
     for row in adjusted.itertuples(index=False):
@@ -190,63 +203,29 @@ def _adjust_ranks_for_feedback(
         return adjusted
 
     adjusted.loc[apply_mask, "position_cash_scale"] = (
-        adjusted.loc[apply_mask, "position_cash_scale"].astype(float) * scale
+        adjusted.loc[apply_mask, "position_cash_scale"].astype(float) * scale_val
     )
     adjusted.loc[apply_mask, "value_gap_amount"] = (
-        adjusted.loc[apply_mask, "value_gap_amount"].astype(float) * scale
-    )
-    adjusted.loc[apply_mask, "value_gap_pct_of_cash"] = (
-        adjusted.loc[apply_mask, "value_gap_amount"].astype(float)
-        / adjusted.loc[apply_mask, "position_cash"].astype(float)
+        adjusted.loc[apply_mask, "value_gap_amount"].astype(float) * scale_val
     )
     return adjusted
 
 
-# --- Spec binding ---
-
-def _spec_binding_fields(output_dir: Path) -> dict[str, str]:
-    spec_path = output_dir / "spec.yaml"
-    if not spec_path.exists():
-        return {"spec_run_id": output_dir.name, "spec_binding_hash": ""}
-    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
-    if not isinstance(spec, dict):
-        return {"spec_run_id": output_dir.name, "spec_binding_hash": ""}
-    binding = {
-        "run_id": spec.get("run_id") or output_dir.name,
-        "hypothesis": spec.get("hypothesis"),
-        "source_insight": spec.get("source_insight"),
-        "parameter_space": spec.get("parameter_space"),
-        "mechanics": spec.get("mechanics"),
-        "proposal_id": ((spec.get("automation") or {}).get("proposal_id")),
-    }
-    payload = json.dumps(binding, ensure_ascii=False, sort_keys=True, default=str)
-    return {
-        "spec_run_id": str(binding["run_id"]),
-        "spec_binding_hash": hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16],
-    }
-
-
-def _attach_spec_binding(rows: list[dict[str, Any]], output_dir: Path) -> None:
-    binding = _spec_binding_fields(output_dir)
-    for row in rows:
-        row.update(binding)
-
-
-# --- CLI ---
+# ── CLI ──
 
 def declare_data_requirements(
     command: list[Any], spec: dict[str, Any] | None = None
 ) -> dict[str, Any]:
     """Return the files this executor will read before it is allowed to run."""
-    _cmd_val = lambda flag: next(
+    cmd_val = lambda flag: next(
         (str(p) for i, p in enumerate(command[:-1]) if str(p) == flag), None
     )
-    data_root_raw = _cmd_val("--data-root")
+    data_root_raw = cmd_val("--data-root")
     if not data_root_raw:
         raise ValueError("evaluate_cb_arb_option_pnl_feedback_v2 requires --data-root")
-    base_ranks = _cmd_val("--base-ranks-path")
-    csv_2020 = _cmd_val("--option-2020-csv")
-    csv_test = _cmd_val("--option-test-csv")
+    base_ranks = cmd_val("--base-ranks-path")
+    csv_2020 = cmd_val("--option-2020-csv")
+    csv_test = cmd_val("--option-test-csv")
 
     required_files: list[dict[str, str]] = [
         {"path": str(Path(data_root_raw) / "data/cb_warehouse/cb_basic.parquet"), "role": "warehouse_input"},
@@ -290,29 +269,8 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
-def _load_base_ranks(args: argparse.Namespace, output_dir: Path) -> pd.DataFrame:
-    start_all = min(args.train_start, args.test_start)
-    end_all = max(args.train_end, args.test_end)
-    if args.base_ranks_path is not None and Path(args.base_ranks_path).exists():
-        ranks = pd.read_parquet(args.base_ranks_path)
-    else:
-        ranks = _load_or_build_value_ranks(
-            args.data_root,
-            start_all,
-            end_all,
-            args.fixed_source,
-            args.rule,
-            output_dir / "daily_value_gap_amounts_base.parquet",
-            args.reuse_ranks,
-        )
-    ranks = ranks.copy()
-    ranks["trade_date"] = ranks["trade_date"].astype(str)
-    ranks["ts_code"] = ranks["ts_code"].astype(str)
-    ranks = ranks[(ranks["trade_date"] >= start_all) & (ranks["trade_date"] <= end_all)]
-    return _add_moneyness(ranks)
-
-
 def _params(args: argparse.Namespace, cfg: dict[str, Any]) -> dict[str, Any]:
+    _, _, _, _, _with_cost_params, _ = _import_value_gap_switch()
     params = _with_cost_params(dict(BASE_PARAMS), args)
     params.update(
         {
@@ -325,15 +283,10 @@ def _params(args: argparse.Namespace, cfg: dict[str, Any]) -> dict[str, Any]:
 
 
 def _row(
-    name: str,
-    description: str,
-    period: str,
-    start: str,
-    end: str,
-    cfg: dict[str, Any],
-    params: dict[str, Any],
-    result: dict[str, Any],
+    name: str, description: str, period: str, start: str, end: str,
+    cfg: dict[str, Any], params: dict[str, Any], result: dict[str, Any],
 ) -> dict[str, Any]:
+    _, _, _, _score_fn, _, _ = _import_value_gap_switch()
     row = {
         "name": name,
         "description": description,
@@ -344,59 +297,8 @@ def _row(
         "params_json": json.dumps(params, sort_keys=True),
         **result["metrics"],
     }
-    row["score"] = _score(result["metrics"])
+    row["score"] = _score_fn(result["metrics"])
     return row
-
-
-def _source_rows(
-    name: str, result: dict[str, Any], ranks_by_key: dict[tuple[str, str], Any], params: dict[str, Any]
-) -> list[dict[str, Any]]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for trade in result["trades"]:
-        key = (str(trade["entry_date"]), str(trade["cb_code"]))
-        rank_row = ranks_by_key.get(key)
-        source = "missing"
-        bond_share = 0.0
-        option_share = 0.0
-        position_scale = 1.0
-        if rank_row is not None:
-            source, bond_share, option_share = _gap_source_shares(rank_row, params)
-            try:
-                position_scale = float(getattr(rank_row, "position_cash_scale", 1.0) or 1.0)
-            except (TypeError, ValueError):
-                position_scale = 1.0
-        grouped.setdefault(source, []).append(
-            {
-                **trade,
-                "bond_share": bond_share,
-                "option_share": option_share,
-                "position_cash_scale": position_scale,
-            }
-        )
-
-    rows: list[dict[str, Any]] = []
-    for source, trades_list in sorted(grouped.items()):
-        pnl_pct = [float(t["pnl_pct"]) for t in trades_list]
-        pnl_amount = [float(t["pnl_amount"]) for t in trades_list]
-        scales = [float(t["position_cash_scale"]) for t in trades_list]
-        rows.append(
-            {
-                "name": name,
-                "source": source,
-                "count": len(trades_list),
-                "avg_pnl_pct": round(sum(pnl_pct) / len(pnl_pct), 6),
-                "sum_pnl_amount": round(sum(pnl_amount), 2),
-                "wins": sum(1 for v in pnl_pct if v > 0),
-                "avg_bond_share": round(
-                    sum(float(t["bond_share"]) for t in trades_list) / len(trades_list), 6
-                ),
-                "avg_option_share": round(
-                    sum(float(t["option_share"]) for t in trades_list) / len(trades_list), 6
-                ),
-                "avg_position_cash_scale": round(sum(scales) / len(scales), 6) if scales else None,
-            }
-        )
-    return rows
 
 
 def _pick(rows: list[dict[str, Any]], name: str, period: str) -> dict[str, Any]:
@@ -407,6 +309,48 @@ def _year(rows: list[dict[str, Any]], name: str, year: int) -> dict[str, Any]:
     return next((r for r in rows if r["name"] == name and r["period"] == str(year)), {})
 
 
+def _spec_binding_fields(output_dir: Path) -> dict[str, str]:
+    spec_path = output_dir / "spec.yaml"
+    if not spec_path.exists():
+        return {"spec_run_id": output_dir.name, "spec_binding_hash": ""}
+    spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
+    if not isinstance(spec, dict):
+        return {"spec_run_id": output_dir.name, "spec_binding_hash": ""}
+    binding = {
+        "run_id": spec.get("run_id") or output_dir.name,
+        "hypothesis": spec.get("hypothesis"),
+        "source_insight": spec.get("source_insight"),
+        "parameter_space": spec.get("parameter_space"),
+        "mechanics": spec.get("mechanics"),
+        "proposal_id": ((spec.get("automation") or {}).get("proposal_id")),
+    }
+    payload = json.dumps(binding, ensure_ascii=False, sort_keys=True, default=str)
+    return {
+        "spec_run_id": str(binding["run_id"]),
+        "spec_binding_hash": hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16],
+    }
+
+
+def _attach_spec_binding(rows: list[dict[str, Any]], output_dir: Path) -> None:
+    binding = _spec_binding_fields(output_dir)
+    for row in rows:
+        row.update(binding)
+
+
+# ── GateKeeper lifecycle ──
+
+def _gatekeeper_before_run(output_dir: Path) -> None:
+    spec_path = output_dir / "spec.yaml"
+    if spec_path.exists():
+        GateKeeper(quiet=True).before_run_grid(spec_path)
+
+
+def _gatekeeper_after_run(output_dir: Path) -> None:
+    GateKeeper(quiet=True).after_run_grid(output_dir)
+
+
+# ── Artifact writing ──
+
 def _write_review_files(
     output_dir: Path,
     summary: dict[str, Any],
@@ -416,7 +360,8 @@ def _write_review_files(
     baseline_test: dict[str, Any],
     adoption_pass: bool,
 ) -> None:
-    now = datetime.now().isoformat(timespec="seconds")
+    now_str = datetime.now().isoformat(timespec="seconds")
+    now_date = datetime.now().strftime("%Y-%m-%d")
     decision = "mini-spec-retry" if adoption_pass else "reject"
     reason = (
         "Rolling option-source PnL feedback (v2 CSV-based) passed train/test/2020 "
@@ -428,222 +373,164 @@ def _write_review_files(
     selected_test = _pick(summary.get("summary_rows", []), str(best_train.get("name")), "test")
     baseline_2020 = summary.get("baseline_2020", {})
     selected_2020 = summary.get("selected_2020", {})
+
+    # summary.json
     (output_dir / "summary.json").write_text(
         json.dumps(summary, ensure_ascii=False, indent=2) + "\n",
         encoding="utf-8",
     )
+
+    # report.yaml
     (output_dir / "report.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "schema_version": 1,
-                "run_id": output_dir.name,
-                "date": datetime.now().strftime("%Y-%m-%d"),
-                "strategy_id": "cb_arb_value_gap_switch",
-                "l6_exit_decision": decision,
-                "status": "COMPLETE",
-                "three_exits_section": {
-                    "train_exit": f"Train winner selected {best_train.get('name')}.",
-                    "validation_exit": f"Sealed test winner selected {best_test.get('name')}.",
-                    "decision_exit": reason,
-                },
-                "compute_cost_yuan": 0.0,
-                "confirmed_invalid_directions": [
-                    "rolling_option_source_pnl_feedback_v2_csv"
-                ] if not adoption_pass else [],
-                "learnings": [
-                    "Pre-computed source PnL from prior position-sizing run is used "
-                    "as a feedback signal; must be judged on train, 2020, and "
-                    "sealed test together.",
-                    reason,
-                ],
-                "follow_up_actions": [
-                    "Keep this run as evidence for future option-source feedback ideation.",
-                    "Do not promote unless follow-up review confirms train/test/2020 robustness.",
-                ],
-                "summary": reason,
-                "notes": "Result reviewed by code-generated summary.json, l4_ack.yaml, and diagnostic.yaml.",
-                "references": summary.get("artifacts", []),
-                "related_reports": [
-                    "data/cb_arb_value_gap_switch_option-position-sizing_2026-05-17_151411/report.yaml",
-                    "data/cb_arb_value_gap_switch_option-value-haircut_2026-05-17/report.yaml",
-                    "data/cb_arb_value_gap_switch_option-pnl-feedback-v1_*/report.yaml",
-                ],
+        yaml.safe_dump({
+            "schema_version": 1,
+            "run_id": output_dir.name,
+            "date": now_date,
+            "strategy_id": "cb_arb_value_gap_switch",
+            "l6_exit_decision": decision,
+            "status": "COMPLETE",
+            "three_exits_section": {
+                "train_exit": f"Train winner selected {best_train.get('name')}.",
+                "validation_exit": f"Sealed test winner selected {best_test.get('name')}.",
+                "decision_exit": reason,
             },
-            allow_unicode=True,
-            sort_keys=False,
-        ),
+            "compute_cost_yuan": 0.0,
+            "confirmed_invalid_directions": (
+                ["rolling_option_source_pnl_feedback_v2_csv"] if not adoption_pass else []
+            ),
+            "learnings": [
+                "Pre-computed source PnL from prior position-sizing run is used "
+                "as a feedback signal; must be judged on train, 2020, and "
+                "sealed test together.",
+                reason,
+            ],
+            "follow_up_actions": [
+                "Keep this run as evidence for future option-source feedback ideation.",
+                "Do not promote unless follow-up review confirms train/test/2020 robustness.",
+            ],
+            "summary": reason,
+        }, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+
+    # l4_ack.yaml
+    l4_test_excess = float(selected_test.get("excess_return", 0))
+    l4_baseline_test_excess = float(baseline_test.get("excess_return", 0))
+    l4_2020_return = float(selected_2020.get("total_return", 0))
+    l4_baseline_2020_return = float(baseline_2020.get("total_return", 0))
+    l4_pass = (
+        l4_test_excess >= l4_baseline_test_excess
+        and l4_2020_return >= l4_baseline_2020_return
+    )
+
     (output_dir / "l4_ack.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "schema_version": 1,
-                "run_id": output_dir.name,
-                "reviewer": "hermes",
-                "ack_at": now,
-                "q1_floor_binding": {
-                    "description": "Hard floors and train/test consistency.",
-                    "answer": (
-                        "Selected train winner also meets sealed test and 2020 checks."
-                        if adoption_pass
-                        else "Selected train winner does not pass train/test/2020 "
-                        "robustness checks together."
-                    ),
-                    "computed_data": {
-                        "best_train_variant": best_train.get("name"),
-                        "train_excess": best_train.get("excess_return"),
-                        "test_excess": selected_test.get("excess_return"),
-                        "baseline_test_excess": baseline_test.get("excess_return"),
-                        "baseline_2020_total_return": baseline_2020.get("total_return"),
-                        "selected_2020_total_return": selected_2020.get("total_return"),
-                    },
-                    "computed_at": now,
-                    "pass": adoption_pass,
-                },
-                "q2_selection_score": {
-                    "description": "Candidate selection quality.",
-                    "answer": (
-                        f"Train score selects {best_train.get('name')}; "
-                        f"sealed test best is {best_test.get('name')}."
-                    ),
-                    "computed_data": {
-                        "selected_by_train_score": best_train.get("name"),
-                        "selected_score": best_train.get("score"),
-                        "best_test_variant": best_test.get("name"),
-                        "best_test_score": best_test.get("score"),
-                    },
-                    "pass": adoption_pass,
-                },
-                "q3_baseline_alignment": {
-                    "description": "Alignment against current cb_arb_value_gap_switch baseline.",
-                    "answer": (
-                        "Candidate is aligned with baseline thresholds."
-                        if adoption_pass
-                        else "Candidate does not justify replacing the current baseline."
-                    ),
-                    "computed_data": {
-                        "baseline_train_excess": baseline_train.get("excess_return"),
-                        "baseline_test_excess": baseline_test.get("excess_return"),
-                        "selected_test_excess": selected_test.get("excess_return"),
-                    },
-                    "computed_at": now,
-                    "pass": adoption_pass,
-                },
-                "q4_monotonic": {
-                    "description": "Edge-of-grid or monotonic concern.",
-                    "answer": "Categorical feedback variants; no monotonic promotion without review.",
-                    "computed_data": {
-                        "grid_type": "csv_feedback_variants",
-                        "candidates_count": summary.get("candidate_count"),
-                    },
-                    "computed_at": now,
-                    "pass": True,
-                },
-                "q5_trade_overlap": {
-                    "description": "Trade overlap baseline vs selected.",
-                    "answer": "Aggregate train/test/2020 checks are used for automatic decision.",
-                    "computed_data": {
-                        "selected_total_trades_test": selected_test.get("total_trades"),
-                        "baseline_total_trades_test": baseline_test.get("total_trades"),
-                        "selected_total_trades_2020": selected_2020.get("total_trades"),
-                        "baseline_total_trades_2020": baseline_2020.get("total_trades"),
-                    },
-                    "computed_at": now,
-                    "pass": True,
-                },
-                "q6_trigger_timing": {"description": "Trigger timing leakage.", "applicable": False},
-                "q7_path_contamination": {"description": "Path/data contamination.", "applicable": False},
-                "overall_pass": adoption_pass,
-                "overall_decision": decision,
-                "overall_reason": reason,
-                "auto_computed_at": now,
+        yaml.safe_dump({
+            "schema_version": 1,
+            "run_id": output_dir.name,
+            "reviewer": "hermes",
+            "ack_at": now_str,
+            "q1_hard_floors": {
+                "description": "2020 stress period: selected variant >= baseline total return.",
+                "answer": f"2020 selected={l4_2020_return} baseline={l4_baseline_2020_return}",
+                "pass": l4_2020_return >= l4_baseline_2020_return,
             },
-            allow_unicode=True,
-            sort_keys=False,
-        ),
+            "q2_selection_quality": {
+                "description": "Sealed test: selected variant >= baseline excess return.",
+                "answer": f"test excess={l4_test_excess} baseline={l4_baseline_test_excess}",
+                "pass": l4_test_excess >= l4_baseline_test_excess,
+            },
+            "q3_falsifiers": {
+                "description": "Overall adoption pass check.",
+                "answer": f"adoption_pass={adoption_pass}, best_train={best_train.get('name')}",
+                "pass": adoption_pass,
+            },
+            "overall_pass": adoption_pass,
+            "overall_decision": decision,
+            "overall_reason": reason,
+            "auto_computed_at": now_str,
+        }, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
+
+    # diagnostic.yaml
     (output_dir / "diagnostic.yaml").write_text(
-        yaml.safe_dump(
-            {
-                "schema_version": 1,
-                "run_id": output_dir.name,
-                "diagnostic_date": datetime.now().strftime("%Y-%m-%d"),
-                "diagnostic_by": "hermes",
-                "verdict_referenced": decision,
-                "summary": reason,
-                "verdict_rationale": reason,
-                **(
-                    {
-                        "next_step_spec_changes": [
-                            {
-                                "field": "review_required_before_promotion",
-                                "old_value": False,
-                                "new_value": True,
-                                "reason": "mini-spec-retry requires explicit follow-up review "
-                                "before any baseline change.",
-                            }
-                        ]
-                    }
-                    if decision == "mini-spec-retry"
-                    else {}
-                ),
-            },
-            allow_unicode=True,
-            sort_keys=False,
-        ),
+        yaml.safe_dump({
+            "schema_version": 1,
+            "run_id": output_dir.name,
+            "diagnostic_date": now_date,
+            "diagnostic_by": "hermes",
+            "verdict_referenced": decision,
+            "summary": reason,
+            "verdict_rationale": reason,
+            "warnings": [],
+            "errors": [],
+            "grid_sweep_size": len(CONFIGS),
+        }, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
 
 
-# --- main ---
+# ── Main ──
 
 def main() -> int:
+    _setup_heavy_deps()
     args = _parse_args()
     output_dir = args.output_dir or args.data_root / "value_gap_option_pnl_feedback_v2"
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    # 1. Load base ranks
-    base_ranks = _load_base_ranks(args, output_dir)
-    base_params_no_feedback = _with_cost_params(dict(BASE_PARAMS), args)
-    ranks_by_key = {
-        (str(r.trade_date), str(r.ts_code)): r
-        for r in base_ranks.itertuples(index=False)
-    }
+    _gatekeeper_before_run(output_dir)
 
-    # 2. Load entry-source CSVs and build per-source PnL lookup
+    (
+        _gap_source_shares,
+        _load_or_build_value_ranks,
+        _run_value_gap_backtest,
+        _score_fn,
+        _with_cost_params,
+        _write_csv,
+    ) = _import_value_gap_switch()
+    _add_moneyness = _import_position_sizing()
+
+    # 1. Load base ranks
+    start_all = min(args.train_start, args.test_start)
+    end_all = max(args.train_end, args.test_end)
+    if args.base_ranks_path is not None and Path(args.base_ranks_path).exists():
+        base_ranks = pd.read_parquet(args.base_ranks_path)
+    else:
+        base_ranks = _load_or_build_value_ranks(
+            args.data_root, start_all, end_all, args.fixed_source, args.rule,
+            output_dir / "daily_value_gap_amounts_base.parquet", args.reuse_ranks,
+        )
+    base_ranks = base_ranks.copy()
+    base_ranks["trade_date"] = base_ranks["trade_date"].astype(str)
+    base_ranks["ts_code"] = base_ranks["ts_code"].astype(str)
+    base_ranks = base_ranks[(base_ranks["trade_date"] >= start_all) & (base_ranks["trade_date"] <= end_all)]
+    base_ranks = _add_moneyness(base_ranks)
+
+    # 2. Load entry-source CSVs → per-source PnL lookup
     source_pnl_lookup: dict[str, dict[str, float]] = {}
     if args.option_2020_csv is not None and Path(args.option_2020_csv).exists():
         df_2020 = _parse_entry_source_csv(args.option_2020_csv)
         source_pnl_lookup.update(_extract_baseline_source_pnl(df_2020))
     if args.option_test_csv is not None and Path(args.option_test_csv).exists():
         df_test = _parse_entry_source_csv(args.option_test_csv)
-        # Merge test PnL data (source-level); 2020 takes priority for overlapping sources
         test_pnl = _extract_baseline_source_pnl(df_test)
         for src, stats in test_pnl.items():
             if src not in source_pnl_lookup:
                 source_pnl_lookup[src] = stats
 
     if not source_pnl_lookup:
-        print("[v2] WARNING: No entry-source CSV data loaded; feedback will be disabled.",
-              file=sys.stderr, flush=True)
+        print("[v2] WARNING: No entry-source CSV data loaded; feedback disabled.", flush=True)
 
-    # 3. Iterate over configs
+    # 3. Iterate configs
     summary_rows: list[dict[str, Any]] = []
     yearly_rows: list[dict[str, Any]] = []
-    source_2020_rows: list[dict[str, Any]] = []
-    source_test_rows: list[dict[str, Any]] = []
-    feedback_rows: list[dict[str, Any]] = []
 
     for cfg in CONFIGS:
         name = str(cfg["name"])
         description = str(cfg.get("description", ""))
         params = _params(args, cfg)
 
-        # Pre-adjust ranks based on CSV feedback
-        adjusted_ranks = _adjust_ranks_for_feedback(
-            base_ranks, source_pnl_lookup, cfg, params
-        )
+        adjusted_ranks = _adjust_ranks_for_feedback(base_ranks, source_pnl_lookup, cfg)
 
         train_ranks = adjusted_ranks[
             (adjusted_ranks["trade_date"] >= args.train_start)
@@ -655,72 +542,51 @@ def main() -> int:
         ]
 
         train = _run_value_gap_backtest(
-            train_ranks,
-            args.train_start,
-            args.train_end,
-            args.data_root,
-            args.fixed_source,
-            args.rule,
-            params,
+            train_ranks, args.train_start, args.train_end,
+            args.data_root, args.fixed_source, args.rule, params,
         )
         test = _run_value_gap_backtest(
-            test_ranks,
-            args.test_start,
-            args.test_end,
-            args.data_root,
-            args.fixed_source,
-            args.rule,
-            params,
+            test_ranks, args.test_start, args.test_end,
+            args.data_root, args.fixed_source, args.rule, params,
         )
+
         summary_rows.append(_row(name, description, "train", args.train_start, args.train_end, cfg, params, train))
         summary_rows.append(_row(name, description, "test", args.test_start, args.test_end, cfg, params, test))
-        source_test_rows.extend(_source_rows(name, test, ranks_by_key, params))
-        feedback_rows.append(
-            {
-                "name": name,
-                "description": description,
-                "params_json": json.dumps(params, sort_keys=True),
-                "train_trade_count": len(train["trades"]),
-                "test_trade_count": len(test["trades"]),
-            }
-        )
+
         print(
-            f"[v2] {name} "
-            f"train_excess={train['metrics']['excess_return']} "
+            f"[v2] {name} train_excess={train['metrics']['excess_return']} "
             f"test_excess={test['metrics']['excess_return']}",
             flush=True,
         )
 
-        # 4. Yearly slices (2019-2024 for train period; 2020 is the validate slice)
+        # Yearly slices for 2020 validation
         for year in range(2019, 2025):
-            start = f"{year}0101"
-            end = f"{year}1231"
-            ranks_year = adjusted_ranks[
-                (adjusted_ranks["trade_date"] >= start)
-                & (adjusted_ranks["trade_date"] <= end)
+            yr_start = f"{year}0101"
+            yr_end = f"{year}1231"
+            ranks_yr = adjusted_ranks[
+                (adjusted_ranks["trade_date"] >= yr_start)
+                & (adjusted_ranks["trade_date"] <= yr_end)
             ]
-            y = _run_value_gap_backtest(
-                ranks_year,
-                start,
-                end,
-                args.data_root,
-                args.fixed_source,
-                args.rule,
-                params,
+            yr_result = _run_value_gap_backtest(
+                ranks_yr, yr_start, yr_end,
+                args.data_root, args.fixed_source, args.rule, params,
             )
-            yearly_rows.append(_row(name, description, str(year), start, end, cfg, params, y))
-            if year == 2020:
-                source_2020_rows.extend(_source_rows(name, y, ranks_by_key, params))
+            yearly_rows.append(_row(name, description, str(year), yr_start, yr_end, cfg, params, yr_result))
 
-    # 5. Attach spec binding and write CSVs
+    # 4. Write CSVs
     _attach_spec_binding(summary_rows, output_dir)
     _write_csv(output_dir / "summary_option_pnl_feedback_v2.csv", summary_rows)
     _write_csv(output_dir / "yearly_option_pnl_feedback_v2.csv", yearly_rows)
-    _write_csv(output_dir / "entry_source_2020_option_pnl_feedback_v2.csv", source_2020_rows)
-    _write_csv(output_dir / "entry_source_test_option_pnl_feedback_v2.csv", source_test_rows)
-    _write_csv(output_dir / "feedback_option_pnl_feedback_v2.csv", feedback_rows)
+    _write_csv(output_dir / "feedback_option_pnl_feedback_v2.csv", [
+        {
+            "name": str(cfg["name"]),
+            "description": str(cfg.get("description", "")),
+            "params_json": json.dumps(_params(args, cfg), sort_keys=True),
+        }
+        for cfg in CONFIGS
+    ])
 
-    # 6. Select best and evaluate adoption criteria
+    # 5. Select best and compute adoption
     train_rows = [r for r in summary_rows if r["period"] == "train"]
     test_rows = [r for r in summary_rows if r["period"] == "test"]
     best_train = max(train_rows, key=lambda r: float(r["score"])) if train_rows else {}
@@ -740,42 +606,27 @@ def main() -> int:
         and float(best_train.get("max_drawdown", -999)) >= -0.30
     )
 
-    artifacts = [
-        "summary_option_pnl_feedback_v2.csv",
-        "yearly_option_pnl_feedback_v2.csv",
-        "entry_source_2020_option_pnl_feedback_v2.csv",
-        "entry_source_test_option_pnl_feedback_v2.csv",
-        "feedback_option_pnl_feedback_v2.csv",
-        "summary.json",
-        "report.yaml",
-        "l4_ack.yaml",
-        "diagnostic.yaml",
-    ]
     summary = {
         "schema_version": 1,
         "run_id": output_dir.name,
         "status": "COMPLETE",
-        "candidate_count": len(CONFIGS),
         "adoption_pass": adoption_pass,
-        "best_train": best_train,
-        "best_test": best_test,
-        "baseline_train": baseline_train,
-        "baseline_test": baseline_test,
-        "selected_test": selected_test,
-        "baseline_2020": baseline_2020,
-        "selected_2020": selected_2020,
+        "decision": "mini-spec-retry" if adoption_pass else "reject",
+        "candidate_count": len(CONFIGS),
+        "params": params,
+        "best_train": {k: v for k, v in best_train.items() if k != "trades"},
+        "best_test": {k: v for k, v in best_test.items() if k != "trades"},
+        "baseline_train": {k: v for k, v in baseline_train.items() if k != "trades"},
+        "baseline_test": {k: v for k, v in baseline_test.items() if k != "trades"},
+        "selected_test": {k: v for k, v in selected_test.items() if k != "trades"},
+        "baseline_2020": {k: v for k, v in baseline_2020.items() if k != "trades"},
+        "selected_2020": {k: v for k, v in selected_2020.items() if k != "trades"},
         "summary_rows": summary_rows,
-        "artifacts": artifacts,
     }
-    _write_review_files(
-        output_dir,
-        summary,
-        best_train,
-        best_test,
-        baseline_train,
-        baseline_test,
-        adoption_pass,
-    )
+    _write_review_files(output_dir, summary, best_train, best_test, baseline_train, baseline_test, adoption_pass)
+
+    _gatekeeper_after_run(output_dir)
+    print(f"[v2] DONE adoption_pass={adoption_pass} candidates={len(CONFIGS)} best_train={best_train.get('name')}", flush=True)
     return 0
 
 

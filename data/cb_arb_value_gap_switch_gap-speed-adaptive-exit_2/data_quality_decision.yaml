@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
+spec_path: data/cb_arb_value_gap_switch_gap-speed-adaptive-exit_2/spec.yaml
+validated_at: '2026-05-23T01:05:45'
+summary_sha256: 367e9e82b074ccc237427ab7543f169b3faa70004b6fd9fc3647514d43b06b36
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- executor_input_column_hints 为空，无法交叉校验输入字段与数据字段的对应关系，但因 required_columns 未显式声明，不构成阻断。
+- executor_generated_columns 为 null，无法确认执行器是否会生成运行时字段，但不影响数据质量判断。
+fix_plan: []
+decision_reason: 唯一必需文件存在、可读、日期区间完整覆盖训练和测试期，无阻断性问题。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: cdbf4bd0a285e4f9

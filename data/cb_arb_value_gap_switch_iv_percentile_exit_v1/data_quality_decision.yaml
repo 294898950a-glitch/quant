@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_iv_percentile_exit_v1
+spec_path: data/cb_arb_value_gap_switch_iv_percentile_exit_v1/spec.yaml
+validated_at: '2026-05-22T05:22:41'
+summary_sha256: 1b9c0c3ed8dd8deee8c2f94f027b3e7bbd9a17fe92d0f1ac6e03829e66bc79c3
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- 训练开始日期 20190101 比 daily_value_gap_amounts.parquet 最早日期 20190102 早一天，可能缺少 20190101
+  数据，但不影响整体覆盖。
+fix_plan: []
+decision_reason: 所有必需文件存在可读，必需字段齐全，日期覆盖充足，输入字段匹配，无阻塞性问题。
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: deepseek
+response_hash: 3bdf56f7d28abf29

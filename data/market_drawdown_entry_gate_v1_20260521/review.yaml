@@ -1,0 +1,57 @@
+schema_version: 1
+run_id: market_drawdown_entry_gate_v1_20260521
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: market_drawdown_entry_gate_v1_20260521
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: 90ac141e68ca86a1
+interpretation:
+  review_status_code: 2
+  result_summary: The market drawdown entry gate gate_n20_t0p12_buf0 failed the required
+    stress 2020 and train score criteria, triggering a reject decision.
+  main_reason: Stress 2020 score (-0.230852) and train score (0.024009) fell below
+    the fixed criteria thresholds, while validate score passed.
+  failure_causes:
+  - stress_2020_score_fail
+  - train_score_fail
+  next_research_directions:
+  - direction: Explore alternative drawdown thresholds and lookback windows
+    why: The gate failed two of three period scores and showed a negative suppression
+      percentage in training; alternative parameters may meet all criteria.
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - Suppression percentage in train is -2.1%, indicating the gate increased rather
+    than decreased trade count; the cause for this anomaly is not explained in available
+    diagnostics.
+  review_status: reject
+closed_directions:
+- mechanic_tag: global_entry_filter
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: deepseek
+prompt_path: null
+response_hash: 95b9ee8f42b2a7ad
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

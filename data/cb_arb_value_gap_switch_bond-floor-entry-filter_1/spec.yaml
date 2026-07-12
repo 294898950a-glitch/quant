@@ -62,7 +62,7 @@ artifacts_required:
 - report.yaml
 - l4_ack.yaml
 - diagnostic.yaml
-status: READY
+status: COMPLETE
 auxiliary_metrics:
 - train_excess_return
 - test_excess_return
@@ -271,3 +271,4 @@ ideation_provenance:
   compiler_decision: READY
   compiler_reason: all guarded checks passed
   dropped_unmatched_required_data: []
+updated_at: '2026-05-22T19:00:31Z'

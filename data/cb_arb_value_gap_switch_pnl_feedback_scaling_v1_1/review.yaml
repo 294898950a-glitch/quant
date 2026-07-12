@@ -1,0 +1,85 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_pnl_feedback_scaling_v1_1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 9
+    selected_name: best_candidate
+  artifacts_hash: 1203561cf0b7c215
+interpretation:
+  review_status_code: 2
+  result_summary: PnL feedback scaling (lookback=60, floor=0.7) failed to produce
+    positive excess returns in any period — test -23.8K, train -98.5K, 2020 -23.8K
+    — confirming the damage-control overlay did not overcome the underlying anti-alpha
+    signal.
+  main_reason: All three evaluation periods (train, test, 2020) returned negative
+    excess returns despite the theoretical premise that sizing discipline would suppress
+    cold-period losses; the forward value-gap signal's cost drag is not fixable by
+    position scaling alone.
+  failure_causes:
+  - PnL feedback scaling failed to turn any period's excess return positive; the overlay
+    dampened exposure but did not avoid the structural negative drift of the forward
+    signal.
+  - The cost-drag mechanism is too persistent — reducing position sizes after drawdowns
+    was insufficient to offset the cumulative negative gap when the model's estimates
+    systematically degrade.
+  next_research_directions:
+  - direction: revisit reverse sort with entry filters that preserve candidate count
+    why: The reverse-probe achieved +30.3% test excess with the full candidate pool;
+      the 5 closed reverse families all failed due to candidate-killing entry filters
+      (moneyness, bond floor). A reverse sort with a non-culling filter (e.g., spread-based
+      or liquidity-based) could retain the reverse signal's directional edge.
+    priority_code: 1
+    priority: high
+  - direction: investigate whether the forward value-gap signal has any conditional
+      regime where it is not anti-alpha
+    why: The forward signal is consistently negative across 6+ tested families; a
+      regime-detection approach (volatility clustering, market stress indicators)
+      could isolate windows where the gap estimates are accurate and the signal is
+      tradable.
+    priority_code: 2
+    priority: medium
+  - direction: test PnL feedback with shorter lookback or asymmetric floor (floor
+      < 0.7)
+    why: The 60-day lookback may be too slow to react to cold-period onset; a more
+      aggressive scaling (lower floor, shorter window) could cut exposure faster,
+      though diminishing returns are likely given the all-negative result.
+    priority_code: 3
+    priority: low
+  evidence_gaps:
+  - No sharpe ratio comparison is available — the hard floor test_period_sharpe >
+    baseline_test_sharpe cannot be verified from the provided facts, though excess
+    return alone is sufficient for rejection.
+  - The grid sweep of 9 candidates only reports one selected configuration; the full
+    sweep results (other 8 candidates) are absent, making it impossible to see if
+    any alternative parameterization came close to breakeven.
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 603439ce479a705c
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false
+    candidate_count: 9
+    selected_name: best_candidate

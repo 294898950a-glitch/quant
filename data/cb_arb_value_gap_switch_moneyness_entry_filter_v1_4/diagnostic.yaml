@@ -1,0 +1,32 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+diagnostic_date: '2026-05-24'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: Moneyness entry filter moneyness_t0p0 failed the fixed criteria.
+verdict_rationale: 'Not all period criteria met: stress_2020_score_fail, train_score_fail,
+  validate_score_pass'
+verdict: reject
+verdict_reason: 'Not all period criteria met: stress_2020_score_fail, train_score_fail,
+  validate_score_pass'
+variant: moneyness_t0p0
+params:
+  moneyness_threshold: 0.0
+filtered_metrics:
+  train_score: -0.153703
+  train_excess_return: -0.074824
+  train_max_drawdown: -0.315518
+  train_total_trades: 1592
+  stress_2020_score: -0.18387
+  stress_2020_excess_return: -0.149543
+  validate_score: 0.300181
+  validate_excess_return: 0.331692
+  validate_total_trades: 361
+checks:
+- stress_2020_score_fail
+- train_score_fail
+- validate_score_pass
+warnings: []
+errors: []
+normalized_at: '2026-05-24T05:15:51+00:00'
+normalized_by: normalize_report_schema

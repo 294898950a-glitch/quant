@@ -15,6 +15,7 @@ This is the "数据自动填" half of L4. Claude fills the other half (`answer` 
 
 Usage:
   python3 scripts/auto_compute_l4_data.py             # process all active runs
+  python3 scripts/auto_compute_l4_data.py --run-dir data/<run-id>
   python3 scripts/auto_compute_l4_data.py --dry-run   # show what would change
 """
 
@@ -334,11 +335,20 @@ def process_run(run_dir: Path, dry_run: bool) -> bool:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--run-dir", type=Path, help="process only one run directory")
     args = parser.parse_args()
 
-    run_dirs = sorted([d for d in DATA_DIR.iterdir() if d.is_dir() and (d / "spec.yaml").exists()])
-    target_runs = [d for d in run_dirs if is_target_run(d)]
-    print(f"Found {len(target_runs)} active run(s) (spec.yaml status RUNNING/COMPLETE)")
+    if args.run_dir is not None:
+        run_dir = args.run_dir if args.run_dir.is_absolute() else REPO_ROOT / args.run_dir
+        if not (run_dir / "spec.yaml").exists():
+            print(f"ERROR: run-dir has no spec.yaml: {run_dir}", file=sys.stderr)
+            return 2
+        target_runs = [run_dir]
+        print(f"Processing one run: {run_dir.relative_to(REPO_ROOT)}")
+    else:
+        run_dirs = sorted([d for d in DATA_DIR.iterdir() if d.is_dir() and (d / "spec.yaml").exists()])
+        target_runs = [d for d in run_dirs if is_target_run(d)]
+        print(f"Found {len(target_runs)} active run(s) (spec.yaml status RUNNING/COMPLETE)")
 
     if not target_runs:
         print("No active runs to process. Auto data filled when spec.yaml status flips to RUNNING/COMPLETE.")

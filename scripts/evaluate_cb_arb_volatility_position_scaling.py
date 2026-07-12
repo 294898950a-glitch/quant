@@ -19,22 +19,18 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-import numpy as np
-import pandas as pd
-import yaml
+def _find_repo_root(start: Path) -> Path:
+    for candidate in (start, *start.parents):
+        if (candidate / "scripts" / "gatekeeper.py").exists():
+            return candidate
+    return start.parent
 
-_REPO_ROOT = Path(__file__).resolve().parent.parent
+
+_REPO_ROOT = _find_repo_root(Path(__file__).resolve())
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
-    _gap_source_shares,
-    _load_or_build_value_ranks,
-    _run_value_gap_backtest,
-    _score,
-    _with_cost_params,
-    _write_csv,
-)
+from scripts.gatekeeper import GateKeeper  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Base backtest params — same as the baseline value-gap switch
@@ -81,6 +77,8 @@ CONFIGS: list[dict[str, Any]] = [
 # ---------------------------------------------------------------------------
 
 def _spec_binding_fields(output_dir: Path) -> dict[str, str]:
+    import yaml
+
     spec_path = output_dir / "spec.yaml"
     if not spec_path.exists():
         return {"spec_run_id": output_dir.name, "spec_binding_hash": ""}
@@ -108,6 +106,18 @@ def _attach_spec_binding(rows: list[dict[str, Any]], output_dir: Path) -> None:
         row.update(binding)
 
 
+def _gatekeeper_before_run(output_dir: Path) -> None:
+    spec_path = output_dir / "spec.yaml"
+    if spec_path.exists():
+        gatekeeper = GateKeeper(quiet=True)
+        gatekeeper.before_run_grid(spec_path)
+
+
+def _gatekeeper_after_run(output_dir: Path) -> None:
+    gatekeeper = GateKeeper(quiet=True)
+    gatekeeper.after_run_grid(output_dir)
+
+
 # ---------------------------------------------------------------------------
 # ATR calculation
 # ---------------------------------------------------------------------------
@@ -128,6 +138,9 @@ def _compute_daily_atr(
 
     Returns a DataFrame with [ts_col, date_col, atr] columns.
     """
+    import numpy as np
+    import pandas as pd
+
     df = price_df.sort_values([ts_col, date_col]).reset_index(drop=True)
     df[high_col] = df[high_col].astype(float)
     df[low_col] = df[low_col].astype(float)
@@ -218,26 +231,23 @@ def declare_data_requirements(
 
     base_ranks_raw = _command_value_from_parts(command, "--base-ranks-path")
     warehouse_files = [
-        ("data/cb_warehouse/cb_basic.parquet", ["ts_code", "stk_code", "issue_size", "rating", "conv_price"]),
-        ("data/cb_warehouse/cb_daily.parquet", ["ts_code", "trade_date", "open", "high", "low", "close", "vol"]),
-        ("data/cb_warehouse/cb_call.parquet", ["ts_code", "ann_date", "call_date", "expire_date"]),
-        ("data/cb_warehouse/stk_daily_qfq.parquet", ["stk_code", "trade_date", "close"]),
+        "data/cb_warehouse/cb_basic.parquet",
+        "data/cb_warehouse/cb_daily.parquet",
+        "data/cb_warehouse/cb_call.parquet",
+        "data/cb_warehouse/stk_daily_qfq.parquet",
     ]
-    required_files: list[dict[str, Any]] = [
-        {
-            "path": rel_path,
-            "role": "warehouse_input",
-            "required_columns": columns,
-            "nonnull_columns": [
-                col
-                for col in columns
-                if col not in {"conv_price", "ann_date", "call_date", "expire_date"}
-            ],
-        }
-        for rel_path, columns in warehouse_files
+    # warehouse_files are repo-relative paths (data/cb_warehouse/...). They
+    # must NOT be joined with data_root — that produces a double "data/"
+    # prefix and the sync gate rejects the path. data_root is only meaningful
+    # for run-scoped inputs (pool_X configs below).
+    required_files: list[dict[str, str]] = [
+        {"path": rel_path, "role": "warehouse_input"}
+        for rel_path in warehouse_files
     ]
     if base_ranks_raw:
         base_ranks_path = Path(base_ranks_raw)
+        if not base_ranks_path.is_absolute():
+            base_ranks_path = _REPO_ROOT / base_ranks_path
         required_files.append(
             {"path": str(base_ranks_path), "role": "base_ranks_input"}
         )
@@ -265,7 +275,10 @@ def declare_data_requirements(
 # rank loading + volatility scaling
 # ---------------------------------------------------------------------------
 
-def _load_base_ranks(args: argparse.Namespace, output_dir: Path) -> pd.DataFrame:
+def _load_base_ranks(args: argparse.Namespace, output_dir: Path):
+    import pandas as pd
+    from scripts.evaluate_cb_arb_value_gap_switch import _load_or_build_value_ranks
+
     start_all = min(args.train_start, args.test_start)
     end_all = max(args.train_end, args.test_end)
     if args.base_ranks_path is not None and Path(args.base_ranks_path).exists():
@@ -293,7 +306,8 @@ def _load_atr_data(
     lookback: int,
     start: str,
     end: str,
-) -> pd.DataFrame:
+):
+    import pandas as pd
     """Load cb_daily, compute ATR, return DataFrame with [ts_code, trade_date, atr]."""
     cb = pd.read_parquet(_REPO_ROOT / "data/cb_warehouse/cb_daily.parquet")
     cb["trade_date"] = cb["trade_date"].astype(str)
@@ -304,10 +318,13 @@ def _load_atr_data(
 
 
 def _merge_and_scale(
-    ranks: pd.DataFrame,
-    atr_df: pd.DataFrame,
+    ranks,
+    atr_df,
     cfg: dict[str, Any],
-) -> tuple[pd.DataFrame, dict[str, Any]]:
+):
+    import numpy as np
+    import pandas as pd
+
     """Apply volatility scaling to value_gap_amount and position_cash_scale.
 
     scaling_factor = min(1, 1 / (1 + beta * (ATR / median_ATR - 1)))
@@ -406,6 +423,8 @@ def _row(
     params: dict[str, Any],
     result: dict[str, Any],
 ) -> dict[str, Any]:
+    from scripts.evaluate_cb_arb_value_gap_switch import _score
+
     row: dict[str, Any] = {
         "name": name,
         "description": description,
@@ -439,6 +458,8 @@ def _write_review_files(
     baseline_test: dict[str, Any],
     adoption_pass: bool,
 ) -> None:
+    import yaml
+
     now = datetime.now().isoformat(timespec="seconds")
     decision = "mini-spec-retry" if adoption_pass else "reject"
     reason = (
@@ -606,9 +627,17 @@ def _write_review_files(
 # ---------------------------------------------------------------------------
 
 def main() -> int:
+    import pandas as pd
+    from scripts.evaluate_cb_arb_value_gap_switch import (
+        _run_value_gap_backtest,
+        _with_cost_params,
+        _write_csv,
+    )
+
     args = _parse_args()
     output_dir = args.output_dir or args.data_root / "volatility_position_scaling"
     output_dir.mkdir(parents=True, exist_ok=True)
+    _gatekeeper_before_run(output_dir)
 
     # Load base ranks (without any scaling)
     base_ranks = _load_base_ranks(args, output_dir)
@@ -798,6 +827,7 @@ def main() -> int:
         baseline_test,
         adoption_pass,
     )
+    _gatekeeper_after_run(output_dir)
     return 0
 
 

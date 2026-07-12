@@ -1,0 +1,69 @@
+warnings: []
+errors: []
+data_rows:
+  gap_ranks: 488639
+  cb_basic: 1012
+  cb_daily: 736216
+  bond_floor_computed: 736216
+  train: 392852
+  test: 95787
+  validate_2020: 49117
+bond_floor_stats:
+  mean: 95.73
+  min: 88.88
+  max: 101.93
+  pct_non_finite: 0.0
+bond_floor_ratio_stats:
+  threshold: 1.1
+  min_days_below: 1
+  discount_rate: 0.03
+entry_mask_diagnostics:
+  total_rows: 392852
+  suppressed_rows: 342308
+  allowed_rows: 50544
+  suppression_pct: 87.13
+  suppression_by_year:
+    '2019':
+      total_rows: 32486
+      suppressed: 22112
+      suppression_pct: 68.07
+    '2020':
+      total_rows: 49117
+      suppressed: 43337
+      suppression_pct: 88.23
+    '2021':
+      total_rows: 63994
+      suppressed: 51165
+      suppression_pct: 79.95
+    '2022':
+      total_rows: 72888
+      suppressed: 71376
+      suppression_pct: 97.93
+    '2023':
+      total_rows: 86365
+      suppressed: 82632
+      suppression_pct: 95.68
+    '2024':
+      total_rows: 88002
+      suppressed: 71686
+      suppression_pct: 81.46
+baseline_trade_count: 35339
+filtered_trade_count: 7093
+trade_count_retention_pct: 20.1
+exit_params:
+  min_hold_days: 5
+  initial_threshold_fraction: 0.7
+  effective_max_hold_days: 45
+schema_version: 1
+run_id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
+diagnostic_date: '2026-05-23'
+diagnostic_by: codex
+verdict_referenced: reject
+summary: Bond-floor entry filter at threshold=1.1 suppressed 87% of train entries,
+  retained only 20.1% of trades (far below 50% minimum), and produced deeply negative
+  excess return in 2020 validation (-130M), failing all three composite criteria simultaneously.
+verdict_rationale: Trade count retention of 20.1% massively undershoots the 50% hard
+  floor, and 2020 validation excess is -130M (excess_2020_gt_0=false), confirming
+  the filter is destructive rather than selective despite directional train/test improvement.
+normalized_at: '2026-05-23T12:56:24+00:00'
+normalized_by: normalize_report_schema

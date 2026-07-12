@@ -1,0 +1,77 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_regime_adaptive_exit_v1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: true
+    candidate_count: 81
+    selected_name: best_candidate
+  artifacts_hash: 8fc1606a52774463
+interpretation:
+  review_status_code: 1
+  result_summary: Regime-adaptive exit with 252-day lookback and asymmetric decay
+    (high_vol=0.3, low_vol=0.9) passes adoption with positive excess return across
+    train, test, and holdout-2020 periods versus a negative-PnL baseline.
+  main_reason: All 81 grid candidates produce positive excess in every evaluation
+    period while the baseline duration-adaptive exit loses money in all three periods;
+    the best candidate (regime_lookback=252, high_vol_decay_factor=0.3, low_vol_decay_factor=0.9)
+    is selected and l6_exit_decision is adopt.
+  failure_causes: []
+  next_research_directions:
+  - direction: regime-conditioned entry logic
+    why: Regime conditioning succeeded on the exit side without shrinking the candidate
+      pool; extending it to entry (e.g. regime-dependent value-gap threshold) could
+      further improve timing without the culling problem that killed entry-filter
+      variants
+    priority_code: 2
+    priority: medium
+  - direction: cross-asset regime validation
+    why: The regime classifier uses CSI 300 realized volatility terciles; testing
+      whether the same regime splits hold for other convertible-bond universes or
+      indexes would strengthen generalizability
+    priority_code: 3
+    priority: low
+  - direction: decay-schedule sensitivity analysis
+    why: The best high-vol decay factor is 0.3 (aggressive) and low-vol is 0.9 (patient);
+      understanding how sensitive cumulative excess is to small perturbations around
+      these values would inform robustness before promotion
+    priority_code: 3
+    priority: low
+  evidence_gaps:
+  - Hard-floor verification data (Sharpe ratio per holdout year, drawdown versus baseline,
+    cumulative excess compound comparison) is present in the evaluator report candidates
+    but not extracted into the facts_locked_by_code key_metrics block; the adoption_pass
+    flag and l6_exit_decision carry the conclusion but not the intermediate verification
+    steps
+  - The empty verdict dict in facts_locked_by_code suggests the code-level fact extraction
+    did not populate a structured verdict object; the review relies on report_context
+    and diagnostic_context to infer the decision
+  review_status: accept
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 6d197e70ea044811
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: true
+    candidate_count: 81
+    selected_name: best_candidate

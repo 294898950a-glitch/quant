@@ -1,0 +1,158 @@
+proposal_id: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_2
+strategy_id: cb_arb_value_gap_switch
+family: reverse_volatility_position_scaling
+hypothesis: 'Entry filters (moneyness, bond floor) systematically failed in the reverse
+  direction because they cull candidates from the already-verified +30.3% test-excess
+  reverse base. Position scaling is a fundamentally different mechanism: it preserves
+  all candidates and adjusts only allocation weights, making it strictly less destructive.
+
+
+  Inverse-ATR weighting applied to the ASCENDING-sort (least-positive-gap-first) base
+  should reduce drawdowns and cost drag without destroying the reverse alpha signal.
+  The reasoning: high-volatility CBs contribute disproportionately to PnL variance
+  and cost bleed; allocating less capital to them preserves exposure to the signal
+  while trimming tail risk.
+
+
+  Re: repeated_reject_families [moneyness_stock_to_conv_threshold] — (1) the underlying
+  value-gap signal is NOT invalid (the reverse sort proves it contains alpha, just
+  in the opposite direction of the original monotonicity assumption); (2) the direction
+  IS reversed — the critical insight already established that ASCENDING sort is the
+  correct direction; (3) the execution condition (entry filters culling candidates)
+  is the proximate cause of failure for the moneyness and bond-floor families, not
+  the signal itself. This proposal avoids the execution failure by not filtering candidates
+  at all.
+
+  '
+source_insight: value_gap_rank_is_anti_alpha_2026_05_24
+expected_improvement: 'Reduce test max drawdown below -0.113 (the reverse-probe-coston
+  baseline) while preserving at least 80% of the +30.3% test excess return. Target:
+  test excess > +0.24 with max drawdown < -0.10. If inverse-ATR scaling is noise-reducing,
+  the risk-adjusted metrics (Sharpe, Calmar) should improve vs the unweighted reverse
+  base even if raw excess dips slightly.
+
+  '
+capability_ids:
+- C001
+required_executor: volatility_based_position_scaling_executor_reverse
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - trade_date
+  - ts_code
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - stk_code
+  - conv_price
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  description: 'Base: reverse-probe-coston logic (value_gap_amount > 0 filter, ASCENDING
+    sort, exit grid over max_hold_days [120, 150, 180], min_gap_pct [0.005, 0.01],
+    sell_gap_pct=0.0, switch_hurdle_pct [0.0, 0.01]).
+
+
+    Overlay: for each candidate on each day, compute ATR from stk_daily_qfq close
+    (ATR lookback grid [10, 20, 40, 60]). Apply inverse scaling: position_weight =
+    baseline * (scaling_beta / ATR_rank), where scaling_beta grid = [0.25, 0.5, 0.75,
+    1.0, 1.5]. Higher-ATR CBs get lower weight; all candidates remain eligible.
+
+
+    Cost-on: slippage 0.0015, market impact 0.001. Train 2018-2022, test 2023-2026.
+
+
+    Compare best grid result against reverse-probe-coston baseline (+30.3% test excess,
+    max drawdown -0.113).
+
+    '
+success_criteria:
+  criteria:
+  - test_excess_return >= 0.24 (80% of reverse base +0.303)
+  - test_max_drawdown < -0.113 (improvement over reverse base -0.113)
+  - adoption_pass: true
+  - No single test-year drawdown vs benchmark > 15%
+falsifiers:
+  train: &id001
+  - test_excess_return < 0.15 (less than half the reverse base excess — scaling destroyed
+    too much signal)
+  - test_max_drawdown >= -0.113 (no drawdown improvement, scaling adds complexity
+    for zero benefit)
+  - test_win_rate < 0.50 (scaling introduces perverse selection, actively losing on
+    over half of trades)
+  validate: *id001
+  test: *id001
+risk: 'Medium. Inverse-ATR scaling assumes high stock volatility predicts worse value-gap
+  trade outcomes. If volatility and gap-closing are uncorrelated or positively correlated
+  (volatile stocks close gaps faster), scaling will reduce returns without reducing
+  risk. The grid search over ATR lookback and scaling_beta provides a safety net —
+  if no parameter combination beats the unweighted base, the null hypothesis (volatility
+  is uninformative) is confirmed.
+
+  '
+why_not_repeated_failure: 'This is not an entry filter. The three entry-filter families
+  (forward moneyness, reverse moneyness, forward bond floor, reverse bond floor) all
+  failed `failed_mechanical_thresholds` because they removed candidates from the pool,
+  which killed signal density. Position scaling preserves every candidate — only allocation
+  weights change. The mechanism is orthogonal: it modulates exposure rather than censoring
+  entries.
+
+
+  The reverse exit duration adaptive also failed `adoption_pass: False`, but that
+  was an exit-rule overlay, not a position-sizing overlay. Position sizing applied
+  to the reverse base has not been tested in any form (neither static nor volatility-based).
+
+
+  This is the only reverse-direction capability remaining in C001 that has not been
+  evaluated, and it is explicitly designed to be non-destructive to the candidate
+  pool.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524
+- cb_arb_value_gap_switch_reverse-probe_20260524
+- cb_arb_value_gap_switch_pnl-feedback-scaling_v1
+- cb_arb_value_gap_switch_reverse_moneyness_entry_filter_v1_1
+- cb_arb_value_gap_switch_reverse_bond_floor_entry_filter_v2
+- cb_arb_value_gap_switch_exit_duration_adaptive_reverse_20260525
+implementation_assumption: The executor `volatility_based_position_scaling_executor_reverse`
+  exists and is registered under C001/available_executors. It sorts value_gap_amount
+  ASCENDING with >0 filter unchanged, computes ATR from stk_daily_qfq close, applies
+  inverse-ATR position weighting, and runs the standard reverse-probe exit grid. Grid
+  search covers ATR lookback [10, 20, 40, 60] × scaling_beta [0.25, 0.5, 0.75, 1.0,
+  1.5] × exit params as described in the capability menu. Cost-on evaluation with
+  slippage 0.0015 and market impact 0.001. Train 2018-2022, test 2023-2026.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: dd38cba1cd5ae325
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: dd38cba1cd5ae325
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_id_deduped_from: cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_reverse_volatility_position_scaling_v1_2/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=reverse_volatility_position_scaling, capability_ids=['C001']);
+    cites critical insight 'value_gap_rank_is_anti_alpha_2026_05_24'; queue depth=0.
+  evidence:
+    family: reverse_volatility_position_scaling
+    capability_ids:
+    - C001
+    cites_critical: value_gap_rank_is_anti_alpha_2026_05_24
+    queue_depth: 0

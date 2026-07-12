@@ -1,0 +1,18 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_volatility_position_scaling_v1_1
+spec_path: data/cb_arb_value_gap_switch_volatility_position_scaling_v1_1/spec.yaml
+validated_at: '2026-05-27T05:58:09'
+summary_sha256: 78336ee25ad53d04b156a0e18c904ea266dfb926dcaa3de68b82929b04ba6157
+status_code: 1
+confidence_code: 1
+blocking_issues: []
+warnings:
+- cb_daily 缺少推荐字段 cb_over_rate 和 pct_chg，按规则7非必需字段缺失不阻塞，放行
+- cb_call 缺少推荐字段 call_type，按规则7非必需字段缺失不阻塞，放行
+fix_plan: []
+decision_reason: 全部9个必需文件存在且可读，行情覆盖训练期2019-2026和测试期2025-01至2026-05-08无缺口，无可阻塞的空值或字段问题，推荐字段缺失不影响实验
+status: pass
+confidence: high
+decision_source: ai_data_quality_judge
+ai_provider: hermes
+response_hash: 9734cfd67e5ae66d

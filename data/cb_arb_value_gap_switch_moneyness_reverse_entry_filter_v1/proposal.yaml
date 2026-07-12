@@ -1,0 +1,185 @@
+proposal_id: cb_arb_value_gap_switch_moneyness_reverse_entry_filter_v1
+strategy_id: cb_arb_value_gap_switch
+family: moneyness_stock_to_conv_threshold
+hypothesis: 'The moneyness entry filter (stock_close / conv_price >= threshold) failed
+  5 times in forward direction not because the filter logic is invalid, but because
+  it was applied to an anti-alpha base. The underlying signal (OTM CBs have noisier
+  theoretical values) is sound in principle. The direction is the key issue: the forward
+  base sorts value_gap_amount descending, which the reverse-probe proved is anti-alpha.
+  Applied to the reverse-sorted base (ascending value_gap_amount, +30.3% test excess
+  cost-on), filtering to near-the-money CBs should improve signal quality by screening
+  out deep-OTM CBs whose option values are dominated by time premium and IV assumptions,
+  reducing noise trades and improving risk-adjusted excess returns. The execution
+  condition (threshold grid, exit logic) is also adjusted to match the reverse-probe
+  exit framework rather than the forward baseline exit.
+
+  '
+source_insight: value_gap_rank_is_anti_alpha_2026_05_24
+expected_improvement: 'Reduce noise trades from deep-OTM CBs whose theoretical value
+  gaps are unreliable, improving reverse-direction cumulative excess return above
+  the current +30.3% test excess cost-on baseline, while maintaining or reducing max
+  drawdown.
+
+  '
+capability_ids:
+- C003
+required_executor: null
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+- data/cb_warehouse/cb_call.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  - theoretical_value
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - stk_code
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - stk_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_call.parquet:
+  - ts_code
+  - call_date
+  - is_call
+test_design:
+  description: 'Sort ascending by value_gap_amount (reverse direction, least-positive
+    gaps first). Apply entry mask: stock_close / conv_price >= moneyness_threshold.
+    Grid search moneyness_threshold over [0.3, 0.5, 0.7, 0.9, 1.0, 1.1, 1.3] and exit
+    parameters (max_hold_days, min_gap_pct, sell_gap_pct, switch_hurdle_pct) matching
+    the reverse-probe exit framework. Run cost-on with standard slippage (0.0015)
+    and market impact (0.001). Train/validation/test split matching the existing reverse-probe
+    setup.
+
+    '
+success_criteria:
+  criteria:
+  - cumulative_excess_compound_test_gt: 0.3
+  - max_drawdown_test_lte: 0.15
+  - train_test_excess_drop_lt_50pct: true
+falsifiers:
+  train: &id001
+  - any moneyness threshold produces test excess below the unfiltered reverse baseline
+    (+0.303)
+  - all thresholds reduce trade count below 100 in test period
+  - train-to-test excess drop exceeds 50%
+  validate: *id001
+  test: *id001
+risk: 'Medium. The moneyness filter could over-restrict candidates and reduce trade
+  count below viable levels, especially since the reverse base already selects from
+  a narrower set of small-positive-gap CBs. If the filter eliminates too many candidates,
+  the strategy may lose statistical significance.
+
+  '
+why_not_repeated_failure: 'The 5 prior moneyness entry filter runs (v1, v1_1, v1_3,
+  v1_4, v1_5) all failed mechanical thresholds on the forward-direction base where
+  value_gap_amount is sorted descending. The critical insight value_gap_rank_is_anti_alpha_2026_05_24
+  proved that the forward direction loses regardless of entry filters — the forward
+  base produces -10.5% test excess cost-on vs reverse''s +30.3%. This proposal switches
+  the sort direction to ascending (reverse). It is not a renamed repeat of the same
+  experiment because the underlying entry signal direction is inverted. We are testing
+  whether moneyness filtering was rejected because the forward base was anti-alpha,
+  not because the filter itself is useless. The bond-floor reverse probe already demonstrated
+  this pattern is viable: a filter that failed forward can work in reverse.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+- cb_arb_value_gap_switch_reverse-probe-coston_20260524
+implementation_assumption: 'Requires a new executor that combines reverse-direction
+  sorting (ascending value_gap_amount) with the moneyness entry mask (stock_close
+  / conv_price >= threshold) and reverse-probe exit logic. The existing evaluate_cb_arb_moneyness_entry_filter
+  and evaluate_cb_arb_moneyness_entry_filter_v2 executors operate on forward direction
+  only. The new executor can be built by forking evaluate_cb_arb_bond_floor_entry_filter_reverse
+  and replacing the bond-floor distance computation with the moneyness ratio computation.
+
+  '
+missing_capability_request:
+  mechanic_description: 'Reverse-direction moneyness entry filter. Sort value_gap_amount
+    ascending (least-positive gaps first, matching the reverse-probe direction), compute
+    stock_close / conv_price for each candidate, apply entry mask where stock_close
+    / conv_price >= threshold, and run with reverse-probe exit logic (max_hold_days,
+    min_gap_pct, sell_gap_pct, switch_hurdle_pct) under standard cost model.
+
+    '
+  required_data_fields:
+    data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+    - ts_code
+    - trade_date
+    - value_gap_amount
+    data/cb_warehouse/cb_basic.parquet:
+    - ts_code
+    - conv_price
+    - stk_code
+    data/cb_warehouse/stk_daily_qfq.parquet:
+    - ts_code
+    - stk_code
+    - trade_date
+    - close
+    data/cb_warehouse/cb_daily.parquet:
+    - ts_code
+    - trade_date
+    - close
+    data/cb_warehouse/cb_call.parquet:
+    - ts_code
+    - call_date
+    - is_call
+  parameter_grid:
+    moneyness_threshold:
+    - 0.3
+    - 0.5
+    - 0.7
+    - 0.9
+    - 1.0
+    - 1.1
+    - 1.3
+    max_hold_days:
+    - 120
+    - 150
+    - 180
+    min_gap_pct:
+    - 0.005
+    - 0.01
+    sell_gap_pct:
+    - 0.0
+    switch_hurdle_pct:
+    - 0.0
+    - 0.01
+  base_executor_to_fork: evaluate_cb_arb_bond_floor_entry_filter_reverse
+  reference_run: cb_arb_value_gap_switch_reverse-probe-coston_20260524
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 62ea175a8918e15a
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 62ea175a8918e15a
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_moneyness_reverse_entry_filter_v1/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=moneyness_stock_to_conv_threshold, capability_ids=['C003']);
+    cites critical insight 'value_gap_rank_is_anti_alpha_2026_05_24'; queue depth=1.
+  evidence:
+    family: moneyness_stock_to_conv_threshold
+    capability_ids:
+    - C003
+    cites_critical: value_gap_rank_is_anti_alpha_2026_05_24
+    queue_depth: 1

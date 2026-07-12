@@ -1,0 +1,70 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+  strategy_id: cb_arb_value_gap_switch
+  decision: failed_mechanical_thresholds
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  evidence_usable: true
+  artifacts_hash: 42bf99c05a2924c0
+interpretation:
+  review_status_code: 2
+  result_summary: Moneyness entry filter with threshold=0.0 is a no-op filter that
+    passes all bonds identically to baseline — it fails train and stress_2020 score
+    criteria while providing zero information about whether moneyness filtering works
+    at meaningful thresholds.
+  main_reason: The tested threshold of 0.0 suppresses no trades (0% suppression, all
+    metrics identical to baseline), so the rejection is for a trivial degenerate case
+    that cannot satisfy the hard_floors, not for the moneyness hypothesis itself.
+  failure_causes:
+  - moneyness_threshold=0.0 suppresses zero trades in all periods (suppression_pct=0.0),
+    making filtered metrics identical to baseline
+  - train score (-0.154) and stress_2020 score (-0.184) both fall well below their
+    respective mechanical criteria
+  next_research_directions:
+  - direction: Test non-trivial moneyness thresholds (e.g., 0.5, 0.7, 0.9)
+    why: The degenerate 0.0 threshold reveals nothing about the hypothesis; only thresholds
+      above 0.0 that actually filter deep-OTM CBs can test whether moneyness entry
+      gates improve risk-adjusted returns
+    priority_code: 1
+    priority: high
+  - direction: Grid-search moneyness_threshold from 0.3 to 1.0
+    why: The parameter_space definition allows categorical values but only one value
+      was tested; a grid search over meaningful thresholds would provide evidence
+      about whether the hypothesis holds at any level
+    priority_code: 1
+    priority: high
+  evidence_gaps:
+  - No evidence was collected on whether any non-zero moneyness threshold improves
+    the strategy, because the only tested value (0.0) is a no-op filter
+  - The moneyness hypothesis remains completely untested — 0% suppression means the
+    filtered portfolio is exactly the baseline portfolio in every period
+  review_status: reject
+closed_directions:
+- mechanic_tag: moneyness_stock_to_conv_threshold
+  reason: run decision=failed_mechanical_thresholds
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: e6fda240ef2a7bf6
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: failed_mechanical_thresholds
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

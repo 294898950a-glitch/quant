@@ -291,6 +291,75 @@ def test_compiler_required_data_missing_produces_draft(matching_registry, closed
     assert "data missing" in result.reason
 
 
+def test_compiler_drops_ai_only_required_data_after_executor_match(matching_registry, closed_tags_with_some, tmp_path, monkeypatch):
+    """AI-written extra data paths cannot block a matched executor that does not need them."""
+    m = _load(COMPILER_MODULE, "spec_compiler")
+    monkeypatch.setattr(m, "REPO_ROOT", tmp_path)
+    data_path = tmp_path / "data" / "cb_warehouse" / "cb_daily.parquet"
+    data_path.parent.mkdir(parents=True)
+    data_path.write_text("placeholder", encoding="utf-8")
+    script_path = tmp_path / "scripts" / "evaluate_valuation.py"
+    script_path.parent.mkdir(parents=True)
+    script_path.write_text("print('ok')\n", encoding="utf-8")
+    registry = dict(matching_registry)
+    registry["matching_rules"] = {
+        "require_required_data_exists": True,
+        "require_executor_script_exists": True,
+    }
+    proposal = _valid_proposal()
+    proposal["required_data"] = [
+        "data/cb_warehouse/cb_daily.parquet",
+        "data/nonexistent/baseline_trade_pnl.parquet",
+    ]
+    proposal["required_data_fields"] = {
+        "data/cb_warehouse/cb_daily.parquet": ["trade_date", "close"],
+        "data/nonexistent/baseline_trade_pnl.parquet": ["pnl"],
+    }
+
+    result = m.compile(
+        proposal=proposal,
+        registry=registry,
+        closed_tags=closed_tags_with_some,
+        recent_proposals=[],
+        output_dir=tmp_path / "data" / "run",
+    )
+
+    assert result.status == "READY"
+    spec = yaml.safe_load(Path(result.spec_path).read_text(encoding="utf-8"))
+    assert spec["new_data_sources"] == [{"path": "data/cb_warehouse/cb_daily.parquet"}]
+    assert spec["proposal"]["dropped_unmatched_required_data"] == [
+        "data/nonexistent/baseline_trade_pnl.parquet"
+    ]
+    assert spec["proposal"]["required_data_fields"] == {
+        "data/cb_warehouse/cb_daily.parquet": ["trade_date", "close"]
+    }
+    assert spec["proposal"]["dropped_unmatched_required_data_fields"] == [
+        "data/nonexistent/baseline_trade_pnl.parquet"
+    ]
+    assert spec["ideation_provenance"]["dropped_unmatched_required_data"] == [
+        "data/nonexistent/baseline_trade_pnl.parquet"
+    ]
+
+
+def test_compiler_missing_executor_script_produces_draft(matching_registry, closed_tags_with_some, tmp_path, monkeypatch):
+    """A matched executor cannot become READY when its script_path is not present."""
+    m = _load(COMPILER_MODULE, "spec_compiler")
+    monkeypatch.setattr(m, "REPO_ROOT", tmp_path)
+    registry = dict(matching_registry)
+    registry["matching_rules"] = {"require_required_data_exists": False, "require_executor_script_exists": True}
+
+    result = m.compile(
+        proposal=_valid_proposal(),
+        registry=registry,
+        closed_tags=closed_tags_with_some,
+        recent_proposals=[],
+        output_dir=tmp_path / "data" / "run_missing_script",
+    )
+
+    assert result.status == "DRAFT"
+    assert "executor script missing" in result.reason
+
+
 def test_compiler_has_no_budget_gate(matching_registry, closed_tags_with_some):
     """Executor match, not budget metadata, determines READY."""
     m = _load(COMPILER_MODULE, "spec_compiler")
@@ -537,6 +606,19 @@ def test_ideation_cycle_offline_end_to_end_generates_ready_spec(tmp_path, monkey
         "schema_version": 1,
         "runs": [],
     }), encoding="utf-8")
+    (rf / "data_inventory.yaml").write_text(yaml.safe_dump({
+        "schema_version": 1,
+        "summary": {"file_count": 1},
+        "files": [{
+            "path": "data/source.parquet",
+            "category": "core_warehouse",
+            "format": "parquet",
+            "rows": 10,
+            "columns": ["trade_date", "close"],
+            "date_ranges": {"trade_date": {"min": "2020-01-02", "max": "2020-01-03"}},
+            "readable": True,
+        }],
+    }), encoding="utf-8")
     (rf / "evidence_tool_registry.yaml").write_text(yaml.safe_dump({
         "schema_version": 1,
         "tools": {},
@@ -597,15 +679,21 @@ def test_ideation_cycle_offline_end_to_end_generates_ready_spec(tmp_path, monkey
         retries_used = 0
 
     class FakeAdapter:
+        prompt = ""
+
         def call_active_provider(self, prompt, schema):
+            self.prompt = prompt
             return FakeResponse()
 
+    fake_adapter = FakeAdapter()
     paths = m.ResearchPaths.from_repo_root(tmp_path)
-    payload = m.IdeationCycle(paths=paths, ai_adapter=FakeAdapter()).run_once(
+    payload = m.IdeationCycle(paths=paths, ai_adapter=fake_adapter).run_once(
         output_root=tmp_path / "data",
     )
 
     assert payload["status"] == "READY"
+    assert "data_inventory" in fake_adapter.prompt
+    assert "data/source.parquet" in fake_adapter.prompt
     spec_path = Path(payload["spec_path"])
     spec = yaml.safe_load(spec_path.read_text(encoding="utf-8"))
     assert spec["status"] == "READY"

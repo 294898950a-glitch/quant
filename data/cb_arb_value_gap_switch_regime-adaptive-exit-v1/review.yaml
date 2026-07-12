@@ -1,0 +1,65 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_regime-adaptive-exit-v1
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  artifacts_hash: 92f9c7f27e742768
+interpretation:
+  review_status_code: 2
+  result_summary: Regime-adaptive exit produced zero excess improvement over the static
+    decay baseline in both train and test periods; strategy remains deeply unprofitable
+    with excess return of -1.0 across all variants.
+  main_reason: excess_improvement_test is 0.0 — regime conditioning added no predictive
+    value — and cumulative excess is negative across all periods, failing the hard
+    floor.
+  failure_causes:
+  - Regime classifier (CSI 300 volatility) contributes no signal to gap-closing dynamics;
+    adaptive and static decay schedules produce identical results
+  - Both train and test excess returns are -1.0, meaning the underlying value-gap
+    signal itself is not generating profitable trades regardless of exit conditioning
+  next_research_directions:
+  - direction: Re-examine the value-gap signal quality before layering exit sophistication
+    why: If the gap signal produces negative excess even with a working duration-adaptive
+      baseline, entry logic or gap measurement may be the bottleneck, not exit timing
+    priority_code: 1
+    priority: high
+  - direction: Test alternative regime signals beyond CSI 300 volatility
+    why: Daily index vol may be too coarse to capture the gap re-widening dynamics
+      the hypothesis targets; consider credit-spread or convertible-bond-specific
+      regime proxies
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - No per-regime performance breakdown — unclear whether the regime classifier was
+    actually segmenting trades into distinct environments or firing uniformly
+  - Duration-adaptive baseline excess (-1.0) contradicts the accepted 2026-05-22 result
+    which reported positive improvement; possible data or pipeline discrepancy between
+    runs
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: c726b34b0dd4d68d
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

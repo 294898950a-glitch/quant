@@ -1,0 +1,21 @@
+q1_floor_binding:
+  computed_data:
+    note: ranked.csv empty or hard_floors missing
+  computed_at: '2026-05-24T00:19:39.503043Z'
+q2_selection_score:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-24T00:19:39.503053Z'
+q3_baseline_alignment:
+  computed_data:
+    note: summary.csv or hard_floors missing
+  computed_at: '2026-05-24T00:19:39.503055Z'
+q4_monotonic:
+  computed_data:
+    note: ranked.csv empty
+  computed_at: '2026-05-24T00:19:39.503057Z'
+q5_trade_overlap:
+  computed_data:
+    note: ranked.csv empty, cant select top candidate
+  computed_at: '2026-05-24T00:19:39.503058Z'
+auto_computed_at: '2026-05-24T00:19:39.503071Z'

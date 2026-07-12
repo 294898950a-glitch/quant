@@ -1,0 +1,64 @@
+schema_version: 1
+run_id: volatility_position_scaling_v2_2026-05-21
+reviewer: codex
+ack_at: '2026-05-22T03:45:25'
+q1_floor_binding:
+  description: Hard floors and train/test consistency.
+  answer: Selected train winner does not pass train/test/2020 robustness checks together.
+  computed_data:
+    best_train_variant: baseline_no_scaling
+    train_excess: 0.131363
+    test_excess: 0.37976
+    baseline_test_excess: 0.37976
+    baseline_2020_total_return: -0.090593
+    selected_2020_total_return: -0.090593
+  computed_at: '2026-05-22T03:45:25'
+  pass: false
+q2_selection_score:
+  description: Candidate selection quality.
+  answer: Train score selects baseline_no_scaling; sealed test best is baseline_no_scaling.
+  computed_data:
+    selected_by_train_score: baseline_no_scaling
+    selected_score: 0.050351
+    best_test_variant: baseline_no_scaling
+    best_test_score: 0.35532
+  pass: false
+q3_baseline_alignment:
+  description: Alignment against current cb_arb_value_gap_switch baseline.
+  answer: Candidate does not justify replacing the current baseline.
+  computed_data:
+    baseline_train_excess: 0.131363
+    baseline_test_excess: 0.37976
+    selected_test_excess: 0.37976
+  computed_at: '2026-05-22T03:45:25'
+  pass: false
+q4_monotonic:
+  description: Edge-of-grid or monotonic concern.
+  answer: Grid-searched volatility scaling factors; no monotonic promotion without
+    manual review.
+  computed_data:
+    grid_type: volatility_scaling_grid
+    candidates_count: 10
+  computed_at: '2026-05-22T03:45:25'
+  pass: true
+q5_trade_overlap:
+  description: Trade overlap baseline vs selected.
+  answer: Aggregate train/test/2020 checks are used for automatic decision.
+  computed_data:
+    selected_total_trades_test: 191
+    baseline_total_trades_test: 191
+    selected_total_trades_2020: 75
+    baseline_total_trades_2020: 75
+  computed_at: '2026-05-22T03:45:25'
+  pass: true
+q6_trigger_timing:
+  description: Trigger timing leakage.
+  applicable: false
+q7_path_contamination:
+  description: Path/data contamination.
+  applicable: false
+overall_pass: false
+overall_decision: reject
+overall_reason: No volatility scaling variant beat baseline across train, 2020 repair,
+  and sealed test together.
+auto_computed_at: '2026-05-22T03:45:25'

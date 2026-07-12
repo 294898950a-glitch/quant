@@ -1,0 +1,66 @@
+schema_version: 1
+run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+strategy_id: cb_arb_value_gap_switch
+facts:
+  run_id: cb_arb_value_gap_switch_regime-adaptive-exit_v1_2
+  strategy_id: cb_arb_value_gap_switch
+  verdict: {}
+  key_metrics:
+    adoption_pass: false
+  artifacts_hash: 66efcb1dcfce7289
+interpretation:
+  review_status_code: 2
+  result_summary: regime-adaptive exit failed both hard floors — adoption_pass=false
+    and zero excess improvement over static baseline, with identical -1.0 returns
+    across all conditions suggesting the regime classifier collapsed to no differentiation
+  main_reason: adoption_pass=false violates the required hard floor and excess_improvement_test
+    of 0.0 shows no gain over the duration-adaptive baseline
+  failure_causes:
+  - adoption_pass=false violates hard floor requiring at least one candidate with
+    adoption_pass=true
+  - excess_improvement_test of 0.0 fails the hard floor that cumulative_excess_compound_cost_on
+    must improve over baseline
+  - train and test excess returns are identically -1.0 across both regime-adaptive
+    and static baseline, indicating the regime switch collapsed to a no-op
+  next_research_directions:
+  - direction: investigate -1.0 sentinel collapse
+    why: identical -1.0 across all four return cells suggests a code or data pipeline
+      failure rather than a genuine negative signal; fix the plumbing before declaring
+      the idea dead
+    priority_code: 1
+    priority: high
+  - direction: simplify regime signal
+    why: CSI300 rolling volatility may be too coarse for cb gap-closing dynamics;
+      a narrower signal like cb implied vol spread or gap-size momentum could yield
+      actual differentiation
+    priority_code: 2
+    priority: medium
+  evidence_gaps:
+  - no diagnostic explaining why all excess returns collapsed to -1.0 (computation
+    error vs true unprofitability)
+  - no per-regime trade statistics showing whether high-vol and low-vol sub-periods
+    actually received different decay schedules
+  review_status: reject
+closed_directions: []
+next_directions: []
+ai_provider_used: hermes
+prompt_path: null
+response_hash: 58f3e13ce928e586
+ai_review_attempts: 1
+inconclusive: false
+verification_rounds_used: 1
+verification_evidence:
+- request_type: artifact_consistency_check
+  status: completed
+  data:
+    checks: []
+- request_type: source_attribution
+  status: completed
+  data:
+    decision: null
+    experiment: null
+    source_artifacts: null
+- request_type: metric_slice
+  status: completed
+  data:
+    adoption_pass: false

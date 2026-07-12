@@ -1,0 +1,129 @@
+proposal_id: cb_arb_value_gap_switch_gap-closing-percentile-exit_v2
+strategy_id: cb_arb_value_gap_switch
+family: exit_gap_closing_percentile_v2
+hypothesis: 'The duration-adaptive exit uses a fixed linear decay schedule that ignores
+  the empirical reality of how gaps actually close. Different initial gap magnitudes
+  have different characteristic closing-time distributions. By conditioning the exit
+  on the historical percentile of days-to-close for gaps of similar initial magnitude,
+  we get a data-driven, non-parametric exit that adapts to each position''s specific
+  gap profile. Positions held longer than the typical close time for their gap size
+  are exited, while fast-closing positions are allowed to run. This should improve
+  risk-adjusted returns versus the fixed decay schedule by reducing both premature
+  exits and stale holdings that linger past their empirical close window.
+
+  '
+source_insight: 'The duration-adaptive exit (accepted 2026-05-22) demonstrated that
+  time-conditioned exits improve on fixed-threshold exits. However, its linear decay
+  schedule is a parametric assumption. The forward base remains at -10.47% cumulative
+  excess cost-on even with that accepted exit. A non-parametric exit conditioned on
+  the empirical distribution of gap-closing times may better match the data-generating
+  process than a linear decay assumption. Active critical insights list is empty;
+  no decision_use obligations apply.
+
+  '
+expected_improvement: 'Reduce test-period cumulative excess drawdown by 5-10pp versus
+  the current baseline by replacing the parametric linear decay schedule with an empirical
+  percentile-based exit that adapts to each gap''s characteristic close time.
+
+  '
+capability_ids:
+- C007
+required_executor: evaluate_cb_arb_exit_gap_closing_percentile
+required_data:
+- data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet
+- data/cb_warehouse/cb_basic.parquet
+- data/cb_warehouse/stk_daily_qfq.parquet
+- data/cb_warehouse/cb_daily.parquet
+required_data_fields:
+  data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/daily_value_gap_amounts.parquet:
+  - ts_code
+  - trade_date
+  - value_gap_amount
+  data/cb_warehouse/cb_basic.parquet:
+  - ts_code
+  - conv_price
+  - list_date
+  - delist_date
+  data/cb_warehouse/stk_daily_qfq.parquet:
+  - ts_code
+  - trade_date
+  - close
+  data/cb_warehouse/cb_daily.parquet:
+  - ts_code
+  - trade_date
+  - close
+test_design:
+  description: 'Train 2018-2022, test 2023-2026. Forward direction: value_gap_amount
+    > 0, sort DESCENDING (largest gap first), select top N by baseline ranking. For
+    each entry, record initial gap magnitude and bin into deciles using train-period
+    gap distribution. Compute empirical CDF of days-to-gap-close for each gap decile
+    from train-period data (gap close defined as current_gap / entry_gap < 0.5 or
+    gap turns negative). Exit when holding days exceeds the P-th percentile of the
+    historical close-time distribution for that gap decile. Grid search over percentile
+    P in [50, 60, 70, 80, 90] and min_hold_days in [5, 10, 20]. Cost-on: slippage
+    0.0015, market impact 0.001. Compare best result against the current baseline
+    (cb_arb-value-gap-switch-medium-signal-cost-on-20260516).
+
+    '
+success_criteria:
+  criteria:
+  - test_cumulative_excess_compound_gt_baseline: true
+  - or_test_max_drawdown_reduction_pp_gt: 5
+falsifiers:
+  train: &id001
+  - all_grid_test_cumulative_excess_compound_lte_baseline: true
+  - best_test_max_drawdown_reduction_pp_lt: 3
+  validate: *id001
+  test: *id001
+risk: 'Medium. If the forward value-gap signal is fundamentally anti-alpha (per value_gap_rank_is_anti_alpha_2026_05_24),
+  no exit rule can turn it positive. However, the empirical CDF approach may better
+  capture the few successful gap closures than a blind linear decay, potentially reducing
+  the damage from stale anti-alpha positions while preserving what little alpha exists.
+
+  '
+why_not_repeated_failure: 'This is not a moneyness or bond-floor entry filter variant
+  (those culled candidates and killed an already-weak signal). It is not a reverse-direction
+  variant (all reverse families are closed by value_gap_rank_is_anti_alpha_2026_05_24).
+  It changes only exit logic — all candidates passing value_gap > 0 still enter. The
+  exit is non-parametric (empirical CDF binned by gap magnitude) rather than parametric
+  (linear decay schedule), making it a genuinely different approach from the accepted
+  duration-adaptive exit. For the repeated-reject moneyness family (moneyness_stock_to_conv_threshold):
+  this proposal does not touch entry filtering at all, so the three repeated-reject
+  questions do not apply.
+
+  '
+related_prior_runs:
+- cb_arb_value_gap_switch_duration-adaptive-exit_2026-05-22
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_3
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_4
+- cb_arb_value_gap_switch_moneyness_entry_filter_v1_5
+- cb_arb_value_gap_switch_moneyness-entry-filter_v1_1
+- cb_arb_value_gap_switch_bond-floor-entry-filter_v1
+implementation_assumption: The executor will compute the empirical gap-closing time
+  distribution from train-period data (2018-2022), binning entries by initial gap
+  magnitude decile. For test-period positions, it will look up the close-time CDF
+  for the matching gap decile and exit when holding days exceeds the grid-selected
+  percentile threshold. Gap closure is defined as current_gap / entry_gap < 0.5 or
+  gap becoming non-positive.
+ai_provider: hermes
+prompt_path: framework/autonomous/strategy_ideator.py
+response_hash: 2b763b89e93b2b48
+provenance:
+  ai_provider: hermes
+  prompt_path: framework/autonomous/strategy_ideator.py
+  response_hash: 2b763b89e93b2b48
+rewrite_status: disabled_two_step_flow
+rewrite_rounds_used: 0
+rewrite_last_errors: []
+proposal_path: /home/jay/projects/quant/data/cb_arb_value_gap_switch_gap-closing-percentile-exit_v2/proposal.yaml
+research_delta_gate:
+  action: advance
+  reason: novel family/capabilities (family=exit_gap_closing_percentile_v2, capability_ids=['C007']);
+    no critical-insight reference; queue depth=0.
+  evidence:
+    family: exit_gap_closing_percentile_v2
+    capability_ids:
+    - C007
+    cites_critical: null
+    queue_depth: 0
