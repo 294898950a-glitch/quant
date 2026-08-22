@@ -17,7 +17,7 @@ in `data/research_framework/runtime_entrypoints.yaml`.
 
 ## Active framework nodes
 
-The framework has five active nodes:
+The framework has six active nodes:
 
 - `state_and_rules` — protocol rules, current state, and status codes.
 - `ideation` — strategy ideation, proposal rewrite, and prompt contracts.
@@ -26,6 +26,11 @@ The framework has five active nodes:
 - `runner` — queue dispatch, remote execution, run recording, and result
   classification.
 - `review_memory` — result review, recent-results digest, and queue memory.
+- `evaluation` — strategy-neutral measurement/validation layer for research
+  questions: admission, lifecycle tracking, and exit evaluation
+  (`framework/evaluation/`, see `framework/evaluation/README.txt`; entry
+  point `scripts/admit_research_input.py`, see "Non-negotiable boundaries"
+  below).
 
 Older Python entrypoints and alias shells stay deleted; helper modules must be
 owned by one of these nodes.
