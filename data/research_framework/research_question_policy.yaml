@@ -1,0 +1,9 @@
+schema_version: 1
+policy_version: "2026-Q3-v1"
+revision_budget:
+  max_per_lineage: 3
+reframe_budget:
+  max_per_lineage: 2
+holdout:
+  required_for_validated_label: true
+  one_final_run_per_question: true

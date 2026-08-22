@@ -44,7 +44,16 @@ def main() -> int:
         dry_run=args.dry_run,
     )
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0 if payload.get("status") in {"READY", "DRAFT", "PROPOSAL_ONLY"} else 1
+    status = str(payload.get("status") or "")
+    research_input_exit_codes = {
+        "RESEARCH_FEEDBACK_INVALID": 41,
+        "RESEARCH_INPUT_DRY_RUN_UNSUPPORTED": 42,
+        "RESEARCH_INPUT_CLAIMED": 43,
+        "RESEARCH_INPUT_STALE_PLAN_VERSION": 44,
+    }
+    if status in research_input_exit_codes:
+        return research_input_exit_codes[status]
+    return 0 if status in {"READY", "DRAFT", "PROPOSAL_ONLY"} else 1
 
 
 if __name__ == "__main__":

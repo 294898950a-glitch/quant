@@ -1,0 +1,19 @@
+You are the reviewer of record for a consequential research-evaluation contract repair in /home/jay/projects/quant. Review only; do not edit files.
+
+Evidence:
+- framework/autonomous/evaluation_protocol.py defines the legacy cb_arb compatibility adapter with cost_model.required=true but no cost_model.metric_path.
+- scripts/auto_research_pipeline.py deliberately skips evaluation-protocol validation/evaluation whenever mode=legacy_cb_arb_compat.
+- data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2/spec.yaml was labelled READY but carries evaluation_protocol_errors for that missing metric path.
+- scripts/evaluate_cb_arb_valuation_formula_momentum.py now performs train-only selection and writes summary.json/test_exposure_protocol.json, but summary.json currently provides adoption_pass (boolean) and metrics such as best_test_excess, best_test_sharpe, best_test_total_trades, rather than a complete contract metrics object.
+
+Proposed minimal design:
+1. Do not broadly redefine every historical cb_arb run or silently reinterpret legacy results.
+2. Give this new momentum evaluator an explicit, non-legacy evaluation_protocol in its proposal/spec. It must use numeric summary paths actually emitted by its evaluator, including a numeric cost-on witness, fixed-winner test excess and Sharpe, total trades, and bottom-momentum trade count. It must fail closed if those fields are absent/non-numeric.
+3. Extend only this evaluator's summary/diagnostic output as necessary to emit the contract fields and post-test bottom-momentum diagnostics. The diagnostics must be based only on the two already-frozen test exposures and must never feed train selection.
+4. Harden the compiler/pipeline so a READY spec cannot carry non-empty evaluation_protocol_errors. Preserve the compatibility adapter for old cb_arb specs, but ensure explicitly declared non-legacy protocols are validated and enforced.
+5. Add focused tests proving: invalid protocol cannot become READY; the momentum spec is a valid explicit contract; the evaluator summary contains required numeric witnesses; and missing witnesses fail closed.
+6. Recompile the existing admitted proposal (same lifecycle identity), then review code, run tests and a dry-run. Only after that change queue configuration / remote dispatch.
+
+Invariants: no test-set parameter selection; exactly frozen winner plus fixed baseline test exposures; cost model remains enabled; historical legacy specs remain runnable under their documented compatibility path; no result is promoted by this work.
+
+Hunt for incorrect metric paths, boolean-vs-numeric mismatches, accidental compatibility breakage, contract drift between evaluator/spec/pipeline, and whether this scope is too broad or too narrow. Reply with exactly one of ACCEPT or REVISE, then concise reasons and required changes.

@@ -7087,3 +7087,6 @@
 {"action": "paused", "payload": {"pause_flag": "data/research_framework/orchestrator_paused.flag"}, "ts": "2026-06-29T21:30:05"}
 {"action": "paused", "payload": {"pause_flag": "data/research_framework/orchestrator_paused.flag"}, "ts": "2026-06-29T21:40:04"}
 {"action": "paused", "payload": {"pause_flag": "data/research_framework/orchestrator_paused.flag"}, "ts": "2026-06-29T21:50:03"}
+{"action": "paused", "payload": {"pause_flag": "data/research_framework/orchestrator_paused.flag"}, "ts": "2026-07-13T07:20:30"}
+{"action": "data_quality_recheck_requeue", "payload": {"attempts": 1, "item_id": "cb_arb_value_gap_switch_bond_floor_proximity_filter_v1", "previous_status": "blocked", "spec_path": "data/cb_arb_value_gap_switch_bond_floor_proximity_filter_v1/spec.yaml"}, "ts": "2026-07-13T07:21:05"}
+{"action": "data_quality_recheck_requeue", "payload": {"attempts": 1, "item_id": "cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8", "previous_status": "blocked", "spec_path": "data/cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8/spec.yaml"}, "ts": "2026-07-13T07:21:05"}

@@ -1,0 +1,33 @@
+你是本项目研究基础设施的 Reviewer of Record。请只评审设计，不得修改文件、不得实现代码。
+
+被评审文档：docs/design/research-question-lifecycle-spec.txt
+
+项目背景：这是量化“新策略/新假设验证”系统，不是自动交易系统。现有稳定入口为：
+ExplorationPacket -> ClaudeReview -> accept_claude_review (deterministic PASS gate) -> ResearchInput -> PendingResearchInputStore。
+本规格拟新增 append-only 的研究问题事实账本和纯函数派生状态，且不能破坏该入口。
+
+请检查以下硬不变量：
+1. 生命周期真相必须由 append-only facts + 版本化 policy 重放，不能由可变 status 决定。
+2. 同一机制换文案不能重置预算；实质 reframe 必须继承 lineage。
+3. 预算只能由历史事实计数得出，不能有 mutable remaining_budget。
+4. LLM 只能给建议性评分/评审；PASS 仍必须经过确定性门，不能由分数自动通过。
+5. pending slot 被占用、replay 或过期时不得产生孤儿 admission；重试必须幂等。
+6. holdout 是 one-shot；无要求的 holdout 事实不得把结果称为“已验证”。
+7. BLOCK 不得偷换为 evidence failure；closure 原因必须可审计。
+8. 旧的 pending/lease、proposal/spec execution status、research queue 必须保留各自执行职责，但必须退出“生命周期权威”的职责；迁移时不能产生双权威或孤儿 admission。
+
+请输出严格格式：
+
+VERDICT: ACCEPT 或 REVISE
+BLOCKERS:
+- 只列会造成数据完整性、错误研究结论、接口不兼容或难以回滚的问题；没有则写 none。
+REQUIRED_SPEC_CHANGES:
+- 每条 blocker 对应一个最小、明确的文档修改；没有则写 none。
+EXECUTABLE_EVALUATION:
+- 给出 6–10 条可实现为 unittest/CLI smoke 的验收项。每条必须包含：测试名、输入事实/操作、预期输出或拒绝行为。
+IMPLEMENTATION_ORDER:
+- 只列能安全落地的最小顺序；指出哪些事项必须在接入现有链路前完成。
+MIGRATION_EXIT_EVALUATION:
+- 给出旧代码清理/退出的具体检查项：哪些旧字段/分支保留、哪些必须废弃、何时允许删、如何回滚。不得建议一次性删除仍承担运行调度的组件。
+
+不要泛泛而谈。若 ACCEPT，仍必须完整给出 EXECUTABLE_EVALUATION。

@@ -8,6 +8,10 @@ timeout_seconds: 240
 allow_fallback: false
 block_on_unimplemented_draft: true
 log_dir: logs/strategy_ideator
+research_input_plan_version: "1"
+research_input_claim_ttl_seconds: 900
+research_lifecycle:
+  mode: compare
 
 context:
   runtime_entrypoints: data/research_framework/runtime_entrypoints.yaml

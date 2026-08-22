@@ -1,0 +1,9 @@
+REVISE
+
+1. **Max-date gate is insufficient**: requiring new max > current max does not verify that all dates between old max and new max are present. Source pagination gaps, holiday mis-handling, or API truncation can pass this gate while leaving holes in the holdout window. "Monotonic date extension" likely checks ordering, not completeness. Add a contiguous-date requirement for the new extension range per table.
+
+2. **Merge-base ambiguity after first refresh**: once a staged version exists, a subsequent refresh must choose whether to merge against `data/cb_warehouse` (original) or the prior staged version. The design does not specify which, and choosing the original silently drops any rows added by the first refresh. Require an explicit `--base` parameter or lock the merge base to the manifest's referenced snapshot.
+
+3. **Partial-fetch failure is underspecified**: if cb_daily succeeds but stk_daily_qfq fails mid-retrieval, the current design does not state whether the whole run aborts or proceeds with a partial merge. Require: any source fetch failure aborts the run, discards the staging directory, and exits nonzero; no partial artifacts are written.
+
+4. **Source corrections are silently suppressed**: "retain old rows on source gaps" does not distinguish a genuine gap from a historical correction. At minimum, log any existing-row date whose source counterpart differs in value, so corrections are visible even if intentionally preserved.

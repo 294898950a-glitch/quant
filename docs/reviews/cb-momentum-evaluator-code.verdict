@@ -1,0 +1,5 @@
+VERDICT: REVISE
+
+BLOCKERS: 网格规模不符——`_DEFAULT_MOMENTUM_WEIGHTS`(4个) × `_DEFAULT_MOMENTUM_LOOKBACKS`(3个) = 12 组,而非要求的15组train-only组合,需核实并对齐预注册的网格设计(缺失的3组可能改变train winner选择结果,属于设计层面偏离,不只是数量问题)。
+
+TESTS: 已确认`_select_train_winner`对train_sharpe用高精度比较且测试证明其确定性(tie-break可复现,不依赖ThreadPoolExecutor完成顺序,因为最终选择基于完整all_rows列表而非增量最优追踪);test集合仅在winner冻结(frozen_combo)后连同baseline各调用一次`include_test=True`,未见test指标参与网格选择或参数微调,未见循环重试/提前终止基于test结果的行为。

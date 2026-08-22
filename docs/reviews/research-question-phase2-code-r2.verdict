@@ -1,0 +1,5 @@
+VERDICT: ACCEPT
+
+BLOCKERS: none — manifest-vs-evidence comparison now uses `manifest_path.exists()` vs `evidence_present` directly (not `spec.status`); revision budget counts distinct `revision_key`/`revision_id` in `derive_state`; duplicate `run_id` diffs append with `duplicate_run_id` flagged (idempotent only when `manifest_ref`+`ledger_high_watermark` both match); `compare_window` walks rows in file append order for trailing zero-diff count. Minor non-blocking note: `record_lifecycle_projection_diff` writes via `handle.flush()` without `os.fsync`, unlike `ResearchQuestionLedger.append`, so a crash could lose a diagnostic diff row (only affects cutover-gate durability, not correctness—undercounts trailing cycles, never overcounts).
+
+TESTS: not run — static review only per instructions (no tool use); test file content shown appears consistent with the implementation reviewed.

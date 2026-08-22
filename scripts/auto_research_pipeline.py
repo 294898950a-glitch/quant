@@ -42,6 +42,7 @@ if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
 from framework.autonomous import run_recorder
+from framework.autonomous.evaluation_protocol import evaluate_constraints, validate_protocol
 from framework.autonomous.result_classification import status_for_decision
 from scripts.gatekeeper import GateKeeper, GateKeeperError
 
@@ -384,6 +385,50 @@ def derive_verdict(spec: dict[str, Any], output_dir: Path, exit_code: int | None
     if table_summary:
         summary = {**summary, **table_summary}
         summary_path = table_summary.get("summary_path") or summary_path
+    protocol = spec.get("evaluation_protocol")
+    if isinstance(protocol, dict) and protocol.get("mode") != "legacy_cb_arb_compat":
+        protocol_errors = validate_protocol(protocol)
+        if protocol_errors:
+            decision = "evaluation_protocol_invalid"
+            return {
+                "status": status_for_decision(decision),
+                "decision": decision,
+                "pass_field": None,
+                "pass_value": False,
+                "summary_path": summary_path,
+                "summary": summary,
+                "protocol_errors": protocol_errors,
+                "protocol_result": {"protocol_pass": False},
+                "falsifier_flags": {},
+            }
+        protocol_result = evaluate_constraints(protocol, summary)
+        if exit_code not in (None, 0):
+            decision = "execution_failed"
+        elif missing_artifacts:
+            decision = "missing_artifacts"
+        elif protocol_result["protocol_pass"]:
+            decision = "passed_declared_protocol"
+        else:
+            reasons = [
+                str(check.get("reason") or "")
+                for check in protocol_result.get("protocol_checks", {}).values()
+                if isinstance(check, dict)
+            ]
+            decision = (
+                "evaluation_evidence_incomplete"
+                if any(reason in {"missing", "non_numeric", "missing_or_non_numeric"} for reason in reasons)
+                else "failed_declared_protocol"
+            )
+        return {
+            "status": status_for_decision(decision),
+            "decision": decision,
+            "pass_field": protocol["primary_metric"]["path"],
+            "pass_value": protocol_result["protocol_pass"],
+            "summary_path": summary_path,
+            "summary": summary,
+            "protocol_result": protocol_result,
+            "falsifier_flags": {},
+        }
     pass_field = str(verdict_cfg.get("pass_field") or "adoption_pass")
     pass_value = boolish(summary.get(pass_field))
     falsifier_result = derive_train_falsifier_flags(spec, output_dir, verdict_cfg, summary)

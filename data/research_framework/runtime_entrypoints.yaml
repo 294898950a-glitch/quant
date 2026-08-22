@@ -70,6 +70,30 @@ runtime_context:
       role: numeric code maps for LLM-facing status-like values
       required: false
       load_scope: code_owned_registry
+    pending_research_input:
+      path: data/research_framework/pending_research_input.yaml
+      format: yaml
+      role: single active Claude-PASS research input; written only by admit_research_input
+      required: false
+      load_scope: code_owned_runtime
+    research_input_admission_history:
+      path: data/research_framework/research_input_admission_history.jsonl
+      format: jsonl
+      role: append-only admission/claim/consume audit authority
+      required: false
+      load_scope: code_owned_runtime
+    research_input_constraint_bindings:
+      path: data/research_framework/research_input_constraint_bindings.v1.yaml
+      format: yaml
+      role: versioned concrete-field bindings for reviewed must_change constraints
+      required: false
+      load_scope: code_owned_registry
+    admit_research_input:
+      path: scripts/admit_research_input.py
+      format: python
+      role: ticket-gated PASS admission entrypoint
+      required: false
+      load_scope: runtime_entrypoint
     hermes_executor_handoffs:
       path: data/research_framework/hermes_executor_handoffs.yaml
       format: yaml

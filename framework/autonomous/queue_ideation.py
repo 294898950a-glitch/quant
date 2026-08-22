@@ -17,6 +17,12 @@ import yaml
 
 
 EXCLUDE_STATUSES = {"DRAFT", "REJECT", "PROPOSAL_ONLY"}
+RESEARCH_INPUT_STATUSES = {
+    "RESEARCH_FEEDBACK_INVALID",
+    "RESEARCH_INPUT_DRY_RUN_UNSUPPORTED",
+    "RESEARCH_INPUT_CLAIMED",
+    "RESEARCH_INPUT_STALE_PLAN_VERSION",
+}
 RETRYABLE_IDEATION_RESULTS = {
     "ideation_not_runnable",
     "ideation_timeout",
@@ -246,6 +252,19 @@ class QueueIdeationService:
         except json.JSONDecodeError:
             payload = {}
         payload_status = str(payload.get("status") or "")
+        if payload_status in RESEARCH_INPUT_STATUSES:
+            event = "ideation_research_input_claimed" if payload_status == "RESEARCH_INPUT_CLAIMED" else "ideation_research_input_terminal"
+            detail = {
+                "status": payload_status,
+                "returncode": returncode,
+                "reason": payload.get("reason"),
+                "errors": payload.get("errors"),
+            }
+            # Claimed is deliberate transient backpressure, not a malformed
+            # draft. The other outcomes are terminal/audited for this tick.
+            self.audit(event, detail)
+            self.write_status(event, detail)
+            return event
         if payload_status in EXCLUDE_STATUSES:
             self.audit(
                 "ideate",

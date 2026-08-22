@@ -1,0 +1,12 @@
+You are the reviewer of record for a research-validity decision. Do not edit files. Reply with exactly one of `INVALID_REQUIRES_NEW_HOLDOUT`, `VALID_REJECT`, or `VALID_PASS`, then no more than 10 concise lines.
+
+Research contract: train-select one winner from 15 penalty/lookback combinations by train Sharpe; then expose test exactly twice (frozen winner and independent fixed baseline). Required test constraints: excess>0, Sharpe>0, total trades>=100, bottom-momentum trades>=30, realized friction>0.
+
+Observed evidence from the completed run:
+- Protocol correctly froze 15 train combinations; winner was w010_lb020; exactly two test exposure roles were recorded.
+- All train_sharpe values were null because the underlying evaluator did not emit Sharpe. Therefore winner selection fell back to a tie on the deterministic simplification order rather than the declared Sharpe criterion.
+- Test output: excess=0.224947; Sharpe=null; total trades=304; bottom-momentum trades=14; friction_total=71849.77; fixed baseline test excess=0.393603.
+- The Sharpe implementation is now repaired for future runs, but the current test period 2025-01-01..2026-05-08 has already been exposed.
+- The run is classified evaluation_evidence_incomplete (non-usable and non-closing), not a valid rejection.
+
+Decide validity strictly. Do not propose a retry on the exposed test period.

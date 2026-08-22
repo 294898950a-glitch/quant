@@ -1,0 +1,32 @@
+Let me first check the relevant files to verify the design context.
+
+<tool_use>
+{"name":"Agent","input":{"prompt":"Find and read the current data refresh design document or proposal in /home/jay/projects/quant. Look for files related to 'refresh_cb_research_data', 'data_versions', 'base-manifest', 'correction ledger', or any design docs under docs/ or data/research_framework/. Also read scripts/build_cb_warehouse.py to understand the current builder, and check data/cb_warehouse structure. Report the key facts: what tables exist, how the current builder works, and whether there's an existing design document for the proposed refresh script.","subagent_type":"Explore"}}
+</tool_use>
+
+<tool_use>
+{"name":"Agent","input":{"prompt":"Read docs/QUANT_WORKFLOW.txt in /home/jay/projects/quant, focusing on sections about data refresh, warehouse, immutable manifests, correction ledgers, and the hard boundaries / incident-derived constraints related to data versioning. Report the relevant rules and constraints.","subagent_type":"Explore"}}
+</tool_use>
+
+<tool_use>
+{"name":"Agent","input":{"prompt":"In /home/jay/projects/quant, find and read any existing refresh_cb_research_data.py script or any staging/design files under data/data_versions/, data/research_framework/, or scripts/. Also check for any existing manifest or correction ledger files. Report whether these exist yet or are purely proposed.","subagent_type":"Explore"}}
+</tool_use>
+
+Now let me evaluate the design against each prior issue and look for the specific failure modes mentioned.
+
+**ACCEPT.**
+
+Prior issues resolved:
+- **Contiguous extension**: Point 5 requires max date > base max and every expected trading date in the extension range, with calendar exception list. No holes or cross-table gaps.
+- **Explicit immutable base manifest**: Point 3 mandates `--base-manifest` that locks the snapshot; later refreshes must name prior staged manifest, no silent fallback to live warehouse.
+- **All-or-nothing failures**: Point 4 discards staging directory, publishes no manifest, exits nonzero on any source fetch failure. No partial state survives.
+- **Correction ledger**: Point 4 logs every source-vs-base value difference on existing keys as a correction candidate; Point 6 validates the ledger.
+
+No blockers found on the four prior issues. Minor observations (not blocking):
+
+1. Point 4 "retain old rows only when an explicitly recorded source gap is allowed" — ensure the gap-allowance list is part of the immutable manifest, not a runtime flag, so it can't widen between runs.
+2. Point 3 merge-by-natural-keys: specify that merge must be deterministic (e.g., ordered by key columns) to guarantee reproducible output across runs.
+3. Point 7 versioned gap-ranks artifact: state whether the version tag derives from the manifest run_id or is independently assigned, to prevent version ambiguity.
+4. Point 9 fixture test should exercise the all-or-nothing discard path to prove staging cleanup actually happens.
+
+Design is sound against the stated failure modes. No leakage, version ambiguity, merge corruption, coverage gaps, or unsafe failure behavior detected in the proposal.

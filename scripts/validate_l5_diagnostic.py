@@ -203,6 +203,17 @@ def main() -> int:
         if not spec_path.exists():
             continue
 
+        # ARCHIVED 跳过 —— 跟 validate_l4_ack.py 的 is_ack_required()、
+        # validate_report.py 的 ALLOWED_STATUS 同一条规矩:已归档的历史批次
+        # 不需要满足现行 schema（schema 是后来才加严的，回头找老记录要新字段
+        # 没有意义，老数据也早就没了）。
+        try:
+            spec_status = yaml.safe_load(spec_path.read_text(encoding="utf-8")).get("status")
+        except Exception:
+            spec_status = None
+        if spec_status == "ARCHIVED":
+            continue
+
         l4_decision = read_l4_decision(l4_ack_path)
 
         # diagnostic 强制条件: l4_ack.overall_decision in {retry, reject}

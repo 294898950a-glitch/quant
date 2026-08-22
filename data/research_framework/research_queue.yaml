@@ -1,6 +1,6 @@
 schema_version: 1
 enabled: true
-updated_at: '2026-05-27T12:00:19'
+updated_at: '2026-07-13T07:21:05'
 escalation:
   status: auto_resolved
   reason: all 10 autonomous research families exhausted (regime_classifier_variant
@@ -78,8 +78,10 @@ forbidden_families:
 - stop_source_stress
 - regime_classifier_variant
 rules:
-- "Local machine only schedules and monitors. Every cb_arb backtest must explicitly select execution_target: sig_spot or execution_target: hzpc."
-- "sig_spot requires spot_minutes > 0 and local_minutes = 0; hzpc requires local_minutes > 0 and spot_minutes = 0."
+- 'Local machine only schedules and monitors. Every cb_arb backtest must explicitly
+  select execution_target: sig_spot or execution_target: hzpc.'
+- sig_spot requires spot_minutes > 0 and local_minutes = 0; hzpc requires local_minutes
+  > 0 and spot_minutes = 0.
 - If queue is empty and no protected user decision is required, the project-owned
   ideation flow may generate one candidate through the registered provider.
 - Do not promote current.yaml or baseline_registry from this loop.
@@ -1916,7 +1918,7 @@ queue:
   completed_at: '2026-05-22T18:31:17'
 - id: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
   family: entry_quality_filter
-  status: blocked
+  status: queued
   spec_path: data/cb_arb_value_gap_switch_bond_floor_proximity_filter_v1/spec.yaml
   process_pattern: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
   sync_paths:
@@ -1935,16 +1937,13 @@ queue:
   discovered_at: '2026-05-23T00:34:12'
   source: project_owned_ideation
   workflow_stage: synced_to_vm
-  blocked_at: '2026-05-23T00:37:45'
-  block_reason: "data_quality_blocked: status_code: 3\nconfidence_code: 1\nblocking_issues:\n\
-    - executor 脚本 evaluate_cb_arb_option_position_sizing.py 未声明 data requirements，无法获取\n\
-    \  required_files / required_columns / required_column_quality，无法执行任何实质性数据质量校验\n\
-    - data_files 为空，没有任何数据文件可供验证\nwarnings: []\nfix_plan: []\ndecision_reason: Executor\
-    \ 未声明数据需求且无可验证的数据文件，硬阻断，必须先在 executor 中补齐 data requirements\n  声明后才能重新提交数据质量检查\n\
-    schema_version: 1\nstatus: fail\nconfidence: high\ndecision_source: ai_data_quality_judge\n\
-    ai_provider: hermes\nresponse_hash: 889f76bf21c1daa8\n\n"
-  data_quality_block_signature: ef5e0403bfca43fce04a45c61dcdb98c32a76d7e3f359471bed98adf17ec1952
+  data_quality_block_signature: 18d04df35b8a4d58fabdc53d09fe26f57e725b3e4455a3355dbeb8dd9eeec333
   data_quality_block_signature_recorded_at: '2026-05-23T00:37:45'
+  requeued_at: '2026-07-13T07:21:05'
+  requeue_reason: data-quality inputs changed; re-run data-quality gate automatically
+  previous_status_before_data_quality_recheck: blocked
+  previous_data_quality_block_signature: ef5e0403bfca43fce04a45c61dcdb98c32a76d7e3f359471bed98adf17ec1952
+  data_quality_recheck_attempts: 1
 - id: cb_arb_value_gap_switch_gap-speed-adaptive-exit_2
   family: exit_rule_duration_adaptive
   status: complete
@@ -1977,7 +1976,7 @@ queue:
   completed_at: '2026-05-23T01:41:04'
 - id: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
   family: entry_filter
-  status: blocked
+  status: queued
   spec_path: data/cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8/spec.yaml
   process_pattern: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
   sync_paths:
@@ -1997,43 +1996,13 @@ queue:
   discovered_at: '2026-05-23T02:37:56'
   source: project_owned_ideation
   workflow_stage: synced_to_vm
-  blocked_at: '2026-05-23T02:41:50'
-  block_reason: 'data_quality_blocked: status_code: 3
-
-    confidence_code: 1
-
-    blocking_issues:
-
-    - ''executor_requirements_error: spec automation.command 未指向有效的 scripts/*.py 执行器，无法确定实验所需的数据文件、字段、时间区间''
-
-    - data_files 为空：没有任何输入数据文件可用
-
-    - periods 全部为空：train_start、train_end、test_start、test_end 均未定义，无法验证行情覆盖
-
-    - executor_requirements 为 null：无法确定 required_columns 和 required_column_quality，无法进行字段级质量检查
-
-    warnings: []
-
-    fix_plan: []
-
-    decision_reason: spec 的 automation.command 无效且无任何数据文件，实验基础设施层面的阻断，非数据质量修复能解决
-
-    schema_version: 1
-
-    status: fail
-
-    confidence: high
-
-    decision_source: ai_data_quality_judge
-
-    ai_provider: hermes
-
-    response_hash: 562892ae09f14111
-
-
-    '
-  data_quality_block_signature: bcf49a932ce1fe95da10533a5abcc7bf03794a0ac6b976f0fad138f63aa89c99
+  data_quality_block_signature: 1db718a2c76788653c7210cb5328cc981ea5a881f2332cd656e9f164b3bf4645
   data_quality_block_signature_recorded_at: '2026-05-23T02:41:50'
+  requeued_at: '2026-07-13T07:21:05'
+  requeue_reason: data-quality inputs changed; re-run data-quality gate automatically
+  previous_status_before_data_quality_recheck: blocked
+  previous_data_quality_block_signature: bcf49a932ce1fe95da10533a5abcc7bf03794a0ac6b976f0fad138f63aa89c99
+  data_quality_recheck_attempts: 1
 - id: cb_arb_value_gap_switch_bond-floor-entry-filter_1
   family: entry_filter
   status: complete
@@ -7430,6 +7399,20 @@ history:
   at: '2026-05-27T12:00:19'
   vm_id: guangzhou_spot
   vm_host: ubuntu@114.132.99.6
+- id: cb_arb_value_gap_switch_bond_floor_proximity_filter_v1
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_proximity_filter_v1/spec.yaml
+  status: queued
+  message: data-quality inputs changed; re-run data-quality gate automatically
+  at: '2026-07-13T07:21:05'
+  vm_id: null
+  vm_host: null
+- id: cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8
+  spec_path: data/cb_arb_value_gap_switch_bond_floor_entry_filter_v1_8/spec.yaml
+  status: queued
+  message: data-quality inputs changed; re-run data-quality gate automatically
+  at: '2026-07-13T07:21:05'
+  vm_id: null
+  vm_host: null
 vm_hosts:
 - id: guangzhou_spot
   host: ubuntu@114.132.99.6

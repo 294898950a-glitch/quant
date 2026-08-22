@@ -1,0 +1,8 @@
+ACCEPT
+
+- Non-legacy branch (`mode != "legacy_cb_arb_compat"`) routes through `validate_protocol`/`evaluate_constraints` — same imported functions a pipeline consumer would call, satisfying protocol parity as far as these excerpts show.
+- Legacy path (`mode == "legacy_cb_arb_compat"`, or no `evaluation_protocol` at all) falls through unchanged to the old `pass_field`/`boolish`/falsifier logic — old behavior preserved.
+- Fail-closed on missing metrics confirmed by the regression test: `best_test_sharpe: None` → `constraint_0` reason `"missing"` → `protocol_pass=False` → `failed_declared_protocol`.
+- Evaluator excerpt reads `train_metrics.get("sharpe")` / `test_metrics.get("sharpe")` / baseline sharpe — correct key, not a renamed/legacy alias.
+- Can't verify from these excerpts alone that pipeline.py calls the identical `evaluate_constraints`/`validate_protocol` pair (pipeline source not shown) — flagging as residual trust-but-verify, not a blocker given shared-import evidence.
+- Minor asymmetry: strict branch hardcodes `falsifier_flags: {}` vs legacy's populated dict — not one of the stated invariants, so not blocking.

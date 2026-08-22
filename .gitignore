@@ -48,6 +48,13 @@ data/research_framework/runs.jsonl
 data/research_framework/tried_directions.jsonl
 data/research_framework/hermes_access_audit.jsonl
 
+# research-question-lifecycle 那批持续追加的 ledger + 运行时锁文件（2026-08-22 补，
+# 跟上面同一条规矩：会持续追加，不应该 commit；.lock 是运行期互斥锁，本来就不该进版本控制）
+data/research_framework/lifecycle_projection_diffs.jsonl
+data/research_framework/research_input_admission_history.jsonl
+data/research_framework/research_question_events.jsonl
+data/research_framework/*.lock
+
 # Heavy generated batch artifacts (按 repo audit 2026-05-16 加)
 # 大批量回测产生的中间结果, 不进 git. 只 promote summary/manifest 进 git
 data/cb_arb_concurrent_supervised_*/
@@ -58,6 +65,11 @@ data/cb_arb_*/spot_*.log
 data/cb_arb_*/*.pid
 data/cb_arb_*/heartbeat
 *.pid
+
+# research-question-lifecycle 单次 admission 的工作目录（2026-08-22 补，同一条规矩：
+# 只 promote data/research_framework/run_manifests/*.yaml 进 git，原始工作目录不进）
+data/research_input_*/
+data/research_framework/admission_packets/
 
 # Archive (保留物理副本但不 commit)
 archive/

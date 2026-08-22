@@ -1,0 +1,65 @@
+You are the architecture reviewer of record. Perform a read-only architecture
+evaluation from the following factual implementation summary. Do not request
+files, call tools, or propose edits.
+
+System purpose: validate genuinely new quantitative research directions, not
+automatically deploy or promote production strategies.
+
+Implemented flow:
+1. Deterministic evaluation modules calculate metrics, benchmark excess,
+costs, typed evidence, and deterministic gates. LLM scores cannot override
+these facts.
+2. A primary exploratory LLM produces an ExplorationPacket of typed questions.
+A second external LLM produces ClaudeReview(PASS/REVISE/BLOCK). Only a valid
+PASS gets through accept_claude_review() into ResearchInput schema v2.
+3. ResearchInput preserves source review/run/plan IDs, accepted question,
+must_change, forbidden, required evidence, opaque review constraints, required
+changes, required tests, evidence references, and score vectors.
+4. admit_research_input.py is ticket-gated. It accepts YAML/JSON packet and
+review files, admits only PASS, validates active plan version, and writes one
+pending input. The append-only history is written+fsynced before atomic pending
+slot replacement; recovery reconstructs a missing slot from history.
+5. PendingResearchInputStore has pending/claimed/consumed/released/
+stale_plan_version states, a flock lock, atomic YAML, a random claim nonce,
+preallocated proposal ID/path, and a reservation marker. Explicit owner
+release removes its reservation; TTL release retains a tombstone because a slow
+worker may still write its old path. A consumed admission key cannot be
+re-admitted. Released/stale inputs may be explicitly re-admitted.
+6. Ideation first continues a locally actionable executor-tool draft. A draft
+waiting on external Hermes does not starve an accepted pending input. A normal
+non-dry run recovers then claims the input. Dry run with pending input fails
+without mutation. Concurrent claims return RESEARCH_INPUT_CLAIMED.
+7. The ideation prompt receives structured ResearchInput plus a versioned,
+code-owned must_change->proposal-path binding registry. The proposed object is
+validated before any proposal artifact write: ordinary proposals pass structural
+proposal schema validation; ResearchInput proposals additionally require exact
+accepted IDs/question, bidirectional constraints/evidence/tests, valid binding
+paths, no forbidden family/mechanics/hypothesis token, and no unreviewed extra
+dimensions. Invalid output writes no proposal; its claim is released.
+8. A valid proposal is durable-written, then the input is consumed before the
+later delta gate/compiler result; READY/DRAFT/SKIP/WATCH cannot replay it.
+Queue routing recognizes claimed input as backpressure and other input errors as
+terminal audited outcomes. No path writes current strategy truth.
+9. New statuses have numeric maps; runtime entrypoints and docs are registered.
+Relevant local tests: 73 bridge/feedback/ideation/compiler tests pass. MacBook
+mirror has the same files, 21 standard-library bridge tests pass, and entrypoint,
+module-decoupling, and no-background-LLM checks pass. External CodeBuddy reviews
+identified and then accepted fixes for pre-write structural validation, draft
+starvation, blank proposal path recovery, explicit reservation release,
+consumed replay, and TTL tombstone behavior.
+
+Evaluate the architecture from first principles. The main question is: what
+still stops it from reliably discovering and validating truly new research
+directions, rather than producing cosmetic variants or a rigorous-looking but
+operationally idle loop?
+
+Distinguish implemented technical defects from operational gaps and deliberate
+trade-offs. Focus on feedback quality, exploration diversity, reviewer
+independence, evidence interfaces, bottlenecks, and information gain.
+
+Return exactly:
+VERDICT: ACCEPT or REVISE
+TOP_BLOCKERS: numbered list; tag each [implemented], [operational], or [design]
+and state why it matters.
+STRENGTHS: numbered list or none
+NEXT_ACTIONS: ordered minimal high-leverage actions

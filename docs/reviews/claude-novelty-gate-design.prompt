@@ -1,0 +1,56 @@
+You are the architecture reviewer of record. Review this proposed extension to
+the quant research framework. Do not edit files or use tools; evaluate the
+design as written.
+
+Existing framework facts:
+- Deterministic evaluation establishes facts; LLMs cannot override them.
+- Exploration LLM -> external Claude PASS/REVISE/BLOCK -> ResearchInput ->
+  ideation proposal -> delta gate/compiler/queue -> deterministic experiment.
+- Current ResearchInput is consumed after a valid proposal is durable-written,
+  before later delta-gate/compiler/experiment outcomes.
+- Existing negative controls prevent closed/forbidden directions, but the
+  system has no positive formal test that a candidate is genuinely novel.
+
+Proposed extension:
+1. Add a research-question lifecycle separate from proposal artifacts:
+   admitted -> active_question -> proposal_revision -> evidence_pending ->
+   evaluated -> closed_supported / closed_rejected / needs_reframe.
+   A question is closed only by sufficient deterministic evidence, not because
+   its first proposal is weak or unexecutable.
+2. Add a Novelty & Information-Gain Gate after exploration generates a typed
+   candidate question and before external Claude review. Each candidate must
+   declare mechanism_change, causal_hypothesis, historical_neighbors,
+   difference_from_neighbors, new_evidence_needed, falsifier, and
+   information_gain_if_fail.
+3. The gate has deterministic checks (duplicate mechanism/family/evidence,
+   experiment-family budget, prior closure, exact evidence/falsifier presence)
+   plus an LLM judgment of semantic novelty and expected information gain.
+   Outcomes: NOVEL, REFRAME, SATURATED, CLOSED. It does not declare strategy
+   profitability.
+4. An accepted question may have at most three proposal revisions. Every
+   revision must change its declared mechanism/evidence, not merely a
+   parameter. Exhaustion becomes needs_reframe, not closed_rejected.
+5. Add an experiment ledger by research family: count hypothesis attempts,
+   reserve a final independent holdout, record family-level false-discovery
+   budget, and prohibit a "validated" label without the independent holdout.
+6. Require exploration and review records to include provider/model identity;
+   policy prefers distinct model families. A third reviewer is required only on
+   material disagreement.
+7. Ticket remains authorization for persistent mutation, but packet/review
+   delivery and validation become mechanically queued and observable. Add
+   throughput metrics: admitted/week, PASS rate, revision count, gate clearance,
+   and close reasons.
+
+Review questions:
+- Does this solve the actual bottlenecks without adding a performative gate?
+- What ownership and state-transition ambiguity remains?
+- Does the revision policy preserve learning without enabling endless retries?
+- Is the multiple-hypothesis proposal statistically meaningful enough to be
+  actionable?
+- What is the smallest implementation slice that should be built first?
+
+Return exactly:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+MINIMAL_SLICE: concise ordered list
+REQUIRED_TESTS: numbered list or none

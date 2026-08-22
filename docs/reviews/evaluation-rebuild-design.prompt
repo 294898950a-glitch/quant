@@ -1,0 +1,48 @@
+你是 quant 项目评测架构的设计审查者，Kimi 是本设计的 reviewer of record。
+
+目标（第一性原理）：评测不是寻找最高回测收益，而是增加我们对“收益来源真实、可重复、扣除现实摩擦后仍存在”的信心。不要设计自动生产部署；只重建研究验证层。
+
+当前问题：
+- framework/evaluation 已有 metrics.py、benchmark.py、costs.py、backtest_metrics.py，但 benchmark 仍直接 import cb_arb verifier，通用评测被策略依赖污染。
+- framework/autonomous/evaluation_protocol.py 能检查主指标、成本、约束、robustness、comparator，但验证协议仍与流水线 verdict 分离，split/通用证据门没有统一模型。
+- 当前 verdict 容易表达“某个字段通过”，不能明确区分信号、baseline、friction、generalization、integrity 五类证据。
+- 现有 cb_arb 行为必须兼容，但新策略不应默认继承 cb_arb 规则。
+
+拟重建的最小架构（已吸收第一轮审查意见，请继续审查）：
+1. `framework/evaluation/contract.py`：定义版本化 `EvaluationPlan` / `EvaluationReport` / `GateResult` 的纯数据契约，含一等 `GateStatus = passed | failed | blocked | not_evaluated | waived`。Plan 包含 objective、benchmark、splits、friction、robustness、multiple_testing、constraints、required_gates、`artifact_requirements`（每项含 id、path/evidence_ref、role、hash_optional）；每个 gate 明确 `required_evidence_keys`、`allowed_sources`、`required_sources`；legacy mode 可显式覆盖 per-gate source 规则。evidence 项带 `source`（train/validation/holdout/rolling）、friction 的 `scenario`（如 cost_on）和稳定 id，并可携带 `applied_method`、`parameters`、`computed_at`；Report 带 plan_version、evidence_refs、evaluated_at、overall_status、decision；不含执行命令和生产部署字段。显式定义 `BenchmarkProvider` / `CostProvider` 协议。暴露 `validate_plan_complete(plan)`。
+2. `framework/evaluation/validation.py`：纯函数 `evaluate_plan(plan, evidence) -> EvaluationReport`，按六个且仅六个 required-capable gate 判断：`integrity`、`signal`、`benchmark`、`friction`、`generalization`、`constraints`（constraints 是第六门，不是 integrity 子门）。decision 映射明确覆盖这六门任一 required 失败→`failed_declared_protocol`。
+   - integrity：required metrics、日期、样本数和无未来数据标记齐全；
+   - signal：候选主指标达到 plan 声明的方向/阈值；
+   - benchmark：超过声明 baseline 或 null benchmark；
+   - friction：成本后指标满足门槛，并记录场景；
+   - generalization：声明的 train/validation/holdout/rolling 来源均满足最低要求；robustness 属于此门子检查；
+   - constraints：校验 max_drawdown、turnover、leverage、concentration 等 guardrails。
+   integrity 是前置门：包含 required metrics、日期、样本数、无未来数据标记、multiple_testing method/value/applied_method 一致、robustness applied_method 一致、按 artifact_requirements 检查 artifact 存在性；Plan completeness 只做路径/引用格式检查，hash 校验在执行后 integrity 阶段完成。integrity 失败时其它 required gate 必须 `blocked`（可达但 prerequisite 失败）或 `not_evaluated`（提前短路未到达），不得 passed；缺证据必须 fail-closed。所有 gate 默认 required_sources 采用 all_required_sources，逐门可显式覆盖；new declared signal 只允许 holdout/rolling，legacy mode 可显式把 signal.allowed_sources 扩为 train/holdout/rolling；friction 只允许 scenario=cost_on，generalization 的 required_sources=[holdout, rolling] 时必须两者都满足。非 required gate 只有在 required evidence 存在、source/type 合法、检查实际执行且阈值未达时才是 `waived`；缺证据/source/type 错误仍是 `failed`；任何 required gate 失败则 overall fail。
+3. `framework/evaluation/metrics.py`、`benchmark.py`、`costs.py`、`backtest_metrics.py` 只负责测量，返回数值/数据，不输出 PASS/FAIL；`framework/evaluation/evidence.py` 的 `measurement_evidence` helper 负责把测量值包装为 typed EvidenceItem（value/source/scenario/method/parameters/id/plan_version）。`BenchmarkProvider` 明确定义 `get_returns(benchmark_id: str, start: str|None, end: str|None) -> pd.Series`（日期为 YYYYmmdd、简单日收益、日期索引；unsupported id 必须 ValueError；provider 不负责对齐）；`CostProvider` 明确定义 `apply(scenario: str, trades_or_returns: Any) -> dict[str, Any]`（未知 scenario 必须 ValueError）。benchmark.py 保留 align_dates/compute_excess_returns/compute_cumulative_excess 纯函数；load_benchmark/total_return 必须显式注入 provider/Series，不能有 cb_arb 默认 provider，也不能 import 任何策略 verifier；Plan 声明 benchmark/friction 但未提供 provider 时测量报错/证据缺失，不回退。
+4. `framework/autonomous/evaluation_protocol.py` 只做旧 proposal/spec → EvaluationPlan 的显式映射，不保留 `evaluate_constraints` 或任何 PASS/FAIL 判断；Plan 有 `mode: declared | legacy_cb_arb_compat`，legacy adapter 可显式覆盖 legacy gate 的 allowed/required sources 以保留历史 in-sample 语义；cb_arb legacy adapter 放在 `strategies/cb_arb/legacy_evaluation_adapter.py`，实现 `legacy_spec_to_plan()` 与 `legacy_results_to_evidence()`，把旧 table verdict 和 train falsifier 动态输出转换为带 source/id/plan_version 的 typed evidence；新策略必须有完整 plan。
+5. `framework/autonomous/run_recorder.py` 成为唯一 verdict 生成入口，负责从 measurement artifacts 调用 `framework/evaluation/evidence.py::measurement_evidence` 组装 evidence，再调用 `validation.evaluate_plan`；执行前 `exit_code != 0` 或 required artifacts 缺失/校验失败时直接返回旧 `execution_failed` / `missing_artifacts`，不生成 EvaluationReport；否则 run_recorder 只写 research run record，不写交易/部署/current strategy 状态，并提供唯一 `_gates_to_decision(report)` 映射：六门任一 required 失败→`failed_declared_protocol`，integrity 失败→`evaluation_protocol_invalid`，全部 required gate 通过→`passed_declared_protocol`；legacy adapter 可附带 legacy-only auxiliary falsifier gate，只有 mode=legacy、integrity 已通过且该 gate 失败才映射 `passed_mechanical_but_falsifier_failed`，该 decision 明确为 rejected/wip evidence、不可晋升、不可写入 current strategy；`scripts/auto_research_pipeline.py` 删除/委托其 `derive_verdict`、`derive_table_verdict`、`derive_train_falsifier_flags`，只保留执行前置检查并把 evidence 交给 run_recorder。multiple_testing 是 integrity 子检查，不是第七门。现有 cb_arb 结果必须有 compatibility path，并以历史样本做旧/新 adapter 的 decision/status/pass_value 完全一致回归。
+
+硬性不变量：
+- 评测层无策略反向依赖、无 AI/network、无生产状态写入。
+- 缺少 required evidence 绝不 PASS。
+- baseline、cost、holdout 是证据来源，不是自动晋升理由。
+- 旧 cb_arb verdict 不变；新策略不能无协议进入 RUNNABLE。
+- 不在这一轮实现统计学研究（bootstrap、multiple-testing correction 算法）或完整 rolling backtest；但契约必须能表达其证据字段，不能伪装成已实现。
+- 新 strategy 的 Plan 不得包含执行命令、部署字段或生产状态字段；不完整 Plan 不得进入 RUNNABLE。
+- runner 在进入 RUNNABLE 前必须调用 `validate_plan_complete(plan)`；失败时进入 DRAFT/REJECT，不得执行。
+- `validate_plan_complete` 强制 integrity 为 required gate，校验每个 gate 的 required_sources ⊆ allowed_sources、required_evidence_keys 有定义；spec_compiler 在返回 READY 前调用，失败返回带 evaluation_protocol_errors 的 DRAFT。
+- Gate 评估遇到缺 source/id、source 越界、plan_version 不一致、required key 缺失或 value 非数值时一律 fail/blocked，不忽略或降级。
+- Evidence value 按 key 的类型契约校验：数值指标需 numeric，完整性标记可为 boolean，scenario/method 可为非空 string；不做“一律 numeric”判断。
+- `waived` 只允许非 required gate 在 evidence 存在且检查实际执行后未达阈值时使用；缺 evidence、source 越界、类型错误一律 `failed`/`blocked`，不得 waived。
+- artifact_requirements：无 hash 时只检查路径/稳定 evidence_ref 存在；声明 hash 时必须匹配，否则 integrity=`failed`。
+- 运行 manifest 可记录 entrypoint/command，但这些是执行记录，不属于 EvaluationPlan，也不参与六门 verdict。
+- 新 schema 的 spec 字段统一命名为 `evaluation_plan`，不与旧 `evaluation_protocol` 双写；`evaluation_protocol.py` 的 legacy mapping 产出 EvaluationPlan，`spec_compiler.compile()` 在返回 READY 前调用 `validate_plan_complete(plan)`，失败返回带 `evaluation_protocol_errors` 的 DRAFT。
+- EvaluationPlan 是声明式证据契约，不含执行命令；run manifest 是运行记录，可以记录实际 entrypoint/command，但 runner 只用 Plan 完整性决定是否 RUNNABLE。
+
+请重点检查：边界是否清楚、是否把 measurement 与 decision 分开、五门是否足够、证据结构是否会产生 false PASS、兼容迁移是否可控、是否把 benchmark/cost provider 解耦正确、是否过度设计。
+
+请只返回：
+VERDICT: ACCEPT 或 REVISE
+BLOCKERS: 编号列表或 none
+REQUIRED_TESTS: 编号列表或 none
+RECOMMENDED_SHAPE: 简短建议

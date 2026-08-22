@@ -1,0 +1,3 @@
+VERDICT: ACCEPT
+BLOCKERS: none — read path uses LOCK_SH/LOCK_UN correctly, write path uses LOCK_EX with dedup-by-run_id and duplicate_run_id marking, 29/30/duplicate tests match compare_window semantics, and check-only vs --activate ticket contract (require_ticket only on activate) is correctly implemented.
+TESTS: 29/30/duplicate-marks-false cases pass per shown assertions; real cutover remains blocked at 0/30 zero-diff cycles, so no authoritative switch is possible yet.

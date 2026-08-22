@@ -1,0 +1,13 @@
+schema_version: 1
+date: '2026-08-23'
+decision: no_truth_change
+reason: >-
+  这份 run_manifest（research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2）
+  是 2026-07-13 对一份已存在产物的回填分类（record_type: backfill），研究判定
+  （promotion_status: rejected，evaluation_evidence_incomplete）当时就已做出。
+  今天只是把这段 5 周前就发生的历史记录补进 git（配合同一批 research question
+  lifecycle 功能一起提交），没有做出任何新的 truth 判断，也没有复活这个已拒绝的
+  方向。current.yaml / baseline_registry.yaml 不需要跟着改。
+changed_paths:
+  - data/research_framework/run_manifests/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2.yaml
+reviewer: claude

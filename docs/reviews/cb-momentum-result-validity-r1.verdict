@@ -1,0 +1,7 @@
+INVALID_REQUIRES_NEW_HOLDOUT
+
+- Selection step failed on its own terms: train_sharpe was null for all 15 combos, so the declared criterion (select by train Sharpe) was never actually applied — w010_lb020 was chosen by an arbitrary tie-break fallback instead. That means no legitimate winner was ever selected under the contract.
+- Since the contract's core selection mechanism didn't execute, the subsequent "frozen winner" test exposure wasn't a test of a validly-selected strategy — it was a test of an arbitrary fallback pick.
+- Test-side results also can't be judged against constraints as intended: Sharpe>0 is unevaluable (null) and bottom-momentum trades=14 fails <30 regardless, but that's secondary — the primary defect is upstream in selection, not in the test outcome itself.
+- The two allowed test exposures have already been consumed on this corrupted selection, and the instructions bar retrying on the same exposed period. So this period is spent without ever producing a valid protocol-compliant test.
+- Correct resolution: fix Sharpe computation (already done), rerun the full train-select-test contract on a fresh, never-exposed holdout period. This matches the run's own classification as evaluation_evidence_incomplete rather than a valid reject.

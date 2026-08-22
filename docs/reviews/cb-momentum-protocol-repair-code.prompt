@@ -1,0 +1,19 @@
+You are the reviewer of record. Review the implemented repair in /home/jay/projects/quant; do not edit files.
+
+Review these changed artifacts:
+- framework/autonomous/evaluation_protocol.py
+- framework/autonomous/spec_compiler.py
+- scripts/evaluate_cb_arb_value_gap_switch.py
+- scripts/evaluate_cb_arb_valuation_formula_momentum.py
+- data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2/proposal.yaml and generated spec.yaml
+- framework/tests/test_evaluation_protocol.py and framework/tests/test_research_question.py
+
+Approved design / required invariants:
+1. Historical `legacy_cb_arb_compat` specs must retain the existing boolean compatibility branch and must not be forced into strict numeric evaluation.
+2. Re-using a compiler-derived legacy protocol must be idempotent; a READY spec may never carry non-empty evaluation_protocol_errors.
+3. Only the new momentum study uses `mode: cb_momentum_protocol_v2`, with numeric primary metric `best_test_excess`, strict constraints for excess>0, Sharpe>0, total trades>=100, bottom-momentum trades>=30, and realized costs.friction_total>0; missing/non-numeric values fail closed.
+4. Cost witness must aggregate actual buy/sell `apply_cost_model` outputs, not merely an enabled flag.
+5. Bottom-momentum count is a post-test diagnostic over entry trades from the already-frozen winner test result. It must not create a third test exposure or affect train selection.
+6. No promotion occurs; execution remains remote-only after review.
+
+Look for real bugs: false cost accumulation, hidden extra test runs, malformed outputs, incorrect metric paths, failure paths calling outdated function signatures, compiler status/protocol mismatch, or compatibility regressions. Inspect and run focused tests if helpful. Reply exactly one of ACCEPT or REVISE, followed by concise blocking findings.

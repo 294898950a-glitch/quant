@@ -1,0 +1,3 @@
+VERDICT: ACCEPT
+BLOCKERS: none
+TESTS: test_momentum_train_selection_is_deterministic_without_test_metrics; test_momentum_grid_has_fifteen_nonbaseline_train_combinations; test_momentum_protocol_freezes_winner_and_rejects_second_test_exposure

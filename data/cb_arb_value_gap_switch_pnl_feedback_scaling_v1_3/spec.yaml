@@ -58,7 +58,7 @@ artifacts_required:
 - report.yaml
 - l4_ack.yaml
 - diagnostic.yaml
-status: COMPLETE
+status: ARCHIVED
 auxiliary_metrics:
 - train_excess_return
 - test_excess_return

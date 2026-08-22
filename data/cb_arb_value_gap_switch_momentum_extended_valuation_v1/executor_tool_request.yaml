@@ -825,10 +825,11 @@ files:
     \    main()\n"
 written_files:
 - generated_executor/evaluate_cb_arb_valuation_formula_momentum.py
-tool_code_attempts: 0
-validation_errors: []
+tool_code_attempts: 1
+validation_errors:
+- files[1].content contains placeholder marker '...'
 hermes_handoff:
   id: cb_arb_value_gap_switch_momentum_extended_valuation_v1_executor_code
   path: data/research_framework/hermes_executor_handoffs.yaml
   recipient: hermes
-status: draft_tool_code
+status: invalid_tool_code_response

@@ -1,0 +1,3 @@
+VERDICT: ACCEPT
+BLOCKERS: none — both entrypoints (ideation_cycle path and admit_research_input CLI) check `research_question_policy.exists()` before any lease/claim/model call and fail closed with RESEARCH_LIFECYCLE_POLICY_MISSING when lifecycle mode ≠ off; dry-run/non-mutating guard precedes it correctly.
+TESTS: test_enabled_lifecycle_without_policy_fails_before_claim covers the ideation_cycle path; add an equivalent CLI-level test for admit_research_input.py to confirm it also returns exit 1 with RESEARCH_LIFECYCLE_POLICY_MISSING before constructing ShadowAdmissionService.

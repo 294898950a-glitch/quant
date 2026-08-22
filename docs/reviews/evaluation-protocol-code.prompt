@@ -1,0 +1,69 @@
+You are the reviewer of record for the implemented evaluation-protocol change.
+
+Approved design:
+- A declarative, versioned `evaluation_protocol` is attached to generated specs.
+- Existing cb_arb behavior is preserved through explicit mode
+  `legacy_cb_arb_compat`.
+- Non-cb_arb proposals without a valid protocol remain DRAFT.
+- Explicit protocols are evaluated fail-closed from declared metric paths,
+  cost metric path, and numeric constraints.
+- No production strategy truth or deployment state changes.
+
+Files changed:
+- framework/autonomous/evaluation_protocol.py: validates protocol schema,
+  resolves cb_arb compatibility, reads dot-separated metric paths, and evaluates
+  constraints.
+- framework/autonomous/spec_compiler.py: attaches protocol to specs and blocks
+  non-cb_arb proposals that omit or invalidate it.
+- scripts/auto_research_pipeline.py: explicit non-compat specs use protocol
+  verdicts; legacy cb_arb specs retain the old verdict path.
+- data/research_framework/result_classification_map.yaml: adds declared-protocol
+  decisions and statuses.
+- framework/evaluation/costs.py: owns generic cost arithmetic directly so the
+  evaluation layer does not import cb_arb or require scipy.
+- framework/tests/test_evaluation_protocol.py: schema, fail-closed, and
+  compatibility tests.
+
+Key implementation excerpt:
+```
+def protocol_for_proposal(proposal):
+    explicit = proposal.get("evaluation_protocol")
+    if explicit is not None:
+        errors = validate_protocol(explicit)
+        return (dict(explicit), errors) if not errors else (None, errors)
+    if str(proposal.get("strategy_id") or "").startswith("cb_arb"):
+        return dict(CB_ARB_COMPAT_PROTOCOL), []
+    return None, ["evaluation_protocol is required for non-cb_arb strategies"]
+```
+
+```
+if isinstance(protocol, dict) and protocol.get("mode") != "legacy_cb_arb_compat":
+    protocol_errors = validate_protocol(protocol)
+    protocol_result = evaluate_constraints(protocol, summary)
+    decision = "passed_declared_protocol" if protocol_result["protocol_pass"] else "failed_declared_protocol"
+```
+
+Verification already passed:
+`pytest -q framework/tests/test_evaluation_protocol.py framework/tests/test_train_period_falsifiers.py framework/tests/test_auto_research_pipeline.py`
+Result: 56 passed in 4.87s.
+Also passed `python3 -m py_compile` for the changed Python files and `git diff --check`.
+
+Follow-up fixes after the first review:
+- Explicit protocols are always validated before the cb_arb compatibility
+  branch, including when strategy_id starts with cb_arb.
+- Missing and non-numeric metric paths now return distinct structured reasons;
+  primary metric and required cost metric both fail closed.
+- Tests now cover invalid explicit cb_arb protocols, missing/non-numeric paths,
+  required-cost behavior, and classification-map wiring. The focused suite now
+  passes 60 tests.
+- The final implementation also evaluates declared `robustness_checks` and an
+  optional baseline `comparator`, both fail-closed on missing/non-numeric data.
+
+Please hunt for real blockers: compatibility drift, invalid status-map wiring,
+missing-metric false positives, protocol validation holes, accidental bypass of
+legacy behavior, and whether the change actually solves strategy-neutral
+validation without overreaching into deployment. Return exactly:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+REQUIRED_TESTS: numbered list or none
+RECOMMENDED_FIXES: concise

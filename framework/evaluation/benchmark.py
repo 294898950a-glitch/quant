@@ -7,15 +7,24 @@ pandas Series of simple daily returns.
 
 from __future__ import annotations
 
-from typing import Callable
+from typing import Callable, Protocol
 
 import pandas as pd
+
+
+class BenchmarkProvider(Protocol):
+    def get_returns(self, benchmark_id: str, start: str | None, end: str | None) -> pd.Series:
+        ...
+
+    def get_total_return(self, benchmark_id: str, start: str, end: str) -> float:
+        ...
 
 
 def load_benchmark(
     start_date: str | None = None,
     end_date: str | None = None,
     benchmark_id: str = "cb_equal_weight",
+    provider: BenchmarkProvider | None = None,
 ) -> pd.Series:
     """Load a daily benchmark return series.
 
@@ -28,35 +37,26 @@ def load_benchmark(
     Returns:
         Date-indexed pandas Series of simple daily returns.
     """
-    if benchmark_id != "cb_equal_weight":
-        raise ValueError(f"Unsupported benchmark_id: {benchmark_id}")
-
-    # Import here to avoid heavy module loading at package import time.
-    from strategies.cb_arb.verifier import _get_cb_index
-
-    idx = _get_cb_index()
-    if start_date is not None:
-        idx = idx[idx.index >= start_date]
-    if end_date is not None:
-        idx = idx[idx.index <= end_date]
-
-    returns = idx.pct_change().fillna(0.0)
-    returns.name = "benchmark_return"
-    return returns
+    if provider is None:
+        raise ValueError("benchmark provider is required; inject a strategy-specific provider explicitly")
+    returns = provider.get_returns(benchmark_id, start_date, end_date)
+    if not isinstance(returns, pd.Series):
+        raise TypeError("benchmark provider must return pandas Series")
+    result = returns.copy()
+    result.name = "benchmark_return"
+    return result
 
 
 def load_benchmark_total_return(
     start_date: str,
     end_date: str,
     benchmark_id: str = "cb_equal_weight",
+    provider: BenchmarkProvider | None = None,
 ) -> float:
     """Total benchmark return over [start_date, end_date]."""
-    if benchmark_id != "cb_equal_weight":
-        raise ValueError(f"Unsupported benchmark_id: {benchmark_id}")
-
-    from strategies.cb_arb.verifier import _index_total_return
-
-    return float(_index_total_return(start_date, end_date))
+    if provider is None:
+        raise ValueError("benchmark provider is required; inject a strategy-specific provider explicitly")
+    return float(provider.get_total_return(benchmark_id, start_date, end_date))
 
 
 def align_dates(

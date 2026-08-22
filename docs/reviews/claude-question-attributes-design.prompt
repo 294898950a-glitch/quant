@@ -1,0 +1,47 @@
+You are the architecture reviewer of record. Do not use tools or edit files.
+
+We are designing the next extension of a quantitative research framework.
+Corrective principle: do NOT make a mutable lifecycle state the source of
+truth. Persist factual attributes/events and derive a queryable state from
+them. A cached state is allowed but is never authoritative.
+
+Existing facts:
+- Exploration -> external PASS/REVISE/BLOCK -> immutable ResearchInput ->
+  constrained proposal -> deterministic experiment/evaluation.
+- A proposal failure must not by itself close a worthwhile research question.
+- A question may have bounded proposal revisions; only reliable evidence or a
+  policy budget should close/park it.
+- The system is for research validation, not production promotion.
+- We need prevent cosmetic rephrasing, endless retry, p-hacking, holdout
+  leakage, and lost/stuck questions.
+
+Proposed authoritative attribute groups:
+1. identity/admission: question_id, accepted question, review/run/plan IDs,
+   admission timestamp, provider/model identities.
+2. novelty: deterministic historical neighbors and duplicate/closure matches,
+   mechanism/evidence/falsifier delta, family budget facts, advisory LLM score.
+3. revision facts: revision attempts, each structured mechanism/evidence delta,
+   proposal validity/compile outcomes, failure classifications.
+4. evidence facts: run IDs, deterministic gate results, required-evidence
+   coverage, supporting/rejecting evidence references.
+5. holdout facts: reserved universe/window, exposure ledger, final independent
+   run and pass/fail result.
+6. closure facts: explicit evidence-backed close reason or policy-budget reason.
+
+We need your recommendation for:
+- the smallest complete schema of factual fields and immutable event records;
+- a derived state vocabulary that is useful operationally but cannot contradict
+  those fields;
+- exact derivation priority/order when facts conflict;
+- which fields must be append-only versus replaceable projections;
+- how to represent blocked external dependencies without confusing them with a
+  rejected question;
+- how a question can be re-framed without quietly becoming a different question;
+- how to keep the first implementation slice small enough to ship.
+
+Return exactly:
+VERDICT: ACCEPT or REVISE
+ATTRIBUTE_SCHEMA: compact YAML-like schema
+DERIVED_STATES: table-like list with derivation conditions in priority order
+INVARIANTS: numbered list
+MINIMAL_SLICE: ordered list

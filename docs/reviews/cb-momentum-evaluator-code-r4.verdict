@@ -1,0 +1,7 @@
+ACCEPT
+
+- Cost aggregation: `record_cost` is called with the final, quantity-adjusted `buy_cost`/`sell_cost` from `apply_cost_model` after the affordability while-loop settles `qty`, not the initial `estimated_cost` used only to size `qty` — actual executed costs, not estimates.
+- Bottom diagnostic: `_bottom_momentum_trade_count` consumes `test_winner_result`, which is the single `_evaluate_single_combo(..., include_test=True)` call on the frozen combo — no separate/third backtest run.
+- Summary numeric fields (`best_train_excess`, `best_test_sharpe`, etc.) are sourced via `.get()` off `_metrics()` output — numeric or `None`, never mistyped as paths/dicts; `artifacts` paths are correctly stringified separately.
+- `_write_outputs(output_dir, False, {}, all_rows, baseline, {"costs": {}}, 0)` matches the signature's positional order (`output_dir, adoption_pass, best_row, grid_rows, baseline, test_result, bottom_momentum_trade_count`) exactly, as does the success-path call.
+- Minor flag (not one of the 4 asked checks, not blocking): the failure branch reads `baseline` before the visible `baseline = _run_baseline_backtest(..., include_test=True)` assignment later in the excerpt — only safe if `baseline` is set earlier in code not shown here; worth a quick grep to confirm no `UnboundLocalError`.

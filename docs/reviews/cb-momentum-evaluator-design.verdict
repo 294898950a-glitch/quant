@@ -1,0 +1,17 @@
+REVISE
+
+Blockers:
+
+1. **Tie-break underspecified on a third dimension.** "较低 penalty、较短 lookback" gives a two-key tie-break, but if train Sharpe ties *and* penalty ties, lookback becomes the decider — that's fine — but you need a documented full ordering (Sharpe desc → penalty asc → lookback asc → deterministic id) and it must be encoded in code, not left implicit, or re-runs can silently reorder ties due to floating-point Sharpe differences at the 1e-9 level. Specify a rounding/tolerance rule for "tie" (e.g., Sharpe within 1e-6) so near-ties aren't treated as strict inequalities.
+
+2. **Baseline selection is circular/weak.** The "penalty=0 same lookback" baseline is *not* independent of the selection process — its lookback is chosen by whatever won on train, so the baseline itself is contaminated by the same train-selection step that produced overfitting risk in the first place. A cleaner baseline is a fixed, pre-registered no-penalty/no-lookback-search config (e.g., a single canonical lookback decided before looking at any grid results), so it isn't picking up incidental train-Sharpe-optimal lookback structure.
+
+3. **`test_exposure_count=1` doesn't fully close the leakage vector.** Two configs (winner + baseline) will see test data — that's `test_exposure_count=2`, not 1, unless "count" is defined as "count of grid-search-selected configs." Clarify the field's definition explicitly in the manifest so it isn't misread later as "only one config ever touched test."
+
+4. **"若test已存在则拒绝重跑" needs a scope definition.** Reject at what granularity — per (universe, date-range, evaluator-version) tuple? If the evaluator code changes (e.g., a bug fix), does that count as new test data or a violation? Need an explicit invalidation/versioning rule, otherwise a legitimate bugfix rerun gets blocked, or worse, someone bypasses the guard by deleting the manifest record instead of establishing a proper exception process.
+
+5. **Bottom-momentum group thresholds (>=30笔) risk being gamed by grid selection.** Since the 15-combo grid still influences which config's bottom-group trade count gets reported, confirm this constraint is checked *only* on the winning config post-selection (not used as an additional selection criterion pre-test) — otherwise you've reintroduced a second implicit selection-on-outcome even before touching test data. State explicitly that count/MAE/dispersion checks are diagnostics on the frozen winner, not selection criteria.
+
+6. **Missing: data file hash should include feature/label construction code hash, not just the price data file hash** — otherwise a silent transform change (e.g., zscore window rewrite) wouldn't be caught by "test already exists" dedup logic in point 4.
+
+Once these five/six points are made explicit in the design doc (tie-break tolerance, baseline independence, exposure-count definition, rerun-guard scope, no leakage from group-count checks into selection, and code-hash inclusion), this is ready to ACCEPT.

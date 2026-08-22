@@ -1,0 +1,54 @@
+You are the architecture reviewer of record for the quant research framework.
+Do a read-only evaluation; do not edit files or run writes.
+
+Review these artifacts:
+- AGENTS.md
+- docs/QUANT_WORKFLOW.txt
+- framework/evaluation/research_feedback.py
+- framework/evaluation/pending_research_input.py
+- framework/autonomous/ideation_cycle.py
+- framework/autonomous/queue_ideation.py
+- scripts/admit_research_input.py
+- data/research_framework/strategy_ideator.yaml
+- data/research_framework/runtime_entrypoints.yaml
+- data/research_framework/research_input_constraint_bindings.v1.yaml
+- data/research_framework/status_code_maps.yaml
+
+Architecture intent:
+1. Deterministic evaluation establishes facts and hard failures; LLMs never
+   override those facts.
+2. A primary exploration LLM proposes candidate research questions from project
+   evidence; a second external reviewer emits PASS/REVISE/BLOCK.
+3. Only a valid PASS becomes a versioned ResearchInput that constrains the next
+   ideation round.
+4. The ideator may translate constraints into a proposal but must not replace
+   the accepted question, omit evidence/tests, or reintroduce forbidden
+   directions.
+5. This framework validates new strategies; it does not automatically promote
+   a strategy to production or mutate current strategy truth.
+6. A single-slot admission state machine must survive concurrency, TTL expiry,
+   crashes, replay, and slow workers without duplicate queueable proposals.
+
+Primary question: what are the principal architecture bottlenecks that still
+prevent this system from reliably discovering and validating genuinely new
+research directions? Distinguish:
+- real implemented blockers;
+- intentional trade-offs;
+- missing operational integrations;
+- over-engineering or unnecessary complexity.
+
+Hunt specifically for:
+- a claimed PASS becoming stuck or silently lost;
+- LLM output escaping deterministic constraints;
+- a loop that produces only cosmetic variants instead of new falsifiable work;
+- review/admission interfaces that cannot actually be operated end-to-end;
+- state, queue, or executor priority interactions that starve research;
+- an evaluation architecture that looks rigorous but fails to create useful
+  information gain.
+
+Return exactly:
+VERDICT: ACCEPT or REVISE
+TOP_BLOCKERS: numbered list, each tagged [implemented] / [operational] /
+[design], with concrete file evidence and severity.
+STRENGTHS: numbered list or none
+NEXT_ACTIONS: ordered, minimal, high-leverage actions

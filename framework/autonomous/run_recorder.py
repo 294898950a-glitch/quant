@@ -10,6 +10,8 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
+import fcntl
 import socket
 import subprocess
 from datetime import datetime, timezone
@@ -19,6 +21,8 @@ from typing import Any
 import yaml
 
 from framework.autonomous.result_classification import status_for_decision
+from framework.autonomous.evaluation_protocol import evaluate_constraints, validate_protocol
+from framework.evaluation.research_question import ResearchQuestionLedger
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +36,78 @@ class RunRecordError(RuntimeError):
 
 NORMAL_RECORD_TYPE = "executed_run"
 BACKFILL_RECORD_TYPE = "backfill"
+
+
+def record_lifecycle_evidence(spec: dict[str, Any], manifest_path: Path, output_dir: Path) -> None:
+    """Shadow-only evidence append; never changes execution verdicts or specs."""
+    linkage = spec.get("research_lifecycle")
+    if not isinstance(linkage, dict):
+        return
+    config_path = REPO_ROOT / "data" / "research_framework" / "strategy_ideator.yaml"
+    policy_path = REPO_ROOT / "data" / "research_framework" / "research_question_policy.yaml"
+    if not config_path.exists() or not policy_path.exists():
+        return
+    config = read_yaml(config_path)
+    if str((config.get("research_lifecycle") or {}).get("mode") or "off") == "off":
+        return
+    question_id, lineage_id, revision_id = (str(linkage.get(key) or "") for key in ("question_id", "lineage_id", "revision_id"))
+    if not all((question_id, lineage_id, revision_id)):
+        return
+    ledger = ResearchQuestionLedger(REPO_ROOT / "data" / "research_framework" / "research_question_events.jsonl", policy_path)
+    if not any(event.get("event_type") == "question_admission" and event.get("question_id") == question_id for event in ledger.events()):
+        return
+    ledger.append({"event_type": "evidence_run", "question_id": question_id, "lineage_id": lineage_id,
+                   "revision_id": revision_id, "run_id": str(spec.get("run_id") or ""),
+                   "evidence_refs": [rel(manifest_path), rel(output_dir)], "result_ref": rel(manifest_path)})
+
+
+def record_lifecycle_projection_diff(spec: dict[str, Any], manifest_path: Path) -> None:
+    """Append one immutable compare cycle per real run; never decides a transition."""
+    linkage = spec.get("research_lifecycle")
+    config_path = REPO_ROOT / "data" / "research_framework" / "strategy_ideator.yaml"
+    policy_path = REPO_ROOT / "data" / "research_framework" / "research_question_policy.yaml"
+    if not isinstance(linkage, dict) or not config_path.exists() or not policy_path.exists(): return
+    if str((read_yaml(config_path).get("research_lifecycle") or {}).get("mode") or "off") != "compare": return
+    question_id = str(linkage.get("question_id") or "")
+    if not question_id: return
+    ledger = ResearchQuestionLedger(REPO_ROOT / "data" / "research_framework" / "research_question_events.jsonl", policy_path)
+    events = ledger.events()
+    state = ledger.state(question_id)
+    revision_id = str(linkage.get("revision_id") or "")
+    run_id = str(spec.get("run_id") or "")
+    differences: list[str] = []
+    if not any(e.get("event_type") == "question_admission" and e.get("question_id") == question_id for e in events):
+        differences.append("missing_question_admission")
+    if revision_id != run_id:
+        differences.append("legacy_run_id_revision_id_mismatch")
+    evidence_present = any(e.get("event_type") == "evidence_run" and e.get("question_id") == question_id and e.get("revision_id") == revision_id and e.get("run_id") == run_id for e in events)
+    if not evidence_present:
+        differences.append("missing_evidence_for_run")
+    legacy_execution_outcome = "RECORDED" if manifest_path.exists() else "MISSING"
+    projection_execution_outcome = "RECORDED" if evidence_present else "MISSING"
+    if legacy_execution_outcome != projection_execution_outcome:
+        differences.append("legacy_execution_lifecycle_evidence_mismatch")
+    path = REPO_ROOT / "data" / "research_framework" / "lifecycle_projection_diffs.jsonl"
+    row = {"run_id": run_id, "ledger_high_watermark": len(events), "manifest_ref": rel(manifest_path),
+           "legacy": {"execution_outcome": legacy_execution_outcome, "revision_id": run_id},
+           "projection": {"question_id": question_id, "revision_id": revision_id, "execution_outcome": projection_execution_outcome, "state": state.value}, "differences": differences}
+    if not row["run_id"]: return
+    path.parent.mkdir(parents=True, exist_ok=True)
+    lock_path = path.with_suffix(path.suffix + ".lock")
+    with lock_path.open("a+", encoding="utf-8") as lock:
+        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+        existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+        prior = []
+        for line in existing:
+            try: parsed = json.loads(line)
+            except json.JSONDecodeError: continue
+            if isinstance(parsed, dict) and parsed.get("run_id") == row["run_id"]: prior.append(parsed)
+        if prior:
+            if any(item.get("manifest_ref") == row["manifest_ref"] and item.get("ledger_high_watermark") == row["ledger_high_watermark"] for item in prior): return
+            row["differences"] = sorted(set(row["differences"]) | {"duplicate_run_id"})
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"); handle.flush(); os.fsync(handle.fileno())
+        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
 
 
 def now_iso() -> str:
@@ -142,6 +218,41 @@ def derive_verdict(spec: dict[str, Any], output_dir: Path, exit_code: int | None
     if table_summary:
         summary = {**summary, **table_summary}
         summary_path = table_summary.get("summary_path") or summary_path
+    protocol = spec.get("evaluation_protocol")
+    if isinstance(protocol, dict) and protocol.get("mode") != "legacy_cb_arb_compat":
+        protocol_errors = validate_protocol(protocol)
+        if protocol_errors:
+            decision = "evaluation_protocol_invalid"
+            return {
+                "status": status_for_decision(decision), "decision": decision,
+                "pass_field": None, "pass_value": False, "summary_path": summary_path,
+                "summary": summary, "protocol_errors": protocol_errors,
+                "protocol_result": {"protocol_pass": False}, "falsifier_flags": {},
+            }
+        protocol_result = evaluate_constraints(protocol, summary)
+        if exit_code not in (None, 0):
+            decision = "execution_failed"
+        elif missing_artifacts:
+            decision = "missing_artifacts"
+        elif protocol_result["protocol_pass"]:
+            decision = "passed_declared_protocol"
+        else:
+            reasons = [
+                str(check.get("reason") or "")
+                for check in protocol_result.get("protocol_checks", {}).values()
+                if isinstance(check, dict)
+            ]
+            decision = (
+                "evaluation_evidence_incomplete"
+                if any(reason in {"missing", "non_numeric", "missing_or_non_numeric"} for reason in reasons)
+                else "failed_declared_protocol"
+            )
+        return {
+            "status": status_for_decision(decision), "decision": decision,
+            "pass_field": protocol["primary_metric"]["path"],
+            "pass_value": protocol_result["protocol_pass"], "summary_path": summary_path,
+            "summary": summary, "protocol_result": protocol_result, "falsifier_flags": {},
+        }
     pass_field = str(verdict_cfg.get("pass_field") or "adoption_pass")
     pass_value = boolish(summary.get(pass_field))
     falsifier_result = derive_train_falsifier_flags(spec, output_dir, verdict_cfg, summary)
@@ -546,6 +657,9 @@ def record_executed_run(
         manifest["data_quality_decision"] = data_quality_decision
         write_yaml(manifest_path, manifest)
     update_experiments(spec, output_dir, manifest_path, verdict, compute_metadata, dry_run=dry_run)
+    if not dry_run:
+        record_lifecycle_evidence(spec, manifest_path, output_dir)
+        record_lifecycle_projection_diff(spec, manifest_path)
     return {"record_type": NORMAL_RECORD_TYPE, "verdict": verdict, "manifest_path": manifest_path}
 
 

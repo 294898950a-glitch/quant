@@ -1,0 +1,27 @@
+schema_version: 1
+research_input_plan_version: "1"
+purpose: "Code-owned allowed proposal fields for reviewed must_change tokens."
+bindings:
+  execution_mechanism:
+    - mechanics
+    - test_design.changed_dimensions
+  signal_definition:
+    - hypothesis
+    - test_design.changed_dimensions
+  universe_definition:
+    - family
+    - test_design.changed_dimensions
+  ranking_direction:
+    - mechanics
+    - hypothesis
+    - test_design.changed_dimensions
+  risk_control:
+    - mechanics
+    - test_design.changed_dimensions
+  use_evaluate_cb_arb_valuation_formula_momentum:
+    - required_executor
+    - test_design.changed_dimensions
+  train_only_parameter_selection:
+    - test_design.changed_dimensions
+  frozen_winner_two_test_exposures:
+    - test_design.changed_dimensions

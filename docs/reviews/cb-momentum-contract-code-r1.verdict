@@ -1,0 +1,7 @@
+REVISE
+
+The legacy escape hatch is unguarded: in `protocol_for_proposal`, any proposal — not just `cb_arb*` strategies — can supply `evaluation_protocol: {mode: "legacy_cb_arb_compat", ...}` explicitly and get `(dict(explicit), [])` back with **zero validation** of its contents (no check for `primary_metric`, `cost_model`, `splits`, etc.). This isn't gated by `strategy_id.startswith("cb_arb")`; the strategy_id check only applies to the *implicit* default path.
+
+Consequence: `compile()`'s `protocol_errors` will be empty for such a payload, so the `status == "READY" and protocol_errors` demotion in `_base_spec` never fires — the compiler can emit READY with an arbitrary, unvalidated "legacy" protocol dict, for any strategy family. That breaks both "legacy remains compatibility-only" and "strict protocol is separately validated."
+
+Fix: restrict the legacy bypass to `strategy_id.startswith("cb_arb")` (or validate the explicit dict against `CB_ARB_COMPAT_PROTOCOL`'s required shape) before skipping `validate_protocol`.

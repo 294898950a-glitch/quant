@@ -925,3 +925,93 @@ local processes before being written:
 - Commits that change autonomous framework entry behavior must also stage a
   changed `AGENTS.md` or `CLAUDE.md`; the pre-commit hook blocks unchanged
   bootstrap entrypoints for those framework changes.
+
+## Evaluation first principles and LLM research scoring
+
+The purpose of evaluation is not to find the highest backtest return. It is to
+increase confidence that a return source is real, repeatable, and still exists
+after realistic friction. Measurement reports facts; deterministic gates test
+those facts; LLMs interpret the research meaning only after the gates run.
+
+The two-LLM research score measures five questions, each from 0 to 4:
+
+1. **Evidence trust** — can this observation be trusted without data leakage or
+   experimental contamination?
+2. **Incremental edge** — does it add information beyond a baseline or null
+   signal rather than merely taking more risk?
+3. **Repeatability** — does the edge persist across holdout, rolling windows,
+   and relevant market regimes?
+4. **Mechanism quality** — is there a coherent, falsifiable explanation for
+   where the edge comes from?
+5. **Information gain** — does the experiment reduce uncertainty and identify
+   what the next experiment should change?
+
+LLM scores never override deterministic gates such as cost, drawdown,
+holdout, or integrity. Two independent LLMs receive the same evidence package
+and return structured per-dimension scores plus evidence references, fatal
+concerns, and a next action. The aggregator uses the mean only when the scores
+agree; large disagreement becomes `disputed` and does not advance
+automatically. The score prioritizes research work, not production promotion.
+
+## Evaluation feedback into the next research round
+
+### Reviewed research-input bridge
+
+An exploration packet becomes a next-round input only after a deterministic
+`accept_claude_review()` PASS gate. `scripts/admit_research_input.py` is
+ticket-gated and writes one v2 input to
+`pending_research_input.yaml`, with the append-only
+`research_input_admission_history.jsonl` as authority. REVISE/BLOCK never
+mutate that slot.
+
+`IdeationCycle` claims the input with a nonce and a reservation marker before
+calling the ideator. The proposal must preserve the accepted question,
+constraints, evidence, tests, and required changes exactly; it is validated
+before any proposal directory is written. The input is consumed only after a
+valid durable proposal exists, including when later delta-gate routing skips or
+watches it. TTL recovery cannot let an old nonce consume a reclaimed input.
+
+`research_input_constraint_bindings.v1.yaml` is the versioned, code-owned map
+from approved `must_change` tokens to concrete proposal fields. It is injected
+into the prompt and verified after generation; an LLM cannot invent a binding.
+The four research-input statuses are numeric-mapped in `status_code_maps.yaml`
+and queue-routed without draft suppression.
+
+The evaluation report is not itself a new proposal. The boundary between review
+and ideation is a versioned `ResearchFeedback` contract. Its purpose is to carry
+machine-readable constraints into the next research entry without allowing a
+free-form LLM answer to rewrite evaluation facts.
+
+The feedback record must include:
+
+- `schema_version`, `run_id`, and `plan_version`;
+- `deterministic_verdict` and failed gates;
+- the two-LLM score vector, disagreement flag, and evidence references;
+- a fixed `next_action.code` and its source dimension;
+- `research_constraints` such as `must_change`, `forbidden`, and
+  `required_test`, each with an evidence reference;
+- `closed_directions` and `required_evidence_next_round`.
+
+The next research entry consumes only these explicit fields:
+
+```text
+ResearchFeedback → ideation/research entry → new proposal
+```
+
+Compatibility rules are strict:
+
+1. `schema_version` / `plan_version` mismatch enters DRAFT or
+   `needs_adapter`; it never silently continues.
+2. Unknown fields may be ignored, but missing core fields fail closed.
+3. Existing `research_insights.yaml`, `recent_results_digest`, and
+   `suggested_closed_families` must be converted by an adapter instead of
+   forcing the new ideator to understand two formats.
+4. Evaluation may emit facts, constraints, forbidden directions, and required
+   evidence; ideation may turn them into a proposal but may not alter the
+   evaluation facts.
+
+Example: if cost-on fails and stability is low, feedback must forbid
+parameter-only tuning, require a changed execution/payoff mechanism, and
+require high-slippage plus rolling/holdout evidence in the next round. This is
+the deterministic bridge that prevents a rejected mechanism from returning as
+an arbitrary nearby parameter variant.

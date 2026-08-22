@@ -1,0 +1,13 @@
+ACCEPT with minor blockers — the protocol is internally consistent and closes the previous leakage/multiplicity issues, but a few points need tightening before this is final.
+
+**Blockers**
+
+1. **Tie-break underspecified for the sort key itself, not just Sharpe.** You specify `round(train_sharpe,6)` descending, then penalty ascending, then lookback ascending, then config_id lexicographic as final tiebreak — good, this is deterministic. But you must also state explicitly that config_id is a *stored, immutable string* fixed at combination-generation time (not derived from penalty/lookback post hoc), otherwise the "final" tiebreak isn't actually independent of the other keys and could silently collapse to always resolving the same way. State this in the manifest schema.
+
+2. **Independent baseline (penalty=0, lookback=60) must itself be a valid member of some universe of possible configs, or declared explicitly as *outside* the 15-combination grid.** If (0,60) also happens to be one of the 15 train combinations, you have a conflict — the same config would be both a candidate for selection and the fixed baseline. State explicitly whether (0,60) is excluded from the 15-combo grid or, if included by coincidence, that its baseline role overrides any selection eligibility (i.e., it's removed from the winner-selection pool).
+
+3. **"Bug fix must bump semantic version" needs a concrete versioning rule** — clarify whether *any* change to evaluator source (not just correctness bugs) triggers a version bump, since the rerun guard key includes "evaluator source+feature construction hash" already. If source hash is already in the key, why is semantic version also required as a separate key component? Either (a) semantic version is redundant with source hash and should be dropped from the key, or (b) semantic version is the *human-readable invalidation trigger* while source hash is the *mechanical* guard — in which case say so explicitly, otherwise this looks like duplicated/ambiguous guard logic.
+
+4. **Diagnostics-not-selection boundary (point E) needs an explicit enforcement mechanism**, not just a policy statement — e.g., "post-test diagnostic code path must be structurally unable to write back into train selection state (no shared mutable ranking object)." Otherwise this is a norm that can be violated by a future refactor without anyone noticing.
+
+Everything else (test run count = 2 with explicit roles, no test-time selection, minimum trade counts as null-result gates) is sound and should prevent the prior leakage patterns. Fix 1–4 (mostly clarifications, not redesign) and this is ready.

@@ -1,0 +1,220 @@
+Kimi is the design reviewer of record. Review this bridge from evaluated
+research feedback into the existing ideation entrypoint.
+
+First-principles invariant:
+- deterministic evaluation establishes facts and hard failures;
+- Codex Terra explores from all available project material and emits candidate
+  questions; Claude Sonnet reviews that exploration;
+- only a validated Claude `PASS` becomes the next research entry;
+- the next proposal must preserve, not rewrite, the accepted constraints;
+- no path may change current strategy truth or production state.
+
+Existing code:
+- `framework/evaluation/research_feedback.py` has immutable
+  ExplorationPacket, ClaudeReview, ResearchInput and
+  `accept_claude_review()`, which admits only valid PASS packets.
+- `framework/autonomous/ideation_cycle.py::run_once` builds
+  `proposal_instruction(...)`, calls `strategy_ideator.propose`, then compiles
+  the result.
+- `scripts/run_strategy_ideation_once.py` is the queue-facing entrypoint.
+
+Proposed implementation:
+1. Add `ResearchPaths.pending_research_input` at
+   `data/research_framework/pending_research_input.yaml`.
+   Add `ResearchPaths.research_input_admission_history` at
+   `data/research_framework/research_input_admission_history.jsonl` with
+   immutable admission keys and timestamps.
+   Add `research_input_plan_version: "1"` to strategy_ideator.yaml as the
+   active version that must match every newly admitted input (admission checks
+   it). Add `research_input_claim_ttl_seconds: 900`. If the configured version
+   changes before claim or recovery, transition the payload to an immutable
+   `stale_plan_version` holding record in history and clear the active slot;
+   this is not consumption, and the same PASS may be explicitly re-admitted
+   against the new plan version.
+2. Add `scripts/admit_research_input.py`:
+   reads an ExplorationPacket and ClaudeReview YAML/JSON, calls
+   accept_claude_review, and atomically writes one pending ResearchInput only
+   for PASS. REVISE/BLOCK/write conflicts return non-zero and do not mutate it.
+   Admission normalizes every Claude review-level constraint into the immutable
+   input and proposal contract; none may be silently dropped. This is an
+   explicit `ResearchInput` schema_version 2 migration (v1 remains readable but
+   cannot be newly admitted). `accept_claude_review` remains the sole PASS gate;
+   `build_research_input_v2()` is called by admission and produces v2 fields:
+   source_review_id, source_run_id, plan_version, question, required_evidence,
+   required_tests, applied_constraints, evidence refs, and score vectors.
+   ResearchInput has
+   an explicit structured `applied_constraints` mapping with must_change,
+   forbidden, required_evidence, review_constraints, and required_changes,
+   populated from ResearchQuestion plus both ClaudeReview.constraints and
+   ClaudeReview.required_changes. `accept_claude_review` classifies a Claude
+   constraint by its required `type`: must_change/forbidden/required_evidence
+   are merged into matching lists; all other dicts are preserved unchanged in
+   review_constraints; every required_changes string is retained separately.
+   Store admission
+   history keyed by `review_id + source_run_id`. Re-admission is permitted only
+   when the latest history state for that key is `released` or
+   `stale_plan_version`; latest `consumed`, active `pending`, and active
+   `claimed` reject it. Thus a durable consumed proposal is never replayed,
+   while a claim that never became a valid durable proposal can be re-admitted.
+3. Add mapping validation/serialization helpers in research_feedback.py and
+   `validate_research_input_proposal(proposal, research_input)`. The required
+   proposal `research_feedback` object has fixed fields:
+   `source_review_id`, `source_run_id`, `plan_version`, `proposal_id`,
+   `accepted_question_id`, `accepted_question_text`, `applied_constraints`
+   mapping with `must_change`/`forbidden`/`required_evidence`/
+   `review_constraints`/`required_changes` lists, `required_tests`, and
+   `test_design.changed_dimensions`, `test_design.required_evidence`,
+   `test_design.required_tests`, `test_design.accepted_question_id`, and
+   `test_design.accepted_question_text`.
+   Validation checks IDs and set-based exact equality (order-insensitive and
+   duplicate-free):
+   `changed_dimensions == must_change` (the same normalized dimension-token
+   set),
+   `test_design.required_evidence == required_evidence`, and
+   `test_design.required_tests == required_tests`; every forbidden
+   is absent from changed_dimensions. This is compliance validation, not a
+   free-text echo check; extra unreviewed dimensions/evidence/tests fail.
+   It also requires accepted_question_id plus exact accepted question text in
+   both research_feedback and test_design, requires feedback plan_version to
+   match pending input and active configured ideation plan version, and validates
+   applied_constraints/test_design bidirectionally including review_constraints
+   and required_changes.
+4. `IdeationCycle.run_once` resolves an outstanding executor-tool draft before it can claim
+   a new pending research input. If there is no prior draft, it loads pending
+   input and injects this structured
+   question/constraints/evidence into `proposal_instruction` and
+   requires the AI output `research_feedback` with matching run/review/plan
+   IDs, `applied_constraints`, and `required_evidence`. Existing digest and
+   insights remain evidence context, but a hard rule requires the proposal to
+   answer only the accepted question and never substitute a new direction. This
+   prompt-contract change is mandatory: `research_feedback` is added to required
+   output fields whenever an input is pending. This is backed by a conditional
+   post-schema validator, not merely the static `PROPOSAL_REQUIRED_FIELDS` set.
+   It adds research_feedback, proposal.required_changes, and test_design.changed_dimensions,
+   required_evidence, required_tests, accepted_question_id, and
+   accepted_question_text to the conditional output contract.
+5. Validate `research_feedback` immediately after `propose()` and before any
+   run-directory allocation or proposal YAML write. Invalid output
+   is returned as `RESEARCH_FEEDBACK_INVALID` (non-zero from
+   run_strategy_ideation_once) without a run directory or compiler/queue
+   access; it leaves the input pending for a revised exploration/review packet.
+   With pending input, dry_run fails fast as
+   `RESEARCH_INPUT_DRY_RUN_UNSUPPORTED` before AI generation and never mutates
+   store or artifacts.
+6. Implement `PendingResearchInputStore` in
+   `framework/evaluation/pending_research_input.py` using a lock file
+   (`fcntl.flock`) and atomic temp-file + `os.replace` writes. `admit()` refuses
+   to overwrite an unconsumed pending item. Before AI generation, claim() holds
+   the lock, pre-allocates proposal_id and expected proposal path, atomically
+   creates `output_root/.research_input_reservations/<proposal_id>.json`, and writes a
+   `claimed` state with a cryptographically unique `claim_nonce`, then releases
+   the lock before AI generation. Allocation
+   checks both `output_root/<proposal_id>` and that reservation path while
+   holding the same store lock and deterministically advances until both are
+   free. Normal (non-pending) ideation uses the same reservation-aware allocator
+   and skips reserved ids. The marker is removed only by successful consume or
+   nonce-CAS release, so no run directory is created before AI feedback is
+   validated. A concurrent
+   run reads claimed state and receives `research_input_claimed`. `consume()`
+   and `release_claim()` compare-and-swap state plus nonce; recovery invalidates
+   the nonce when it releases a TTL-expired claim, so an original slow worker
+   can never consume/release a reclaimed input. The
+   prompt and validator force `proposal_id == preallocated proposal_id`.
+   Recovery checks the active plan version before inspecting an artifact: a
+   mismatch records `stale_plan_version`, clears the slot, and never consumes.
+   Otherwise it marks consumed idempotently only if the expected proposal
+   artifact exists and passes both proposal schema validation and
+   `validate_research_input_proposal`; after TTL, an uncompleted claim is
+   released with nonce invalidation and without making a new proposal. After
+   valid proposal write, atomically mark consumed with
+   proposal_id/path/timestamp, retaining immutable payload. If validation or
+   durable write fails, release claim. Any proposal that passes the feedback
+   validator consumes the input after durable write, regardless of later
+   DRAFT/READY/delta-gate outcome; no second idea may reuse it. A claim includes claimed_at
+   and recovery only releases it after a TTL. `dry_run` with pending input
+   returns RESEARCH_INPUT_DRY_RUN_UNSUPPORTED before AI generation: it never claims, allocates a run
+   directory, writes a proposal artifact, or consumes input. Thus recovery never
+   sees a dry-run artifact at the expected path.
+7. At the start of each non-dry-run tick, after prior executor-tool draft resolution, call
+   store.recover() so stale claims past TTL are released and a durable valid
+   preallocated artifact is consumed idempotently. A current plan-version check
+   runs at both admission and claim time and again in recover(). A claim-time plan mismatch appends a
+   stale_plan_version history record, clears the active slot to empty, and
+   returns RESEARCH_INPUT_STALE_PLAN_VERSION; only a newly admitted current PASS
+   may create a new pending input. If an executor-tool draft is resolved, it
+   does not claim or consume the pending input; the input remains pending for
+   the next tick. Dry-run skips recover entirely. Normal ideation remains unchanged when no pending input exists.
+8. `validate_research_input_proposal` also normalizes whitespace for question
+   comparison, verifies forbidden tokens are absent from family/mechanics/
+   hypothesis, verifies must_change values bind to declared concrete proposal
+   fields, and verifies required_changes appear in a new
+   `proposal.required_changes` list. Must-change uses exact normalized tokens:
+   each accepted token must appear in test_design.changed_dimensions and have a
+   code-owned, versioned constraint_bindings registry entry listing allowed
+   concrete paths (family, mechanics, hypothesis, or test_design.changed_dimensions)
+   resolving to non-empty values. The pending-input prompt includes these
+   registry entries and conditionally requires
+   `test_design.constraint_bindings` (token -> concrete proposal paths); the
+   validator requires it to equal the registry entries for all accepted tokens.
+   The dedicated file is
+   `data/research_framework/research_input_constraint_bindings.v1.yaml`, with
+   `schema_version: 1`, `research_input_plan_version: "1"`, and a `bindings`
+   mapping from normalized token to allowed concrete paths. Loader rejects a
+   version mismatch; the path is selected directly from the active plan version.
+   Forbidden comparison normalizes case/whitespace/underscore/hyphen; it rejects
+   exact normalized matches in family/mechanics/changed_dimensions and in a
+   hypothesis only when the forbidden token sequence matches whole normalized
+   word tokens (multiword compounds require contiguous tokens, never substring
+   matching). `review_constraints` are opaque review dicts: the AI must echo
+   them verbatim and validation uses canonical deep equality (including list
+   order and all keys/values). New files and script
+   are registered in runtime_entrypoints.yaml; AGENTS.md and QUANT_WORKFLOW.txt
+   are updated.
+9. Register RESEARCH_FEEDBACK_INVALID, RESEARCH_INPUT_DRY_RUN_UNSUPPORTED,
+   RESEARCH_INPUT_CLAIMED, and RESEARCH_INPUT_STALE_PLAN_VERSION in
+   status_code_maps.yaml and make run_strategy_ideation_once return non-zero for
+   all four statuses. Add a `research_input_status` numeric map:
+   1=research_feedback_invalid, 2=research_input_dry_run_unsupported,
+   3=research_input_claimed, 4=research_input_stale_plan_version. The entry
+   script maps them to distinct non-zero process exits 41, 42, 43, 44.
+10. Update queue_ideation.py: RESEARCH_INPUT_CLAIMED is transient/non-retryable
+    and never suppressed as a malformed proposal; the other three statuses are
+    distinct non-retryable audited outcomes. Register all files in
+    runtime_entrypoints.yaml and update AGENTS.md/CLAUDE.md/QUANT_WORKFLOW.txt.
+
+Required implementation tests cover v2 constraint preservation; admission and
+re-admission transitions; plan mismatch; concurrent collision-free claim;
+recovery TTL/idempotency/stale-plan rejection; every bidirectional feedback
+validation failure; dry-run/invalid/valid IdeationCycle paths; script exit
+statuses; queue routing; and registry/documentation policy.
+
+State durability contract: append-only admission-history JSONL is the
+authoritative event log. Under one flock, append+fsync the event before atomic
+pending-slot replacement (and fsync its directory). If a process dies between
+those writes, the next locked operation reconstructs the missing slot from the
+latest nonterminal history event; it never creates a second admission. If the
+latest reconstructed claim has exceeded its TTL, reconstruction appends a
+nonce-invalidating `released` event and leaves the slot empty rather than
+restoring it. Reconstructing a live claimed state also recreates its missing
+reservation marker before exposing the claim. `consume`, `release`, and the
+stale-plan transition remove the marker only through the matching nonce. All
+claim/release/consume/stale transitions append history first and are idempotent
+by admission key plus claim_nonce. `consumed` is terminal; `released` and
+`stale_plan_version` permit explicit re-admission.
+
+Failure modes to hunt:
+- PASS bypass or stale/mismatched IDs;
+- unreviewed/partial constraints leaking into a queued proposal;
+- pending input consumed before a valid proposal is durable;
+- replay producing duplicate proposals;
+- REVISE/BLOCK mutating state;
+- a provisional invalid proposal artifact being mistaken for a queue entry;
+- global state/current strategy changes;
+- an overly broad generic adapter that lets AI erase constraints.
+- overwrite of a prior accepted PASS, dry-run consumption, or crash replay.
+
+Return exactly:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+REQUIRED_TESTS: numbered list or none
+RECOMMENDED_SHAPE: concise

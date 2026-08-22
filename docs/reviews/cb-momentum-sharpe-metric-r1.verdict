@@ -1,0 +1,8 @@
+ACCEPT
+
+- Empty-curve early return already sets `sharpe: 0.0` — numeric, satisfies requirement.
+- Daily-return list build filters via `vals[index-1] > 0` and `math.isfinite(...)`, eliminating divide-by-zero/NaN inputs before ratio computation.
+- Sharpe branch requires `len(daily_returns) >= 2` before calling `statistics.stdev` (avoids `StatisticsError` on <2 samples) and guards `daily_std > 0` before dividing — no crash/NaN paths.
+- Annualization via `sqrt(252)` on daily returns is standard and correct.
+- `total_return`, `max_drawdown`, `win_rate` blocks are untouched — semantics preserved.
+- Tests match: non-empty curve asserts float + nonzero sharpe, empty curve asserts `0.0` — both align with the implementation's behavior.

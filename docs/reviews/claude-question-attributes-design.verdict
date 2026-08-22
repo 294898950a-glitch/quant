@@ -1,0 +1,105 @@
+VERDICT: REVISE
+
+The six groups have the right shape (event-sourced facts, cached-but-non-authoritative state) but three structural gaps would recreate the exact bug you're correcting: (1) no lineage/reframe identity, so "re-framing" has nowhere to attach and cosmetic rephrasing can silently reset budgets; (2) "family budget facts" is ambiguous between a derived count and a stored mutable counter — if implemented as the latter you've just moved the mutable-truth problem one layer down; (3) closure reasons are 2-way (evidence / policy-budget) but BLOCK is neither — without a third branch it will get coerced into one and conflated with rejection-on-merits.
+
+ATTRIBUTE_SCHEMA:
+```
+# G0 (NEW) pre-admission attempts — AO, one row per candidate iteration
+external_review_attempt:
+  lineage_id, candidate_text, candidate_hash, attempt_ordinal
+  reviewer_identity{provider,model,version}
+  verdict: PASS|REVISE|BLOCK
+  revise_notes?              # only if REVISE
+  blocking_dependency_id?, blocking_reason?, retriable?bool   # only if BLOCK
+  ts
+
+# G1 admission — AO, one row per question_id, written only on PASS
+question_admission:
+  question_id (PK, immutable)
+  lineage_id (immutable; = question_id if root)
+  parent_question_id?        # NEW: null for root, set for reframes
+  reframe_ordinal: int        # NEW: 0 for root
+  question_text, question_text_hash
+  admitting_attempt_id -> external_review_attempt
+  research_input_ref (content hash)
+  admission_ts, provider/model identities, review/run/plan_ids
+
+# G2 novelty — AO, one row per admission or per revision needing recheck
+novelty_check:
+  novelty_check_id, question_id
+  historical_neighbor_ids[], duplicate_match_id?
+  self_lineage_similarity_score   # NEW: distance to own ancestor, catches cosmetic reframe
+  mechanism_delta, evidence_delta, falsifier_delta
+  advisory_llm_score              # non-authoritative, informational only
+  ts
+policy_budget:                    # RP-by-version, NOT per-question — versioned config, not a counter
+  policy_version, revisions_max, reframes_max, time_box, cost_box
+
+# G3 proposal revision (post-admission only) — AO
+proposal_revision:
+  revision_id, question_id, revision_ordinal
+  trigger_reason: proposal_invalid|compile_failed|gate_failed|evidence_insufficient  # -> status_code_maps.yaml
+  mechanism_delta, evidence_delta, falsifier_delta, proposal_ref
+  validity_outcome, compile_outcome, failure_classification
+  ts
+
+# G4 evidence — AO
+evidence_run:
+  run_id, question_id, revision_id
+  deterministic_gate_results[], required_evidence_coverage{required[],satisfied[]}
+  supporting_refs[], rejecting_refs[], is_holdout:bool
+  ts
+
+# G5 holdout — AO, tightly bounded
+holdout_reservation: {question_id, universe_ref, window_ref, ts}          # exactly one
+holdout_exposure_ledger: [{question_id, accessor, purpose, ts}, ...]      # every touch, no exceptions
+holdout_final_run: {run_id, question_id, result:pass|fail, ts}            # exactly one, 2nd write = violation
+
+# G6 closure — AO, terminal
+closure:
+  closure_id, question_id (or lineage_id for family-level)
+  closure_reason_type: evidence_backed | policy_budget | external_block_exhausted   # NEW: 3-way, not 2-way
+  evidence_backed  -> holdout_final_run_id (required)
+  policy_budget    -> budget_type{revision_max|reframe_max|time_box|cost_box}, policy_version
+  external_block_exhausted -> blocking_dependency_id, retries_exhausted:bool
+  closed_ts, closed_by (deterministic policy engine, never LLM discretion)
+```
+
+DERIVED_STATES (checked top-down, first match wins; RP cache allowed but must recompute identically from facts+policy_version):
+
+| # | State | Condition |
+|---|---|---|
+| 1 | CLOSED_{EVIDENCE_PASS/FAIL/BUDGET/BLOCKED} | a `closure` fact exists for this question_id/lineage — sub-label from `closure_reason_type` |
+| 2 | AWAITING_HOLDOUT_EXECUTION | `holdout_reservation` exists, no `holdout_final_run`, no closure |
+| 3 | READY_FOR_HOLDOUT | no reservation yet; latest non-holdout `evidence_run` has all gates pass + full coverage; no closure |
+| 4 | AWAITING_EXTERNAL_DEPENDENCY | latest `external_review_attempt` = BLOCK, no later PASS, no closure |
+| 5 | IN_PROPOSAL_REVISION | latest `proposal_revision` invalid/compile-failed/gate-failed/coverage-insufficient AND count(revisions, lineage) < revisions_max |
+| 6 | AWAITING_EXPERIMENT_RUN | latest `proposal_revision` valid+compiled, no `evidence_run` referencing that revision_id |
+| 7 | FRAMING_REVISE_REQUESTED | pre-admission, latest `external_review_attempt` = REVISE, no admission fact yet |
+| 8 | ADMITTED_AWAITING_PROPOSAL | admission fact exists, zero `proposal_revision` rows |
+| 9 | NEW | only an unresolved candidate exists |
+| — | STUCK (orthogonal alarm) | now − max(fact.ts) > staleness_threshold AND state ∉ CLOSED_*; monitoring flag, never a lifecycle state or a persisted fact |
+
+INVARIANTS:
+1. All G0–G6 records are append-only; the only replaceable artifact is the derived-state cache, rebuildable from facts at any time.
+2. `question_id` is immutable and 1:1 with one `question_text`; substantive change requires a new `question_id` via reframe, never an in-place text edit.
+3. `lineage_id` is immutable and shared by a root question and all its reframes; every budget ceiling is enforced at lineage scope so a reframe cannot reset a family's budget.
+4. Budget ceilings (`revisions_max`, `reframes_max`, time/cost box) are versioned policy facts; budget usage is always `count(rows)` for the lineage — never a stored decrementing counter.
+5. A `proposal_revision` failure alone never writes a `closure` fact. Only an evidence fact from the one-shot holdout run, or an explicit budget/exhaustion policy evaluation, may write closure.
+6. Exactly one `holdout_final_run` may exist per question_id; every access to reserved holdout data, including inspection short of a full run, is logged in `holdout_exposure_ledger`; a second `holdout_final_run` write is rejected as a violation, not accepted as an update.
+7. Writing `holdout_final_run` and writing its `closure(evidence_backed)` happen atomically — there is no derived state for "holdout ran, not yet closed"; a completed holdout result is terminal by definition.
+8. BLOCK facts never by themselves produce closure and never consume revision/reframe budget. Closure via `external_block_exhausted` requires an explicit policy evaluation citing the specific `blocking_dependency`, keeping "blocked" structurally distinct from "rejected on merits."
+9. A reframe (`parent_question_id` set) must pass `self_lineage_similarity_score` against its own ancestors before admission; if it exceeds the cosmetic-rephrase threshold, admission is refused and that refusal is itself logged as an `external_review_attempt`-equivalent fact citing the ancestor — no silent retry.
+10. Every derived state is a pure function of (facts, policy_version); a cached projection must record the policy_version and fact high-watermark it was computed from, so staleness is detectable and the cache is provably non-authoritative.
+11. `advisory_llm_score` and `revise_notes` are stored as facts (what was said) but never gate any state transition — only deterministic counts, hashes, and thresholds may gate closure/budget logic.
+12. The STUCK alarm is computed at query time from `max(fact.ts)` vs. a policy threshold, excluded once CLOSED_* is derived, and is never persisted as a fact.
+
+MINIMAL_SLICE:
+1. Ship G1 additions only (`lineage_id`, `parent_question_id`, `reframe_ordinal`) on the existing admission record — cheap now, expensive to retrofit later.
+2. Ship G3 (`proposal_revision`) + G4 (`evidence_run`) as append-only tables, plus a versioned `policy_budget` fact (revisions_max only, no time/cost box yet).
+3. Ship a pure-function (no cache table) derived-state resolver covering states 5,6,8,9 and `CLOSED_BUDGET` only (`closure_reason_type=policy_budget`, `budget_type=revision_max`) — this alone fixes the "proposal failure wrongly closes the question" bug, since closure now requires count(revisions) ≥ revisions_max instead of a status flag.
+4. Ship G2 novelty facts with `self_lineage_similarity_score`, scoped at lineage level — schema only; the reframe *workflow* trigger can land later, but self-similarity must exist before any reframe path opens.
+5. Ship G0 (`external_review_attempt` as its own append-only log with BLOCK/`blocking_dependency`) and derived states 4,7 — separates exogenous BLOCK from merit rejection, closes that gap explicitly.
+6. Ship G5 (holdout reservation + exposure ledger + one-shot final run) and G6's `evidence_backed` branch as its own reviewed slice — highest correctness bar, isolate it.
+7. Add `external_block_exhausted` closure branch once G0+G5 are stable.
+8. Only after 1–7 are live, add the materialized derived-state cache table (policy_version + high-watermark stamped) purely for read performance.

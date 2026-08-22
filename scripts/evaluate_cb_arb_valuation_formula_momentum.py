@@ -16,6 +16,7 @@ from the value-gap-switch baseline.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import sys
@@ -144,8 +145,10 @@ _GAP_DATA_PATH = (
     "data/cb_arb_value_gap_switch_regime-option-entry-gate_2026-05-17/"
     "daily_value_gap_amounts.parquet"
 )
-_DEFAULT_MOMENTUM_WEIGHTS = [0.1, 0.2, 0.3, 0.5]
+_DEFAULT_MOMENTUM_WEIGHTS = [0.1, 0.2, 0.3, 0.4, 0.5]
 _DEFAULT_MOMENTUM_LOOKBACKS = [20, 40, 60]
+_FIXED_BASELINE = (0.0, 60)
+_EVALUATOR_SEMANTIC_VERSION = "2.0.0-train-select-test-once"
 _SLIPPAGE = 0.0015
 _MARKET_IMPACT = 0.001
 
@@ -332,6 +335,8 @@ def _apply_momentum_penalty(
 def _run_baseline_backtest(
     ranks_df: Any,
     args: argparse.Namespace,
+    *,
+    include_test: bool,
 ) -> dict[str, Any]:
     """Run backtest with unadjusted (baseline) ranks."""
     base_params = {
@@ -362,10 +367,9 @@ def _run_baseline_backtest(
         train_df, args.train_start, args.train_end,
         args.data_root, 2, "score_4state", base_params,
     )
-    test_res = _run_value_gap_backtest(
-        test_df, args.test_start, args.test_end,
-        args.data_root, 2, "score_4state", base_params,
-    )
+    test_res = ({"metrics": {}} if not include_test else _run_value_gap_backtest(
+        test_df, args.test_start, args.test_end, args.data_root, 2, "score_4state", base_params,
+    ))
 
     return {
         "train_metrics": train_res.get("metrics", {}),
@@ -382,6 +386,8 @@ def _evaluate_single_combo(
     momentum_df: Any,
     stk_map: dict[str, str],
     args: argparse.Namespace,
+    *,
+    include_test: bool,
 ) -> dict[str, Any]:
     """Evaluate one (penalty_weight, lookback_days) combination.
 
@@ -424,10 +430,9 @@ def _evaluate_single_combo(
         train_df, args.train_start, args.train_end,
         args.data_root, 2, "score_4state", params,
     )
-    test_res = _run_value_gap_backtest(
-        test_df, args.test_start, args.test_end,
-        args.data_root, 2, "score_4state", params,
-    )
+    test_res = ({"metrics": {}} if not include_test else _run_value_gap_backtest(
+        test_df, args.test_start, args.test_end, args.data_root, 2, "score_4state", params,
+    ))
 
     train_metrics = train_res.get("metrics", {})
     test_metrics = test_res.get("metrics", {})
@@ -437,18 +442,74 @@ def _evaluate_single_combo(
         "lookback_days": lookback_days,
         "train_excess_return": train_metrics.get("excess_return"),
         "train_max_drawdown": train_metrics.get("max_drawdown"),
-        "train_sharpe": train_metrics.get("sharpe_ratio"),
+        "train_sharpe": train_metrics.get("sharpe"),
         "train_win_rate": train_metrics.get("win_rate"),
         "train_total_return": train_metrics.get("total_return"),
         "train_total_trades": train_metrics.get("total_trades"),
         "test_excess_return": test_metrics.get("excess_return"),
         "test_max_drawdown": test_metrics.get("max_drawdown"),
-        "test_sharpe": test_metrics.get("sharpe_ratio"),
+        "test_sharpe": test_metrics.get("sharpe"),
         "test_win_rate": test_metrics.get("win_rate"),
         "test_total_return": test_metrics.get("total_return"),
         "test_total_trades": test_metrics.get("total_trades"),
         "train_score": _score(train_metrics),
+        "config_id": f"w{int(round(penalty_weight * 100)):03d}_lb{lookback_days:03d}",
+        "_test_result": test_res if include_test else None,
     }
+
+
+def _select_train_winner(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Frozen pre-registered ordering: Sharpe(6dp) desc, then simpler config."""
+    if not rows:
+        raise ValueError("no train rows")
+    def key(row: dict[str, Any]) -> tuple[float, float, int, str]:
+        return (-round(float(row.get("train_sharpe") or -999.0), 6), float(row["penalty_weight"]),
+                int(row["lookback_days"]), str(row["config_id"]))
+    return min(rows, key=key)
+
+
+def _bottom_momentum_trade_count(test_result: dict[str, Any], momentum_df: Any, stk_map: dict[str, str]) -> int:
+    """Post-test diagnostic only: count winner entries whose z-score is <= -1."""
+    lookup = {
+        (str(row.stk_code), str(row.trade_date)): float(row.momentum_zscore)
+        for row in momentum_df.itertuples(index=False)
+    }
+    return sum(
+        1 for trade in test_result.get("trades", [])
+        if lookup.get((str(stk_map.get(str(trade.get("cb_code")), "")), str(trade.get("entry_date"))), float("inf")) <= -1.0
+    )
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _freeze_test_protocol(output_dir: Path, args: argparse.Namespace, grid_rows: list[dict[str, Any]], winner: dict[str, Any]) -> dict[str, Any]:
+    """Durably freeze the train winner before any test backtest is invoked."""
+    path = output_dir / "test_exposure_protocol.json"
+    if path.exists():
+        raise RuntimeError("test exposure already exists for this output directory; use a new semantic-versioned run")
+    required = [Path(_GAP_DATA_PATH), Path("data/cb_warehouse/stk_daily_qfq.parquet"), Path("data/cb_warehouse/cb_basic.parquet"), Path("data/cb_warehouse/cb_daily.parquet")]
+    protocol = {
+        "schema_version": 1,
+        "evaluator_semantic_version": _EVALUATOR_SEMANTIC_VERSION,
+        "evaluator_source_sha256": _sha256(Path(__file__)),
+        "feature_construction_sha256": _sha256(Path(__file__)),
+        "data_sha256": {str(path): _sha256(path) for path in required if path.exists()},
+        "train_window": [args.train_start, args.train_end], "test_window": [args.test_start, args.test_end],
+        "train_selection": {"grid": [{key: row.get(key) for key in ("config_id", "penalty_weight", "lookback_days", "train_sharpe", "train_score")} for row in grid_rows],
+                            "ordering": "round(train_sharpe,6) desc; penalty asc; lookback asc; config_id asc", "winner": winner["config_id"]},
+        "fixed_baseline": {"penalty_weight": _FIXED_BASELINE[0], "lookback_days": _FIXED_BASELINE[1], "role": "independent_baseline_not_in_selection_grid"},
+        "cost_model": {"slippage_pct": _SLIPPAGE, "market_impact_coeff": _MARKET_IMPACT, "market_impact_cap_pct": 0.02},
+        "test_exposure_count": 2, "test_exposure_roles": ["frozen_winner", "fixed_baseline"],
+        "post_test_diagnostics": {"bottom_momentum_definition": "daily_zscore<=-1", "minimum_total_trades": 100, "minimum_bottom_group_trades": 30, "selection_input": False},
+    }
+    path.write_text(json.dumps(_plain(protocol), ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    return protocol
 
 
 # ── Serialization helpers ───────────────────────────────────────────────
@@ -484,6 +545,8 @@ def _write_outputs(
     best_row: dict[str, Any],
     grid_rows: list[dict[str, Any]],
     baseline: dict[str, Any],
+    test_result: dict[str, Any],
+    bottom_momentum_trade_count: int,
 ) -> None:
     """Write summary.json, report.yaml, l4_ack.yaml, diagnostic.yaml."""
     output_dir.mkdir(parents=True, exist_ok=True)
@@ -516,6 +579,8 @@ def _write_outputs(
             "best_test_max_drawdown": best_row.get("test_max_drawdown"),
             "best_test_win_rate": best_row.get("test_win_rate"),
             "best_test_total_trades": best_row.get("test_total_trades"),
+            "bottom_momentum_trade_count": bottom_momentum_trade_count,
+            "costs": test_result.get("costs", {}),
             "baseline_train_excess": baseline["train_metrics"].get("excess_return"),
             "baseline_test_excess": baseline["test_metrics"].get("excess_return"),
             "grid_rows": grid_rows,
@@ -601,6 +666,8 @@ def _write_outputs(
                     "best_test_max_drawdown": best_row.get("test_max_drawdown"),
                     "best_test_win_rate": best_row.get("test_win_rate"),
                     "best_test_total_trades": best_row.get("test_total_trades"),
+                    "bottom_momentum_trade_count": bottom_momentum_trade_count,
+                    "costs": test_result.get("costs", {}),
                     "baseline_train_excess": baseline["train_metrics"].get("excess_return"),
                     "baseline_test_excess": baseline["test_metrics"].get("excess_return"),
                 },
@@ -665,6 +732,12 @@ def _write_outputs(
             "run_id": output_dir.name,
             "generated_at": now,
             "best_cfg": best_cfg,
+            "post_test_diagnostics": {
+                "bottom_momentum_definition": "entry momentum_zscore <= -1",
+                "bottom_momentum_trade_count": bottom_momentum_trade_count,
+                "selection_input": False,
+            },
+            "costs": test_result.get("costs", {}),
             "total_grid_combinations": len(grid_rows),
             "all_grid_rows_summary": [
                 {
@@ -683,8 +756,8 @@ def _write_outputs(
             ],
             "baseline_train_excess": baseline["train_metrics"].get("excess_return"),
             "baseline_test_excess": baseline["test_metrics"].get("excess_return"),
-            "baseline_train_sharpe": baseline["train_metrics"].get("sharpe_ratio"),
-            "baseline_test_sharpe": baseline["test_metrics"].get("sharpe_ratio"),
+            "baseline_train_sharpe": baseline["train_metrics"].get("sharpe"),
+            "baseline_test_sharpe": baseline["test_metrics"].get("sharpe"),
         }, allow_unicode=True, sort_keys=False),
         encoding="utf-8",
     )
@@ -763,7 +836,7 @@ def main() -> None:
 
     # 6. Run baseline
     print("\n[baseline] Running baseline backtest (no momentum adjustment)...")
-    baseline = _run_baseline_backtest(ranks_df, args)
+    baseline = _run_baseline_backtest(ranks_df, args, include_test=False)
     train_base_m = baseline["train_metrics"]
     test_base_m = baseline["test_metrics"]
     print(f"  Baseline train excess: {train_base_m.get('excess_return')}, "
@@ -790,8 +863,7 @@ def main() -> None:
             penalty_weight, lookback_days = combo
             future = executor.submit(
                 _evaluate_single_combo,
-                combo, ranks_df, momentum_dfs[lookback_days],
-                stk_map, args,
+                combo, ranks_df, momentum_dfs[lookback_days], stk_map, args, include_test=False,
             )
             future_map[future] = combo
 
@@ -802,9 +874,8 @@ def main() -> None:
             try:
                 result = future.result()
                 all_rows.append(result)
-                if result["train_score"] > best_train_score:
-                    best_train_score = result["train_score"]
-                    best_row = result
+                best_row = _select_train_winner(all_rows)
+                best_train_score = best_row["train_score"]
                 print(f"  [{done_count}/{total_combos}] "
                       f"w={result['penalty_weight']}, lb={result['lookback_days']}: "
                       f"train_excess={result['train_excess_return']}, "
@@ -817,10 +888,21 @@ def main() -> None:
     # 8. Evaluate success criteria
     if not best_row:
         print("\nERROR: No valid grid search results. Writing rejection outputs.")
-        _write_outputs(output_dir, False, {}, all_rows, baseline)
+        _write_outputs(output_dir, False, {}, all_rows, baseline, {"costs": {}}, 0)
         _gatekeeper_after_run(output_dir)
         sys.exit(0)
 
+    # The grid has never touched test.  Freeze its result before exactly two
+    # test exposures: the frozen winner and independent fixed baseline.
+    # train-selected winner and the independent, pre-registered baseline.
+    frozen_combo = (float(best_row["penalty_weight"]), int(best_row["lookback_days"]))
+    _freeze_test_protocol(output_dir, args, all_rows, best_row)
+    best_row = _evaluate_single_combo(frozen_combo, ranks_df, momentum_dfs[frozen_combo[1]], stk_map, args, include_test=True)
+    test_winner_result = best_row.pop("_test_result")
+    if not isinstance(test_winner_result, dict):
+        raise RuntimeError("frozen winner test result missing")
+    bottom_momentum_trade_count = _bottom_momentum_trade_count(test_winner_result, momentum_dfs[frozen_combo[1]], stk_map)
+    baseline = _run_baseline_backtest(ranks_df, args, include_test=True)
     best_test_excess = float(best_row.get("test_excess_return") or -999)
     best_test_dd = float(best_row.get("test_max_drawdown") or -999)
     best_test_sharpe = float(best_row.get("test_sharpe") or -999)
@@ -867,7 +949,7 @@ def main() -> None:
     print(f"  Adoption: {adoption_pass}")
 
     # 9. Write outputs
-    _write_outputs(output_dir, adoption_pass, best_row, all_rows, baseline)
+    _write_outputs(output_dir, adoption_pass, best_row, all_rows, baseline, test_winner_result, bottom_momentum_trade_count)
 
     print(f"\n[out] summary.json -> {output_dir / 'summary.json'}")
     print(f"[out] report.yaml  -> {output_dir / 'report.yaml'}")

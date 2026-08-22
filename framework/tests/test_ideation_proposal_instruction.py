@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import pytest
 
+from framework.evaluation.research_feedback import ResearchInput, ResearchQuestion
+
 from framework.autonomous.ideation_cycle import (
     _critical_insights,
     _closed_families_from_insights,
@@ -188,3 +190,26 @@ def test_prompt_omits_closed_families_hard_rule_when_no_insight_has_closed(tmp_p
     assert not any(
         "closed_families_from_insights" in r for r in prompt["hard_rules"]
     )
+
+
+def test_prompt_makes_reviewed_research_input_a_conditional_contract():
+    closed_tags, digest, cap_menu, current, data_inv = _stub_inputs()
+    question = ResearchQuestion(
+        "q1", "Can costs preserve the edge?", "realizability", ("edge",),
+        ("execution_mechanism",), (), ("cost_on",), ("cost falsifies",), ("e1",),
+    )
+    research_input = ResearchInput(
+        2, "review_1", "run_1", "1", question,
+        {"must_change": ["execution_mechanism"], "forbidden": [],
+         "required_evidence": ["cost_on"], "review_constraints": [],
+         "required_changes": ["use conservative costs"]},
+        ("cost_on",), ("tail_cost",), ("e1",),
+    )
+    prompt = proposal_instruction(
+        closed_tags, digest, cap_menu, current, data_inventory=data_inv,
+        research_input=research_input, preallocated_proposal_id="reserved_1",
+        constraint_bindings={"execution_mechanism": ["mechanics"]},
+    )
+    assert prompt["research_input"]["preallocated_proposal_id"] == "reserved_1"
+    assert {"research_feedback", "required_changes"}.issubset(prompt["required_fields"])
+    assert any("accepted Claude PASS" in rule for rule in prompt["hard_rules"])

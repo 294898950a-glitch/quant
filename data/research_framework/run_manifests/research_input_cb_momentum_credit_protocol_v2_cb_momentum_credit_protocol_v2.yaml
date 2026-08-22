@@ -1,0 +1,228 @@
+schema_version: 1
+record_type: backfill
+batch_id: research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2
+strategy_id: cb_arb_value_gap_switch
+hypothesis_id: research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2
+data_window:
+  start: unknown
+  end: unknown
+config_path: data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2/spec.yaml
+config_hash: f80298fe8ab7318bb17ea3f6c2623cc1
+entrypoint: []
+git_commit: 2cd0152
+git_dirty:
+- ' M AGENTS.md'
+- ' M data/cb_arb_value_gap_switch_bond-floor-entry-filter_v1/verification_log.jsonl'
+- ' M data/cb_arb_value_gap_switch_momentum_extended_valuation_v1/executor_tool_request.yaml'
+- ' M data/research_framework/experiments.yaml'
+- ' M data/research_framework/orchestrator_log.jsonl'
+- ' M data/research_framework/quant_access_audit.jsonl'
+- ' M data/research_framework/research_queue.yaml'
+- ' M data/research_framework/result_classification_map.yaml'
+- ' M data/research_framework/runtime_entrypoints.yaml'
+- ' M data/research_framework/status_code_maps.yaml'
+- ' M data/research_framework/strategy_ideator.yaml'
+- ' M docs/QUANT_WORKFLOW.txt'
+- ' M framework/autonomous/ideation_cycle.py'
+- ' M framework/autonomous/paths.py'
+- ' M framework/autonomous/queue_ideation.py'
+- ' M framework/autonomous/run_recorder.py'
+- ' M framework/autonomous/spec_compiler.py'
+- ' M framework/evaluation/__init__.py'
+- ' M framework/evaluation/benchmark.py'
+- ' M framework/evaluation/costs.py'
+- ' M framework/tests/test_ideation_proposal_instruction.py'
+- ' M scripts/auto_research_pipeline.py'
+- ' M scripts/evaluate_cb_arb_valuation_formula_momentum.py'
+- ' M scripts/evaluate_cb_arb_value_gap_switch.py'
+- ' M scripts/run_strategy_ideation_once.py'
+- ?? data/research_framework/admission_packets/
+- ?? data/research_framework/lifecycle_projection_diffs.jsonl
+- ?? data/research_framework/lifecycle_projection_diffs.jsonl.lock
+- ?? data/research_framework/pending_research_input.yaml.lock
+- ?? data/research_framework/research_input_admission_history.jsonl
+- ?? data/research_framework/research_input_constraint_bindings.v1.yaml
+- ?? data/research_framework/research_question_events.jsonl
+- ?? data/research_framework/research_question_events.jsonl.lock
+- ?? data/research_framework/research_question_policy.yaml
+- ?? data/research_framework/run_manifests/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2.yaml
+- ?? data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2/
+- ?? docs/design/
+- ?? docs/reviews/cb-momentum-contract-code-r1.verdict
+- ?? docs/reviews/cb-momentum-contract-code-r1.verdict.log
+- ?? docs/reviews/cb-momentum-contract-code-r2.verdict
+- ?? docs/reviews/cb-momentum-contract-code-r2.verdict.log
+- ?? docs/reviews/cb-momentum-credit-question-r2.verdict
+- ?? docs/reviews/cb-momentum-credit-question-r2.verdict.log
+- ?? docs/reviews/cb-momentum-credit-question.verdict
+- ?? docs/reviews/cb-momentum-credit-question.verdict.log
+- ?? docs/reviews/cb-momentum-evaluator-code-r2.verdict
+- ?? docs/reviews/cb-momentum-evaluator-code-r2.verdict.log
+- ?? docs/reviews/cb-momentum-evaluator-code-r3.verdict
+- ?? docs/reviews/cb-momentum-evaluator-code-r3.verdict.log
+- ?? docs/reviews/cb-momentum-evaluator-code-r4.verdict
+- ?? docs/reviews/cb-momentum-evaluator-code-r4.verdict.log
+- ?? docs/reviews/cb-momentum-evaluator-code.verdict
+- ?? docs/reviews/cb-momentum-evaluator-code.verdict.log
+- ?? docs/reviews/cb-momentum-evaluator-design-r2.verdict
+- ?? docs/reviews/cb-momentum-evaluator-design-r2.verdict.log
+- ?? docs/reviews/cb-momentum-evaluator-design-r3.verdict
+- ?? docs/reviews/cb-momentum-evaluator-design-r3.verdict.log
+- ?? docs/reviews/cb-momentum-evaluator-design.verdict
+- ?? docs/reviews/cb-momentum-evaluator-design.verdict.log
+- ?? docs/reviews/cb-momentum-protocol-repair-code-r2.prompt
+- ?? docs/reviews/cb-momentum-protocol-repair-code-r2.verdict
+- ?? docs/reviews/cb-momentum-protocol-repair-code-r2.verdict.log
+- ?? docs/reviews/cb-momentum-protocol-repair-code-r3.verdict
+- ?? docs/reviews/cb-momentum-protocol-repair-code-r3.verdict.log
+- ?? docs/reviews/cb-momentum-protocol-repair-code-r4.verdict
+- ?? docs/reviews/cb-momentum-protocol-repair-code-r4.verdict.log
+- ?? docs/reviews/cb-momentum-protocol-repair-code.prompt
+- ?? docs/reviews/cb-momentum-protocol-repair-code.verdict
+- ?? docs/reviews/cb-momentum-protocol-repair-code.verdict.log
+- ?? docs/reviews/cb-momentum-protocol-repair-design.prompt
+- ?? docs/reviews/cb-momentum-protocol-repair-design.verdict
+- ?? docs/reviews/cb-momentum-protocol-repair-design.verdict.log
+- ?? docs/reviews/cb-momentum-ready-spec.verdict
+- ?? docs/reviews/cb-momentum-ready-spec.verdict.log
+- ?? docs/reviews/cb-momentum-run-recorder-contract-r1.verdict
+- ?? docs/reviews/cb-momentum-run-recorder-contract-r1.verdict.log
+- ?? docs/reviews/cb-momentum-sharpe-metric-r1.verdict
+- ?? docs/reviews/cb-momentum-sharpe-metric-r1.verdict.log
+- ?? docs/reviews/claude-architecture-context.prompt
+- ?? docs/reviews/claude-architecture-context.verdict
+- ?? docs/reviews/claude-architecture-context.verdict.log
+- ?? docs/reviews/claude-architecture-evaluation.prompt
+- ?? docs/reviews/claude-architecture-evaluation.verdict
+- ?? docs/reviews/claude-architecture-evaluation.verdict.log
+- ?? docs/reviews/claude-novelty-gate-design.prompt
+- ?? docs/reviews/claude-novelty-gate-design.verdict
+- ?? docs/reviews/claude-novelty-gate-design.verdict.log
+- ?? docs/reviews/claude-question-attributes-design.prompt
+- ?? docs/reviews/claude-question-attributes-design.verdict
+- ?? docs/reviews/claude-question-attributes-design.verdict.log
+- ?? docs/reviews/evaluation-evidence-incomplete-r1.verdict
+- ?? docs/reviews/evaluation-evidence-incomplete-r1.verdict.log
+- ?? docs/reviews/evaluation-protocol-code.prompt
+- ?? docs/reviews/evaluation-protocol-code.verdict
+- ?? docs/reviews/evaluation-protocol-code.verdict.log
+- ?? docs/reviews/evaluation-protocol-code.verdict.raw.json.2757a5d2e77021125e68ef6e9ce4ca8fab3777b128d17d108e8a087f81d8f650.json
+- ?? docs/reviews/evaluation-protocol-code.verdict.raw.json.2d1420ab30e694c5933395a50fa3147d68ce68cd639d391e85ec491f3346a2f3.json
+- ?? docs/reviews/evaluation-protocol-code.verdict.request.json
+- ?? docs/reviews/evaluation-protocol-design.prompt
+- ?? docs/reviews/evaluation-protocol-design.verdict
+- ?? docs/reviews/evaluation-protocol-design.verdict.log
+- ?? docs/reviews/evaluation-protocol-design.verdict.raw.json.2757a5d2e77021125e68ef6e9ce4ca8fab3777b128d17d108e8a087f81d8f650.json
+- ?? docs/reviews/evaluation-protocol-design.verdict.raw.json.2d1420ab30e694c5933395a50fa3147d68ce68cd639d391e85ec491f3346a2f3.json
+- ?? docs/reviews/evaluation-protocol-design.verdict.request.json
+- ?? docs/reviews/evaluation-rebuild-code.prompt
+- ?? docs/reviews/evaluation-rebuild-code.verdict
+- ?? docs/reviews/evaluation-rebuild-code.verdict.log
+- ?? docs/reviews/evaluation-rebuild-design.prompt
+- ?? docs/reviews/evaluation-rebuild-design.verdict
+- ?? docs/reviews/evaluation-rebuild-design.verdict.log
+- ?? docs/reviews/pending-input-priority-fix.verdict
+- ?? docs/reviews/pending-input-priority-fix.verdict.log
+- ?? docs/reviews/research-feedback-code.prompt
+- ?? docs/reviews/research-feedback-code.verdict
+- ?? docs/reviews/research-feedback-code.verdict.log
+- ?? docs/reviews/research-input-bridge-design.prompt
+- ?? docs/reviews/research-input-bridge-design.verdict
+- ?? docs/reviews/research-input-bridge-design.verdict.log
+- ?? docs/reviews/research-question-lifecycle-core-r2.verdict
+- ?? docs/reviews/research-question-lifecycle-core-r2.verdict.log
+- ?? docs/reviews/research-question-lifecycle-core.verdict
+- ?? docs/reviews/research-question-lifecycle-core.verdict.log
+- ?? docs/reviews/research-question-lifecycle-migration-r2.verdict
+- ?? docs/reviews/research-question-lifecycle-migration-r2.verdict.log
+- ?? docs/reviews/research-question-lifecycle-migration-r3.verdict
+- ?? docs/reviews/research-question-lifecycle-migration-r3.verdict.log
+- ?? docs/reviews/research-question-lifecycle-migration-r4.verdict
+- ?? docs/reviews/research-question-lifecycle-migration-r4.verdict.log
+- ?? docs/reviews/research-question-lifecycle-migration.verdict
+- ?? docs/reviews/research-question-lifecycle-migration.verdict.log
+- ?? docs/reviews/research-question-lifecycle-spec.prompt
+- ?? docs/reviews/research-question-lifecycle-spec.verdict
+- ?? docs/reviews/research-question-lifecycle-spec.verdict.log
+- ?? docs/reviews/research-question-phase0-code-r2.verdict
+- ?? docs/reviews/research-question-phase0-code-r2.verdict.log
+- ?? docs/reviews/research-question-phase0-code.verdict
+- ?? docs/reviews/research-question-phase0-code.verdict.log
+- ?? docs/reviews/research-question-phase1-code-r2.verdict
+- ?? docs/reviews/research-question-phase1-code-r2.verdict.log
+- ?? docs/reviews/research-question-phase1-code-r3.verdict
+- ?? docs/reviews/research-question-phase1-code-r3.verdict.log
+- ?? docs/reviews/research-question-phase1-code-r4.verdict
+- ?? docs/reviews/research-question-phase1-code-r4.verdict.log
+- ?? docs/reviews/research-question-phase1-code-r5.verdict
+- ?? docs/reviews/research-question-phase1-code-r5.verdict.log
+- ?? docs/reviews/research-question-phase1-code-r6.verdict
+- ?? docs/reviews/research-question-phase1-code-r6.verdict.log
+- ?? docs/reviews/research-question-phase1-code.verdict
+- ?? docs/reviews/research-question-phase1-code.verdict.log
+- ?? docs/reviews/research-question-phase2-code-r2.verdict
+- ?? docs/reviews/research-question-phase2-code-r2.verdict.log
+- ?? docs/reviews/research-question-phase2-code-r3.verdict
+- ?? docs/reviews/research-question-phase2-code-r3.verdict.log
+- ?? docs/reviews/research-question-phase2-code.verdict
+- ?? docs/reviews/research-question-phase2-code.verdict.log
+- ?? docs/reviews/research-question-phase3-code-r2.verdict
+- ?? docs/reviews/research-question-phase3-code-r2.verdict.log
+- ?? docs/reviews/research-question-phase3-code.verdict
+- ?? docs/reviews/research-question-phase3-code.verdict.log
+- ?? framework/autonomous/evaluation_protocol.py
+- ?? framework/evaluation/README.txt
+- ?? framework/evaluation/contract.py
+- ?? framework/evaluation/evidence.py
+- ?? framework/evaluation/lifecycle_cutover.py
+- ?? framework/evaluation/pending_research_input.py
+- ?? framework/evaluation/research_feedback.py
+- ?? framework/evaluation/research_question.py
+- ?? framework/evaluation/research_question_shadow.py
+- ?? framework/evaluation/validation.py
+- ?? framework/tests/test_evaluation_contract.py
+- ?? framework/tests/test_evaluation_protocol.py
+- ?? framework/tests/test_research_feedback.py
+- ?? framework/tests/test_research_input_bridge.py
+- ?? framework/tests/test_research_question.py
+- ?? framework/tests/test_run_recorder_protocol.py
+- ?? framework/tests/test_value_gap_metrics.py
+- ?? scripts/admit_research_input.py
+- ?? scripts/lifecycle_cutover.py
+dirty_policy: allowed_with_list
+data_snapshot: {}
+compute_host: Jay
+compute_cost_yuan: 0.0
+start_at: null
+end_at: '2026-07-13T00:26:23Z'
+exit_code: null
+result_artifact: data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2
+artifact_hash: 65cd4c8b87268538e644c7ff615e8b1d
+artifact_hash_manifest: null
+result_summary: evaluation_evidence_incomplete
+promotion_status: rejected
+reviewer: auto
+verdict_at: '2026-07-13T00:26:23Z'
+automation:
+  compute:
+    estimated_compute_cost_yuan: 0.0
+    decision: record-only
+    inputs:
+      sig_minutes: 0.0
+      spot_minutes: 60.0
+      local_minutes: 0.0
+      fixed_yuan: 0.0
+  verdict:
+    decision: evaluation_evidence_incomplete
+    pass_field: best_test_excess
+    pass_value: false
+    summary_path: data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2/summary.json
+    falsifier_flags: {}
+backfill:
+  reason: classify existing artifacts without executing a new run
+  actor: auto_research_pipeline
+  evidence_paths:
+  - data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2
+  new_execution: false
+  may_trigger_next_research: false
+  may_update_current_strategy: false

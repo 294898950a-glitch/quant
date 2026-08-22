@@ -1,0 +1,53 @@
+You are the design reviewer of record for the quant repository. Review this
+proposal before implementation. The goal is to fix evaluation-protocol
+coupling, not to add automatic production deployment.
+
+Current problem:
+- framework/autonomous/spec_compiler.py emits hard-coded evaluation defaults:
+  cv_design=single-window, holdout years [2025, 2026], and a fallback hard
+  floor.
+- scripts/auto_research_pipeline.py derives verdicts from strategy-specific
+  fields and implicit train/test, cost, drawdown, and adoption assumptions.
+- This makes new strategy families inherit cb_arb assumptions or silently
+  receive an under-specified validation.
+
+Proposed minimal contract:
+1. Add a versioned `evaluation_protocol` object to generated spec.yaml.
+2. The protocol declares, without executing code:
+   - primary metric and direction;
+   - train/validation/holdout split labels or periods;
+   - required cost model flag and cost metadata keys;
+   - named hard constraints with metric paths, operators, and thresholds;
+   - robustness checks required for a PASS;
+   - baseline/comparator identity and comparison metric;
+   - explicit fail-closed behavior when a required metric is missing.
+3. Keep a compatibility adapter for existing cb_arb specs so current runs do
+   not change behavior. New strategies must either provide an explicit protocol
+   or be DRAFT/REJECTED as under-specified; no silent generic thresholds.
+4. Centralize protocol validation in a small pure module, and make pipeline
+   verdict derivation consume the protocol rather than scattered defaults.
+5. Do not change current.yaml, deployment state, queue state, or strategy truth.
+
+Acceptance criteria:
+- Existing cb_arb specs produce the same verdict for the same artifacts.
+- A new strategy can declare a different primary metric, split layout, cost
+  requirement, comparator, and constraints without editing pipeline code.
+- Missing protocol or missing required metric fails closed with a structured
+  reason; it cannot become PASS because a legacy field happens to be present.
+- Protocol validation is deterministic and unit-testable with no AI/network.
+- The implementation remains compatible with current spec schema versioning and
+  does not duplicate the full result reviewer.
+
+Please hunt for:
+- ambiguous metric-path semantics;
+- accidental acceptance when a constraint is absent or malformed;
+- backward-compatibility drift in cb_arb verdicts;
+- protocol fields that are too strategy-specific or too weak to validate;
+- hidden coupling to report.yaml/summary.json schemas;
+- unnecessary migration complexity.
+
+Return exactly:
+VERDICT: ACCEPT or REVISE
+BLOCKERS: numbered list or none
+REQUIRED_TESTS: numbered list or none
+RECOMMENDED_SHAPE: concise design guidance

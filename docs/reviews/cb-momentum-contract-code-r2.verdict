@@ -1,0 +1,3 @@
+ACCEPT
+
+The fix now gates the legacy bypass on both conditions: `explicit.get("mode") == "legacy_cb_arb_compat"` AND `strategy_id.startswith("cb_arb")`. A non-cb_arb strategy attaching `legacy_cb_arb_compat` mode (or the full `CB_ARB_COMPAT_PROTOCOL`) no longer bypasses — it falls through to `validate_protocol(explicit)` and gets rejected with real errors, confirmed by `test_non_cb_arb_cannot_bypass_strict_validation_with_legacy_mode`. Legitimate `cb_arb`-prefixed legacy specs still short-circuit correctly, confirmed by `test_legacy_compatibility_mode_is_not_validated_as_strict_numeric_contract` and the idempotency test. Tests and code excerpts agree.

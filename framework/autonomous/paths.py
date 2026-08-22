@@ -70,3 +70,23 @@ class ResearchPaths:
     @property
     def ideation_policy_state(self) -> Path:
         return self.research_framework_dir / "ideation_policy_state.json"
+
+    @property
+    def pending_research_input(self) -> Path:
+        return self.research_framework_dir / "pending_research_input.yaml"
+
+    @property
+    def research_input_admission_history(self) -> Path:
+        return self.research_framework_dir / "research_input_admission_history.jsonl"
+
+    @property
+    def research_input_constraint_bindings(self) -> Path:
+        return self.research_framework_dir / "research_input_constraint_bindings.v1.yaml"
+
+    @property
+    def research_question_events(self) -> Path:
+        return self.research_framework_dir / "research_question_events.jsonl"
+
+    @property
+    def research_question_policy(self) -> Path:
+        return self.research_framework_dir / "research_question_policy.yaml"

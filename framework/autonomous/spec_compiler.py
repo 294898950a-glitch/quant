@@ -18,12 +18,14 @@ try:
     from framework.autonomous.executor_registry import match_executor
     from framework.autonomous.executor_registry import validate_registry_schema
     from framework.autonomous.proposal_schema import validate_proposal
+    from framework.autonomous.evaluation_protocol import protocol_for_proposal
 except ModuleNotFoundError:  # importlib-based acceptance tests load files directly
     from artifacts import ArtifactStore  # type: ignore
     from executor_registry import capability_catalog, capability_ids_to_mechanics  # type: ignore
     from executor_registry import match_executor  # type: ignore
     from executor_registry import validate_registry_schema  # type: ignore
     from proposal_schema import validate_proposal  # type: ignore
+    from evaluation_protocol import protocol_for_proposal  # type: ignore
 
 
 class CompileResult:
@@ -231,10 +233,22 @@ def _base_spec(
     status: str,
     reason: str,
     mechanics: set[str] | None = None,
+    evaluation_protocol: dict[str, Any] | None = None,
+    protocol_errors: list[str] | None = None,
 ) -> dict[str, Any]:
     resolved_mechanics = sorted(mechanics if mechanics is not None else set(proposal.get("mechanics", [])))
     success = proposal.get("success_criteria", {})
-    return {
+    if protocol_errors is None:
+        evaluation_protocol, protocol_errors = protocol_for_proposal(proposal)
+    if status == "READY" and protocol_errors:
+        status = "DRAFT"
+        reason = "evaluation protocol required or invalid"
+    artifacts_required = ["implementation_plan.yaml", "spec.yaml"] if status == "DRAFT" else [
+        "summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml",
+    ]
+    if isinstance(evaluation_protocol, dict) and evaluation_protocol.get("mode") == "cb_momentum_protocol_v2":
+        artifacts_required.append("test_exposure_protocol.json")
+    spec = {
         "schema_version": 1,
         "run_id": _run_id(proposal),
         "date": _today(),
@@ -258,6 +272,7 @@ def _base_spec(
             for item in proposal.get("required_data", [])
         ],
         "hard_floors": success if isinstance(success, dict) and success else {"test_excess_min": 0.0},
+        "evaluation_protocol": evaluation_protocol,
         "cv_design": "single-window",
         "cv_holdout_years": [2025, 2026],
         "compute_estimate": {
@@ -270,15 +285,18 @@ def _base_spec(
             "executor match fails",
             "required artifacts are missing",
         ],
-        "artifacts_required": ["implementation_plan.yaml", "spec.yaml"]
-        if status == "DRAFT"
-        else ["summary.json", "report.yaml", "l4_ack.yaml", "diagnostic.yaml"],
+        "artifacts_required": artifacts_required,
         "status": status,
         "auxiliary_metrics": ["train_excess_return", "test_excess_return", "max_drawdown"],
         "escalation": ["DRAFT requires executor implementation before run"],
         "notes": reason,
+        "evaluation_protocol_errors": protocol_errors,
         "proposal": proposal,
     }
+    lifecycle = proposal.get("research_lifecycle")
+    if isinstance(lifecycle, dict):
+        spec["research_lifecycle"] = dict(lifecycle)
+    return spec
 
 
 def compile(
@@ -297,6 +315,30 @@ def compile(
     errors = validate_proposal(proposal, vocab, capability_vocab=capability_vocab or None)
     if errors:
         return CompileResult("REJECT", "proposal schema invalid", errors=errors)
+    evaluation_protocol, protocol_errors = protocol_for_proposal(proposal)
+    if protocol_errors:
+        spec_path = None
+        plan_path = None
+        if output_dir is not None:
+            out = Path(output_dir)
+            plan_path = _write_yaml(out / "implementation_plan.yaml", {
+                "proposal_id": proposal.get("proposal_id"),
+                "reason": "evaluation protocol required or invalid",
+                "errors": protocol_errors,
+            })
+            spec_path = _write_yaml(
+                out / "spec.yaml",
+                _base_spec(proposal, "DRAFT", "evaluation protocol required or invalid", evaluation_protocol=evaluation_protocol, protocol_errors=protocol_errors),
+            )
+        return CompileResult(
+            "DRAFT",
+            "evaluation protocol required or invalid",
+            spec_path=spec_path,
+            implementation_plan_path=plan_path or "implementation_plan.yaml",
+            errors=protocol_errors,
+        )
+    proposal = dict(proposal)
+    proposal["evaluation_protocol"] = evaluation_protocol
 
     capability_ids = set(str(item) for item in proposal.get("capability_ids", []))
     if not capability_ids and proposal.get("missing_capability_request"):
@@ -437,7 +479,10 @@ def compile(
 
     spec_path = None
     if output_dir is not None:
-        ready_spec = _base_spec(proposal, "READY", "all guarded checks passed", mechanics=mechanics)
+        ready_spec = _base_spec(
+            proposal, "READY", "all guarded checks passed", mechanics=mechanics,
+            evaluation_protocol=evaluation_protocol, protocol_errors=protocol_errors,
+        )
         command = _format_command_template(match, proposal, Path(output_dir))
         ready_spec.update({
             "executor_id": _executor_value(match, "executor_id") or _executor_value(match, "id"),

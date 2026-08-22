@@ -1,0 +1,31 @@
+你是 quant 评测重建的代码 reviewer of record。设计 gate 已 ACCEPT；本次只审第一阶段实现，不要求本轮删除旧 verdict 路径。
+
+第一性原理不变量：评测的目的，是增加对收益来源真实、可重复、扣除现实摩擦后仍存在的信心；measurement 不做 PASS/FAIL；缺证据不得 PASS；评测层不依赖策略模块；不写生产策略状态。
+
+本阶段改动：
+- `framework/evaluation/contract.py`：GateStatus、EvaluationPlan/GateResult/EvaluationReport、plan_from_mapping、validate_plan_complete；六门 integrity/signal/benchmark/friction/generalization/constraints。
+- `framework/evaluation/evidence.py`：EvidenceItem 和 measurement_evidence typed handoff。
+- `framework/evaluation/validation.py`：纯函数 evaluate_plan；integrity prerequisite、source/plan_version/scenario fail-closed、required gate/waived/blocked 语义、artifact existence。
+- `framework/evaluation/benchmark.py`：BenchmarkProvider 协议；load_benchmark/load_benchmark_total_return 必须显式 provider；align/excess 仍为纯函数；移除 cb_arb 默认 import。
+- `framework/evaluation/__init__.py`：公开新契约和 validator。
+- `framework/tests/test_evaluation_contract.py`：计划完整性、integrity 阻塞、source 边界、provider 注入测试。
+- `framework/evaluation/costs.py`：通用成本计算不导入 cb_arb/scipy（此前已完成并测试）。
+
+验证：`python3 -m unittest discover -s framework/tests -p 'test_evaluation*.py'` → 42 passed。
+
+请重点找真实 blocker：
+1. validate_plan_complete 是否会允许不完整计划或绕过 integrity；
+2. evaluate_plan 是否可能在缺 evidence/source/type/version 时 false PASS；
+3. measurement/decision 是否混合；
+4. benchmark 是否仍有策略反向依赖；
+5. 旧 cb_arb 兼容是否被本阶段意外破坏；
+6. GateStatus/overall decision 是否与第一性原理一致；
+7. 测试是否覆盖了声明的行为，是否有明显遗漏或过度设计。
+
+本阶段是迁移第一步，旧 `framework/autonomous/evaluation_protocol.py` 与旧 pipeline verdict 尚未删除；请把“后续迁移未完成”与“本阶段实现 bug”区分开。
+
+返回：
+VERDICT: ACCEPT 或 REVISE
+BLOCKERS: 编号列表或 none
+REQUIRED_TESTS: 编号列表或 none
+RECOMMENDED_FIXES: 简短

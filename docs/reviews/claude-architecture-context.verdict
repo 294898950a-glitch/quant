@@ -1,0 +1,29 @@
+VERDICT: REVISE
+
+TOP_BLOCKERS:
+
+1. **[design] Research input is consumed before the deterministic gate/compiler result is known.** Per step 8, the pending input is marked consumed once a structurally-valid proposal is durable-written, but the delta gate/compiler evaluation (the actual evidence-based verdict) happens *after* that, and a consumed key can never be re-admitted. A reviewed, PASS-approved research question therefore gets exactly one ideation attempt; if that single LLM draft is structurally valid but substantively weak and later fails the deterministic gate, the underlying idea is burned permanently. This punishes execution-layer noise as if it were idea-layer failure, which directly throttles the system's ability to actually land new validated directions — the one resource that's expensive to produce (a reviewed question) is the one thing treated as disposable.
+
+2. **[design] No visible control for cumulative multiple-hypothesis testing.** Deterministic gates decide pass/fail per proposal, but nothing in the flow tracks false-discovery risk across the growing population of tested proposals (no FDR correction, no held-out/out-of-sample split distinct from the fitting sample). Over many cycles this is exactly how a "rigorous-looking" pipeline quietly becomes a p-hunting loop: each individual gate is principled, but the aggregate accept rate isn't controlled, so "validated new direction" can mean "one of many random hypotheses that cleared a fixed bar by chance."
+
+3. **[design] Reviewer independence is unverified from the summary.** The second gate is "ClaudeReview" — if the primary exploratory LLM and the reviewing LLM share a model family/training distribution, they likely share blind spots (same notion of what counts as "novel," same failure to flag statistically dubious framings). A same-family reviewer catching same-family generation is weak adversarial pressure; it filters format/policy violations well but not conceptual staleness.
+
+4. **[design] Novelty enforcement is negative-only.** Forbidden family/mechanics/hypothesis tokens block literal repeats, but there's no positive diversity signal (e.g., distance from the history of already-tried hypotheses) pushing the exploratory LLM toward genuinely unexplored regions. An idea can dodge every forbidden token while still being a cosmetic rephrasing of a previously tried direction.
+
+5. **[operational] Ticket-gated admission is a manual choke point.** Every research input requires a human to stage packet/review files and open a ticket. Correctness of the pipeline downstream doesn't matter if input volume is bottlenecked by manual ops — this is the most direct path to an "operationally idle" loop regardless of how sound the state machine is.
+
+STRENGTHS:
+
+1. Clean separation of authority: deterministic evaluation is fact, LLM output is opinion, and LLM scores structurally cannot override deterministic gates.
+2. Strong data-integrity engineering: append-only history with fsync before atomic slot replacement, flock-guarded state store, recoverable missing-slot reconstruction, tombstoned TTL release, replay-proof consumed keys.
+3. Architecturally enforced non-deployment: "no path writes current strategy truth" makes the stated purpose (validate, don't promote) a structural guarantee, not a policy note.
+4. Pre-write semantic validation (exact accepted IDs/question, bidirectional constraints/evidence/tests, valid binding paths, forbidden-token check) closes off a whole class of silent drift between what was reviewed and what gets proposed.
+5. The engineering layer already has a working adversarial-review loop (external CodeBuddy caught and fixed real concurrency/replay defects) — the plumbing is battle-tested even if the research-quality layer isn't yet.
+
+NEXT_ACTIONS:
+
+1. Move input consumption to occur after (or make it reversible until) the deterministic delta-gate/compiler verdict, or add a bounded-retry state so one weak ideation draft doesn't permanently waste a reviewed input.
+2. Add cumulative false-discovery tracking or an out-of-sample holdout distinct from the fitting data before a proposal can be labeled a validated new direction.
+3. Confirm and document that the exploratory LLM and ClaudeReview are decorrelated (different providers/model families or otherwise independent failure modes); if not, add a third, differently-sourced check.
+4. Add a positive novelty signal (e.g., embedding distance from prior tried/rejected hypotheses) into the exploratory prompt, not just a forbidden-token blocklist.
+5. Instrument throughput metrics (tickets admitted/week, PASS rate, proposals written, proposals clearing the deterministic gate) so an operationally idle loop is visible from dashboards, not inferred after the fact.

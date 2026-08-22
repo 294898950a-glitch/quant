@@ -39,6 +39,10 @@ owned by one of these nodes.
 - Use the registered data-quality judge, evidence toolkit, status codes, Hermes
   provider adapter, run recorder, and review pipeline; do not create parallel
   paths.
+- A Claude `PASS` exploration review enters ideation only through
+  `scripts/admit_research_input.py` with a quant access ticket. Its pending
+  state/history and constraint-binding registry are machine-owned; do not edit
+  them to bypass a claim, plan-version check, or deterministic feedback gate.
 - Hermes is an executor-code handoff consumer, not a quant workflow entrypoint.
 - Quant automation writes advance through the project-owned
   `QUANT_INTERNAL_CRON_TICK` running `scripts/quant_internal_tick.py`.

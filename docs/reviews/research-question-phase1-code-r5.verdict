@@ -1,0 +1,3 @@
+VERDICT: REVISE
+
+测试写的是 `mode: shadow`，并非要求的 enabled lifecycle 场景，未覆盖“enabled 且 policy 缺失必须 fail-closed”这一目标场景。

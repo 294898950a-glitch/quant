@@ -1,0 +1,16 @@
+You are the reviewer of record for a consequential market-data refresh design in /home/jay/projects/quant. Review only; do not edit files. Reply ACCEPT or REVISE, then <=12 concise lines.
+
+Current facts: core CB and stock warehouse tables plus daily_value_gap_amounts end 2026-05-08. `scripts/build_cb_warehouse.py --update` is not actually incremental: it does full external retrieval and overwrites live parquet tables. A valid rerun of the repaired momentum study needs a never-exposed holdout period and fresh value-gap ranks.
+
+Proposed design:
+1. Add a separate `scripts/refresh_cb_research_data.py`, leaving the legacy builder unchanged.
+2. It writes into a versioned staging directory `data/data_versions/<run_id>/` and never mutates `data/cb_warehouse` or existing rank artifacts in place.
+3. Require an explicit immutable `--base-manifest`; merge each table by its natural keys with only that manifest's referenced snapshot. A later refresh must name the prior staged manifest rather than silently falling back to the original live warehouse.
+4. Treat any source fetch failure as an all-or-nothing failure: discard its staging directory, publish no manifest, and exit nonzero. Retain old rows only when an explicitly recorded source gap is allowed; log every source-vs-base value difference on existing keys as a correction candidate.
+5. Require new maximum date > base maximum date and require every expected trading date in the extension range to be represented in each required table, subject to a published trading-calendar exception list. Reject date holes and cross-table coverage gaps.
+6. Validate schemas, key uniqueness, correction ledger, extension coverage, and write input/output hashes plus source/query timestamp manifest.
+7. Rebuild a new, explicitly versioned daily_value_gap_amounts artifact from the staged warehouse, never overwrite the historical rank artifact.
+8. Publish only a manifest pointing to the staged paths; a later research admission must bind this manifest and reserve a new holdout. No automatic strategy run or promotion.
+9. Support `--dry-run` and a narrow, deterministic fixture test; actual external refresh happens only after code review and validation.
+
+Look for leakage, data-version ambiguity, merge corruption, incomplete new-date coverage, and unsafe source failure behavior.

@@ -1,0 +1,18 @@
+VERDICT: **ACCEPT**
+
+BLOCKERS:  
+*None*
+
+REQUIRED_TESTS:  
+1. Unit tests for the new `evaluation_protocol` schema validation module, covering valid/invalid protocols, missing fields, and malformed constraints.  
+2. Regression tests ensuring all existing `cb_arb` specs produce identical verdicts under the new system via the compatibility adapter.  
+3. Tests verifying that a spec without an `evaluation_protocol` is marked DRAFT/REJECTED with a structured reason, not silently accepted.  
+4. Tests confirming fail-closed behavior when required metrics or cost metadata keys are missing in results.  
+5. Tests validating that robustness checks and comparator logic are correctly enforced per protocol declaration.
+
+RECOMMENDED_SHAPE:  
+- Define `evaluation_protocol` as a strictly versioned, declarative YAML object with deterministic parsing and validation.  
+- Isolate protocol validation into a pure function module (e.g., `framework.validation.evaluation_protocol_validator`) with no side effects or external dependencies.  
+- Use explicit metric path syntax (e.g., JSONPath or dot-notation) with documented semantics to avoid ambiguity.  
+- Enforce presence and correctness of protocol fields at parse time; do not fallback to implicit defaults unless through the `cb_arb` adapter.  
+- Avoid tight coupling to report or summary schemas by referencing only declared metric paths and requiring explicit fail-closed behavior.

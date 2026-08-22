@@ -30,3 +30,23 @@ result_decisions:
     evidence_usable: false
     closes_direction: false
     can_seed_ideation: false
+  passed_declared_protocol:
+    status: wip
+    evidence_usable: true
+    closes_direction: false
+    can_seed_ideation: true
+  failed_declared_protocol:
+    status: rejected
+    evidence_usable: true
+    closes_direction: true
+    can_seed_ideation: true
+  evaluation_evidence_incomplete:
+    status: rejected
+    evidence_usable: false
+    closes_direction: false
+    can_seed_ideation: false
+  evaluation_protocol_invalid:
+    status: rejected
+    evidence_usable: false
+    closes_direction: false
+    can_seed_ideation: false

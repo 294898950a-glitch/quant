@@ -1,0 +1,194 @@
+# 研究问题生命周期规格（评审草案）
+
+状态：`DRAFT — 未经 Claude Code 设计评审，不得据此接入现有运行链路`  
+范围：策略研究验证；不负责生产部署、自动交易或自动批准策略。
+
+## 1. 要解决的问题
+
+系统必须能回答：一个研究问题从哪里来、接受了哪些约束、做过哪些版本的假设、用了哪些证据、是否耗尽研究预算、以及为什么结束。答案必须能从不可变事实重放出来，不能依赖一个可被覆盖的 `status` 字段。
+
+这里的“预算”不是资金预算，而是防止同一问题族无限微调的研究治理预算：同一血缘允许多少次实质性假设修订、多少次重新表述，以及何时必须停止或换方向。
+
+## 2. 边界与非目标
+
+- 只管理“新策略/新假设验证”的研究入口与证据轨迹。
+- LLM 可以提出、评分、解释和评审；不能直接写最终状态或绕过确定性校验。
+- 本期不实现自动下单、生产发布、自动资金分配或 LLM 自行通过实验。
+- 不把生命周期当作一个可变状态机；状态只是事实账本的投影。
+
+## 3. 基本对象与身份
+
+### 3.1 Question 与 Lineage
+
+- `question_id`：一个不可变研究问题实例的 ID。由来源 review、来源 run、候选问题 ID 确定；一旦写入不可修改。
+- `lineage_id`：同一机制方向的问题血缘 ID。根问题可由规范化的问题文本和来源维度生成；一经 admission 写入即不可改。
+- 实质性改变机制、主张、可证伪条件或研究对象时，必须创建新的 `question_id`，记录 `parent_question_id` 与递增的 `reframe_ordinal`，并**继承父问题的同一 `lineage_id`**；不能拿旧 ID 改文案或改 lineage 重置预算。
+- 如果改变已经不属于原机制方向，它不是 reframe，而是独立的新 root question；不得把它称为原问题的预算续期，也不能继承原问题的“已验证”声明。
+- 纯文字澄清、不改变上述四项的修改是同一问题的 `proposal_revision`，不是 reframe。
+
+### 3.2 事实事件账本
+
+唯一权威为 `data/research_framework/research_question_events.jsonl`。每行一个 JSON 事件，追加写、fsync、带确定性 `event_key`。写入时间不是事件身份的一部分，因此安全重试不会制造重复事实。
+
+所有事件至少含：
+
+```yaml
+schema_version: 1
+event_key: stable hash
+event_type: one of the allowed types
+question_id: rq_...
+lineage_id: lineage_...
+at: unix timestamp          # 观察时间，不参与 event_key
+```
+
+允许的事件类型及必填事实：
+
+| 事件 | 必填事实 | 说明 |
+| --- | --- | --- |
+| `admission_attempt` | `admission_operation_id`, `research_input_ref`, `outcome` | 可重试的投递前审计；不是 admitted，绝不能被投影为生命周期准入。 |
+| `external_review_attempt` | `candidate_hash`, `attempt_ordinal`, `provider`, `model`, `verdict`, `review_id` | 每个外部 LLM 的独立评审尝试；评分仅建议性事实。 |
+| `question_admission` | `research_input_ref`, `question_text_hash`, `policy_version`, `review_attempt_event_key` | 仅确定性 PASS 门通过后写入。 |
+| `proposal_revision` | `revision_id`, `mechanism_delta`, `evidence_delta`, `falsifier_delta`, `validity_outcome` | 每个修订是新事件，不覆盖上一版。 |
+| `evidence_run` | `run_id`, `revision_id`, `evidence_refs`, `result_ref` | 普通训练/验证证据。 |
+| `holdout_reservation` | `reservation_id`, `revision_id`, `holdout_dataset_id`, `reservation_operation_id` | 保留最终留出集，一题只允许一个有效 reservation。 |
+| `holdout_exposure` | `reservation_id`, `reason` | 暴露、取消或污染留出集的审计事实。 |
+| `holdout_final_run` | `reservation_id`, `run_id`, `result_ref` | 不可重跑的最终留出结果。 |
+| `closure` | `closure_reason_type`, `closure_claim`, `evidence_refs` | 结束事实；原因只能是下述三类。 |
+
+`closure_reason_type` 只能为：
+
+- `evidence_backed`：已完成所需证据（若策略声称“已验证”，还必须引用 `holdout_final_run_id`）；
+- `policy_budget`：版本化政策预算已耗尽；
+- `external_block_exhausted`：外部依赖或评审阻塞已按政策重试完毕。
+
+`closure_claim` 只能为 `validated`、`not_validated`。只有 `closure_claim: validated` 时，`closure` 必须有显式字段 `holdout_final_run_id`，且该 ID 必须引用同一 question 的 `holdout_final_run`；确定性校验器拒绝其他任何“已验证”表述。`evidence_backed` 本身不等于 `validated`。
+
+`BLOCK` 不是“证据失败”的同义词；它首先是评审或依赖事实，只有明确写入 `closure` 才结束问题。
+
+一个 question 只能有一个 terminal `closure`。`append_closure()` 在 question 锁内执行：已有 closure 时返回原事件，不允许第二个理由覆盖、升级或改写，即使后来出现更高优先级候选。若同一次 reconciliation 同时得出多个候选 closure，固定优先级为：`evidence_backed`（同 question 的 final holdout 已完整）→ `policy_budget`（revision 与 reframe 预算均耗尽）→ `external_block_exhausted`。本期没有“人工强制 closure”事件；人工只能补充可校验事实或选择停止后由对应的三种理由之一关闭。
+
+## 4. 版本化预算政策
+
+文件 `data/research_framework/research_question_policy.yaml` 是研究治理的版本化输入，而不是可变计数器。每个政策至少包含：
+
+```yaml
+policy_version: 2026-Q3-v1
+revision_budget:
+  max_per_lineage: 3
+reframe_budget:
+  max_per_lineage: 2
+holdout:
+  required_for_validated_label: true
+  one_final_run_per_question: true
+```
+
+预算消耗由账本事件按 `lineage_id` 计数得出：
+
+- `proposal_revision` 数量消耗 revision budget；
+- 新子问题（`parent_question_id != null`）数量消耗 reframe budget；
+- 不允许保存或递减一个独立的 `remaining_budget`；
+- `question_admission` 永远记录当时使用的 `policy_version`，重放时可解释当时规则；投影默认使用该版本，不能静默用新政策改写旧历史。
+- `policy_budget` closure 不是在 revision 刚耗尽时产生：revision 耗尽先要求 reframe；只有当前 lineage 的 revision budget 已耗尽且 reframe budget 也已耗尽（或政策明示 `max_per_lineage: 0`），确定性 `LifecycleClosureTrigger` 才追加幂等的 `closure(policy_budget)`。该触发器在每次 lifecycle fact 成功写入后、及定期 reconciliation 时运行；失败可重试，event key 由 lineage、policy version、预算快照确定。
+
+## 5. 派生状态（只读投影）
+
+`derive_question_state(question_events, lineage_events, policy)` 是纯函数，输出 `{value, reason, policy_version, fact_count, lineage_revision_count}`。它不写文件，也不是新的事实来源。
+
+固定优先级如下：
+
+1. 有 `closure` → `CLOSED_EVIDENCE_BACKED` / `CLOSED_POLICY_BUDGET` / `CLOSED_EXTERNAL_BLOCK_EXHAUSTED`；
+2. 有 `holdout_final_run` 但未 closure → `HOLDOUT_RESULT_UNCLOSED`（必须由确定性规则补 closure）；
+3. 有未暴露、未取消、未完成的 holdout reservation → `AWAITING_HOLDOUT_EXECUTION`；
+4. 最近 reservation 已有 `holdout_exposure` 且没有替代 reservation → `REQUIRES_NEW_HOLDOUT`；
+5. 同血缘 revision budget 已耗尽且仍可 reframe → `REFRAME_REQUIRED`；
+6. 最新 revision 未通过结构/约束校验或未可执行 → `IN_PROPOSAL_REVISION`；
+7. 最新有效 revision 没有对应 evidence run → `AWAITING_EXPERIMENT_RUN`；
+8. 最新有效 revision 有普通证据但尚无 closure → `EVALUATED`；
+9. 有 admission、无 revision → `ADMITTED_AWAITING_PROPOSAL`；
+10. 其他 → `NEW`。
+
+`STUCK` 是监控告警（例如事实长期无更新），可由时间窗口计算，但绝不写入账本作为生命周期真相。
+
+## 6. 评审接口与研究入口兼容
+
+研究入口仍使用现有 `ExplorationPacket → ClaudeReview → ResearchInput → PendingResearchInputStore` 合同；生命周期只能附加审计事实，不能替代或绕过该合同。
+
+1. 主探索模型（Codex/terria）输出带证据引用、机制、反证条件、约束的 `ExplorationPacket`；可有多个方向。
+2. 外部评审模型（例如 Claude Sonnet）输出结构化 `ClaudeReview`：`PASS | REVISE | BLOCK`、分维度评分、依据、约束、必需测试和证据引用。
+3. 两个模型的评分都是事实和研究建议，绝不是“LLM 分数高则自动通过”。
+4. 只有确定性 `accept_claude_review` 校验 PASS、问题 ID、证据、约束和测试齐全，才允许形成 `ResearchInput`。
+5. 写入 pending slot 成功后，才追加 `external_review_attempt` 与 `question_admission`；slot 被占用、replay 拒绝或版本过期时不得制造孤儿 lifecycle。
+6. 后续 proposal 编译、实验、holdout 的每一步只追加事件；任何 gate 的输出必须能关联 `question_id`、`revision_id`、证据/结果引用。
+
+## 7. 必须保持的不变量
+
+- 账本追加写、可重放、同一事件重试幂等；损坏单行不得阻断其他有效事实读取，但必须有监控告警。
+- 一个有效 `holdout_final_run` 只能对应一个 question；重复或暴露必须拒绝并写审计事实。
+- `holdout_reservation` 必须通过 `ResearchQuestionLedger.reserve_holdout()` 写入：该方法在以 `question_id` 为粒度的排他锁内读取有效 reservation、校验 `reservation_operation_id` 幂等性、再追加事件。已有不同 operation 的有效 reservation 时拒绝，不允许通用 append 绕过该检查。
+- “已验证”标签必须由 policy 要求的 holdout 事实和确定性 closure 同时支持。
+- reframe 的 `lineage_id` 与根问题保持相同；预算计算跨该 lineage 的所有子问题累计。
+- 不同 lineage 的新 root question 不能复用、抵销或继承旧 lineage 的 revision/reframe 计数；实现必须用显式 ID 关联，不能依赖截断哈希碰撞后的“相等”。
+- 任何 LLM、UI 或脚本都不能直接设置 `CLOSED_*` 或 `EVALUATED`；它们只能提交可校验事实。
+- 政策、问题、修订、证据和 closure 均可从 append-only 账本还原；可替换的 state cache（若以后需要）必须包含 `policy_version` 和账本高水位，且永远不是权威。
+
+## 8. 旧路径的职责收缩与退出计划
+
+这不是删除现有执行系统的迁移。旧组件在它们本来的边界内继续存在：
+
+| 旧组件 | 保留职责 | 必须退出的职责 | 最终去向 |
+| --- | --- | --- | --- |
+| `ResearchInput` / `accept_claude_review` | PASS 的确定性输入合同 | 记录长期研究历史 | 保留为入口 DTO 和 gate。 |
+| `PendingResearchInputStore` | 单槽投递、claim lease、nonce、崩溃恢复 | 判断问题是否已评估/已关闭/预算耗尽 | 保留为短期 transport；其 history 仅是投递审计。 |
+| `pending_research_input.yaml` | 当前等待 ideation 的单个工作项 | 生命周期主记录 | 单槽清空或消费后不再承载历史。 |
+| `proposal.yaml` / `spec.yaml.status` | 某一 revision 的提案与一次执行状态（READY/RUNNING/COMPLETE） | 同一 question/lineage 的研究状态 | 保留为 run artifact；通过 `question_id` + `revision_id` 关联账本。 |
+| `research_queue.yaml` | 调度队列、机器/执行器分配 | 研究治理和 closure 决策 | 保留为调度投影，不能覆盖账本事实。 |
+
+四环节的写权必须始终唯一，迁移开关不得改变运行侧的归属：
+
+| 环节 | Phase 0–2 写权 | Phase 3–4 写权 | 生命周期服务的权限 |
+| --- | --- | --- | --- |
+| 准入（校验 PASS） | `accept_claude_review` | 不变 | 只在成功后记录事实；不能批准 PASS。 |
+| 投递 / claim / consume | `PendingResearchInputStore` | 不变 | 只按 operation ID reconciliation；不能 claim 或 consume。 |
+| 执行（spec、命令、结果） | `auto_research_pipeline.py` / run recorder | 不变 | 消费结果并追加 evidence fact；不能运行或改 `spec.status`。 |
+| 调度（队列、机器、执行器） | `QueueIdeationService` / `research_queue.yaml` | 不变 | 只读调度信息；不能 enqueue、dequeue 或改队列状态。 |
+
+唯一配置开关为 `research_lifecycle.mode`，值只能为 `off | shadow | compare | authoritative`：
+
+- `off`：没有 lifecycle 写入或读取；
+- `shadow`：只追加事实，旧路径是唯一读写权威；
+- `compare`：与 `shadow` 相同，另写不可变 `lifecycle_projection_diff` 诊断，UI 不读它；
+- `authoritative`：只有研究 UI、研究入口资格和 `validated` 标签读取账本投影；投递、执行、调度仍按上表由旧组件独占。
+
+该开关只能在一次进程启动前读取并记录到每个新 event 的 `writer_mode`；不允许单任务部分切换。允许的转换为 `off → shadow`、`shadow ↔ compare`、`compare → authoritative`、`authoritative → compare`；`shadow/compare → off` 仅当 reconciler 已处理完所有 `admission_attempt` 时允许，`authoritative → off` 禁止（必须先退到 compare）。所有转换都只改变读/诊断路径，已写事实不删除。
+
+代码强制方式：lifecycle 服务在独立进程、独立 Unix 账户运行；该账户对 pending slot、queue、spec 和执行目录只有只读 ACL，对 lifecycle ledger 只有 append 权限。它只接收不可变 `RunResultEnvelope`，不持有 pending/queue/pipeline 对象或写能力 token。CI 静态检查再禁止它导入或引用 `PendingResearchInputStore.claim/consume`、`QueueIdeationService` 的写方法、`auto_research_pipeline.set_spec_status`。因此动态导入、反射或 monkeypatch 即使发生，也没有 OS 层写权限；这些旧写接口也不得导入 lifecycle 的“写控制”对象。
+
+启动时 reconciler 以 `admission_operation_id`、pending history 和账本事件交叉核对：它在 `PendingResearchInputStore` 锁内调用既有 `_reconstruct()`；其返回的已验证 slot 和 history 中同一 operation 的最后一条有效状态是投递真源，临时 yaml 与 history 冲突时以该恢复结果为准。只有状态为 `pending|claimed|consumed` 且能匹配 admission key/nonce 的 operation 才可补写 admission；其余 attempt 永远保持未准入。reconciler 的补写必须复用同一 `event_key` 生成原语，因此崩溃后可任意次重跑，第二次及以后为零新增事实。
+
+迁移必须按下列阶段进行，任何阶段均不得让两套系统同时作为“权威”：
+
+1. **Phase 0 — 冻结与映射**：不改现有运行行为；列出所有 `pending`、`proposal`、`spec.status`、queue 读写点，并为新事件定义 `question_id`/`revision_id` 的关联字段。
+2. **Phase 1 — 影子账本（只写不读）**：新增 `ResearchQuestionLifecycleService` 与 `LifecycleClosureTrigger`。PASS 流程使用一个稳定 `admission_operation_id`：先记录可重试的 `admission_attempt` 审计；仅当 pending slot 成功后追加 `external_review_attempt` 和 `question_admission`。若在两文件写入之间进程崩溃，reconciler 从 pending/history 找到成功 operation 并补写同一 `event_key`；没有成功 slot 的 attempt 永远不得投影为 admitted。每次事实写入及定期 reconciliation 后运行 closure trigger。旧路径仍决定运行。
+3. **Phase 2 — 双读比对**：每次 claim、proposal 校验、编译、运行记录、holdout 结果都追加 lifecycle facts；同时计算新派生投影，但只写诊断报告，与旧调度/执行结果逐条比较。一个 `compare cycle` 精确定义为：一个唯一 `run_id` 的 run recorder 成功写完结果、lifecycle 已消费同一 `RunResultEnvelope`、并以 `{run_id, ledger_high_watermark}` 写入一条不可变 `lifecycle_projection_diff`；无 run result 不计 cycle，同一 run_id 的重试不新计 cycle。切换门槛为按该记录完成时间排序的连续 **30 个** cycle 中，`question_id`、admission ownership、revision ID、投影状态、closure reason/claim、validated 标签六类字段均为零差异；一条差异即把连续计数归零。不允许人工豁免，历史坏数据必须单独修复或显式迁入。自动 cutover gate 达标后才允许 `compare → authoritative`。
+4. **Phase 3 — 生命周期读切换**：研究 UI、研究入口资格和“已验证”标签只读取事实账本投影；`PendingResearchInputStore` 仍只负责 claim/consume。禁止任何新代码以 `spec.status` 或 queue status 判断 question closure。
+5. **Phase 4 — 清理旧生命周期胶水**：删除把 `pending` history、proposal 文案或 `spec.status` 映射为研究结论的分支和文档；保留运行状态字段及兼容读取至少一个政策版本。删除前需导出旧→新关联清单、完成回放校验，并确认没有生产调用者依赖被删字段。
+
+回滚规则：Phase 1–2 可以停写新账本或忽略投影，旧执行链路不受影响；Phase 3 后只允许回滚“读路径”，不得删除账本事实；Phase 4 前不得物理删除历史 artifacts。
+
+本次实现不删除旧组件。Phase 4 的候选清理清单（每一项须先经 `rg`/入口检查和迁移验收）为：
+
+| 候选旧胶水 | 当前位置 | 删除前置条件 | 不删除的内容 |
+| --- | --- | --- | --- |
+| 将 pending history 当成长周期结论的读分支 | `framework/evaluation/pending_research_input.py` 的调用方 | 账本回放与 Phase 3 读路径已稳定一个 policy version | store 的 slot/lease/recovery 实现。 |
+| 从 proposal 文案推断研究已结束的分支 | `framework/autonomous/ideation_cycle.py` 的调用方 | 每个 proposal 均有 `question_id`/`revision_id` fact 关联 | proposal 生成、结构校验、compiler。 |
+| 从 `spec.yaml.status` 或队列 status 推断 question closure 的分支 | `scripts/auto_research_pipeline.py`、`framework/autonomous/queue_ideation.py` 的调用方 | static reference scan 为零，且 lifecycle projection diff 连续稳定 | `spec.status` 的执行状态写入、queue 的调度状态写入。 |
+
+## 9. 最小实现顺序与验收
+
+1. 完成 Phase 0 映射和政策读取、事件 schema、追加幂等、纯派生器；不改变 ideation 行为。
+2. 完成 admission operation + reconciler，进入 Phase 1；失败路径只留 attempt，不得生成 admission。
+3. 在 proposal 校验、编译、证据执行处追加 revision/evidence 事实，进入 Phase 2 双读比对；为每一条事实增加重试测试。
+4. 实现 holdout reservation/exposure/final-run 的 one-shot 约束和测试。
+5. 完成差异稳定窗口后才切 Phase 3；最后才做缓存、UI 和 Phase 4 清理。
+
+最低验收测试：重放幂等、预算跨子问题累计、closure 优先级、无 holdout 不得标记 validated、被占用的 pending slot 不生成 admission、admission 写入中断可由 reconciler 补齐、LLM 输出不能直接闭环、Phase 2 双读差异被记录。

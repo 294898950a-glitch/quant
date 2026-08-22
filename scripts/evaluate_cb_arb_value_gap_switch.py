@@ -177,6 +177,7 @@ def _metrics(
         return {
             "total_return": 0.0,
             "excess_return": 0.0,
+            "sharpe": 0.0,
             "max_drawdown": 0.0,
             "win_rate": 0.0,
             "total_trades": 0,
@@ -192,10 +193,21 @@ def _metrics(
             max_dd = min(max_dd, v / peak - 1.0)
     wins = sum(1 for t in trades if float(t["pnl_pct"]) > 0)
     win_rate = wins / len(trades) if trades else 0.0
+    daily_returns = [
+        vals[index] / vals[index - 1] - 1.0
+        for index in range(1, len(vals))
+        if vals[index - 1] > 0 and math.isfinite(vals[index]) and math.isfinite(vals[index - 1])
+    ]
+    if len(daily_returns) >= 2:
+        daily_std = statistics.stdev(daily_returns)
+        sharpe = statistics.mean(daily_returns) / daily_std * math.sqrt(252) if daily_std > 0 else 0.0
+    else:
+        sharpe = 0.0
     benchmark = _index_total_return(equity_curve[0][0], equity_curve[-1][0])
     return {
         "total_return": round(total_return, 6),
         "excess_return": round(total_return - benchmark, 6),
+        "sharpe": round(sharpe, 4),
         "max_drawdown": round(max_dd, 6),
         "win_rate": round(win_rate, 4),
         "total_trades": len(trades),
@@ -985,6 +997,11 @@ def _run_value_gap_backtest(
     panic_ranks: pd.DataFrame | None = None,
     opportunity_dates_override: set[str] | None = None,
 ) -> dict[str, Any]:
+    cost_totals = {"fee": 0.0, "slippage": 0.0, "market_impact": 0.0, "holding_cost": 0.0}
+
+    def record_cost(cost: dict[str, Any]) -> None:
+        for key in cost_totals:
+            cost_totals[key] += float(cost.get(key, 0.0) or 0.0)
     cfgs = _base_configs(data_root, fixed_source)
     if float(params.get("cost_model_enabled", 0.0)) > 0:
         cfgs = {
@@ -1119,6 +1136,7 @@ def _run_value_gap_backtest(
             avg_amount_5d=avg_amount_5d_map.get(ts),
             holding_days=hd,
         )
+        record_cost(sell_cost)
         proceeds = float(sell_cost["cash_amount"])
         nonlocal cash
         cash += proceeds
@@ -1620,6 +1638,7 @@ def _run_value_gap_backtest(
                 continue
             if cost > cash_limit:
                 continue
+            record_cost(buy_cost)
             cash -= cost
             holdings[ts] = Position(
                 ts_code=ts,
@@ -1649,6 +1668,7 @@ def _run_value_gap_backtest(
         "metrics": metrics,
         "trades": trades,
         "equity_curve": equity_curve,
+        "costs": {**cost_totals, "friction_total": sum(cost_totals.values())},
     }
 
 

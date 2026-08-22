@@ -1,0 +1,3 @@
+VERDICT: REVISE
+BLOCKERS: reconcile() is only invoked when `self.paths.research_question_policy.exists()`; if lifecycle_mode != "off" but that file is absent, claim() runs with no prior reconcile, silently breaking the "claim 前必定 reconcile" invariant instead of failing loudly.
+TESTS: test_shadow_reconcile_admits_only_after_pending_success_and_is_idempotent and test_shadow_attempt_for_occupied_slot_never_becomes_admission cover shadow-not-claim and idempotent-replay; add a test for recover() consuming a claimed-but-not-committed slot after simulated crash, and a test asserting reconcile is still invoked (or the pipeline fails safe) when research_question_policy.yaml is missing under lifecycle_mode != "off".

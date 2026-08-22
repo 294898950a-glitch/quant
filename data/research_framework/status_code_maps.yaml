@@ -23,3 +23,8 @@ maps:
     1: high
     2: medium
     3: low
+  research_input_status:
+    1: research_feedback_invalid
+    2: research_input_dry_run_unsupported
+    3: research_input_claimed
+    4: research_input_stale_plan_version

@@ -11672,3 +11672,24 @@
 {"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260629_214003_81a24c52f23c"}, "pid": 27813, "ts": "2026-06-29T21:40:04"}
 {"action": "research_queue_runner_once", "event": "issued", "payload": {"allowed_actions": ["research_queue_runner_once"], "ticket_id": "20260629_215003_8cddb7a70f66", "ttl_seconds": 900}, "pid": 32096, "ts": "2026-06-29T21:50:03"}
 {"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260629_215003_8cddb7a70f66"}, "pid": 32130, "ts": "2026-06-29T21:50:03"}
+{"action": "admit_research_input", "event": "issued", "payload": {"allowed_actions": ["admit_research_input"], "ticket_id": "20260713_071137_37d097813ebe", "ttl_seconds": 900}, "pid": 25549, "ts": "2026-07-13T07:11:37"}
+{"action": "admit_research_input", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_071137_37d097813ebe"}, "pid": 25540, "ts": "2026-07-13T07:11:39"}
+{"action": "strategy_ideation_once", "event": "issued", "payload": {"allowed_actions": ["strategy_ideation_once"], "ticket_id": "20260713_071151_36686c6f9c60", "ttl_seconds": 900}, "pid": 25656, "ts": "2026-07-13T07:11:51"}
+{"action": "strategy_ideation_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_071151_36686c6f9c60"}, "pid": 25647, "ts": "2026-07-13T07:11:52"}
+{"action": "strategy_ideation_once", "event": "issued", "payload": {"allowed_actions": ["strategy_ideation_once"], "ticket_id": "20260713_071408_c704bef6b227", "ttl_seconds": 900}, "pid": 26814, "ts": "2026-07-13T07:14:08"}
+{"action": "strategy_ideation_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_071408_c704bef6b227"}, "pid": 26815, "ts": "2026-07-13T07:14:08"}
+{"action": "admit_research_input", "event": "issued", "payload": {"allowed_actions": ["admit_research_input"], "ticket_id": "20260713_071622_4ba4b866d827", "ttl_seconds": 900}, "pid": 28592, "ts": "2026-07-13T07:16:22"}
+{"action": "admit_research_input", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_071622_4ba4b866d827"}, "pid": 28582, "ts": "2026-07-13T07:16:24"}
+{"action": "strategy_ideation_once", "event": "issued", "payload": {"allowed_actions": ["strategy_ideation_once"], "ticket_id": "20260713_071631_b703b666309f", "ttl_seconds": 900}, "pid": 28718, "ts": "2026-07-13T07:16:31"}
+{"action": "strategy_ideation_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_071631_b703b666309f"}, "pid": 28720, "ts": "2026-07-13T07:16:33"}
+{"action": "admit_research_input", "event": "issued", "payload": {"allowed_actions": ["admit_research_input"], "ticket_id": "20260713_071806_310ad4c71b81", "ttl_seconds": 900}, "pid": 29578, "ts": "2026-07-13T07:18:06"}
+{"action": "admit_research_input", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_071806_310ad4c71b81"}, "pid": 29561, "ts": "2026-07-13T07:18:08"}
+{"action": "admit_research_input", "event": "issued", "payload": {"allowed_actions": ["admit_research_input"], "ticket_id": "20260713_071844_644ac7df6d78", "ttl_seconds": 900}, "pid": 29900, "ts": "2026-07-13T07:18:44"}
+{"action": "admit_research_input", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_071844_644ac7df6d78"}, "pid": 29891, "ts": "2026-07-13T07:18:45"}
+{"action": "research_queue_runner_once", "event": "denied", "payload": {"reason": "PermissionError: missing QUANT_AUTOMATION_TICKET_PATH"}, "pid": 30632, "ts": "2026-07-13T07:20:21"}
+{"action": "research_queue_runner_once", "event": "issued", "payload": {"allowed_actions": ["research_queue_runner_once"], "ticket_id": "20260713_072029_b9da1ea491d9", "ttl_seconds": 900}, "pid": 30706, "ts": "2026-07-13T07:20:29"}
+{"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_072029_b9da1ea491d9"}, "pid": 30697, "ts": "2026-07-13T07:20:30"}
+{"action": "research_queue_runner_once", "event": "issued", "payload": {"allowed_actions": ["research_queue_runner_once"], "ticket_id": "20260713_072059_0772dcb75aa5", "ttl_seconds": 900}, "pid": 31051, "ts": "2026-07-13T07:20:59"}
+{"action": "research_queue_runner_once", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_072059_0772dcb75aa5"}, "pid": 31042, "ts": "2026-07-13T07:21:00"}
+{"action": "data_quality_judge", "event": "issued", "payload": {"allowed_actions": ["data_quality_judge"], "ticket_id": "20260713_080328_f4236defdda1", "ttl_seconds": 900}, "pid": 16589, "ts": "2026-07-13T08:03:28"}
+{"action": "data_quality_judge", "event": "allowed", "payload": {"consume": true, "ticket_id": "20260713_080328_f4236defdda1"}, "pid": 16618, "ts": "2026-07-13T08:03:28"}

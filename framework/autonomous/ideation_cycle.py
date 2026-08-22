@@ -10,6 +10,11 @@ from typing import Any
 
 import yaml
 
+from framework.evaluation.pending_research_input import PendingResearchInputStore
+from framework.evaluation.research_feedback import ResearchInput, validate_research_input_proposal
+from framework.evaluation.research_question import ResearchQuestionLedger
+from framework.evaluation.research_question_shadow import ShadowAdmissionService, question_identity
+
 try:
     from framework.autonomous.artifacts import ArtifactStore
     from framework.autonomous.ai_provider_adapter import RegisteredProviderAdapter
@@ -20,6 +25,7 @@ try:
     from framework.autonomous.framework_change_recorder import record_framework_change
     from framework.autonomous.paths import ResearchPaths
     from framework.autonomous.prompt_contracts import prompt_contract_for_role
+    from framework.autonomous.proposal_schema import validate_proposal
     from framework.autonomous.research_delta_gate import (
         evaluate as evaluate_research_delta,
     )
@@ -36,6 +42,7 @@ except ModuleNotFoundError:  # importlib-based tests may load files directly
     from framework_change_recorder import record_framework_change  # type: ignore
     from paths import ResearchPaths  # type: ignore
     from prompt_contracts import prompt_contract_for_role  # type: ignore
+    from proposal_schema import validate_proposal  # type: ignore
     from research_delta_gate import evaluate as evaluate_research_delta  # type: ignore
     from spec_compiler import compile as compile_proposal  # type: ignore
     from strategy_ideator import propose  # type: ignore
@@ -116,6 +123,12 @@ class IdeationCycle:
         tool_registry_store = EvidenceToolRegistry(tool_registry_path or self.paths.evidence_tool_registry)
         tool_registry = tool_registry_store.load()
         pending = find_pending_tool_draft(Path(output_root or self.paths.data_root), self.store)
+        # Any pre-existing executor draft is resumable, whereas a PASS research
+        # input is a one-slot contractual admission. It must be claimed first
+        # or an unrelated draft can starve it indefinitely.
+        pending_research_exists = self.paths.pending_research_input.exists()
+        if pending and pending_research_exists:
+            pending = None
         if pending and not dry_run:
             proposal = normalize_proposal_shape(pending["proposal"])
             run_dir = Path(pending["run_dir"])
@@ -172,6 +185,60 @@ class IdeationCycle:
                 "executor_tool_package": executor_tool_package,
                 "executor_registration": registration,
             }
+        output_base = Path(output_root or self.paths.data_root)
+        plan_version = str(config.get("research_input_plan_version") or "")
+        claim_ttl = int(config.get("research_input_claim_ttl_seconds") or 900)
+        research_store = PendingResearchInputStore(
+            self.paths.pending_research_input,
+            self.paths.research_input_admission_history,
+        )
+        # A dry run must be completely non-mutating for an accepted research
+        # input: do not reconstruct history, recover leases, or call a model.
+        if dry_run and self.paths.pending_research_input.exists():
+            return {
+                "status": "RESEARCH_INPUT_DRY_RUN_UNSUPPORTED",
+                "reason": "an admitted research input requires a durable claimed proposal",
+            }
+        # A successful pending-slot write may survive a crash before the
+        # admission entrypoint gets to shadow-reconcile it.  Run reconciliation
+        # on the real claim path before recovery/claim so no proposal can own
+        # an admitted input without its immutable lifecycle facts.
+        lifecycle_mode = str((config.get("research_lifecycle") or {}).get("mode") or "off")
+        if lifecycle_mode != "off":
+            if not self.paths.research_question_policy.exists():
+                return {"status": "RESEARCH_LIFECYCLE_POLICY_MISSING", "reason": "lifecycle mode requires research_question_policy.yaml"}
+            ShadowAdmissionService(
+                ResearchQuestionLedger(self.paths.research_question_events, self.paths.research_question_policy),
+                research_store, output_base, claim_ttl,
+            ).reconcile()
+        bindings_raw = self.store.read_yaml(self.paths.research_input_constraint_bindings, default={})
+        if bindings_raw and str(bindings_raw.get("research_input_plan_version") or "") != plan_version:
+            return {"status": "RESEARCH_INPUT_STALE_PLAN_VERSION", "reason": "constraint bindings version mismatch"}
+
+        def _recovery_artifact_valid(slot: dict[str, Any]) -> bool:
+            raw_input = slot.get("research_input")
+            if not isinstance(raw_input, dict):
+                return False
+            proposal_path = Path(str(slot.get("proposal_path") or ""))
+            try:
+                artifact = self.store.read_yaml(proposal_path)
+            except Exception:
+                return False
+            return not validate_research_input_proposal(
+                artifact, ResearchInput.from_dict(raw_input), plan_version, bindings_raw,
+                expected_proposal_id=str(slot.get("proposal_id") or ""),
+            )
+
+        recovery_status = research_store.recover(plan_version, output_base, claim_ttl, _recovery_artifact_valid)
+        if recovery_status == "RESEARCH_INPUT_STALE_PLAN_VERSION":
+            return {"status": recovery_status, "reason": "pending input plan no longer matches active ideation plan"}
+        if recovery_status == "RESEARCH_INPUT_CLAIMED":
+            return {"status": recovery_status, "reason": "another ideation worker owns the pending input"}
+        claim: dict[str, Any] | None = None
+        if recovery_status == "PENDING_RESEARCH_INPUT":
+            claim, claim_status = research_store.claim(plan_version, output_base, claim_ttl)
+            if claim is None:
+                return {"status": claim_status, "reason": "unable to claim pending research input"}
         closed_tags = closed_tags_from_runtime(digest=digest, config=config, queue_state=queue_state)
         cap_menu = capability_menu(registry)
         pre_ideation_evidence = collect_pre_ideation_evidence(digest)
@@ -180,6 +247,7 @@ class IdeationCycle:
         from framework.autonomous import ideation_policy_state as _ips_mod
         policy_state = _ips_mod.load_state(self.paths.ideation_policy_state)
 
+        research_input = ResearchInput.from_dict(claim["research_input"]) if claim else None
         instruction = proposal_instruction(
             closed_tags,
             digest,
@@ -188,6 +256,9 @@ class IdeationCycle:
             data_inventory=compact_data_inventory(data_inventory),
             research_insights=research_insights,
             ideation_policy_state=policy_state,
+            research_input=research_input,
+            preallocated_proposal_id=str(claim.get("proposal_id") or "") if claim else None,
+            constraint_bindings=bindings_raw.get("bindings") if isinstance(bindings_raw.get("bindings"), dict) else {},
         )
         instruction["forced_prompt_contract"] = prompt_contract_for_role(
             "strategy_ideation",
@@ -210,15 +281,42 @@ class IdeationCycle:
         proposal["rewrite_status"] = "disabled_two_step_flow"
         proposal["rewrite_rounds_used"] = 0
         proposal["rewrite_last_errors"] = []
+        structural_errors = validate_proposal(
+            proposal,
+            mechanics_vocab=set(),
+            capability_vocab=set(cap_menu),
+        )
+        if structural_errors:
+            if claim:
+                research_store.release_claim(
+                    str(claim.get("claim_nonce") or ""), output_base,
+                    "proposal_invalid_structure",
+                )
+            return {
+                "status": "PROPOSAL_INVALID_STRUCTURE",
+                "reason": "proposal failed deterministic structural validation before persistence",
+                "errors": structural_errors,
+            }
         proposal_id = str(proposal.get("proposal_id") or "auto_strategy_proposal").replace(" ", "_")
-        output_base = Path(output_root or self.paths.data_root)
-        run_dir = output_base / proposal_id
-        if run_dir.exists():
+        if claim and research_input:
+            feedback_errors = validate_research_input_proposal(
+                proposal, research_input, plan_version, bindings_raw,
+                expected_proposal_id=str(claim.get("proposal_id") or ""),
+            )
+            if feedback_errors:
+                research_store.release_claim(str(claim.get("claim_nonce") or ""), output_base, "research_feedback_invalid")
+                return {"status": "RESEARCH_FEEDBACK_INVALID", "reason": "proposal did not preserve accepted research input", "errors": feedback_errors}
+            proposal_id = str(claim["proposal_id"])
+            run_dir = output_base / proposal_id
+        else:
+            run_dir = output_base / proposal_id
+        reservation_root = output_base / ".research_input_reservations"
+        if not claim and (run_dir.exists() or (reservation_root / f"{proposal_id}.json").exists()):
             base_id = proposal_id
             for index in range(1, 100):
                 candidate_id = f"{base_id}_{index}"
                 candidate_dir = output_base / candidate_id
-                if not candidate_dir.exists():
+                if not candidate_dir.exists() and not (reservation_root / f"{candidate_id}.json").exists():
                     proposal_id = candidate_id
                     proposal["proposal_id"] = candidate_id
                     proposal["proposal_id_deduped_from"] = base_id
@@ -228,7 +326,17 @@ class IdeationCycle:
                 raise RuntimeError(f"unable to allocate unique proposal directory for {base_id}")
         proposal_path = run_dir / "proposal.yaml"
         proposal["proposal_path"] = str(proposal_path)
+        if research_input and lifecycle_mode != "off":
+            question_id, lineage_id = question_identity(research_input)
+            proposal["research_lifecycle"] = {
+                "question_id": question_id,
+                "lineage_id": lineage_id,
+                "revision_id": proposal_id,
+                "admission_operation_id": str(claim.get("admission_operation_id") or "") if claim else "",
+            }
         self.store.write_yaml(proposal_path, proposal)
+        if claim and not research_store.consume(str(claim.get("claim_nonce") or ""), output_base, proposal_path):
+            raise RuntimeError("research-input claim was lost before durable consume")
         proposal_event_hash = record_framework_change(
             change_type="strategy_proposal_generated",
             summary=f"Generated strategy proposal {proposal_id}",
@@ -389,12 +497,19 @@ class IdeationCycle:
                 "compile_framework_change_event_hash": compile_event_hash,
             }
         )
+        if research_input and lifecycle_mode != "off":
+            ShadowAdmissionService(
+                ResearchQuestionLedger(self.paths.research_question_events, self.paths.research_question_policy),
+                research_store, output_base, claim_ttl,
+            ).record_revision(research_input, proposal, compile_outcome=result.status)
         return payload
 
 
 def normalize_proposal_shape(proposal: dict[str, Any]) -> dict[str, Any]:
     """Normalize common AI shape drift without asking the model to rewrite."""
     normalized = dict(proposal)
+    if isinstance(normalized.get("required_changes"), str):
+        normalized["required_changes"] = [normalized["required_changes"]]
     test_design = normalized.get("test_design")
     if isinstance(test_design, str):
         normalized["test_design"] = {"description": test_design}
@@ -416,6 +531,17 @@ def normalize_proposal_shape(proposal: dict[str, Any]) -> dict[str, Any]:
             "validate": falsifiers,
             "test": falsifiers,
         }
+    if isinstance(normalized.get("research_feedback"), dict):
+        feedback = dict(normalized["research_feedback"])
+        if isinstance(feedback.get("required_tests"), str):
+            feedback["required_tests"] = [feedback["required_tests"]]
+        normalized["research_feedback"] = feedback
+    if isinstance(normalized.get("test_design"), dict):
+        design = dict(normalized["test_design"])
+        for key in ("changed_dimensions", "required_evidence", "required_tests"):
+            if isinstance(design.get(key), str):
+                design[key] = [design[key]]
+        normalized["test_design"] = design
     return normalized
 
 
@@ -1574,6 +1700,9 @@ def proposal_instruction(
     data_inventory: dict[str, Any] | None = None,
     research_insights: dict[str, Any] | None = None,
     ideation_policy_state: dict[str, Any] | None = None,
+    research_input: ResearchInput | None = None,
+    preallocated_proposal_id: str | None = None,
+    constraint_bindings: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     active_strategy_id = current_main_strategy_id(current or {}) or "unknown"
     critical_insights = _critical_insights(research_insights)
@@ -1636,28 +1765,50 @@ def proposal_instruction(
             "and the closing_insight that disqualified it. Read these entries before "
             "choosing your next family — they are direct feedback on what was just rejected."
         )
+    required_fields = [
+        "proposal_id",
+        "strategy_id",
+        "family",
+        "hypothesis",
+        "source_insight",
+        "expected_improvement",
+        "capability_ids",
+        "required_executor",
+        "required_data",
+        "required_data_fields",
+        "test_design",
+        "success_criteria",
+        "falsifiers",
+        "risk",
+        "why_not_repeated_failure",
+        "related_prior_runs",
+        "implementation_assumption",
+    ]
+    research_context: dict[str, Any] | None = None
+    if research_input is not None:
+        required_fields.extend(["research_feedback", "required_changes"])
+        research_context = {
+            "source_review_id": research_input.source_review_id,
+            "source_run_id": research_input.source_run_id,
+            "plan_version": research_input.plan_version,
+            "preallocated_proposal_id": preallocated_proposal_id,
+            "accepted_question": research_input.question.to_dict(),
+            "applied_constraints": research_input.applied_constraints,
+            "required_tests": list(research_input.required_tests),
+            "constraint_bindings": constraint_bindings or {},
+        }
+        hard_rules.extend([
+            "research_input is an accepted Claude PASS contract. Answer only its accepted_question; do not substitute a direction.",
+            "proposal_id must exactly equal research_input.preallocated_proposal_id.",
+            "Echo research_input.applied_constraints exactly in research_feedback.applied_constraints, including opaque review_constraints.",
+            "research_feedback must include source_review_id, source_run_id, plan_version, proposal_id, accepted_question_id, accepted_question_text, applied_constraints, and required_tests.",
+            "test_design must include changed_dimensions, required_evidence, required_tests, accepted_question_id, accepted_question_text, and constraint_bindings. Use exactly the supplied binding paths.",
+            "required_changes must exactly equal research_input.applied_constraints.required_changes.",
+        ])
     return {
         "task": "Generate exactly one new strategy proposal as a YAML or JSON object.",
         "hard_rules": hard_rules,
-        "required_fields": [
-            "proposal_id",
-            "strategy_id",
-            "family",
-            "hypothesis",
-            "source_insight",
-            "expected_improvement",
-            "capability_ids",
-            "required_executor",
-            "required_data",
-            "required_data_fields",
-            "test_design",
-            "success_criteria",
-            "falsifiers",
-            "risk",
-            "why_not_repeated_failure",
-            "related_prior_runs",
-            "implementation_assumption",
-        ],
+        "required_fields": required_fields,
         "current_state": current or {},
         "allowed_strategy_id": active_strategy_id,
         "closed_tags": closed_tags,
@@ -1670,6 +1821,7 @@ def proposal_instruction(
         "closed_families_from_insights": closed_families_from_insights,
         "cooldown_families": cooldown_families,
         "recent_gate_skip_summary": recent_skip_summary,
+        "research_input": research_context,
     }
 
 

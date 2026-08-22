@@ -1,0 +1,181 @@
+Now I have sufficient context to perform the design review. Let me analyze the design against the codebase and the stated goals.
+
+**Key observations from the codebase:**
+
+1. `benchmark.py` directly imports `strategies.cb_arb.verifier` — this is the contamination the design aims to fix.
+2. `evaluation_protocol.py` currently contains both schema validation (`validate_protocol`) AND pass/fail logic (`evaluate_constraints`) — the design wants to split this.
+3. `run_recorder.py` currently has `derive_verdict`, `derive_table_verdict`, `derive_train_falsifier_flags` — the design wants these moved/deleted.
+4. `auto_research_pipeline.py` duplicates the same `derive_verdict`, `derive_table_verdict`, `derive_train_falsifier_flags` functions — the design wants these deleted.
+5. The `result_classification_map.yaml` already has the new decision types (`passed_declared_protocol`, `failed_declared_protocol`, `evaluation_protocol_invalid`) — some groundwork is already laid.
+6. Tests in `test_train_period_falsifiers.py` test the old falsifier behavior that must be preserved for cb_arb.
+7. Tests in `test_auto_research_pipeline.py` test pipeline behavior including verdict derivation.
+
+**Now let me review the design against the stated concerns:**
+
+**1. Boundary clarity — MEASUREMENT vs DECISION separation:**
+- ✅ `metrics.py`, `benchmark.py`, `costs.py`, `backtest_metrics.py` return values, not PASS/FAIL
+- ✅ `evidence.py::measurement_evidence` wraps values into typed `EvidenceItem`
+- ✅ `validation.py::evaluate_plan` is the pure decision function
+- ✅ `run_recorder.py` assembles evidence and calls `evaluate_plan`, then maps to decision
+
+**2. Six gates — are they sufficient?**
+The design says six gates: `integrity`, `signal`, `benchmark`, `friction`, `generalization`, `constraints`.
+- `integrity` is a prerequisite gate (must pass before others can pass)
+- `signal` = primary metric direction/threshold
+- `benchmark` = vs baseline/null
+- `friction` = cost-adjusted metrics
+- `generalization` = split validation (train/validation/holdout/rolling)
+- `constraints` = guardrails (max_drawdown, turnover, etc.)
+
+Wait — the prompt says "五门是否足够" (are five gates enough) but the design lists six. Let me re-read: "按六个且仅六个 required-capable gate 判断". The prompt title says "五门" but the design uses six. This is a minor inconsistency in the prompt text, but the design itself is clear about six.
+
+**3. Evidence structure and false PASS risks:**
+- `waived` only for non-required gates with evidence present, check executed, threshold not met
+- Missing evidence → `failed`/`blocked`, never `waived`
+- Source out-of-bounds → `failed`/`blocked`
+- Type errors → `failed`/`blocked`
+- `integrity` failure blocks all other required gates
+- Required gate failure → overall `failed_declared_protocol`
+
+This looks solid. The fail-closed semantics are explicit.
+
+**4. Compatibility migration:**
+- `mode: declared | legacy_cb_arb_compat` in Plan
+- `strategies/cb_arb/legacy_evaluation_adapter.py` handles the translation
+- Old cb_arb verdicts must map identically
+- `passed_mechanical_but_falsifier_failed` is preserved as legacy-only auxiliary gate
+
+**5. Benchmark/Cost provider decoupling:**
+- `BenchmarkProvider.get_returns(benchmark_id, start, end) -> pd.Series`
+- `CostProvider.apply(scenario, trades_or_returns) -> dict`
+- No default cb_arb provider injection
+- Plan declares but provider must be explicitly provided
+
+**6. Over-design check:**
+- No execution commands in Plan
+- No deployment fields
+- No production state writing
+- No statistical algorithms (bootstrap, etc.) — just schema capacity to express them
+- Minimal, focused architecture
+
+**Potential issues I see:**
+
+1. **The prompt says "五门" but the design specifies six gates.** This is a minor text inconsistency, not a design flaw.
+
+2. **`validate_plan_complete` is called by `spec_compiler.compile()` before returning READY.** But the design also says `runner` must call it before RUNNABLE. This is a double-check, which is fine, but we need to ensure it's not a single point of failure that could be bypassed.
+
+3. **Legacy adapter placement in `strategies/cb_arb/legacy_evaluation_adapter.py`** — this means the evaluation framework imports from strategies. The design says "评测层无策略反向依赖" (evaluation layer has no strategy reverse dependencies). But the legacy adapter is IN the strategy directory, which means the evaluation layer would need to import it. This is a forward dependency, not a reverse one — the evaluation layer depends on the strategy, not vice versa. This is acceptable for legacy compatibility but should be clearly marked as transitional.
+
+4. **`generalization` gate with `required_sources=[holdout, rolling]` requires BOTH.** This is strict but correct. However, for early-stage strategies, a single holdout might be all that's available. The design allows per-gate override of `required_sources`, so this is fine.
+
+5. **The `blocked` vs `not_evaluated` distinction for integrity failure:**
+   - `blocked` = reachable but prerequisite failed
+   - `not_evaluated` = short-circuited, never reached
+   This is a useful distinction for debugging but adds complexity. Is it worth it? Yes, for understanding why a gate didn't pass.
+
+6. **`artifact_requirements` hash checking:** The design says "无 hash 时只检查路径/稳定 evidence_ref 存在；声明 hash 时必须匹配". This is good — hash verification is opt-in.
+
+7. **The `result_classification_map.yaml` already has new decisions.** The design is partially implemented. The review should acknowledge this.
+
+8. **One subtle issue:** The design says `new declared signal 只允许 holdout/rolling`. But what about strategies that use walk-forward validation where the "signal" evidence comes from a rolling window that includes some training data? The design says "legacy mode 可显式把 signal.allowed_sources 扩为 train/holdout/rolling". This is fine — new strategies must be stricter, legacy can be looser.
+
+9. **Missing: What happens when a gate is `required=False`?** The design says non-required gates can be `waived` under certain conditions. But it doesn't explicitly say what happens to the overall decision when a non-required gate fails. I assume: overall decision only depends on required gates. A non-required gate failing doesn't fail the overall protocol, but it should be recorded.
+
+10. **The `friction` gate only allows `scenario=cost_on`.** What about `cost_off` as a comparison baseline? The design says friction gate checks cost-adjusted metrics. If you want to compare cost_on vs cost_off, that's evidence collection, not a separate gate. The `cost_off` scenario would be evidence for the `signal` or `benchmark` gate, not the `friction` gate. This seems correct.
+
+11. **`multiple_testing` as integrity sub-check, not a seventh gate.** Good — this prevents proliferation of gates.
+
+12. **The design says "robustness 属于 generalization 子检查".** This is fine, but robustness checks (like parameter stability, sub-sample tests) are conceptually different from split validation. Putting them under generalization makes sense because they're about whether the signal generalizes.
+
+13. **One concern about `evidence.py::measurement_evidence`:** The design says it wraps measurements into `EvidenceItem`. But who decides which source label to apply? The measurement function doesn't know if it's running on train, validation, or holdout data. This needs to be explicit in the caller. The design seems to assume the measurement pipeline knows its context — this is reasonable but needs to be documented.
+
+14. **`run_recorder.py` as "唯一 verdict 生成入口" (sole verdict generation entry):** Currently both `run_recorder.py` and `auto_research_pipeline.py` have `derive_verdict`. The design says pipeline should delete its copy. Good.
+
+15. **The design says `scripts/auto_research_pipeline.py` should delete `derive_verdict`, `derive_table_verdict`, `derive_train_falsifier_flags`.** But looking at the current code, `auto_research_pipeline.py` has its own copies of these functions AND calls `run_recorder.record_executed_run`. The `run_recorder.record_executed_run` also calls `derive_verdict` internally. So currently there are TWO verdict derivations. The design correctly identifies this duplication.
+
+**Blockers I identify:**
+
+1. **The design mentions `spec_compiler.compile()` but doesn't specify where `spec_compiler` lives.** Looking at the codebase, there's no obvious `spec_compiler.py`. The design needs to either name the file or acknowledge this is a future implementation detail.
+
+2. **The legacy adapter needs to produce identical decisions for all historical cb_arb runs.** The design says "以历史样本做旧/新 adapter 的 decision/status/pass_value 完全一致回归". This is a REQUIRED TEST, not a blocker for the design itself, but the design must ensure the test is feasible.
+
+3. **The `evaluation_protocol.py` currently has `evaluate_constraints` which returns PASS/FAIL.** The design says it should only do "旧 proposal/spec → EvaluationPlan 的显式映射". But the current `evaluation_protocol.py` also has `protocol_for_proposal` which already does some mapping. The transition plan needs to be clearer — should `evaluate_constraints` be deleted immediately or deprecated?
+
+4. **The `result_classification_map.yaml` already has `passed_declared_protocol`, `failed_declared_protocol`, `evaluation_protocol_invalid`.** But the current code in `auto_research_pipeline.py` doesn't use these for cb_arb (legacy path). The design says legacy should still use old decisions. This is fine but needs care in implementation.
+
+5. **One subtle but important issue:** The design says `run_recorder.py` should be the "唯一 verdict 生成入口". But `auto_research_pipeline.py` currently does its own verdict derivation before calling `run_recorder`. The design says to delete pipeline's derivation. However, the pipeline currently needs the verdict to decide whether to set spec status to COMPLETE or ARCHIVED. If we move all verdict logic to `run_recorder`, the pipeline would need to get the verdict back from `run_recorder`. The design seems to imply this: `record = run_recorder.record_executed_run(...)` returns the verdict. This is already the case. So the pipeline just needs to stop doing its own derivation.
+
+**Let me reconsider the "五门" question:**
+
+The prompt asks "五门是否足够" but the design has six gates. Looking more carefully:
+- integrity
+- signal
+- benchmark
+- friction
+- generalization
+- constraints
+
+That's six. The prompt's "五门" might be referring to the five evidence categories (signal, baseline, friction, generalization, integrity) mentioned in the "当前问题" section. The design correctly adds `constraints` as the sixth gate because constraints are not just part of integrity — they're about guardrails that limit position sizing, leverage, etc.
+
+Actually, re-reading: "不能明确区分信号、baseline、friction、generalization、integrity 五类证据" — this lists five evidence categories. The design maps these to six gates by splitting `benchmark` (baseline) into its own gate and adding `constraints` as a separate gate. This is a good design choice — baseline comparison and signal detection are conceptually different.
+
+**Final assessment:**
+
+The design is well-structured, with clear separation of concerns, fail-closed semantics, proper legacy compatibility path, and no over-engineering. The six gates are sufficient and appropriately scoped. The measurement/decision separation is clean. The provider decoupling is correct.
+
+I have a few minor concerns but no blockers. The design should be accepted with recommended tests.
+
+**RECOMMENDED_SHAPE:**
+- Keep the six gates; do not add a seventh.
+- Ensure `evaluation_protocol.py` transition is phased: first add legacy mapping, then remove `evaluate_constraints` after adapter tests pass.
+- Consider whether `blocked` vs `not_evaluated` distinction is worth the complexity; if in doubt, default all non-reached gates to `blocked` when integrity fails.
+
+Wait, let me reconsider one thing. The design says `integrity` failure means other required gates must be `blocked` or `not_evaluated`. The distinction is:
+- `blocked` = the gate was reachable but couldn't be evaluated because a prerequisite failed
+- `not_evaluated` = short-circuited before reaching the gate
+
+This is useful for debugging but adds complexity. Is it necessary? For a minimal architecture, we could just use `blocked` for all gates when integrity fails. But the design explicitly allows both. I think this is fine — it's a small amount of complexity for better observability.
+
+Another consideration: The design says `EvaluationPlan` is "版本化" (versioned). But it doesn't specify how versioning works. Is it `plan_version` in the report? Or does the plan itself have a version? The design says "Report 带 plan_version", which suggests the plan has a version that the report references. This is fine but should be explicit in the contract.
+
+Let me also check: does the design handle the case where `benchmark` gate is not required (e.g., absolute return strategy)? The design says each gate can be required or not. If `benchmark` is not required, it can be `waived` if evidence exists but threshold not met. This is correct.
+
+What about `null benchmark`? The design says "超过声明 baseline 或 null benchmark". A null benchmark means no benchmark comparison is required. In this case, the `benchmark` gate would be `waived` or not required. This is fine.
+
+One more thing: The design says `friction` gate only allows `scenario=cost_on`. But what if a strategy wants to test multiple cost scenarios (e.g., conservative vs aggressive cost assumptions)? The design says "friction 的 `scenario`（如 cost_on）". The "如" (e.g.) suggests `cost_on` is an example, not the only allowed scenario. But then it says "friction 只允许 scenario=cost_on". This is explicit. For multiple cost scenarios, they would be different evidence items under the same `friction` gate, or the plan would need to declare which scenario is the required one. I think this is fine — the plan declares the required scenario.
+
+Actually, re-reading more carefully: "friction 只允许 scenario=cost_on" — this means the friction gate's evidence must have `scenario=cost_on`. But the `CostProvider.apply` takes a `scenario` parameter. So if you want to test multiple scenarios, you'd call the provider multiple times with different scenarios and create multiple evidence items. Only the one matching the plan's required scenario would be checked for the friction gate. This is correct.
+
+**VERDICT: ACCEPT**
+
+**BLOCKERS: none**
+
+**REQUIRED_TESTS:**
+1. Legacy cb_arb adapter regression: run 10+ historical cb_arb specs through old and new adapter, assert identical decision/status/pass_value/falsifier_flags.
+2. Integrity fail-closed: provide evidence missing required metrics key, assert all required gates are `blocked` or `not_evaluated`, overall `evaluation_protocol_invalid`.
+3. New strategy declared plan: create a minimal plan with signal.allowed_sources=[holdout], provide train-sourced evidence, assert signal gate `failed` (not `waived`).
+4. Provider injection: call `load_benchmark` without provider, assert ValueError or evidence missing; call with explicit provider, assert correct excess return.
+5. GateStatus waived semantics: non-required gate with evidence present but threshold not met → `waived`; same gate with missing evidence → `failed`.
+6. `validate_plan_complete` rejects plan without integrity as required gate, and rejects plan with required_sources ⊄ allowed_sources.
+
+**RECOMMENDED_SHAPE:**
+- Keep six gates; do not add seventh. `blocked`/`not_evaluated` distinction is acceptable for debugging but could be simplified to just `blocked` if implementation cost is a concern.
+- Phase the transition: (1) create new files (`contract.py`, `validation.py`, `evidence.py`), (2) move `cb_arb` verifier import out of `benchmark.py` via provider injection, (3) build legacy adapter with full regression tests, (4) only then delete `evaluate_constraints` from `evaluation_protocol.py` and `derive_verdict` from `auto_research_pipeline.py`.
+- Add a `plan_version` field to `EvaluationPlan` itself (not just `EvaluationReport`), and validate plan_version == evidence.plan_version in integrity gate.
+- Document that `measurement_evidence` caller is responsible for correct `source` label; the measurement layer is source-agnostic by design.VERDICT: ACCEPT
+
+BLOCKERS: none
+
+REQUIRED_TESTS:
+1. Legacy cb_arb adapter regression: run 10+ historical cb_arb specs through old and new adapter, assert identical decision/status/pass_value/falsifier_flags.
+2. Integrity fail-closed: provide evidence missing required metrics key, assert all required gates are `blocked` or `not_evaluated`, overall `evaluation_protocol_invalid`.
+3. New strategy declared plan: create a minimal plan with signal.allowed_sources=[holdout], provide train-sourced evidence, assert signal gate `failed` (not `waived`).
+4. Provider injection: call `load_benchmark` without provider, assert ValueError or evidence missing; call with explicit provider, assert correct excess return.
+5. GateStatus waived semantics: non-required gate with evidence present but threshold not met → `waived`; same gate with missing evidence → `failed`.
+6. `validate_plan_complete` rejects plan without integrity as required gate, and rejects plan with required_sources ⊄ allowed_sources.
+
+RECOMMENDED_SHAPE:
+- Keep six gates; do not add seventh. `blocked`/`not_evaluated` distinction is acceptable for debugging but could be simplified to just `blocked` if implementation cost is a concern.
+- Phase the transition: (1) create new files (`contract.py`, `validation.py`, `evidence.py`), (2) move `cb_arb` verifier import out of `benchmark.py` via provider injection, (3) build legacy adapter with full regression tests, (4) only then delete `evaluate_constraints` from `evaluation_protocol.py` and `derive_verdict` from `auto_research_pipeline.py`.
+- Add a `plan_version` field to `EvaluationPlan` itself (not just `EvaluationReport`), and validate plan_version == evidence.plan_version in integrity gate.
+- Document that `measurement_evidence` caller is responsible for correct `source` label; the measurement layer is source-agnostic by design.

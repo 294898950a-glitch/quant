@@ -1,0 +1,8 @@
+ACCEPT
+
+- Classification map: `failed_declared_protocol` (rejected/usable/closes/seeds) and `evaluation_evidence_incomplete` (rejected/non-usable/non-closing/no-seed) exactly match the contract's two outcomes.
+- Both strict branches (pipeline and recorder) contain identical decision logic: `protocol_pass` false → collect check reasons → any reason in `{missing, non_numeric, missing_or_non_numeric}` routes to `evaluation_evidence_incomplete`, else `failed_declared_protocol`. No divergence between the two files.
+- Test exercises the mixed case correctly: `best_test_sharpe=None` (missing) + `bottom_momentum_trade_count=12` failing a numeric `gte 30` threshold (pure numeric miss) → the "any" logic correctly taints the whole decision to `evaluation_evidence_incomplete`, and both `run_recorder.derive_verdict` and `auto_research_pipeline.derive_verdict` are asserted to agree.
+- `pass_field`/`protocol_checks[...]["reason"]` assertions line up with the spec's `primary_metric.path` and constraint ordering.
+
+No contract violations found.

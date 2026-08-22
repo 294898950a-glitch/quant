@@ -1,0 +1,7 @@
+Act as the reviewer of record for this already-implemented contract repair. Review only; do not edit files. Return exactly `ACCEPT` or `REVISE`, followed by at most 12 concise lines of findings.
+
+Files to inspect: framework/autonomous/evaluation_protocol.py, framework/autonomous/spec_compiler.py, scripts/evaluate_cb_arb_value_gap_switch.py, scripts/evaluate_cb_arb_valuation_formula_momentum.py, and data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2/{proposal,spec}.yaml.
+
+Required invariants: (1) legacy_cb_arb_compat remains on its old boolean pipeline path; (2) new cb_momentum_protocol_v2 is strict and fail-closed: numeric best_test_excess, best_test_sharpe, best_test_total_trades, bottom_momentum_trade_count, costs.friction_total; (3) costs.friction_total comes from actual buy/sell apply_cost_model returns; (4) diagnostic uses the frozen winner's existing test result, adding no test backtest; (5) no READY spec can carry protocol errors.
+
+Find concrete violations only. Verify function call signatures and metric paths. Do not run long backtests.

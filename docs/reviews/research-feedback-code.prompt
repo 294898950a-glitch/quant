@@ -1,0 +1,29 @@
+Kimi 是 reviewer of record。请审查本次 ResearchFeedback 闭环接口实现。
+
+第一性原理：评测只增加对真实、可重复、扣摩擦后 edge 的信心；Codex Terra 负责多步探索；Claude Sonnet 负责外部审查；只有结构化 PASS 才能进入下一轮 research input；REVISE/BLOCK 绝不能进入。
+
+改动：
+- framework/evaluation/research_feedback.py
+  - ScoreVector 六维评分：observation_trust、incremental_edge、stability、realizability、falsifiable_mechanism、information_gain（0..4）。
+  - ResearchQuestion：premise、must_change、forbidden、required_evidence、falsifier、evidence_refs。
+  - ExplorationPacket：版本、run/plan、候选问题、证据 refs、评分。
+- ClaudeReview：PASS/REVISE/BLOCK、accepted question、blockers、证据 refs、constraints、required tests。
+- accept_claude_review：只允许合法 PASS 生成 ResearchInput，并校验证据引用、问题存在、schema 和约束。
+- ResearchInput 现在保留 required_evidence、required_tests、探索评分向量和 Claude review score_vector，避免审计链断裂。
+- framework/tests/test_research_feedback.py：覆盖合法 packet、PASS、REVISE/BLOCK、PASS blockers、缺 question、证据越界、评分审计和字段分离（13 tests）。
+
+已通过：13 tests、py_compile、git diff --check。
+
+请重点检查：
+1. PASS 是否可能绕过证据引用或 schema 校验；
+2. REVISE/BLOCK 是否绝不生成下一轮入口；
+3. constraints / required_tests 是否会丢失或被伪造；
+4. 两 LLM 评分是否被错误当成确定性 verdict；
+5. 版本、run_id、plan_version 和 evidence refs 是否足以审计；
+6. 是否存在明显的安全/状态污染或过度设计。
+
+请返回：
+VERDICT: ACCEPT 或 REVISE
+BLOCKERS: 编号列表或 none
+REQUIRED_TESTS: 编号列表或 none
+RECOMMENDED_FIXES: 简短

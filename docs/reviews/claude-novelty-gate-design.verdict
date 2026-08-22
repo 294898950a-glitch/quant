@@ -1,0 +1,27 @@
+VERDICT: REVISE
+
+BLOCKERS:
+1. No mapping is defined between gate outcomes (NOVEL/REFRAME/SATURATED/CLOSED) and question lifecycle states (active_question/evidence_pending/closed_supported/closed_rejected/needs_reframe). Every transition needs an explicit table before this is buildable.
+2. Authority order between the deterministic novelty checks and the LLM semantic-novelty judgment is unstated. The framework's own rule ("LLMs cannot override deterministic facts") must extend here explicitly: LLM judgment should be advisory only and never able to unilaterally push a candidate to SATURATED/CLOSED without a corroborating deterministic signal — otherwise "no positive novelty test" is replaced by "vibes-based novelty test," which is worse, not better.
+3. The false-discovery budget is only specified as "recorded." A recorded-but-unenforced budget is a dashboard number, not a control. It must mechanically block further attempts in a family once exhausted, or the multi-hypothesis structure isn't actually statistically meaningful.
+4. "Independent holdout" has no isolation mechanism specified. Unless there's a technical guarantee that no exploration/ideation/proposal step in that family ever touched the holdout window/universe, "independent" is a label, not a property — it can leak through repeated informal peeks across revisions.
+5. "Revision must change mechanism, not merely a parameter" has no enforcement mechanism defined. If this is judged by an LLM comparing prose, it's gameable by rewording; it needs a structured, diffable field with a deterministic check.
+6. No owner/store is specified for question-lifecycle state given that ResearchInput is already consumed and discarded before downstream outcomes are known (per existing framework facts). The relationship between question_id, ResearchInput instances, and proposal revisions (1:many) needs a concrete schema before this can be implemented.
+
+MINIMAL_SLICE:
+1. Experiment ledger by family: attempt counts, reserved holdout, FDR budget as a hard-blocking gate, "validated" label mechanically requires a passed independent holdout.
+2. Question-lifecycle store: durable question_id independent of ResearchInput, with the full outcome→state transition table from Blocker 1 written down before any code.
+3. Revision cap (3) + deterministic mechanism-change check (structured field diff, not prose) tied to the lifecycle.
+4. Deterministic half of the novelty gate only: duplicate mechanism/family/evidence check, budget check, prior-closure check — ship and observe before adding LLM judgment.
+5. Provider/model identity metadata + throughput metrics (cheap, additive, no ambiguity).
+6. LLM semantic-novelty/information-gain judgment as an advisory-only layer, added last, once deterministic checks are producing real duplicate data to compare it against; wire in third-reviewer-on-disagreement at this stage.
+
+REQUIRED_TESTS:
+1. Every gate outcome maps to exactly one defined lifecycle transition; no undefined/orphan transitions.
+2. Attempting an experiment after a family's FDR budget is exhausted is mechanically blocked, not merely logged.
+3. Holdout isolation: no artifact in a family's history had data access to the reserved holdout window/universe before final evaluation.
+4. A 4th revision attempt on one question is auto-converted to needs_reframe, not silently permitted.
+5. A parameter-only revision (adversarial fixture) is rejected by the deterministic mechanism-change check.
+6. LLM novelty judgment alone (no deterministic corroboration) cannot move a candidate to SATURATED/CLOSED.
+7. No family/experiment can reach "validated" status without a recorded, passed, independent holdout run.
+8. Existing ResearchInput consume/durable-write timing is unchanged, and question-lifecycle updates never require re-reading an already-consumed ResearchInput.

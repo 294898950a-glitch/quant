@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-22T05:38:04Z'
+updated_at: '2026-07-13T00:26:23Z'
 authority: machine
 purpose: Machine-readable experiment registry. AI reads this instead of Markdown experiment
   summaries.
@@ -601,6 +601,33 @@ experiments:
       estimated_compute_cost_yuan: 0.0
       decision: backfill_record_only
     updated_at: '2026-05-22T05:38:04Z'
+- id: research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2
+  strategy_id: cb_arb_value_gap_switch
+  hypothesis_id: research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2
+  branch: auto
+  status: rejected
+  summary: A train-selected downward stock-momentum penalty applied to credit-adjusted
+    value gap can reduce continuation losses among bottom-momentum issuers without
+    selecting parameters on test data.
+  key_metrics:
+    adoption_pass: false
+    candidate_count: 15
+  artifacts:
+  - data/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2
+  - data/research_framework/run_manifests/research_input_cb_momentum_credit_protocol_v2_cb_momentum_credit_protocol_v2.yaml
+  affects_current_strategy: false
+  current_strategy_effect: auto-run record only; does not promote current strategy
+  automation:
+    decision: evaluation_evidence_incomplete
+    compute:
+      estimated_compute_cost_yuan: 0.0
+      decision: record-only
+      inputs:
+        sig_minutes: 0.0
+        spot_minutes: 60.0
+        local_minutes: 0.0
+        fixed_yuan: 0.0
+    updated_at: '2026-07-13T00:26:23Z'
 research_insights:
 - id: cb_arb_2020_fundamental_dead_zone_20260517
   summary: '2020 is a fundamental dead zone for cb_arb: weakness was broad across
