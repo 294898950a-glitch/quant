@@ -78,3 +78,8 @@ archive/
 # Runtime state (not source)
 data/research_framework/orchestrator_paused.flag
 logs/research_queue_status.json
+# 一次性研究诊断的产出目录（study/<name>/），跟上面「大批量生成产物不进 git」同一条规矩：
+# 脚本 study/*.py 读 data/ 里的仓库数据、可完整复现这些 CSV/PNG/REPORT.txt，所以只 commit
+# 脚本本身，不 commit 产出。注意 scripts/validate_entrypoints.py 是扫文件系统而不是扫 git，
+# 所以 gitignore 挡不住 markdown 禁令：study 下的散文一律用 .txt（同 docs/QUANT_WORKFLOW.txt）。
+study/*/
