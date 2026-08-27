@@ -36,6 +36,10 @@ except ImportError:
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from framework.autonomous.jsonl_ledger import append_jsonl  # noqa: E402
 
 CURRENT_YAML = "data/research_framework/current.yaml"
 BASELINE_YAML = "data/research_framework/baseline_registry.yaml"
@@ -333,10 +337,7 @@ def append_protected_action_audit(
         "actor": "validate_truth_sync.py",
         "note": "Automatic trace only. This record does not grant approval; it records truth/protected changes even when unauthorized.",
     }
-    audit_path.parent.mkdir(parents=True, exist_ok=True)
-    with audit_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-        fh.write("\n")
+    append_jsonl(audit_path, row)
     return event_hash
 
 

@@ -13,6 +13,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from framework.autonomous.jsonl_ledger import append_jsonl
+
 
 class ResultRejected(ValueError):
     """A result envelope cannot advance controller-owned state."""
@@ -80,6 +82,5 @@ def claim_result(
         "claimed_by": actor,
         "outcome": str(envelope.get("outcome") or "unknown"),
     }
-    with ledger_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(record, ensure_ascii=False, sort_keys=True) + "\n")
+    append_jsonl(ledger_path, record)
     return True, digest

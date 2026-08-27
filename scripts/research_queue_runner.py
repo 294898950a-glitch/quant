@@ -28,6 +28,7 @@ for path in (REPO_ROOT, SCRIPT_DIR):
     if str(path) not in sys.path:
         sys.path.insert(0, str(path))
 
+from framework.autonomous.jsonl_ledger import append_jsonl
 from framework.autonomous.workflow_state import count_status, decide_scheduler_action
 from framework.autonomous.queue_ideation import QueueIdeationService
 from framework.autonomous.queue_remote_execution import QueueRemoteExecutionService
@@ -61,10 +62,8 @@ def log(message: str) -> None:
 
 
 def audit(action: str, payload: dict[str, Any] | None = None) -> None:
-    AUDIT_LOG_PATH.parent.mkdir(parents=True, exist_ok=True)
     row = {"action": action, "payload": payload or {}, "ts": now_iso()}
-    with AUDIT_LOG_PATH.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    append_jsonl(AUDIT_LOG_PATH, row)
 
 
 def is_paused() -> bool:

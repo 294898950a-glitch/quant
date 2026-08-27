@@ -10,8 +10,6 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
-import os
-import fcntl
 import socket
 import subprocess
 from datetime import datetime, timezone
@@ -20,6 +18,7 @@ from typing import Any
 
 import yaml
 
+from framework.autonomous.jsonl_ledger import append_jsonl, ledger_lock
 from framework.autonomous.result_classification import status_for_decision
 from framework.autonomous.evaluation_protocol import evaluate_constraints, validate_protocol
 from framework.evaluation.research_question import ResearchQuestionLedger
@@ -93,9 +92,11 @@ def record_lifecycle_projection_diff(spec: dict[str, Any], manifest_path: Path) 
            "projection": {"question_id": question_id, "revision_id": revision_id, "execution_outcome": projection_execution_outcome, "state": state.value}, "differences": differences}
     if not row["run_id"]: return
     path.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = path.with_suffix(path.suffix + ".lock")
-    with lock_path.open("a+", encoding="utf-8") as lock:
-        fcntl.flock(lock.fileno(), fcntl.LOCK_EX)
+    # ledger_lock() owns the same path.lock file this code used inline before, so
+    # the read-then-append duplicate_run_id decision stays one critical section.
+    # append_jsonl(lock_held=True) must not retake it: flock is per open file
+    # description, so a second acquire in this process would self-deadlock.
+    with ledger_lock(path):
         existing = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
         prior = []
         for line in existing:
@@ -105,9 +106,7 @@ def record_lifecycle_projection_diff(spec: dict[str, Any], manifest_path: Path) 
         if prior:
             if any(item.get("manifest_ref") == row["manifest_ref"] and item.get("ledger_high_watermark") == row["ledger_high_watermark"] for item in prior): return
             row["differences"] = sorted(set(row["differences"]) | {"duplicate_run_id"})
-        with path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n"); handle.flush(); os.fsync(handle.fileno())
-        fcntl.flock(lock.fileno(), fcntl.LOCK_UN)
+        append_jsonl(path, row, lock_held=True)
 
 
 def now_iso() -> str:

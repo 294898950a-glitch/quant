@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import json
 import hashlib
 from pathlib import Path
 from typing import Any
@@ -11,8 +10,10 @@ import yaml
 
 try:
     from framework.autonomous.evidence_tool_registry import EvidenceToolRegistry
+    from framework.autonomous.jsonl_ledger import append_jsonl
 except ModuleNotFoundError:  # importlib-based tests may load files directly
     from evidence_tool_registry import EvidenceToolRegistry  # type: ignore
+    from jsonl_ledger import append_jsonl  # type: ignore
 
 DEFAULT_TOOL_REGISTRY_PATH = Path("data/research_framework/evidence_tool_registry.yaml")
 
@@ -137,9 +138,7 @@ class EvidenceToolkit:
 
 def _append_log(review_dir: Path, row: dict[str, Any]) -> None:
     review_dir.mkdir(parents=True, exist_ok=True)
-    with (review_dir / "verification_log.jsonl").open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-        fh.write("\n")
+    append_jsonl(review_dir / "verification_log.jsonl", row)
 
 
 def _load_review(review_dir: Path) -> dict[str, Any]:

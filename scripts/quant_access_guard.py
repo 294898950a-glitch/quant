@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import secrets
+import sys
 import uuid
 from datetime import datetime
 from pathlib import Path
@@ -15,6 +16,11 @@ from typing import Any
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+if str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
+
+from framework.autonomous.jsonl_ledger import append_jsonl  # noqa: E402
+
 TICKET_DIR = REPO_ROOT / "logs" / "quant_tickets"
 AUDIT_PATH = REPO_ROOT / "data" / "research_framework" / "quant_access_audit.jsonl"
 DEFAULT_TTL_SECONDS = 15 * 60
@@ -31,7 +37,6 @@ def _hash_token(token: str) -> str:
 
 
 def _audit(event: str, action: str, payload: dict[str, Any] | None = None) -> None:
-    AUDIT_PATH.parent.mkdir(parents=True, exist_ok=True)
     row = {
         "event": event,
         "action": action,
@@ -39,8 +44,7 @@ def _audit(event: str, action: str, payload: dict[str, Any] | None = None) -> No
         "ts": _now_iso(),
         "payload": payload or {},
     }
-    with AUDIT_PATH.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    append_jsonl(AUDIT_PATH, row)
 
 
 def _ticket_path_from_env() -> Path:

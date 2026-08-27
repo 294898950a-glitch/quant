@@ -82,7 +82,9 @@ realized by a small group of helper modules):
   (`strategies.yaml`, `baseline_registry.yaml`,
   `executor_registry.yaml`, `evidence_tool_registry.yaml`),
   `framework/autonomous/workflow_state.py`,
-  `framework/autonomous/status_codes.py`.
+  `framework/autonomous/status_codes.py`,
+  `framework/autonomous/jsonl_ledger.py` (the single durable append path for
+  every append-only JSONL ledger: frozen line format, flock + fsync).
 - ideation: `framework/autonomous/queue_ideation.py`,
   `framework/autonomous/ideation_cycle.py`,
   `framework/autonomous/strategy_ideator.py`,

@@ -14,6 +14,7 @@ from typing import Any, Callable, Iterator, Mapping
 
 import yaml
 
+from framework.autonomous.jsonl_ledger import append_jsonl
 from framework.evaluation.research_feedback import RESEARCH_INPUT_SCHEMA_VERSION, ResearchInput
 
 
@@ -73,15 +74,15 @@ class PendingResearchInputStore:
             os.close(fd)
 
     def _append_event(self, event: str, slot: Mapping[str, Any] | None, *, reason: str | None = None) -> None:
-        self.history_path.parent.mkdir(parents=True, exist_ok=True)
         row = {"event": event, "at": int(time.time()), "slot": dict(slot) if slot else None}
         if reason:
             row["reason"] = reason
-        with self.history_path.open("a", encoding="utf-8") as handle:
-            handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
-            handle.flush()
-            os.fsync(handle.fileno())
-        self._fsync_dir(self.history_path.parent)
+        # Every caller runs inside self._locked(), which serialises all history
+        # appends on pending_research_input.yaml.lock, so the writer must not
+        # take a lock of its own: doing so would add a second, needless lock
+        # inside the store's critical section.  fsync_dir keeps the previous
+        # behaviour of making the directory entry durable on every append.
+        append_jsonl(self.history_path, row, lock_held=True, fsync_dir=True)
 
     def _events(self) -> list[dict[str, Any]]:
         if not self.history_path.exists():

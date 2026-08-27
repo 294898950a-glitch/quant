@@ -5,10 +5,8 @@ or pipeline writers.  Those systems retain their own execution authority.
 """
 from __future__ import annotations
 
-import fcntl
 import hashlib
 import json
-import os
 import time
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -16,6 +14,8 @@ from pathlib import Path
 from typing import Any, Iterator, Mapping
 
 import yaml
+
+from framework.autonomous.jsonl_ledger import append_jsonl, ledger_lock
 
 
 EVENT_TYPES = {"admission_attempt", "external_review_attempt", "question_admission", "proposal_revision", "evidence_run", "holdout_reservation", "holdout_exposure", "holdout_final_run", "closure"}
@@ -99,11 +99,13 @@ class ResearchQuestionLedger:
     def __init__(self, events_path: Path | str, policy_path: Path | str): self.events_path, self.policy_path = Path(events_path), Path(policy_path)
     @contextmanager
     def _lock(self) -> Iterator[None]:
-        lock = self.events_path.with_suffix(self.events_path.suffix + ".lock"); lock.parent.mkdir(parents=True, exist_ok=True)
-        with lock.open("a+") as h:
-            fcntl.flock(h, fcntl.LOCK_EX)
-            try: yield
-            finally: fcntl.flock(h, fcntl.LOCK_UN)
+        # Same "<events file>.lock" file this class locked inline before, now
+        # owned by the shared writer so old and new holders still exclude each
+        # other.  The whole dedupe/closure check plus the append must stay in
+        # one critical section, so append() passes lock_held=True; flock is per
+        # open file description, so re-locking here would self-deadlock.
+        with ledger_lock(self.events_path):
+            yield
     def events(self) -> list[dict[str, Any]]:
         if not self.events_path.exists(): return []
         out=[]
@@ -129,8 +131,7 @@ class ResearchQuestionLedger:
                 target = row.get("holdout_final_run_id")
                 if not any(e.get("question_id") == question_id and e.get("event_type") == "holdout_final_run" and e.get("holdout_final_run_id") == target for e in existing):
                     raise ValueError("validated closure references missing holdout_final_run")
-            self.events_path.parent.mkdir(parents=True, exist_ok=True)
-            with self.events_path.open("a", encoding="utf-8") as h: h.write(json.dumps(row, ensure_ascii=False, sort_keys=True)+"\n"); h.flush(); os.fsync(h.fileno())
+            append_jsonl(self.events_path, row, lock_held=True)
         return row
     def state(self, question_id: str) -> QuestionState:
         all_events=self.events(); question=[e for e in all_events if e.get("question_id")==question_id]

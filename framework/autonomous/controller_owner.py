@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 import yaml
+
+from framework.autonomous.jsonl_ledger import append_jsonl
 
 
 def owner_allows(*, current_path: Path, local_host: str | None = None) -> tuple[bool, str]:
@@ -36,11 +37,9 @@ def owner_allows(*, current_path: Path, local_host: str | None = None) -> tuple[
 
 
 def audit_noop(*, audit_path: Path, reason: str, action: str = "controller_owner_noop") -> None:
-    audit_path.parent.mkdir(parents=True, exist_ok=True)
     row: dict[str, Any] = {
         "ts": datetime.now().astimezone().isoformat(timespec="seconds"),
         "action": action,
         "reason": reason,
     }
-    with audit_path.open("a", encoding="utf-8") as fh:
-        fh.write(json.dumps(row, ensure_ascii=False, sort_keys=True) + "\n")
+    append_jsonl(audit_path, row)

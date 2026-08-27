@@ -7,6 +7,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from framework.autonomous.jsonl_ledger import append_jsonl
+
 
 DEFAULT_CHANGE_LOG_PATH = Path("data/research_framework/framework_change_log.jsonl")
 AUTO_RECORDED_PATH_PREFIXES = (
@@ -83,10 +85,7 @@ def record_framework_change(
     row["event_hash"] = _event_hash(row)
     if row["event_hash"] in _existing_hashes(path):
         return row["event_hash"]
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(json.dumps(row, ensure_ascii=False, sort_keys=True))
-        handle.write("\n")
+    append_jsonl(path, row)
     return row["event_hash"]
 
 

@@ -16,8 +16,10 @@ active_components:
       - data/research_framework/ai_providers.yaml
       - data/research_framework/executor_registry.yaml
       - data/research_framework/evidence_tool_registry.yaml
+      - framework/autonomous/jsonl_ledger.py
     must:
       - "Be the only source for current truth, limits, allowed providers, allowed executors, and allowed evidence tools."
+      - "Be the only append path for append-only JSONL ledgers, with one frozen line format and flock plus fsync on every append."
       - "Reject unregistered providers, unregistered executors, and unregistered evidence tools."
     must_not:
       - "Run research."

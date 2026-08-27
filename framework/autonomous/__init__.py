@@ -11,6 +11,7 @@ __all__ = [
     "evidence_tool_registry",
     "executor_registry",
     "ideation_cycle",
+    "jsonl_ledger",
     "paths",
     "proposal_rewrite_loop",
     "proposal_schema",
