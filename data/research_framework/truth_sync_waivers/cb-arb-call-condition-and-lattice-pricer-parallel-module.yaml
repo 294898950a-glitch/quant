@@ -1,0 +1,15 @@
+schema_version: 1
+date: '2026-08-29'
+decision: no_truth_change
+reason: >-
+  新增 strategies/cb_arb/call_condition.py 和
+  strategies/cb_arb/cb_pricer_lattice.py 是一条平行路径, 不改动
+  strategies/cb_arb/verifier.py 或 cb_pricer.py, 没有接入现有回测/主策略。
+  spec(docs/2026-08-28-cb-embedded-call-lattice-pricer-spec.txt)第 6 节明确
+  写了: verifier.py 是否/何时切换到新定价器, 待验收结果出来后再决定, 本次
+  提交不预设答案。current.yaml 里记录的 cb_arb_value_gap_switch 指标和状态
+  不受本次改动影响, 不需要跟着改。
+changed_paths:
+  - strategies/cb_arb/call_condition.py
+  - strategies/cb_arb/cb_pricer_lattice.py
+reviewer: claude
