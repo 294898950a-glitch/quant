@@ -1,0 +1,17 @@
+schema_version: 1
+date: '2026-08-31'
+decision: no_truth_change
+reason: >-
+  新增 strategies/cb_arb/fetch_jisilu_adj_logs.py 是一个数据抓取脚本
+  (批量拉取集思录 jisilu.cn 的转股价调整历史, 落地到
+  data/cb_warehouse/cb_conv_price_adj_jisilu.jsonl), 不改动任何定价/回测
+  逻辑, 不读写 verifier.py / cb_pricer.py / cb_pricer_lattice.py /
+  call_condition.py, 也不接入现有回测或主策略。current.yaml 里记录的指标和
+  状态不受本次改动影响。数据落地之后是否/如何接入定价流程是下一步的独立
+  决定, 本次提交不预设答案。已过 7 轮 codex review(client 层
+  clients/jisilu_client.py + 本脚本), 结论 ACCEPT, 详见
+  docs/specs/2026-08-30-jisilu-adj-logs-client-spec.md(位于 client 仓库)。
+changed_paths:
+  - strategies/cb_arb/fetch_jisilu_adj_logs.py
+  - strategies/cb_arb/tests/test_fetch_jisilu_adj_logs.py
+reviewer: claude
