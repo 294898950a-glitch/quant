@@ -1,0 +1,17 @@
+schema_version: 1
+date: '2026-08-31'
+decision: no_truth_change
+reason: >-
+  新增 strategies/cb_arb/build_cb_conv_price_history.py, 把 hkvm 上抓取的
+  原始集思录下修历史(cb_conv_price_adj_jisilu.jsonl)整理成一张干净的、
+  一债一事件一行的权威表(cb_conv_price_history.parquet), 供下一步定价器
+  验证使用。纯粹的数据整理脚本, 不改动任何定价/回测逻辑, 不读写
+  verifier.py / cb_pricer.py / cb_pricer_lattice.py / call_condition.py,
+  不接入现有回测或主策略。current.yaml 指标不受影响。已过 3 轮 codex
+  review(前两轮各发现一个真实 bug: fetched_at 取错层级导致按时间去重
+  形同虚设、dtype 未强制转换导致价格列可能悄悄变成 int64, 均已修复)。
+  spec 见 docs/2026-08-31-cb-conv-price-history-spec.txt。
+changed_paths:
+  - strategies/cb_arb/build_cb_conv_price_history.py
+  - strategies/cb_arb/tests/test_build_cb_conv_price_history.py
+reviewer: claude

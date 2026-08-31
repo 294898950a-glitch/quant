@@ -1,0 +1,9 @@
+{
+  "source_path": "data/cb_warehouse/_raw_cb_conv_price_adj_jisilu.jsonl",
+  "source_line_count": 1539,
+  "source_mtime": "2026-08-31T11:31:36Z",
+  "built_at": "2026-08-31T11:50:26Z",
+  "dedupe_rule_version": 1,
+  "row_count": 532,
+  "unresolved_count": 1
+}
