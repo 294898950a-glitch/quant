@@ -16,9 +16,16 @@ fetch_cb_announcements.py / extract_conv_price_revisions.py 的先例一致,
 `clients/fetch_errors.py` 的更新 scp 到 hkvm 的 ~/.hermes/scripts/clients/,
 md5 校验一致后再跑。
 
-节流参数(唯一权威定义, 就在这里, 不在别处重复): 集思录目前没有任何已知
-节流基线, 保守起步(2.0~3.5 秒一次抖动间隔, 每日上限 600 次), 以后有真实
-运行数据再调松, 不能反过来先猛抓再看会不会被封。
+节流参数(唯一权威定义, 就在这里, 不在别处重复): 2026-08-30 起步时集思录
+没有任何已知节流基线, 保守起步(2.0~3.5 秒一次抖动间隔, 每日上限 600 次,
+平均约 21.8 请求/分钟)。2026-08-31 用起步参数真实跑完 600 次请求, 全程
+零疑似反爬信号(11 次失败逐条人工核对原始 HTML, 全是数据本身的边界情况,
+不是网站的反应)——按"先保守起步、有真实数据再调松"的规矩调松成
+1.5~2.5 秒一次抖动间隔、每日上限 1200 次(codex review 指出: 间隔和上限
+同时调会叠加成持续请求速率的放大, 不是简单的"间隔减半"; 原方案
+1.0~2.0 秒 + 1200/天相当于把速率一次性拉高约 83%, 现在这组数字只拉高
+约 37.5%, 是分阶段校准, 不是一步到位)。跑满一整轮 1200 次仍然干净的话,
+再考虑要不要往 1.0~2.0 秒再松一档。
 
 "什么算失败"由本脚本决定(`fetch_throttle.py` 自己不猜): 网络层失败和
 `jisilu_unexpected_response`(疑似反爬拦截页/页面结构变了)计入熔断;
@@ -56,7 +63,7 @@ from clients import fetch_throttle, jisilu_client  # noqa: E402
 _BOND_ID_RE = re.compile(r"\d{6}")
 
 GATE_PROVIDER = "jisilu"
-GATE_BUCKETS = {"adj_logs": {"min_gap": 2.0, "jitter": 1.5, "daily_cap": 600}}
+GATE_BUCKETS = {"adj_logs": {"min_gap": 1.5, "jitter": 1.0, "daily_cap": 1200}}
 GATE_STATE_PATH = Path.home() / ".hermes" / "state" / "jisilu_throttle.json"
 
 DEFAULT_CB_BASIC = Path("data/cb_warehouse/cb_basic.parquet")
