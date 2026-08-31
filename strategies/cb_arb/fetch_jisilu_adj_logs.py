@@ -24,6 +24,14 @@ md5 校验一致后再跑。
 `jisilu_unexpected_response`(疑似反爬拦截页/页面结构变了)计入熔断;
 `invalid_bond_id` 在发请求之前就地拦掉, 不算网站失败, 不占闸的名额;
 "暂无数据"(查无历史)是正常答案, 记成功, 不能让一批冷门代码把闸打下来。
+
+**这不是一次性回填, 是要每天定时跑的**(2026-08-31 起, 见
+data/research_framework 或 cron-registry 的对应条目): 已经到期摘牌的债
+成功抓过一次就永久跳过(历史不会再变); 还在存续期的债即使上次结果是
+"暂无历史", 也会被重新问一遍——不然真实发生的新一轮下修会被永久漏掉,
+且不会有任何报警。所以输出文件 `cb_conv_price_adj_jisilu.jsonl` 里同一个
+`bond_id` 会随时间积累多条记录, **下游必须按 `fetched_at` 取最新的那条**,
+不能假设一个 bond_id 只有一行。
 """
 from __future__ import annotations
 
@@ -31,6 +39,7 @@ import argparse
 import json
 import re
 import sys
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -53,10 +62,18 @@ GATE_STATE_PATH = Path.home() / ".hermes" / "state" / "jisilu_throttle.json"
 DEFAULT_CB_BASIC = Path("data/cb_warehouse/cb_basic.parquet")
 DEFAULT_OUTPUT = Path("data/cb_warehouse/cb_conv_price_adj_jisilu.jsonl")
 
-#: 到达这些状态就不再重试(续跑时跳过)。跟 extract_conv_price_revisions.py
-#: 的续跑规则一致: 只有"网站给了确定答案"或"我们自己的输入本身就是错的"
-#: 才算终态, 网络失败/疑似反爬一律留到下次重跑。
-TERMINAL_STATUSES = {"ok", "invalid_bond_id"}
+#: 无条件终态: 不管这只债是不是还在存续期, 都不再重试。`invalid_bond_id`
+#: 是我们自己的输入格式就不对, 重试没用; 跟"这只债有没有到期"无关。
+ALWAYS_TERMINAL_STATUSES = {"invalid_bond_id"}
+
+#: 只对"已到期摘牌"的债才算终态的状态。一只已经摘牌的债, 转股价调整只可能
+#: 发生在存续期内, 摘牌之后历史不会再变, `ok` 抓到过一次就永久够用。
+#: 但如果这只债还在存续期(下面 `load_matured_bond_ids` 判定), 同样是
+#: `ok` 也**不能**当成终态——本轮"暂无历史"不代表以后不会有新的下修事件,
+#: 定时任务要靠"这只债每次都还在 pending 里"才能发现新事件, 一旦被判成
+#: 永久终态, 未来真实发生的下修会被悄悄漏掉, 而且没有任何报警
+#: ("答不出来时写什么"——这里答案是"这只债还活着, 永远别假装问完了")。
+MATURED_ONLY_TERMINAL_STATUSES = {"ok"}
 
 
 def build_gate() -> fetch_throttle.Gate:
@@ -89,7 +106,54 @@ def load_bond_ids(cb_basic_path: Path) -> list[str]:
     return out
 
 
-def load_done(output_path: Path) -> set[str]:
+_DELIST_DATE_RE = re.compile(r"\d{8}")
+
+
+def load_matured_bond_ids(cb_basic_path: Path, *, as_of: "date | None" = None) -> set[str]:
+    """`cb_basic.parquet` 的 `delist_date` 列, 返回到 `as_of`(默认今天)为止
+    已经到期摘牌的债券代码集合。`delist_date` 是 "YYYYMMDD" 字符串, 仍在
+    存续期的债这一列是 null。
+
+    "判成已摘牌"是一张单程票——一旦误判, `load_done` 会把这只债永久跳过,
+    未来真实发生的下修会被永久漏掉、且不会有任何报警(codex review 指出:
+    只做 `int()` 不校验格式, "2027011"(少一位)这类脏值会被解析成一个
+    恰好小于今天的整数, 静默把仍存续的债判成摘牌)。所以这里必须严格校验
+    "确实是 8 位数字, 且是一个真实存在的日历日期", 解析失败一律当"还没
+    摘牌"处理(fail open 只会导致多抓一次, 不会导致漏抓——方向必须是这边,
+    不能反过来)。
+    """
+    import pandas as pd
+    from datetime import datetime as _datetime
+
+    as_of = as_of or date.today()
+    df = pd.read_parquet(cb_basic_path)
+    matured: set[str] = set()
+    for code_raw, delist_raw in zip(df["code"], df["delist_date"]):
+        code = str(code_raw).strip()
+        if not code or pd.isna(delist_raw):
+            continue
+        delist_str = str(delist_raw).strip()
+        if not _DELIST_DATE_RE.fullmatch(delist_str):
+            continue  # 格式不是严格的 8 位数字(比如浮点尾巴 "20200101.0"), 当存续处理
+        try:
+            delist_date = _datetime.strptime(delist_str, "%Y%m%d").date()
+        except ValueError:
+            continue  # 8 位数字但不是真实日历日期(比如 13 月), 当存续处理
+        if delist_date <= as_of:
+            matured.add(code)
+    return matured
+
+
+def load_done(output_path: Path, matured_ids: "set[str] | None" = None) -> set[str]:
+    """哪些 bond_id 这次可以跳过不抓。
+
+    `invalid_bond_id` 永久跳过(不管存续状态)。`ok` 只有在这只债已经
+    到期摘牌(`matured_ids`)时才跳过——还在存续期的债即使上次结果是
+    "暂无历史", 这次也要重新问一遍(见 `MATURED_ONLY_TERMINAL_STATUSES`
+    的注释)。`matured_ids` 不传等价于"没有任何债算摘牌", 即所有 `ok`
+    都不跳过, 全部重新抓。
+    """
+    matured_ids = matured_ids or set()
     done: set[str] = set()
     if not output_path.exists():
         return done
@@ -102,11 +166,41 @@ def load_done(output_path: Path) -> set[str]:
                 rec = json.loads(line)
             except json.JSONDecodeError:
                 continue
-            if rec.get("status") in TERMINAL_STATUSES:
+            status = rec.get("status")
+            bond_id = rec.get("bond_id")
+            if not bond_id:
+                continue
+            if status in ALWAYS_TERMINAL_STATUSES:
+                done.add(bond_id)
+            elif status in MATURED_ONLY_TERMINAL_STATUSES and bond_id in matured_ids:
+                done.add(bond_id)
+    return done
+
+
+def load_ever_succeeded(output_path: Path) -> set[str]:
+    """哪些 bond_id 曾经至少成功过一次(`status == "ok"`), 不管现在算不算
+    终态。只用来给续跑排优先级(见 `run()`): 从没成功过的候选(没试过或者
+    一直失败)优先处理, 已经成功过、只是等着按存续期规则每天刷新的债往后
+    排——不然每天都要重刷一遍存续期内的债, 会跟"把全量候选第一次跑完"
+    抢当日预算, 拖慢首次回填。
+    """
+    seen: set[str] = set()
+    if not output_path.exists():
+        return seen
+    with output_path.open("r", encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("status") == "ok":
                 bond_id = rec.get("bond_id")
                 if bond_id:
-                    done.add(bond_id)
-    return done
+                    seen.add(bond_id)
+    return seen
 
 
 def append_record(output_path: Path, rec: dict[str, Any]) -> None:
@@ -115,41 +209,67 @@ def append_record(output_path: Path, rec: dict[str, Any]) -> None:
         f.write(json.dumps(rec, ensure_ascii=False) + "\n")
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
 def fetch_one(gate: fetch_throttle.Gate, bond_id: str) -> dict[str, Any]:
-    """抓一只债的调整历史。返回值就是要写进输出文件的那一条记录。"""
+    """抓一只债的调整历史。返回值就是要写进输出文件的那一条记录。
+
+    `fetched_at` 是必须字段, 不是可有可无的元数据——存续期内的债每天都会
+    被重新抓一遍(见 `MATURED_ONLY_TERMINAL_STATUSES`), 输出文件里同一个
+    `bond_id` 会积累多条记录, 下游必须靠这个字段才能判断"哪一条是最新的",
+    不能只靠文件里出现的先后顺序去猜。
+    """
     if not _BOND_ID_RE.fullmatch(bond_id):
-        return {"bond_id": bond_id, "status": "invalid_bond_id", "error": "invalid_bond_id"}
+        return {
+            "bond_id": bond_id, "status": "invalid_bond_id", "error": "invalid_bond_id",
+            "fetched_at": _now_iso(),
+        }
 
     slot, gate_err = gate.reserve("adj_logs", bond_id=bond_id)
     if gate_err is not None:
-        return {"bond_id": bond_id, "status": "throttled", "error": gate_err}
+        return {"bond_id": bond_id, "status": "throttled", "error": gate_err, "fetched_at": _now_iso()}
 
     gate.wait_for(slot)
     records, err = jisilu_client.fetch_adj_logs(bond_id)
 
     if err is not None:
         gate.record("adj_logs", ok=False)
-        return {"bond_id": bond_id, "status": err.get("error", "unknown_error"), "error": err}
+        return {
+            "bond_id": bond_id, "status": err.get("error", "unknown_error"), "error": err,
+            "fetched_at": _now_iso(),
+        }
 
     gate.record("adj_logs", ok=True)
-    return {"bond_id": bond_id, "status": "ok", "records": records}
+    return {"bond_id": bond_id, "status": "ok", "records": records, "fetched_at": _now_iso()}
 
 
 def run(cb_basic_path: Path, output_path: Path, limit: "int | None" = None,
-        gate: "fetch_throttle.Gate | None" = None) -> dict[str, int]:
+        gate: "fetch_throttle.Gate | None" = None,
+        as_of: "date | None" = None) -> dict[str, int]:
     """跑一轮。返回汇总计数, 供 main() 打印、也供测试直接断言。
 
     `limit` 不传 = 处理全部待抓候选。传了就必须是正整数——`list[:limit]`
     在 Python 里对负数是合法的"掐掉末尾几个"切片, `limit=-1` 会变成
     "几乎全部候选都抓", 跟"只抓前 N 个调试"的本意正好相反
     (codex review 2026-08-30 用真实 3 条候选复现过这个反例)。
+
+    候选排序: 从没成功过的(没试过/一直失败)排在前面, 已经成功过、只是
+    按存续期规则等着刷新的排在后面——见 `load_ever_succeeded`。
     """
     if limit is not None and limit < 1:
         raise ValueError(f"--limit 必须是正整数(不传 = 全量待抓候选), 收到: {limit}")
 
     all_ids = load_bond_ids(cb_basic_path)
-    done = load_done(output_path)
-    pending = [b for b in all_ids if b not in done]
+    matured_ids = load_matured_bond_ids(cb_basic_path, as_of=as_of)
+    done = load_done(output_path, matured_ids)
+    ever_succeeded = load_ever_succeeded(output_path)
+    candidates = [b for b in all_ids if b not in done]
+    pending = (
+        [b for b in candidates if b not in ever_succeeded]
+        + [b for b in candidates if b in ever_succeeded]
+    )
     if limit is not None:
         pending = pending[:limit]
 

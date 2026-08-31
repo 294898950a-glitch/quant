@@ -1,0 +1,16 @@
+schema_version: 1
+date: '2026-08-31'
+decision: no_truth_change
+reason: >-
+  strategies/cb_arb/fetch_jisilu_adj_logs.py 从"一次性回填"改成"可以每天
+  定时跑": 已到期摘牌的债成功一次永久跳过, 仍在存续期的债每次都重新问
+  (避免真实发生的新一轮下修被永久漏抓), 新增 fetched_at 字段供下游取最新
+  记录。纯粹是这个数据抓取脚本自身的续跑/去重逻辑修正, 不改动任何定价/
+  回测逻辑, 不读写 verifier.py / cb_pricer.py / cb_pricer_lattice.py /
+  call_condition.py, 不接入现有回测或主策略, current.yaml 里的指标和状态
+  不受影响。已过 2 轮 codex review, 代码层面确认无阻断问题(外部同行评审链
+  本轮不可用, 结论基于本地实测复现)。
+changed_paths:
+  - strategies/cb_arb/fetch_jisilu_adj_logs.py
+  - strategies/cb_arb/tests/test_fetch_jisilu_adj_logs.py
+reviewer: claude
