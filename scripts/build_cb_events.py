@@ -42,6 +42,8 @@ def main() -> int:
 
     daily = pd.read_parquet(WAREHOUSE_DIR / "cb_daily.parquet", columns=["ts_code", "trade_date"])
     life = daily.groupby("ts_code")["trade_date"].agg(first_trade="min", last_trade="max").reset_index()
+    basic = pd.read_parquet(WAREHOUSE_DIR / "cb_basic.parquet", columns=["ts_code", "bond_short_name"])
+    life = life.merge(basic, on="ts_code", how="left")
     frames = []
 
     revision = load_notices(args.announcements, life, keyword="下修", classify=ev.classify_revision_title)

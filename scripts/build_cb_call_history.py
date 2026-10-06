@@ -15,12 +15,14 @@ Sources:
   cninfo announcement archive  cb_announcements.jsonl collected on hkvm
                                (~/.hermes/shared/cb_announcement/), keyword 赎回
 
-A bond is a forced call when eastmoney says reason 4, or when it stopped
-trading more than 90 days before scheduled maturity and cninfo has a call
-announcement in the 120 days before its last trade. ann_date is the earliest
-such announcement. A bond that stopped trading early with neither is recorded
-with source "inferred" and ann_date = last trade - 30 days, provided its last
-close is at least 100 (a bond delisted far below par was not called).
+A bond is a forced call when eastmoney says reason 4, or when cninfo has an
+explicit call announcement naming the bond and the bond stopped trading within
+60 days of it (or the notice is in the last 60 days and the bond is still
+listed). ann_date is the earliest such announcement; it is the date the call
+became public, so a backtest that reads it knows nothing early. A bond that
+stopped trading more than 90 days before contract maturity with neither is
+recorded with source "inferred" and ann_date = last trade - 30 days, provided
+its last close is at least 100 (a bond delisted far below par was not called).
 
 跑法:
     python scripts/build_cb_call_history.py --announcements <cb_announcements.jsonl>
@@ -45,7 +47,7 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts.build_cb_warehouse import WAREHOUSE_DIR, code_to_ts_code, fetch_cb_universe_em  # noqa: E402
 
 EARLY_DAYS = 90
-NOTICE_WINDOW_DAYS = 120
+NOTICE_TO_LAST_TRADE_DAYS = 60
 INFERRED_LEAD_DAYS = 30
 _CN_DIGITS = "一二三四五六七八九十"
 
@@ -53,7 +55,7 @@ _CN_DIGITS = "一二三四五六七八九十"
 def classify_title(title: str) -> str:
     if re.search("不提前赎回|不行使|不赎回|暂不", title):
         return "no_call"
-    if re.search("可能满足|预计满足|预计触发|可能触发|有可能|或将", title):
+    if re.search("可能满足|预计满足|预计触发|可能触发|有可能|或将|是否满足|重新计算", title):
         return "may_trigger"
     if re.search("到期|兑付|回售|现金管理|理财", title):
         return "other"
@@ -65,7 +67,11 @@ def classify_title(title: str) -> str:
 
 
 def load_notices(path: Path, life: pd.DataFrame, keyword: str = "赎回", classify=classify_title) -> pd.DataFrame:
-    """Announcements of one search keyword, attributed to a bond and classified by title."""
+    """Announcements of one search keyword, attributed to a bond and classified by title.
+
+    life: ts_code, first_trade, last_trade, bond_short_name.
+    """
+    short_name = dict(zip(life["ts_code"], life["bond_short_name"]))
     rows = []
     with path.open(encoding="utf-8") as f:
         for line in f:
@@ -74,13 +80,15 @@ def load_notices(path: Path, life: pd.DataFrame, keyword: str = "赎回", classi
                 continue
             title = str(r.get("ann_title") or "").replace("<em>", "").replace("</em>", "")
             day = str(r.get("ann_datetime") or "")[:10].replace("-", "")
-            names = r.get("candidate_bond_names") or []
             codes = r.get("candidate_ts_codes") or []
-            named = [ts for ts, n in zip(codes, names) if n and (n in title or n[:-1] in title)]
+            # The archive is collected per stock: candidate codes and candidate names are two separately
+            # ordered lists, so pairing them by position gives one bond's notice to its sibling. Use each
+            # bond's own short name, and only the full name ("特发转" would also match "特发转2").
+            named = [ts for ts in codes if short_name.get(ts) and short_name[ts] in title]
             for ts in named or codes:
                 rows.append({"ts_code": ts, "ann_date": day, "kind": classify(title),
                              "named_in_title": bool(named), "title": title, "url": r.get("ann_url")})
-    notices = pd.DataFrame(rows).merge(life, on="ts_code", how="inner")
+    notices = pd.DataFrame(rows).merge(life[["ts_code", "first_trade", "last_trade"]], on="ts_code", how="inner")
     # An issuer's archive covers all of its bonds; keep a notice only inside the bond's own listed life.
     alive = (notices["ann_date"] >= notices["first_trade"]) & (
         pd.to_datetime(notices["ann_date"]) <= pd.to_datetime(notices["last_trade"]) + pd.Timedelta(days=10)
@@ -113,6 +121,7 @@ def main() -> int:
         first_trade=("trade_date", "min"), last_trade=("trade_date", "max"), last_close=("close", "last")
     ).reset_index()
     basic = pd.read_parquet(WAREHOUSE_DIR / "cb_basic.parquet")
+    life = life.merge(basic[["ts_code", "bond_short_name"]], on="ts_code", how="left")
 
     em = pd.DataFrame(fetch_cb_universe_em())
     em["ts_code"] = em["SECURITY_CODE"].astype(str).map(code_to_ts_code)
@@ -122,24 +131,24 @@ def main() -> int:
     em["em_call_price"] = pd.to_numeric(em["EXECUTE_PRICE_HS"].fillna(em["EXECUTE_PRICE_SH"]), errors="coerce")
 
     notices = load_notices(args.announcements, life)
-    call_notices = notices[notices["kind"].isin(["call", "call_late"])].copy()
-    in_window = pd.to_datetime(call_notices["ann_date"]) >= (
-        pd.to_datetime(call_notices["last_trade"]) - pd.Timedelta(days=NOTICE_WINDOW_DAYS)
-    )
-    first_notice = call_notices[in_window].groupby("ts_code")["ann_date"].min()
+    # an explicit call announcement that names this bond; "call_late" (result / delisting notices) is not a start
+    call_notices = notices[(notices["kind"] == "call") & notices["named_in_title"]]
+    first_notice = call_notices.groupby("ts_code")["ann_date"].min()
 
-    b = basic.merge(life, on="ts_code", how="inner").merge(
+    b = basic.merge(life.drop(columns="bond_short_name"), on="ts_code", how="inner").merge(
         em[["ts_code", "reason", "em_ann", "em_call_date", "em_call_price"]], on="ts_code", how="left"
     )
     scheduled = pd.to_datetime(b["value_date"]) + pd.to_timedelta(b["interest_rate_explain"].map(_term_years) * 365.25, unit="D")
     b["stopped"] = b["last_trade"] < warehouse_end
     b["early"] = b["stopped"] & ((scheduled - pd.to_datetime(b["last_trade"])).dt.days > EARLY_DAYS)
     b["cn_ann"] = b["ts_code"].map(first_notice)
-    # A pending call on a still-listed bond: only a first-hand call notice in the last 60 days counts.
-    recent = pd.to_datetime(b["cn_ann"]) >= pd.to_datetime(warehouse_end) - pd.Timedelta(days=60)
+    # the notice counts when trading ended soon after it; a still-listed bond is measured against the data end
+    days_after_notice = (pd.to_datetime(b["last_trade"]) - pd.to_datetime(b["cn_ann"])).dt.days
+    followed = days_after_notice.between(0, NOTICE_TO_LAST_TRADE_DAYS)
 
     is_em = (b["reason"] == "4") & b["em_ann"].notna()
-    is_cn = ~is_em & b["cn_ann"].notna() & (b["early"] | (~b["stopped"] & recent))
+    b.loc[~followed & ~is_em, "cn_ann"] = pd.NA
+    is_cn = ~is_em & b["cn_ann"].notna()
     is_inferred = ~is_em & ~is_cn & b["early"] & (b["last_close"] >= 100.0)
     b["source"] = np.select([is_em & b["cn_ann"].notna(), is_em, is_cn, is_inferred],
                             ["eastmoney+cninfo", "eastmoney", "cninfo", "inferred"], default="")

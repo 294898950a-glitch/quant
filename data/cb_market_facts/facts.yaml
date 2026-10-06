@@ -1,6 +1,6 @@
 schema_version: 1
-generated_at: '2026-10-06T22:39:23.932847+00:00'
-code_commit: 1c31592
+generated_at: '2026-10-06T23:53:37.510390+00:00'
+code_commit: e4295e4
 code_dirty: true
 warehouse_end: '20260930'
 study_start: '20190101'
@@ -21,11 +21,11 @@ inputs:
     bytes: 454804
     sha256_16: 3a72f34a1e12c716
   cb_call.parquet:
-    bytes: 23429
-    sha256_16: 9889983d1c33cc28
+    bytes: 23499
+    sha256_16: 3d6a812af61c74be
   cb_events.parquet:
-    bytes: 87702
-    sha256_16: 050df17c79c68451
+    bytes: 91654
+    sha256_16: 93016bd4ab9bee14
 facts:
 - id: C1_call_terms
   kind: contract
@@ -121,7 +121,7 @@ facts:
     in_conversion_share_below_minus_3pct: 0.0006
     before_conversion_share_below_minus_1pct: 0.0477
     longest_run_days_p95: 4.0
-  n: 612832
+  n: 612872
   date_range:
   - '20190102'
   - '20260930'
@@ -146,9 +146,9 @@ facts:
   status: measured
   values:
     episodes: 862
-    share_call_announced: 0.4559
-    share_no_call: 0.406
-    share_none: 0.1381
+    share_call_announced: 0.4617
+    share_no_call: 0.4223
+    share_none: 0.116
   n: 862
   date_range:
   - '20190228'
@@ -160,24 +160,24 @@ facts:
   statement: '公告强赎时, 转债相对正股下跌: 时间价值被收走。'
   status: measured
   values:
-    net_of_stock -20..-6: -0.0649
-    net_of_stock -5..-1: -0.0157
-    net_of_stock 0..0: -0.0234
-    net_of_stock 1..5: 0.0065
-    net_of_stock 6..20: -0.0034
-    t 0..0: -9.9126
-    t 1..5: 4.6709
-    t 6..20: -1.5289
-    vs_market 0..0: -0.0346
-    vs_market 1..5: -0.0077
-    vs_market 6..20: -0.0227
-    stock -20..-6: 0.1316
-    stock 1..5: -0.0144
-    stock 6..20: -0.0153
-    n 6..20: 122
-    price_before_median: 149.884
-    premium_before_median: -0.0003
-  n: 532
+    net_of_stock -20..-6: -0.0657
+    net_of_stock -5..-1: -0.0152
+    net_of_stock 0..0: -0.0235
+    net_of_stock 1..5: 0.0058
+    net_of_stock 6..20: -0.0035
+    t 0..0: -9.7625
+    t 1..5: 3.7431
+    t 6..20: -1.6226
+    vs_market 0..0: -0.0352
+    vs_market 1..5: -0.0071
+    vs_market 6..20: -0.0199
+    stock -20..-6: 0.1323
+    stock 1..5: -0.0132
+    stock 6..20: -0.0145
+    n 6..20: 119
+    price_before_median: 149.813
+    premium_before_median: 0.0002
+  n: 535
   date_range:
   - '20190123'
   - '20260910'
@@ -189,24 +189,24 @@ facts:
   statement: '公告不强赎时, 转债相对正股上涨: 封顶暂时解除。'
   status: measured
   values:
-    net_of_stock -20..-6: -0.0343
-    net_of_stock -5..-1: -0.0013
-    net_of_stock 0..0: 0.0156
-    net_of_stock 1..5: 0.0124
-    net_of_stock 6..20: 0.0176
-    t 0..0: 12.5532
-    t 1..5: 7.4937
-    t 6..20: 6.973
-    vs_market 0..0: 0.0165
-    vs_market 1..5: 0.0106
-    vs_market 6..20: -0.0013
+    net_of_stock -20..-6: -0.0339
+    net_of_stock -5..-1: -0.0017
+    net_of_stock 0..0: 0.0158
+    net_of_stock 1..5: 0.0138
+    net_of_stock 6..20: 0.0172
+    t 0..0: 12.9452
+    t 1..5: 8.062
+    t 6..20: 7.105
+    vs_market 0..0: 0.017
+    vs_market 1..5: 0.0116
+    vs_market 6..20: -0.0
     stock -20..-6: 0.0797
-    stock 1..5: -0.0018
-    stock 6..20: -0.0175
-    n 6..20: 741
-    price_before_median: 166.0595
-    premium_before_median: 0.0516
-  n: 744
+    stock 1..5: -0.0025
+    stock 6..20: -0.0157
+    n 6..20: 771
+    price_before_median: 167.878
+    premium_before_median: 0.0477
+  n: 774
   date_range:
   - '20190418'
   - '20260828'
@@ -218,13 +218,13 @@ facts:
   statement: 公司提示"预计触发下修"之后, 多数时候选择不下修。
   status: measured
   values:
-    warnings: 1096
-    share_no_revision: 0.74
-    share_revision_proposal: 0.1779
-    share_none: 0.0821
+    warnings: 1133
+    share_no_revision: 0.7458
+    share_revision_proposal: 0.1774
+    share_none: 0.0768
     meetings_approved: 477
     meetings_rejected: 20
-  n: 1096
+  n: 1133
   date_range:
   - '20220802'
   - '20260817'
@@ -235,24 +235,24 @@ facts:
   statement: 董事会提议下修的公告日转债上涨; 公告之后到股东大会之间 (约 16 天) 还在涨。
   status: measured
   values:
-    net_of_stock -20..-6: 0.0351
+    net_of_stock -20..-6: 0.034
     net_of_stock -5..-1: 0.013
-    net_of_stock 0..0: 0.0166
-    net_of_stock 1..5: -0.003
-    net_of_stock 6..20: 0.0103
-    t 0..0: 10.9595
-    t 1..5: -1.0027
-    t 6..20: 2.6166
-    vs_market 0..0: 0.0193
-    vs_market 1..5: -0.0031
-    vs_market 6..20: 0.0203
-    stock -20..-6: -0.0485
-    stock 1..5: 0.0096
-    stock 6..20: 0.009
-    n 6..20: 457
-    price_before_median: 111.859
-    premium_before_median: 0.6452
-  n: 463
+    net_of_stock 0..0: 0.0172
+    net_of_stock 1..5: -0.0021
+    net_of_stock 6..20: 0.0104
+    t 0..0: 11.3316
+    t 1..5: -0.7345
+    t 6..20: 2.6346
+    vs_market 0..0: 0.02
+    vs_market 1..5: -0.003
+    vs_market 6..20: 0.0199
+    stock -20..-6: -0.0467
+    stock 1..5: 0.0085
+    stock 6..20: 0.008
+    n 6..20: 471
+    price_before_median: 112.135
+    premium_before_median: 0.6502
+  n: 477
   date_range:
   - '20190116'
   - '20260828'
@@ -264,24 +264,24 @@ facts:
   statement: 公告不下修时, 转债相对正股的反应。
   status: measured
   values:
-    net_of_stock -20..-6: 0.024
+    net_of_stock -20..-6: 0.0246
     net_of_stock -5..-1: 0.0062
     net_of_stock 0..0: -0.0042
-    net_of_stock 1..5: -0.0059
-    net_of_stock 6..20: -0.0036
-    t 0..0: -7.1263
-    t 1..5: -5.1293
-    t 6..20: -1.8699
-    vs_market 0..0: -0.0026
+    net_of_stock 1..5: -0.006
+    net_of_stock 6..20: -0.0024
+    t 0..0: -7.4905
+    t 1..5: -5.4046
+    t 6..20: -1.3089
+    vs_market 0..0: -0.0028
     vs_market 1..5: -0.0018
     vs_market 6..20: 0.0014
-    stock -20..-6: -0.0338
+    stock -20..-6: -0.0344
     stock 1..5: 0.0054
-    stock 6..20: 0.0071
-    n 6..20: 2168
-    price_before_median: 113.705
-    premium_before_median: 0.6569
-  n: 2182
+    stock 6..20: 0.006
+    n 6..20: 2305
+    price_before_median: 113.6605
+    premium_before_median: 0.6701
+  n: 2318
   date_range:
   - '20211019'
   - '20260829'
@@ -296,11 +296,11 @@ facts:
     <60: 6.3046
     60-80: 12.2525
     80-95: 18.4527
-    95-105: 20.082
+    95-105: 20.0819
     105-120: 16.9725
-    120-140: 10.5358
-    '>140': 12.1625
-  n: 705116
+    120-140: 10.5428
+    '>140': 12.1669
+  n: 705169
   date_range:
   - '20190102'
   - '20260930'
@@ -370,14 +370,14 @@ facts:
   status: measured
   values:
     '2019': 7
-    '2020': 82
-    '2021': 118
-    '2022': 131
-    '2023': 95
-    '2024': 77
-    '2025': 142
-    '2026': 96
-  n: 748
+    '2020': 92
+    '2021': 121
+    '2022': 137
+    '2023': 94
+    '2024': 78
+    '2025': 147
+    '2026': 98
+  n: 774
   date_range:
   - '20190418'
   - '20260828'

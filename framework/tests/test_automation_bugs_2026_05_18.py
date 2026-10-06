@@ -238,13 +238,21 @@ def test_research_queue_runner_auto_resolves_exhaustion_block(tmp_path: Path, mo
     monkeypatch.setattr(runner, "STATUS_PATH", status_path)
     monkeypatch.setattr(runner, "AUDIT_LOG_PATH", audit_path)
     monkeypatch.setattr(runner, "PAUSE_FLAG_PATH", pause_flag)
+    calls = []
+
     class FakeIdeationService:
         def generate_until_actionable(self, state):
+            calls.append(state)
             return "queued_ideation_spec"
 
     monkeypatch.setattr(runner, "ideation_service", lambda: FakeIdeationService())
 
-    assert runner.tick() == "queued_ideation_spec"
+    # What this guards: an exhausted-directions block must reach ideation instead of stopping for the user.
+    # Since the 2026-05-23 parallel-dispatch change the runner goes straight on to dispatch what ideation
+    # queued; this state has no VM configured, so the tick ends as idle, not as "queued_ideation_spec".
+    result = runner.tick()
+    assert len(calls) == 1
+    assert result == "idle_no_available_vm"
 
 
 def test_research_queue_completion_requires_review_and_digest(tmp_path: Path, monkeypatch):

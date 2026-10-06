@@ -287,3 +287,8 @@ allowlist:
   added_at: '2026-07-12'
   added_by: claude
   pending_repair_handoff_id: cb_arb_value_gap_switch_reverse_moneyness_entry_filter_v1_executor_code
+- script: scripts/evaluate_cb_arb_pit_holdout.py
+  reason: 2026-10-07 本地一次性诊断 (冻结参数的样本外检验 + 低溢价/双低对照), 不经队列、不上 VM、不改 truth;
+    结果在 data/cb_arb_pit_rerun_four_fixes_2026-10-07/
+  owner: claude
+  archived_at: 2026-10-07
