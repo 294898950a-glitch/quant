@@ -58,3 +58,38 @@ def test_decomposition_components_add_up_to_the_return():
     assert d["r"].iloc[0] == pytest.approx(d[COMPONENTS[1:]].iloc[0].sum())
     held_a = decompose(_panel(), weights=pd.Series([1, 1, 0, 0]))
     assert held_a["r"].iloc[0] == pytest.approx(0.03) and held_a["r_conv_price"].iloc[0] == 0.0
+
+
+def _scripts_writing(filename: str) -> set[str]:
+    """Scripts that write `filename` into the shared warehouse (run-local copies elsewhere do not count)."""
+    import re
+
+    root = Path(__file__).resolve().parents[2]
+    hits = set()
+    for path in list((root / "scripts").glob("*.py")) + list((root / "cb_market").glob("*.py")):
+        text = path.read_text(encoding="utf-8")
+        if re.search(rf'to_parquet\(\s*WAREHOUSE(?:_DIR)? / "{re.escape(filename)}"', text):
+            hits.add(path.name)
+    return hits
+
+
+def test_each_shared_table_has_exactly_one_writer():
+    # cb_call.parquet used to be written by build_cb_warehouse.py too, with every notice type as a "call"
+    assert _scripts_writing("cb_call.parquet") == {"build_cb_call_history.py"}
+    assert _scripts_writing("cb_contract_terms.parquet") == {"build_cb_contract_terms.py"}
+
+
+def test_point_in_time_conversion_price_has_one_answer():
+    # evaluation scripts must not carry their own conversion-value lookup next to verifier.point_in_time_conv_price
+    root = Path(__file__).resolve().parents[2]
+    own_lookup = [
+        p.name for p in (root / "scripts").glob("evaluate_cb_arb_pit_*.py")
+        if "100.0 * stock_price /" in p.read_text(encoding="utf-8")
+    ]
+    assert own_lookup == []
+
+
+def test_call_eligibility_rule_lives_only_in_call_condition():
+    # the panel feeds per-bond terms to call_condition.is_call_eligible; it must not count trigger days itself
+    text = (Path(__file__).resolve().parents[1] / "panel.py").read_text(encoding="utf-8")
+    assert "is_call_eligible(" in text and ".rolling(" not in text

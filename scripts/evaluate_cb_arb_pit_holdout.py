@@ -2,7 +2,7 @@
 """Fresh-holdout and matched-style-control test for the frozen point-in-time
 value-gap candidate (open thread pit_value_gap_incremental_edge).
 
-Frozen before this script was written (research_insights.yaml, commit cecae06):
+Frozen before this script was written (research_insights.yaml, commit 13d97df):
   signal   pit_norating_lag1 (point-in-time conversion value, every bond priced
            as AA, rating floor off, yesterday's signal traded at today's close)
   params   min_gap_pct 0, sell_gap_pct 0, switch_hurdle_pct 0.03,
@@ -38,6 +38,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import replace
 from datetime import date
 from multiprocessing import get_context
 from pathlib import Path
@@ -51,7 +52,7 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-import scripts.analyze_cb_conv_price_lookahead as lookahead  # noqa: E402
+import scripts.analyze_cb_arb_repair_times as repair_times  # noqa: E402
 import scripts.evaluate_cb_arb_value_gap_switch as value_gap  # noqa: E402
 
 WAREHOUSE = _REPO_ROOT / "data" / "cb_warehouse"
@@ -60,7 +61,15 @@ FROZEN_PARAMS = {
     "max_hold_days": 180.0, "stop_gap_ratio_floor": 0.0,
 }
 PREVIOUS_END = "20260508"
-RANK_LABEL = "pit_norating"
+SPLITS = {"train": ("20190101", "20241231"), "test": ("20250101", "20260508")}
+SIGNAL_COLUMNS = [
+    "theoretical", "bond_floor", "option_value", "intrinsic", "deviation",
+    "rank", "n_ranked", "rank_pct", "value_gap_amount", "value_gap_pct_of_cash",
+]
+COST_ARGS = argparse.Namespace(
+    cost_model_enabled=True, slippage_pct=0.0015, market_impact_coeff=0.0010,
+    market_impact_cap_pct=0.02, holding_cost_pct=0.0,
+)
 _SIGNALS: dict[str, pd.DataFrame] = {}
 _CTX: dict[str, Any] = {}
 
@@ -78,9 +87,75 @@ def _parse_args() -> argparse.Namespace:
     return p.parse_args()
 
 
+def _ranks_path(output_dir: Path) -> Path:
+    return output_dir / "daily_value_gap_amounts_pit_norating.parquet"
+
+
+def _build_ranks(ctx: dict[str, Any]) -> None:
+    """Daily ranks with no rating information. Runs in its own process, so the patches never reach the parent.
+
+    cb_basic.rating is the latest rating, not the rating on the day: price every bond as AA and switch the
+    rating floor off. Conversion price and maturity are already point-in-time in the valuation code itself.
+    """
+    original = repair_times.price_cb
+
+    def price_cb_no_rating(spec, valuation_date, stock_price, **kwargs):
+        return original(spec=replace(spec, rating="AA"), valuation_date=valuation_date, stock_price=stock_price, **kwargs)
+
+    load_basic = repair_times._load_cb_basic
+
+    def load_basic_no_rating() -> pd.DataFrame:
+        df = load_basic().copy()
+        df["rating"] = "AA"
+        df["rating_int"] = int(df["rating_int"].max())
+        return df
+
+    repair_times.price_cb = price_cb_no_rating
+    repair_times._load_cb_basic = load_basic_no_rating
+    value_gap._load_or_build_value_ranks(
+        ctx["data_root"], ctx["start"], ctx["end"], ctx["fixed_source"], ctx["rule"],
+        _ranks_path(ctx["output_dir"]), ctx["reuse_ranks"],
+    )
+
+
+def _lag_signal(ranks: pd.DataFrame) -> pd.DataFrame:
+    """Act on yesterday's signal at today's close."""
+    out = ranks.sort_values(["ts_code", "trade_date"]).copy()
+    out[SIGNAL_COLUMNS] = out.groupby("ts_code")[SIGNAL_COLUMNS].shift(1)
+    out = out.dropna(subset=["value_gap_amount"])
+    out["rank"] = out.groupby("trade_date")["deviation"].rank(method="first").astype(int) - 1
+    out["n_ranked"] = out.groupby("trade_date")["ts_code"].transform("size")
+    out["rank_pct"] = out["rank"] / out["n_ranked"]
+    return out.sort_values(["trade_date", "rank"]).reset_index(drop=True)
+
+
+def _yearly(curve: list[tuple[str, float]], bench: pd.Series) -> pd.DataFrame:
+    equity = pd.Series(dict(curve)).sort_index()
+    bm = bench.reindex(equity.index).ffill()
+    rows = {}
+    for year, eq in equity.groupby(equity.index.str[:4]):
+        prev_eq = equity[equity.index < eq.index[0]]
+        prev_bm = bm[bm.index < eq.index[0]]
+        eq_base = prev_eq.iloc[-1] if len(prev_eq) else eq.iloc[0]
+        bm_year = bm[eq.index]
+        bm_base = prev_bm.iloc[-1] if len(prev_bm) else bm_year.iloc[0]
+        ret = eq.pct_change().fillna(eq.iloc[0] / eq_base - 1.0)
+        bm_ret = bm_year.pct_change().fillna(bm_year.iloc[0] / bm_base - 1.0)
+        relative = (1.0 + ret).cumprod() / (1.0 + bm_ret).cumprod()
+        rows[year] = {
+            "return": eq.iloc[-1] / eq_base - 1.0,
+            "benchmark": bm_year.iloc[-1] / bm_base - 1.0,
+            "excess": eq.iloc[-1] / eq_base - bm_year.iloc[-1] / bm_base,
+            "sharpe": float(ret.mean() / ret.std() * np.sqrt(252)) if ret.std() > 0 else 0.0,
+            "max_drawdown": float((eq / eq.cummax() - 1.0).min()),
+            "drawdown_vs_benchmark": float((relative / relative.cummax() - 1.0).min()),
+        }
+    return pd.DataFrame(rows).T
+
+
 def _reassign(ranks: pd.DataFrame, order_key: pd.Series) -> pd.DataFrame:
     """Give the k-th best signal bundle of each day to the bond ranked k-th by order_key (ascending)."""
-    cols = lookahead.SIGNAL_COLUMNS
+    cols = SIGNAL_COLUMNS
     out = ranks.copy()
     out["_key"] = order_key.values
     donor = out.sort_values(["trade_date", "value_gap_amount"], ascending=[True, False], kind="stable")
@@ -100,7 +175,7 @@ def _build_signals(ranks: pd.DataFrame, pit: pd.DataFrame, seeds: int) -> dict[s
     for seed in range(seeds):
         rng = np.random.default_rng(seed)
         signals[f"random_{seed:02d}"] = _reassign(ranks, pd.Series(rng.random(len(ranks)), index=ranks.index))
-    return {name: lookahead._lag_signal(df) for name, df in signals.items()}
+    return {name: _lag_signal(df) for name, df in signals.items()}
 
 
 def _run(task: tuple[str, str]) -> dict[str, Any]:
@@ -110,7 +185,7 @@ def _run(task: tuple[str, str]) -> dict[str, Any]:
     out = value_gap._run_value_gap_backtest(
         ranks[(ranks["trade_date"] >= start) & (ranks["trade_date"] <= end)],
         start, end, _CTX["data_root"], _CTX["fixed_source"], _CTX["rule"],
-        value_gap._with_cost_params(FROZEN_PARAMS, lookahead.COST_ARGS),
+        value_gap._with_cost_params(FROZEN_PARAMS, COST_ARGS),
     )
     return {"signal": name, "split": split, "metrics": out["metrics"], "equity_curve": out["equity_curve"],
             "trades": [(t["entry_date"], t["exit_date"]) for t in out["trades"]]}
@@ -144,7 +219,7 @@ def main() -> int:
     cb_days = sorted(pd.read_parquet(WAREHOUSE / "cb_daily.parquet", columns=["trade_date"])["trade_date"].unique())
     end = cb_days[-1]
     holdout_start = next(d for d in cb_days if d > PREVIOUS_END)
-    splits = {**lookahead.SPLITS, "holdout": (holdout_start, end)}
+    splits = {**SPLITS, "holdout": (holdout_start, end)}
     ctx = {
         "data_root": args.data_root, "pit_path": args.pit_path, "fixed_source": args.fixed_source,
         "rule": args.rule, "output_dir": args.output_dir, "reuse_ranks": args.reuse_ranks,
@@ -153,8 +228,8 @@ def main() -> int:
     _CTX.update(ctx)
     fork = get_context("fork")
     with fork.Pool(1, maxtasksperchild=1) as pool:
-        pool.map(lookahead._build_ranks, [(RANK_LABEL, ctx)])
-    ranks = pd.read_parquet(lookahead._ranks_path(args.output_dir, RANK_LABEL))
+        pool.map(_build_ranks, [ctx])
+    ranks = pd.read_parquet(_ranks_path(args.output_dir))
     ranks["trade_date"] = ranks["trade_date"].astype(str)
     ranks["ts_code"] = ranks["ts_code"].astype(str)
     ranks = ranks.reset_index(drop=True)
@@ -191,7 +266,7 @@ def main() -> int:
             "max_drawdown": r["metrics"]["max_drawdown"],
             "sharpe": float(ret.mean() / ret.std() * np.sqrt(252)) if ret.std() > 0 else 0.0,
         })
-        yearly = lookahead._yearly(r["equity_curve"], index)
+        yearly = _yearly(r["equity_curve"], index)
         for year, row in yearly.iterrows():
             yearly_rows.append({"signal": r["signal"], "split": r["split"], "year": year,
                                 "return": round(float(row["return"]), 6), "excess": round(float(row["excess"]), 6)})
@@ -261,7 +336,7 @@ def main() -> int:
     summary = {
         "run_id": args.output_dir.name,
         "scope": "local diagnostic only; no VM/spot; no strategy or truth change",
-        "frozen_params": FROZEN_PARAMS, "signal": f"{RANK_LABEL}_lag1", "splits": splits,
+        "frozen_params": FROZEN_PARAMS, "signal": "pit_norating_lag1", "splits": splits,
         "random_seeds": args.random_seeds, "verdict": verdict,
     }
     (args.output_dir / "summary.json").write_text(json.dumps(summary, ensure_ascii=False, indent=2, default=float) + "\n", encoding="utf-8")

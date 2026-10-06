@@ -4,7 +4,8 @@
 Sources:
   --announcements  cninfo archive collected on hkvm (cb_announcements.jsonl), keywords 下修 and 赎回
   --adj-logs       Jisilu down-revision log collected daily on hkvm (cb_conv_price_adj_jisilu.jsonl)
-  cb_call.parquet  real forced calls (scripts/build_cb_call_history.py)
+  cb_call.parquet, cb_redemption_notices.parquet   forced calls and every dated redemption notice,
+                   both written by scripts/build_cb_call_history.py (run it first)
 
 Announcements whose title cannot be classified are kept as "unclassified".
 
@@ -48,7 +49,8 @@ def main() -> int:
         "ts_code": revision["ts_code"], "event_date": revision["ann_date"], "event_type": revision["kind"],
         "source": "cninfo", "detail": revision["title"],
     }))
-    redemption = load_notices(args.announcements, life)
+    # redemption notices were attributed and classified once, by build_cb_call_history.py; read that result
+    redemption = pd.read_parquet(WAREHOUSE_DIR / "cb_redemption_notices.parquet")
     redemption = redemption[redemption["kind"].isin(_REDEMPTION_KIND)]
     frames.append(pd.DataFrame({
         "ts_code": redemption["ts_code"], "event_date": redemption["ann_date"],

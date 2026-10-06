@@ -46,7 +46,7 @@
 
 (3) 日频面板 (内存, 不落盘)                   写: cb_market/panel.py::load_panel()
     每券每日: 价格、成交额、当日真实转股价值、溢价、纯债价值、时间价值、收益三项分解、
-    是否在转股期、是否已公告强赎、按本券合同算的强赎触发天数与是否满足。
+    是否在转股期、是否已公告强赎、按本券合同算是否满足强赎条件。
     来历: panel.attrs["inputs"] 每个输入文件的大小和内容指纹; attrs["end"] 数据截止日。
     谁读: 每个测量函数; 之后的信号层。
     答不出来: 缺输入的格子是 NaN; 条款没解析出来的券 call_eligible 为 False, 要配合 call_status 读。
@@ -72,7 +72,8 @@ build_cb_call_history.py     读 东财执行原因 + 巨潮公告            �
 build_cb_events.py           读 巨潮公告 + 集思录下修记录 + cb_call  写 (2)
 build_cb_market_facts.py     读 仓库 + (1)(2), 经 load_panel()     写 (4)(5)
 
-判断不重复: 强赎触发天数只在 load_panel() 里按合同算; 公告归属到券和标题分类只在
+判断不重复: "是否满足强赎条件"的规则只在 strategies/cb_arb/call_condition.py, load_panel() 只负责
+把每只券自己的合同条款喂给它; 公告归属到券和标题分类只在
 build_cb_call_history.load_notices() 与 cb_market/events.py; 三项分解只在 panel + identities。
 
 巨潮公告档案和集思录下修记录在 hkvm (~/.hermes/shared/cb_announcement/), 重建 (2) 时

@@ -15,6 +15,7 @@ that raises is written as not_measured with the error; it never disappears.
 
 from __future__ import annotations
 
+import argparse
 import subprocess
 import sys
 import traceback
@@ -109,6 +110,7 @@ def render(doc: dict) -> str:
 
 
 def main() -> int:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     doc = run()
     PAGE.write_text(render(doc), encoding="utf-8")
     measured = sum(r["status"] == "measured" for r in doc["facts"])

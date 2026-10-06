@@ -13,7 +13,7 @@
 输出 (data/cb_warehouse/):
   - cb_basic.parquet            CB 基础 (面值/利率/到期/转股价/评级/上市日/正股代码)
   - cb_daily.parquet            CB 日线
-  - cb_call.parquet             强赎公告 (从 cov_info 反推)
+  - (cb_call.parquet 不由本脚本写, 见 scripts/build_cb_call_history.py)
   - cb_price_chg.parquet        转股价调整历史 (合并自 bond_cb_adj_logs_jsl)
   - stk_daily.parquet           正股日线 (不复权)
   - stk_daily_qfq.parquet       正股前复权日线 (BS 公式用)
@@ -545,9 +545,8 @@ def main():
     if not df_basic.empty:
         df_basic.to_parquet(WAREHOUSE_DIR / "cb_basic.parquet", index=False)
         print(f"  -> cb_basic.parquet ({len(df_basic)} 条)", flush=True)
-    if not df_call.empty:
-        df_call.to_parquet(WAREHOUSE_DIR / "cb_call.parquet", index=False)
-        print(f"  -> cb_call.parquet ({len(df_call)} 条)", flush=True)
+    # cb_call.parquet is not written here. df_call is eastmoney's one "latest notice" per bond, which mixes
+    # puts, maturity, "will not redeem" and forced calls; scripts/build_cb_call_history.py is the only writer.
 
     # 阶段 3: cb_daily
     codes = df_basic["code"].tolist() if not df_basic.empty else universe["code"].tolist()

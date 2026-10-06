@@ -14,6 +14,7 @@ the parsed values so any row can be checked by eye.
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 from datetime import datetime, timezone
@@ -32,6 +33,7 @@ STATUS_COLUMNS = ["call_status", "maturity_redemption_status", "put_status", "co
 
 
 def main() -> int:
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     raw = fetch_cb_universe_em()
     rows = []
     for r in raw:

@@ -434,7 +434,7 @@ key_insights:
   - id: conv_price_lookahead_contamination_2026_10_07
     priority: critical
     summary: "cb_basic.conv_price is the LATEST conversion price (after every later down-revision) and both valuation paths apply it to all history. In 2019-2023 the value-gap signal therefore ranked bonds by data error, not by undervaluation. Rerunning the unmodified baseline on point-in-time conversion value turns every one of the 96 grid candidates from negative to positive train excess. Every cb_arb / cb_arb_value_gap_switch result computed before this date on 2019-2024 data is contaminated."
-    source: "data/cb_arb_conv_price_lookahead_2026-10-07/ (scripts/analyze_cb_conv_price_lookahead.py); point-in-time data in data/cb_warehouse/cb_conv_value_pit.parquet (scripts/build_cb_conv_value_pit.py)"
+    source: "data/cb_arb_conv_price_lookahead_2026-10-07/ (script retired to archive/ after the measurement fixes removed its control arm; it is at commit 13d97df); point-in-time data in data/cb_warehouse/cb_conv_value_pit.parquet (scripts/build_cb_conv_value_pit.py)"
     facts:
       scope: "Local diagnostic only; no VM/spot; no strategy or truth change."
       defect:
@@ -542,7 +542,7 @@ key_insights:
     source: "data/cb_arb_pit_holdout_2026-10-07/ (scripts/evaluate_cb_arb_pit_holdout.py); warehouse extended to 2026-09-30 by scripts/refresh_cb_warehouse.py"
     facts:
       scope: "Local diagnostic only; no VM/spot; no strategy or truth change."
-      frozen_before_run: "signal pit_norating_lag1, params min_gap_pct 0 / sell_gap_pct 0 / switch_hurdle_pct 0.03 / max_hold_days 180 / stop_gap_ratio_floor 0, falsifiers as written in the open thread (commit cecae06)"
+      frozen_before_run: "signal pit_norating_lag1, params min_gap_pct 0 / sell_gap_pct 0 / switch_hurdle_pct 0.03 / max_hold_days 180 / stop_gap_ratio_floor 0, falsifiers as written in the open thread (commit 13d97df)"
       controls: "Same engine, parameters, costs, universe and one-day delay. Each day the model's signal values are handed to bonds in order of lowest conversion premium (low_premium) or lowest price+premium (double_low) instead of in model order."
       falsifier_1_holdout_excess_vs_project_index_le_0:
         fired: false

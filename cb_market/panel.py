@@ -13,6 +13,8 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from strategies.cb_arb.call_condition import is_call_eligible
+
 WAREHOUSE = Path(__file__).resolve().parent.parent / "data" / "cb_warehouse"
 INPUT_FILES = (
     "cb_daily.parquet", "cb_conv_value_pit.parquet", "cb_basic.parquet", "stk_daily_qfq.parquet",
@@ -65,14 +67,18 @@ def load_panel(start: str = "20170101") -> pd.DataFrame:
     p["in_conversion_period"] = p["trade_date"] >= p["conversion_start_date"].fillna("99999999")
     p["called"] = p["trade_date"] >= p["call_ann_date"].fillna("99999999")
 
-    # call trigger by each bond's own contract: stock / conversion price = conv_value / 100
-    hit = ((p["conv_value"] >= p["call_trigger_pct"]) & p["in_conversion_period"]).astype(float)
-    count = pd.Series(np.nan, index=p.index)
-    for window, idx in p[p["call_status"] == "parsed"].groupby("call_window").groups.items():
-        sub = hit.loc[idx]
-        count.loc[idx] = sub.groupby(p.loc[idx, "ts_code"]).transform(lambda s, w=int(window): s.rolling(w, min_periods=1).sum())
-    p["call_trigger_days"] = count
-    p["call_eligible"] = count >= p["call_required_days"]  # False where the clause is not parsed; see call_status
+    # Call trigger by each bond's own contract. The rule itself lives in call_condition.py (the one
+    # implementation); here it is only fed each bond's terms. stock / conversion price = conv_value / 100,
+    # and days before the conversion period cannot count.
+    ratio = (p["conv_value"] / 100.0).where(p["in_conversion_period"])
+    eligible = pd.Series(False, index=p.index)  # stays False where the clause is not parsed; see call_status
+    parsed = p[p["call_status"] == "parsed"]
+    for _, g in parsed.groupby("ts_code"):
+        eligible.loc[g.index] = is_call_eligible(
+            ratio.loc[g.index].to_numpy(), window=int(g["call_window"].iloc[0]),
+            threshold=float(g["call_trigger_pct"].iloc[0]) / 100.0, required=int(g["call_required_days"].iloc[0]),
+        )
+    p["call_eligible"] = eligible
 
     p = p[p["trade_date"] >= start].reset_index(drop=True)
     p.attrs["inputs"] = input_fingerprints()

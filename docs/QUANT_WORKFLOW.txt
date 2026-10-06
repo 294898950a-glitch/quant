@@ -866,6 +866,12 @@ the evidence is `data/cb_arb_conv_price_lookahead_2026-10-07/`.
   (`scripts/build_cb_call_history.py`), and valuations read point-in-time
   conversion value through `verifier.point_in_time_conv_price`. Numbers from
   before and after that date are not comparable.
+- Facts about the CB market itself (contracts, return identity, what issuers do
+  at each decision point, rules and supply) live in the `cb_market/` package and
+  are measured by `scripts/build_cb_market_facts.py` into
+  `data/cb_market_facts/facts.yaml` and the generated page
+  `docs/cb-market-structure.txt`. It evaluates no strategy. Read the page before
+  proposing a CB strategy; design in `docs/2026-10-07-cb-market-facts-spec.txt`.
 - `cb_basic.maturity_date` is the delisting date for bonds that have left the
   market. Valuations read `contract_maturity_date` (through
   `valuation_maturity_date` in `verifier._load_cb_basic`); see

@@ -67,7 +67,9 @@ def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = 
     fixed_source = int(fixed_source_raw)
     pool_ids = sorted({0, 2, 4, 6, fixed_source})
     warehouse_files = [
-        ("data/cb_warehouse/cb_basic.parquet", ["ts_code", "stk_code", "issue_size", "rating", "conv_price"]),
+        ("data/cb_warehouse/cb_basic.parquet", ["ts_code", "stk_code", "issue_size", "rating", "contract_maturity_date"]),
+        # valuation skips a bond-day with no point-in-time conversion value: without this file every day is empty
+        ("data/cb_warehouse/cb_conv_value_pit.parquet", ["ts_code", "trade_date", "conv_value"]),
         ("data/cb_warehouse/cb_daily.parquet", ["ts_code", "trade_date", "open", "high", "low", "close", "vol"]),
         ("data/cb_warehouse/cb_call.parquet", ["ts_code", "ann_date", "call_date", "expire_date"]),
         ("data/cb_warehouse/stk_daily_qfq.parquet", ["stk_code", "trade_date", "close"]),
@@ -80,7 +82,7 @@ def declare_data_requirements(command: list[Any], spec: dict[str, Any] | None = 
             "nonnull_columns": [
                 col
                 for col in columns
-                if col not in {"conv_price", "ann_date", "call_date", "expire_date"}
+                if col not in {"contract_maturity_date", "ann_date", "call_date", "expire_date"}
             ],
         }
         for rel_path, columns in warehouse_files
