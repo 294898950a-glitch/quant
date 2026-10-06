@@ -1,0 +1,120 @@
+# 可转债下修历史权威表 cb_conv_price_history(spec)
+
+状态: draft, 未评审, 未进 proposal_gate。本文件只是工程设计, 不是研究方向的
+正式立项, 不改变 current.yaml 记录的任何 truth。
+背景来源: 2026-08-30~31 在 hkvm 上真实抓取集思录(jisilu.cn)转股价调整记录
+接口(`strategies/cb_arb/fetch_jisilu_adj_logs.py` + `clients/jisilu_client.py`,
+共 11+2 轮 codex review), 以及跟已有 PDF+LLM 抽取管线
+(`~/projects/cb_announcement_fetch/`)的交叉核对结果。
+
+## 0. 一句话
+
+把 hkvm 上抓到的原始集思录数据(`cb_conv_price_adj_jisilu.jsonl`, append-only,
+存续债每天重复抓、同一事件会有多条记录)整理成一张"一债一事件一行"的干净表,
+给下一步的定价器验证用, 不是重新设计抓取或校验逻辑。
+
+## 1. 现状(已验证, 不是猜测)
+
+- `data/cb_warehouse/cb_basic.parquet` 的 `conv_price` 是静态标量(最新转股价),
+  没有历史下修记录——之前发现这是验证定价器时的一个真实数据缺口。
+- 2026-08-30~31 抓完集思录: 1012 只候选债, 1011 只至少成功抓到过一次
+  (673 只已摘牌, 历史永久不变; 338 只存续, 每天定时刷新), 1 只(蓝盾转债/
+  bond_id=123015)因为公司简称缩写只剩一个字、没法安全区分"是同一只债改名"
+  还是"两只不相关的债撞了名字", 主动放弃自动识别, 长期保持"未知"状态。
+- 跟已有的 PDF+LLM 抽取管线(`conv_price_revisions.jsonl`, 4916 条有效抽取)
+  做过一次交叉核对: 385 条能对应到具体事件的记录里, 368 条(95.6%)完全一致,
+  10 条(2.6%)"新价格"一致但"旧价格"不一致(逐条核对确认是集思录没有单独
+  记录分红送股一类自动转股价调整, 不是任何一边抄错), 7 条(1.8%)对不上
+  日期(4 条是已知的蓝盾转债缺口, 其余是 2-3 天的日期口径差异)。
+  **结论: 集思录数据可以当权威源用, 但"旧价格"这一栏不是无条件可信的**,
+  见第 3 节。
+
+## 2. 目标(本 spec 覆盖的范围)
+
+从 hkvm 上的原始抓取文件, 生成一张干净的、去重的、按(债券, 事件)一行的表,
+供后续定价器验证脚本读取。只做整理, 不做新的抓取, 不做新的校验规则。
+
+## 3. 权威表设计
+
+| 这份产物 | 谁写 | 里面有什么 | 带什么来历 | 谁读 | 答不出来时写什么 |
+|---|---|---|---|---|---|
+| `data/cb_warehouse/cb_conv_price_history.parquet`(一债一事件一行) | `strategies/cb_arb/build_cb_conv_price_history.py`, 唯一写入者 | `bond_id`(6位), `bond_name`(该事件当时的原始显示名, 不做统一改名), `meeting_date`(股东大会日, 跟 bond_id 一起唯一定位一个事件), `outcome`(见下方权威枚举), `approved`(bool, 等价于 `outcome=="approved"`, 只为方便粗粒度过滤), `old_conv_price`/`new_conv_price`/`floor_price`(float, 可空), `effective_date`(可空), `fetched_at`(该事件最后一次被确认时的抓取时间) | 生成脚本头部记录: 源文件(`cb_conv_price_adj_jisilu.jsonl`)路径+行数+mtime, 生成时间, 去重规则版本号(见第 6 节)——写进 parquet 的元数据(`pandas.DataFrame.attrs` 存不进 parquet, 改成单独一个同名 `.meta.json` 伴随文件) | 后续定价器验证脚本(study/ 或 strategies/cb_arb/ 下待写的下修事件回测脚本); 人工探索性分析 | 见第 4 节, 单独一份"未解决名单" |
+| `data/cb_warehouse/cb_conv_price_history_unresolved.json`(抓不到历史的债名单) | 同一个生成脚本, 同一次运行里一起写 | 每个从未成功抓到过(`status` 不是 `ok`, 排除 `invalid_bond_id`)的 `bond_id`, 附最后一次尝试的 `status`/`error` | 生成脚本自己知道"哪些候选从没在源文件里出现过 `status=="ok"`"这件事, 不用来历字段单独证明——它就是这次生成过程直接算出来的 | 同上——任何要用 `cb_conv_price_history.parquet` 的人, 先查这份名单排除"零条历史"和"未知"两种情况的混淆 | (本身就是"答不出来时写什么"这一环, 不需要再有一层) |
+
+**`outcome` 权威枚举**(定义在生成脚本里, 唯一权威定义, 不在别处重复):
+`approved`(下修真的生效) / `rejected`(股东大会未通过, 含"未通过"和"不通过"
+两种测量到的措辞) / `cancelled`(股价自己涨回去, 会议撤回) /
+`no_adjustment_needed`(集思录给出的独立结局, 具体原因不猜测) /
+`both_delisted`(正股转债均退市) / `pending`(股东大会还没开, 集思录给的是
+预估值, `effective_date` 为空)。
+
+## 4. 明确排除的范围(不是本 spec 要做的事)
+
+- **不建 `cb_lifecycle` 表**: 生命周期日期(上市/摘牌/转股期起止)已经在
+  `cb_basic.parquet` 里, 没有证据说明现在需要一张新表重复这些字段。
+- **不建 `cb_disclosure_events`(公告原文)表**: PDF+LLM 抽取的原始数据
+  (`conv_price_revisions.jsonl`)已经躺在 hkvm 上, 没有下游读者现在需要
+  把它正式建成 quant 数据仓库的一张表——填不出"谁读"就不建。
+- **不做"旧价格"的自动修正**: 已知集思录的 `old_conv_price` 偶尔因为没算上
+  自动调整而偏差, 本 spec 不试图去猜/修这个偏差(没有第三方数据源能确认
+  真实值), 只如实标注这个已知限制在第 3 节的"带什么来历"里, 留给使用者
+  自己判断要不要信这一栏。
+- **不做 PDF+LLM 数据的持续交叉校验**: 那条管线不再维护更新, 第 1 节的
+  交叉核对是一次性的质量抽查, 不是要接入本表的生成流程里每次跑一遍。
+- **不处理蓝盾转债(123015)的名字问题**: 保持"未解决", 记录在
+  `cb_conv_price_history_unresolved.json` 里, 不在本 spec 尝试新的匹配规则。
+
+## 5. 前置依赖 / 风险
+
+- 依赖 `~/projects/cb_announcement_fetch/out/cb_conv_price_adj_jisilu.jsonl`
+  这份文件目前只存在于 hkvm, 不在 quant 仓库版本控制里(体量会持续增长,
+  不适合进 git)。生成脚本需要先把这份文件同步到本地/dgx 才能跑——按
+  "cron 屯 + 按需召回"的规矩, 这次同步是一次性的手工/脚本化拉取, 不是
+  在生成脚本内部现抓现拉。
+- **历史 schema 不一致**: 这份原始文件跨越了本次开发过程中的多次 schema
+  修订——早期(2026-08-30 第一批)记录没有 `outcome` 字段(只有
+  `approved: true/false`), 也没有 `fetched_at` 字段。已摘牌的债一旦成功
+  就不会再被重新抓取, 所以**这批老格式记录会永久保留在源文件里, 不会自然
+  变成新格式**。生成脚本必须显式做兼容转换(见第 6 节), 不能假设所有记录
+  都是最新 schema。
+
+## 6. 接口设计
+
+`strategies/cb_arb/build_cb_conv_price_history.py`:
+
+1. 逐行读原始 jsonl, 只保留 `status == "ok"` 的顶层记录; 记录状态不是 `ok`
+   且不是 `invalid_bond_id` 的 `bond_id`(如果从未在任何一行里成功过)进
+   "未解决名单"。
+2. 每条顶层记录展开成若干"事件"行(`records` 数组), 逐条做 legacy 兼容:
+   - 有 `outcome` 字段: 原样使用。
+   - 没有 `outcome` 字段(老格式): `approved == True` -> `outcome="approved"`;
+     `approved == False` -> `outcome="rejected"`(老格式版本的 jisilu_client
+     只认识"未通过"一种否定结局, 这个推断有实测代码历史依据, 不是猜测)。
+   - 没有 `fetched_at` 字段: 视为空字符串(去重时永远排在"有时间戳的"记录
+     之后, 见下条)。
+3. 按 `(bond_id, meeting_date)` 去重: 同一个 key 多次出现时, `fetched_at`
+   字符串大(ISO 格式, 字典序等价于时间序)的那条赢——这不仅解决"存续债
+   每天重复抓同一条历史"的冗余, 也正确处理"上次抓到还是 pending(预估值),
+   这次抓到已经变成 approved(真的生效)"这种状态真的变了的情况。
+4. 写 `cb_conv_price_history.parquet` + `cb_conv_price_history_unresolved.json`
+   + 一份 `cb_conv_price_history.meta.json`(源文件路径/行数/mtime, 生成时间,
+   本脚本的去重规则版本号, 供下游判断这张表是不是最新的)。
+
+## 7. 验收标准
+
+- 跑一遍生成脚本, 输出行数 = 去重后的真实事件数, 人工抽查 3-5 个已知真实
+  案例(比如第 1 节交叉核对时用过的那几个 bond_id)数值对得上原始抓取结果。
+- `cb_conv_price_history_unresolved.json` 里恰好列出蓝盾转债(123015), 不多
+  不少。
+- 老格式记录(`outcome` 缺失)的 legacy 转换有单元测试覆盖, 断言的是转换
+  结果(不是复述转换逻辑本身)。
+- 同一个 `(bond_id, meeting_date)` 出现多条冲突记录时, 输出取 `fetched_at`
+  最新的那条——需要构造一个"pending 变 approved"的场景专门测这条, 不能
+  只测"完全相同的两条谁赢都一样"这种不会红的假测试。
+
+## 8. 本 spec 完成之后, 还没解决的问题
+
+- 定价器验证具体怎么用这张表(比如按事件回放价格路径、还是只做统计层面的
+  验证)——下一步单独设计, 不在本 spec 范围内。
+- "旧价格"字段的已知偏差会不会实际影响验证结论, 需要等真正跑验证的时候
+  才知道, 到时候如果影响明显, 再回来决定要不要花力气修。

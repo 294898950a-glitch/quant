@@ -1,0 +1,13 @@
+schema_version: 1
+date: '2026-08-31'
+decision: no_truth_change
+reason: >-
+  纯参数调整: strategies/cb_arb/fetch_jisilu_adj_logs.py 的 GATE_BUCKETS
+  节流参数从起步保守值(min_gap=2.0/jitter=1.5/daily_cap=600)调松到
+  min_gap=1.5/jitter=1.0/daily_cap=1200——用 2026-08-31 真实跑完 600 次
+  请求零疑似反爬信号的数据支撑, 按 codex review 建议做分阶段校准(不是
+  一步到位), 只改节流数值和对应的 docstring 说明, 不改任何抓取/解析/
+  定价逻辑, current.yaml 指标不受影响。
+changed_paths:
+  - strategies/cb_arb/fetch_jisilu_adj_logs.py
+reviewer: claude

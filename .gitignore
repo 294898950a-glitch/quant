@@ -40,6 +40,9 @@ data/*/heartbeat
 data/*/tried_directions.jsonl
 data/*/editor_writes.jsonl
 data/*/control.signal
+# hkvm 上的原始集思录抓取快照(append-only, 持续增长), 只是本地临时同步
+# 副本, 不进版本控制——见 docs/2026-08-31-cb-conv-price-history-spec.txt 第 5 节
+data/cb_warehouse/_raw_cb_conv_price_adj_jisilu.jsonl
 
 # Codex P1.0 processor ledgers (会持续追加, 不应该 commit)
 data/research_framework/decisions.jsonl
