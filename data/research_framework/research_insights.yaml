@@ -493,7 +493,7 @@ key_insights:
       - "Not a deployment or promotion claim. The clean-data strategy is long-only with beta about 1.0-1.1 to cb_equal; absolute max drawdown is -25% to -35% in train, and 2022-2024 Sharpe is below 0.5 (the any_holdout_year_sharpe_lt_0_5 falsifier still fires)."
       - "2019-2024 excess is statistically explained by low-premium / double-low style exposure. Excess beyond those styles appears only in 2025-2026 (17 months, t about 1.5-2.2)."
       - "The 2025-2026 window was inspected for four variants in this diagnostic and many times before with contaminated data."
-      - "Point-in-time conversion value comes from one vendor (eastmoney). Spot checks: 游族转债 matches the jisilu down-revision log; true conversion value exceeds 110% of price on under 1% of top-10 rows."
+      - "Point-in-time conversion value comes from eastmoney and was cross-checked against jisilu on 2026-10-07 (scripts/verify_cb_conv_value_pit.py, data/cb_warehouse/verification/cb_conv_value_pit_vs_jisilu.yaml): all 270 matched listed bonds agree on the 2026-09-30 conversion value, and 434 of 435 jisilu down-revision events agree on the conversion price before and after the effective date (the exception, 113534, switches one trading day early in eastmoney). Not cross-checked: dividend-driven conversion-price adjustments, and bonds that never had a down-revision and are already delisted."
     decision_use: |
       1. Treat every cb_arb / cb_arb_value_gap_switch number computed on 2019-2024 data before 2026-10-07 as
          invalid evidence: the metrics in current.yaml, the yearly floors in cb_arb_hard_floors_v1_1, and the

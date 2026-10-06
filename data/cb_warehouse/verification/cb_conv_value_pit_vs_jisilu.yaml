@@ -1,0 +1,28 @@
+schema_version: 1
+checked_at: '2026-10-06T18:15:27.451052+00:00'
+subject: data/cb_warehouse/cb_conv_value_pit.parquet
+reference: jisilu via akshare (bond_cb_redeem_jsl, bond_cb_adj_logs_jsl)
+tolerance: 0.01
+level_check:
+  jisilu_listed_bonds: 319
+  matched_bonds: 270
+  unmatched_not_in_cb_basic: 49
+  eastmoney_dates:
+    '20260930': 270
+  max_abs_relative_diff: 0.0
+  share_within_tolerance: 1.0
+revision_history_check:
+  bonds_queried: 922
+  fetch_errors: 0
+  jisilu_revision_events: 503
+  bonds_with_revisions: 330
+  events_compared: 435
+  share_before_within_tolerance: 0.9977
+  share_after_within_tolerance: 1.0
+  mismatched_events:
+  - code: '113534'
+    effective: '20190924'
+    jsl_before: 20.7
+    em_before: 15.28
+    jsl_after: 15.28
+    em_after: 15.28
