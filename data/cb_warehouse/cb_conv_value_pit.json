@@ -1,0 +1,27 @@
+{
+  "name": "cb_conv_value_pit",
+  "created_at": "2026-10-06T17:34:28.576718+00:00",
+  "source": "eastmoney bond_zh_cov_value_analysis via akshare",
+  "rows": 794629,
+  "bonds": 996,
+  "start": "20070702",
+  "end": "20260930",
+  "missing_codes": {
+    "115003": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126006": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126007": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126008": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126009": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126010": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126011": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126012": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126013": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126014": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126015": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126016": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126017": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126018": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "126019": "TypeError(\"'NoneType' object is not subscriptable\")",
+    "404005": "TypeError(\"'NoneType' object is not subscriptable\")"
+  }
+}

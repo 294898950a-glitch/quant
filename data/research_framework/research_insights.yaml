@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-05-24T10:00:00+08:00"
+updated_at: "2026-10-07T02:00:00+08:00"
 authority: machine
 source_migration:
   legacy_markdown_removed: true
@@ -430,7 +430,114 @@ key_insights:
       evaluate_cb_arb_exit_gap_closing_percentile.py was patched
       2026-05-27 to use this pattern as the reference implementation.
 
+  - id: conv_price_lookahead_contamination_2026_10_07
+    priority: critical
+    summary: "cb_basic.conv_price is the LATEST conversion price (after every later down-revision) and both valuation paths apply it to all history. In 2019-2023 the value-gap signal therefore ranked bonds by data error, not by undervaluation. Rerunning the unmodified baseline on point-in-time conversion value turns every one of the 96 grid candidates from negative to positive train excess. Every cb_arb / cb_arb_value_gap_switch result computed before this date on 2019-2024 data is contaminated."
+    source: "data/cb_arb_conv_price_lookahead_2026-10-07/ (scripts/analyze_cb_conv_price_lookahead.py); point-in-time data in data/cb_warehouse/cb_conv_value_pit.parquet (scripts/build_cb_conv_value_pit.py)"
+    facts:
+      scope: "Local diagnostic only; no VM/spot; no strategy or truth change."
+      defect:
+        field: cb_basic.conv_price
+        built_by: "scripts/build_cb_warehouse.py + enrich_cb_conv_price.py / fix_delisted_conv_price.py (eastmoney TRANSFER_PRICE, else latest jisilu down-revision row)"
+        consumed_by:
+          - "strategies/cb_arb/verifier.py (main cb_arb)"
+          - "scripts/analyze_cb_arb_repair_times.py::_compute_daily_ranks (every daily_value_gap_amounts.parquet)"
+        example: "游族转债 128074: true conversion price 16.92-17.06 from 2019 until 2025-03-07, warehouse value 10.1 for all dates"
+        also_static: "cb_basic.rating is the latest rating as well"
+      static_conversion_value_error_by_year:
+        note: "error = static conversion value / true conversion value - 1, over ranked bond-days; top10 = the ten best-ranked picks each day"
+        all_mean_abs_error: {"2019": 0.306, "2020": 0.290, "2021": 0.285, "2022": 0.276, "2023": 0.242, "2024": 0.176, "2025": 0.067, "2026": 0.012}
+        top10_median_error: {"2019": 0.628, "2020": 1.050, "2021": 1.177, "2022": 1.333, "2023": 1.274, "2024": 1.101, "2025": 0.010, "2026": 0.000}
+        top10_share_overstated_gt_25pct: {"2019": 0.849, "2020": 0.999, "2021": 0.980, "2022": 1.000, "2023": 1.000, "2024": 0.787, "2025": 0.344, "2026": 0.000}
+        top10_share_static_conversion_value_gt_110pct_of_price: {"2019": 0.865, "2020": 0.998, "2021": 0.989, "2022": 0.995, "2023": 0.987, "2024": 0.498, "2025": 0.025, "2026": 0.000}
+        top10_share_true_conversion_value_gt_110pct_of_price: {"2019": 0.004, "2020": 0.002, "2021": 0.000, "2022": 0.000, "2023": 0.000, "2024": 0.000, "2025": 0.000, "2026": 0.000}
+        daily_spearman_value_gap_vs_error: {"2019": 0.829, "2020": 0.838, "2021": 0.822, "2022": 0.784, "2023": 0.702, "2024": 0.513, "2025": 0.268, "2026": -0.014}
+      baseline_rerun:
+        protocol: "Unmodified _run_value_gap_backtest, same 96-candidate grid, cost model on (slippage 0.0015, impact 0.001, cap 0.02), train 2019-01-01..2024-12-31, test 2025-01-01..2026-05-08 run only for the top 10 by train score. Only the pricer input changes."
+        static_reproduces_recorded_baseline: "test_excess 0.37976 equals the recorded baseline_no_entry_gate value"
+        static:
+          train_excess_min_median_max: [-0.132, -0.065, -0.004]
+          train_share_candidates_positive: 0.0
+          test_excess_of_train_best: 0.380
+        pit:
+          train_excess_min_median_max: [0.633, 0.785, 1.098]
+          train_share_candidates_positive: 1.0
+          train_best_max_drawdown: -0.254
+          test_excess_of_train_best: 0.479
+          test_excess_median_of_top10: 0.507
+        pit_lag1:
+          note: "acts on yesterday's signal at today's close"
+          train_excess_min_median_max: [0.261, 0.416, 0.591]
+          train_best_max_drawdown: -0.306
+          test_excess_of_train_best: 0.436
+        pit_norating_lag1:
+          note: "most conservative: one-day delay, every bond priced as AA, rating floor off"
+          train_excess_min_median_max: [0.406, 0.556, 0.820]
+          train_best_max_drawdown: -0.353
+          test_excess_of_train_best: 0.334
+          test_excess_median_of_top10: 0.244
+          yearly_excess_train_best: {"2019": 0.069, "2020": 0.340, "2021": 0.188, "2022": -0.020, "2023": 0.024, "2024": 0.024, "2025": 0.121, "2026": 0.151}
+          yearly_sharpe_train_best: {"2019": 1.570, "2020": 1.686, "2021": 1.721, "2022": -1.010, "2023": 0.129, "2024": 0.209, "2025": 1.659, "2026": 2.878}
+          worst_single_year_drawdown_vs_benchmark: -0.116
+        exits_settled_at_entry_price_for_missing_close: "8-12 of 1476-2057 trades per variant; not material"
+      style_attribution:
+        note: "Daily regression of strategy return on cb_equal and on cost-free daily style returns (lowest-quintile conversion premium, double-low). The style returns pay no costs, so this is a harsh control."
+        pit_norating_lag1_train: {beta_to_benchmark: 1.103, alpha_vs_benchmark: 0.088, alpha_t: 2.17, alpha_after_low_premium: 0.030, alpha_after_low_premium_t: 0.76, alpha_after_low_premium_and_double_low: -0.064}
+        pit_norating_lag1_test: {beta_to_benchmark: 1.143, alpha_vs_benchmark: 0.149, alpha_t: 1.51, alpha_after_low_premium: 0.148, alpha_after_low_premium_t: 1.55, alpha_after_low_premium_and_double_low: 0.142}
+        pit_lag1_test: {alpha_vs_benchmark: 0.209, alpha_t: 2.09, alpha_after_low_premium: 0.208, alpha_after_low_premium_t: 2.20}
+      why_old_patterns_appeared:
+        - "'value gap rank is anti-alpha' and 'reverse rank wins': the largest gaps were the largest data errors; the smallest positive gaps were the least wrong rows."
+        - "'train fails, test passes' across all rejected families: the error is large in 2019-2024 and close to zero in 2025-2026, because the stored price is the current one."
+        - "'far above bond floor / deep in the money option exposure loses' (option_false_undervalue_attribution): a bond priced near par with static moneyness above 1.5 is the signature of a later down-revision, not of a real deep-in-the-money bond."
+    limits:
+      - "Not a deployment or promotion claim. The clean-data strategy is long-only with beta about 1.0-1.1 to cb_equal; absolute max drawdown is -25% to -35% in train, and 2022-2024 Sharpe is below 0.5 (the any_holdout_year_sharpe_lt_0_5 falsifier still fires)."
+      - "2019-2024 excess is statistically explained by low-premium / double-low style exposure. Excess beyond those styles appears only in 2025-2026 (17 months, t about 1.5-2.2)."
+      - "The 2025-2026 window was inspected for four variants in this diagnostic and many times before with contaminated data."
+      - "Point-in-time conversion value comes from one vendor (eastmoney). Spot checks: 游族转债 matches the jisilu down-revision log; true conversion value exceeds 110% of price on under 1% of top-10 rows."
+    decision_use: |
+      1. Treat every cb_arb / cb_arb_value_gap_switch number computed on 2019-2024 data before 2026-10-07 as
+         invalid evidence: the metrics in current.yaml, the yearly floors in cb_arb_hard_floors_v1_1, and the
+         insights main_vs_value_gap_distinction, cost_realism_wall, panic_detector_dead_end,
+         single_filter_dead_end, option_false_undervalue_attribution_2026_05_17,
+         option_source_value_gap_structural_tradeoff_2026_05_17, value_gap_rank_is_anti_alpha_2026_05_24,
+         asymmetric_payoff_mechanism_2026_05_27 and all_autonomous_directions_exhausted_2026_05_19.
+         They describe a data error, not the market. Do not cite them as reasons to close or to open a direction.
+      2. forbidden_families and closed_families were closed on contaminated evidence. That does not make them
+         good ideas; it means they are untested. Do not reopen them in bulk.
+      3. No valuation may read cb_basic.conv_price for a historical date. Use
+         data/cb_warehouse/cb_conv_value_pit.parquet. A ranks file whose top-10 picks show conversion value
+         above 110% of market price on more than a few percent of rows is a data error and must fail integrity.
+      4. Do not archive cb_arb_value_gap_switch on the expired kill_date: the falsifiers were evaluated on
+         invalid data. Do not promote it either. The next work is the open thread
+         pit_value_gap_incremental_edge.
+    follow_ups:
+      - pit_value_gap_incremental_edge
+
 open_threads:
+  - id: pit_value_gap_incremental_edge
+    priority: critical
+    status: open
+    opened_at: "2026-10-07"
+    evidence: conv_price_lookahead_contamination_2026_10_07
+    summary: "On point-in-time data the value-gap ranking earns positive excess over cb_equal in 7 of 8 years even with a one-day delay and no rating information. Open question: does the theoretical-value gap add anything beyond a plain low-conversion-premium / double-low rotation, net of costs?"
+    frozen_candidate:
+      label: pit_norating_lag1
+      params: {min_gap_pct: 0.0, sell_gap_pct: 0.0, switch_hurdle_pct: 0.03, max_hold_days: 180, stop_gap_ratio_floor: 0.0}
+      rule: "Do not retune before test 1. Any change to params, grid, or universe restarts the count of looks."
+    required_tests:
+      - id: fresh_holdout
+        what: "Refresh cb_daily / stk_daily_qfq / cb_call / cb_basic through 2026-09-30 (cb_conv_value_pit already covers it) and run the frozen candidate once on 2026-05-09..2026-09-30."
+        falsifier: "excess vs cb_equal <= 0, or alpha after benchmark and low-premium style <= 0"
+      - id: matched_style_control
+        what: "Backtest a plain lowest-conversion-premium and a double-low top-N rotation with the same number of holdings, the same cost model, the same one-day delay and the same universe; compare year by year with the frozen candidate."
+        falsifier: "the frozen candidate does not beat both controls net of costs in pooled 2019-2026 and in at least 5 of 8 years"
+      - id: flat_years_diagnosis
+        what: "Explain 2022-2024, where excess is about zero and Sharpe is below 0.5, before any risk overlay is proposed."
+        falsifier: "no state variable known at the time separates 2022-2024 from the other years"
+    forbidden:
+      - "any valuation that reads cb_basic.conv_price or cb_basic.rating for a historical date"
+      - "selecting parameters on 2025-2026 or on the fresh holdout"
+      - "stacking entry filters, exit grids or position scaling before tests 1 and 2 are answered"
   - id: promote_absolute_value_gap_ranking_to_core
     priority: high
     summary: "Test whether absolute value-gap ranking alone should be promoted into core verifier as an option."

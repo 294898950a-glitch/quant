@@ -39,6 +39,7 @@ summary.
   - [requeue_stale_pipeline_failures freshness guards (2026-05-26)](#requeue_stale_pipeline_failures-freshness-guards-2026-05-26)
 - [Current Snapshot](#current-snapshot)
   - [Current snapshot as of 2026-05-22 13:00 Asia/Shanghai](#current-snapshot-as-of-2026-05-22-1300-asiashanghai)
+  - [Conversion-price look-ahead finding (2026-10-07)](#conversion-price-look-ahead-finding-2026-10-07)
 - [Hard Boundaries](#hard-boundaries)
 
 ## Bootstrap & Runtime Entrypoints
@@ -839,6 +840,26 @@ local processes before being written:
   while the live status file and local processes show the cron tick is generating
   the next research direction through Hermes. Always verify the live queue and
   `logs/research_queue_status.json` before acting.
+
+### Conversion-price look-ahead finding (2026-10-07)
+
+`cb_basic.conv_price` holds the latest conversion price and was applied to all
+history by both valuation paths. In 2019-2023 the value-gap ranking therefore
+sorted bonds by data error. Every `cb_arb` / `cb_arb_value_gap_switch` result on
+2019-2024 data from before this date, including the 2026-05-22 snapshot above,
+is invalid as evidence. The machine-owned record is the critical insight
+`conv_price_lookahead_contamination_2026_10_07` in `research_insights.yaml`;
+the evidence is `data/cb_arb_conv_price_lookahead_2026-10-07/`.
+
+- Historical valuations must read point-in-time conversion value from
+  `data/cb_warehouse/cb_conv_value_pit.parquet`
+  (`scripts/build_cb_conv_value_pit.py`), never `cb_basic.conv_price`.
+- The active research question is the open thread
+  `pit_value_gap_incremental_edge`: its frozen candidate and three required
+  tests are defined there and must run before any new overlay is proposed.
+- The orchestrator has been paused since 2026-05-27 and all ten legacy families
+  are still in `forbidden_families`. They were closed on contaminated evidence,
+  which makes them untested, not validated.
 
 ## Hard Boundaries
 

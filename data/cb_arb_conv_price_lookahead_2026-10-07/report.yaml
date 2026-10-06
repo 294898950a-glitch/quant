@@ -1,0 +1,52 @@
+schema_version: 1
+run_id: cb_arb_conv_price_lookahead_2026-10-07
+date: '2026-10-07'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: mini-spec-retry
+three_exits_section:
+  adoption_pass: false
+  review_summary: Diagnostic evidence only. The static-conv_price baseline is invalid;
+    the point-in-time rerun is not a promotion candidate until the follow-up tests
+    run.
+  review_main_reason: cb_basic.conv_price look-ahead
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- any valuation that reads cb_basic.conv_price or cb_basic.rating for a historical
+  date
+learnings:
+- The value-gap ranking built on static conv_price ranks bonds by conversion-value
+  error; see conv_value_error_by_year.csv.
+- The same backtest on point-in-time conversion value has positive train excess for
+  every grid candidate, including with a one-day signal delay and no rating information;
+  see grid_summary.csv.
+- Train-period excess is explained by low-premium / double-low style exposure; see
+  style_attribution.csv.
+follow_up_actions:
+- Run the three required tests of open thread pit_value_gap_incremental_edge in research_insights.yaml.
+- Evidence-only record; do not promote to truth without user approval.
+status: COMPLETE
+notes: Local diagnostic only; no VM/spot; no strategy or truth change.
+references:
+- data/research_framework/research_insights.yaml#conv_price_lookahead_contamination_2026_10_07
+related_reports:
+- data/cb_arb_option_false_undervalue_attribution_2026-05-17/report.yaml
+evaluator_report:
+  scope: local diagnostic only; no VM/spot; no strategy or truth change
+  inputs:
+    data_root: data/cb_arb_concurrent_supervised_20260511_094500
+    pit_path: data/cb_warehouse/cb_conv_value_pit.parquet
+    splits:
+      train:
+      - '20190101'
+      - '20241231'
+      test:
+      - '20250101'
+      - '20260508'
+  hypothesis: cb_basic.conv_price is the latest conversion price; applying it to history
+    makes the value-gap signal rank bonds by data error instead of by undervaluation.
+  artifacts:
+  - conv_value_error_by_year.csv
+  - grid_summary.csv
+  - yearly_excess.csv
+  - style_attribution.csv
+  - summary.json

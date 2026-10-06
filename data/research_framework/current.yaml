@@ -23,6 +23,16 @@ summary:
       review_status: reject
       main_reason: Train-period excess return is negative; strategy remains deeply
         unprofitable in absolute PnL.
+  data_integrity_warning:
+    recorded_at: '2026-10-07'
+    insight: conv_price_lookahead_contamination_2026_10_07
+    evidence: data/cb_arb_conv_price_lookahead_2026-10-07/
+    finding: Every cb_arb and cb_arb_value_gap_switch metric, falsifier result and
+      cost-wall number in this file was computed with cb_basic.conv_price (the latest
+      conversion price) applied to all history. They are invalid as evidence.
+    effect_on_decisions: Do not archive or promote either strategy on these numbers
+      or on the expired kill_date. Status fields below are unchanged pending the
+      open thread pit_value_gap_incremental_edge.
   cost_realism_wall:
     applies_to:
     - cb_arb
