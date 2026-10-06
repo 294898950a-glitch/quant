@@ -10,11 +10,11 @@ import pandas as pd
 import pytest
 
 from strategies.cb_arb import verifier as v
+from strategies.cb_arb import warehouse_access as wa
 from strategies.cb_arb.verifier import (
     CBArbConfig,
     IS_END,
     OOS_START,
-    RATING_TO_INT,
     _build_call_index,
     _compute_metrics,
     _index_total_return,
@@ -23,6 +23,7 @@ from strategies.cb_arb.verifier import (
     _unpack_config,
     run_backtest,
 )
+from strategies.cb_arb.warehouse_access import RATING_TO_INT
 from strategies.cb_redemption.result_types import BacktestResult, TradeRecord
 
 
@@ -291,16 +292,16 @@ def _install_synthetic_caches(monkeypatch):
         ["stk_code", "trade_date"]
     ).reset_index(drop=True)
 
-    monkeypatch.setattr(v, "_CB_BASIC_CACHE", cb_basic_proc)
-    monkeypatch.setattr(v, "_CB_DAILY_CACHE", cb_daily_proc)
-    monkeypatch.setattr(v, "_CB_CALL_CACHE", cb_call)
-    monkeypatch.setattr(v, "_STK_DAILY_CACHE", stk_daily_proc)
-    monkeypatch.setattr(v, "_TRADING_DAYS_CACHE", days)
+    monkeypatch.setattr(wa, "_CB_BASIC_CACHE", cb_basic_proc)
+    monkeypatch.setattr(wa, "_CB_DAILY_CACHE", cb_daily_proc)
+    monkeypatch.setattr(wa, "_CB_CALL_CACHE", cb_call)
+    monkeypatch.setattr(wa, "_STK_DAILY_CACHE", stk_daily_proc)
+    monkeypatch.setattr(wa, "_TRADING_DAYS_CACHE", days)
     # 当日真实转股价值: 合成数据里转股价恒为 cb_basic.conv_price, 没有下修
     stk_of = dict(zip(cb_basic["ts_code"], cb_basic["stk_code"]))
     conv_price_of = dict(zip(cb_basic["ts_code"], cb_basic["conv_price"]))
     stk_close = {(r.stk_code, r.trade_date): r.close for r in stk_daily_proc.itertuples(index=False)}
-    monkeypatch.setattr(v, "_CONV_VALUE_PIT_CACHE", {
+    monkeypatch.setattr(wa, "_CONV_VALUE_PIT_CACHE", {
         (ts, d): 100.0 * stk_close[(stk_of[ts], d)] / conv_price_of[ts] for ts in cb_codes for d in days
     })
     return cb_codes, days
@@ -515,10 +516,11 @@ def test_excess_return_zero_dates_handled(monkeypatch):
 def test_real_data_30day_smoke():
     """真实 cb_warehouse 数据, 跑 30 天 OOS 子段, 验证全流程."""
     import time
-    from strategies.cb_arb.verifier import _load_trading_days, reset_cache
+    from strategies.cb_arb.verifier import reset_cache
+    from strategies.cb_arb.warehouse_access import load_trading_days
 
     reset_cache()
-    days = _load_trading_days()
+    days = load_trading_days()
     test_pool = set([d for d in days if d.startswith("2024")][:30])
     assert len(test_pool) == 30
     t0 = time.time()
@@ -537,10 +539,10 @@ def test_valuation_uses_point_in_time_conv_price(monkeypatch):
     cb_codes, days = _install_synthetic_caches(monkeypatch)
     ts, day = cb_codes[0], days[10]
     # 当日真实转股价值 50 → 有效转股价 = 100 * 正股价 / 50, 与 cb_basic 里的 10.0 无关
-    v._CONV_VALUE_PIT_CACHE[(ts, day)] = 50.0
-    assert v.point_in_time_conv_price(ts, day, 8.0) == pytest.approx(16.0)
+    wa._CONV_VALUE_PIT_CACHE[(ts, day)] = 50.0
+    assert wa.point_in_time_conv_price(ts, day, 8.0) == pytest.approx(16.0)
     # 查不到当日值 → NaN, 调用方跳过该券当日 (缺证据不估值)
-    assert math.isnan(v.point_in_time_conv_price(ts, "19990101", 8.0))
+    assert math.isnan(wa.point_in_time_conv_price(ts, "19990101", 8.0))
 
 
 def test_cb_index_is_a_return_index_not_a_price_level(monkeypatch):
@@ -550,7 +552,7 @@ def test_cb_index_is_a_return_index_not_a_price_level(monkeypatch):
         "trade_date": ["20240102", "20240103", "20240104", "20240103", "20240104"],
         "close": [200.0, 200.0, 200.0, 100.0, 100.0],
     })
-    monkeypatch.setattr(v, "_CB_DAILY_CACHE", daily)
+    monkeypatch.setattr(wa, "_CB_DAILY_CACHE", daily)
     monkeypatch.setattr(v, "_CB_INDEX_CACHE", None)
     # 均价从 200 掉到 150 (-25%), 但持有人一分钱没亏
     assert _index_total_return("20240102", "20240104") == pytest.approx(0.0)
@@ -563,9 +565,9 @@ def test_valuation_reads_contract_maturity_not_the_rewritten_field(monkeypatch, 
     cb_basic["contract_maturity_date"] = ["20260101", None]          # 合同上到 2026; 第二只解析不出
     path = tmp_path / "cb_basic.parquet"
     cb_basic.to_parquet(path, index=False)
-    monkeypatch.setattr(v, "CB_BASIC_PARQUET", path)
-    monkeypatch.setattr(v, "_CB_BASIC_CACHE", None)
-    df = v._load_cb_basic()
+    monkeypatch.setattr(wa, "CB_BASIC_PARQUET", path)
+    monkeypatch.setattr(wa, "_CB_BASIC_CACHE", None)
+    df = wa.load_cb_basic()
     assert df.loc["CB001.SH", "valuation_maturity_date"] == "20260101"
     assert df.loc["CB002.SH", "valuation_maturity_date"] == "20280101"  # 退回原字段
 

@@ -1,15 +1,15 @@
 {
   "name": "cb_events",
-  "built_at": "2026-10-06T22:14:29.740457+00:00",
-  "events": 8388,
-  "bonds": 955,
+  "built_at": "2026-10-06T22:36:17.253316+00:00",
+  "events": 8391,
+  "bonds": 956,
   "by_type": {
-    "no_revision": 2214,
-    "revision_may_trigger": 1841,
+    "no_revision": 2215,
+    "revision_may_trigger": 1842,
     "call_may_trigger": 1009,
     "no_call": 748,
     "call_announced": 591,
-    "revision_meeting": 527,
+    "revision_meeting": 528,
     "revision_effective": 500,
     "revision_proposal": 491,
     "revision_decided": 458,
@@ -31,7 +31,7 @@
     "2023": 1152,
     "2024": 2245,
     "2025": 1435,
-    "2026": 789
+    "2026": 791
   },
   "unclassified_share_of_revision_notices": 0.0018
 }

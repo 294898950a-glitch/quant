@@ -1,0 +1,433 @@
+# 修复 maturity_date 数据源污染 + cb_call 强赎窗口误标(spec)
+
+状态: draft, 第一、二轮 codex 设计审查均 REVISE, 第三轮判定"实质收敛,
+修完当轮指出的具体问题即可视为 ACCEPT, 不需要第四轮"。本版(v4)已按
+第三轮意见修订(人工核对表准入规则、point-in-time 构建函数签名跟人工
+核对表按 ts_code 查找的矛盾、消费者报告义务按库函数/顶层脚本分层)。
+背景来源: `~/projects/knowledge`(dgx)2026-08-28 的诊断工作——
+`notes/退市转债的到期日字段被数据源改写.md`、
+`notes/回测提前知道了转债哪天退市.md`、
+`notes/数据缺陷的位移可以大于正在争论的效应量.md`、
+`notes/cb_call表不能当强赎标记.md`、
+`sources/maturity_date影响面排查.md`。本 spec 只做工程设计, 不是研究方向的
+正式立项。
+
+**修订说明(不留旧结论, 直接改写, 不加"修订记录"章节)**:
+第一轮指出两个 blocking 问题——(a) 强赎窗口的修复方案本身不成立, 会把
+到期/回售/信用退出继续错标成强赎, 而且引入新的"按最终结局筛事件"前视
+偏差; (b) 受影响调用方清单不是"全项目搜索、已确认", 是漏了至少 4 个
+真实文件的不完整清单, 其中一个漏项就在本次会话新写的脚本里。v2 采纳后
+重写, 但第二轮又指出一个新的 blocking 缺口(缺失合同期限时消费者该
+怎么办没定义, 而且举的"115003.SH 不属于分离交易可转债"这个例子本身
+是错的)和两条验收标准仍然循环自证/不够机械。v3(本版)按第二轮意见
+修订。
+
+## 实施状态 (2026-10-07, 与下文设计的差异)
+
+本 spec 写完后没有实施。2026-10-07 另一条线在不知道它存在的情况下做了一个更小的版本,
+已合并。对照下文各节:
+
+- 4.1 合同到期日: **部分实施**。`cb_basic.contract_maturity_date` 已加
+  (`scripts/build_cb_warehouse.py::contract_maturity_date`), 核心估值路径经
+  `warehouse_access.load_cb_basic()` 派生的 `valuation_maturity_date` 读它。
+  **没做的**: 旧列没有改名为 `expire_date_raw` (所以没迁移的读取点不会报错, 会静默读到旧值);
+  年限没有限制在 {5, 6}; 没有人工核对表 (115003.SH 等 15 只解析不出的老券退回旧字段,
+  而不是留空并报告); 没有 `contract_tenor_years` / `contract_tenor_parse_status` 两列;
+  消费者不报告因缺失被排除的券。这几条仍按下文设计待做。
+- 4.2 强赎标记: **没有按"停用"做, 改成了重建**。停用的前提是"没有 point-in-time 可靠的
+  事件源"; 2026-10-07 找到了两个: 东财 `EXECUTE_REASON` (4 = 强赎, 已摘牌的 468 只执行日到
+  摘牌都在 0-19 天内) 和 hkvm 上的巨潮公告档案。`cb_call.parquet` 现在只含真强赎 591 只,
+  窗口终点是最后交易日 (`scripts/build_cb_call_history.py`)。下文 1.2 的反例格力转债
+  (110030.SH) 不在新表里; 新表中最后交易日落在合同到期前 90 天内的只有 5 只。
+  **仍然成立的顾虑**: 仅靠巨潮公告认定的 113 只, 用了"提前停止交易"这个事后结果来筛公告。
+- 第 5 节调用方清单: 只迁了 `verifier.py` 和 `analyze_cb_arb_repair_times.py`, 其余未迁。
+
+## 0. 一句话
+
+`build_cb_warehouse.py` 把两张不同用途的字段(合同到期日 / 强赎窗口结束日)
+都从同一个上游字段 `EXPIRE_DATE`照抄, 而这个字段对已退市转债被数据源
+改写成了**实际摘牌日**, 不是合同到期日——这造成了一个**前视偏差**(回测在
+2020年就知道这只债2022年哪天退市)和一个**误标**(28%-48%的存续债观测点
+被错误标成"已强赎")。两个问题方向相反, 不能用同一个补丁解决, 而且
+"已强赎"这件事目前**没有可靠的、point-in-time 可得的数据源能确认**,
+不能靠猜。
+
+## 1. 问题(已用数据证实)
+
+### 1.1 `maturity_date` 污染 + 前视偏差
+
+- `cb_basic.maturity_date`(源自 eastmoney `EXPIRE_DATE`)对已退市转债不是
+  合同到期日, 是数据源就地改写后的实际兑付/摘牌日。存续中 338 只名义
+  期限清一色 6.00 年(标准合同), 已退市 674 只用同一字段算出的期限中位数
+  只有 2.73 年——合同期限不会因为退市而变短。
+- `corr(读到的距到期天数, 距实际摘牌天数) = 0.99994`。2019-2024 回测
+  824 笔交易里, 摘牌前 180 天内入场的 **0 笔**——一个没有未来信息的模型
+  不可能在最后半年打出一个精确的零。
+- 影响面: 2019-2026 回测窗口, 41.8% 的 obs、53.9% 的标的受影响; 覆盖
+  2019-2024 已登记基线的区间里 50%-99% 的 CB-day。
+- 用重建的合同到期日重跑 384 次回测(96 组参数 × cost-on/off × 修正
+  前后), train 期结果变好(79.2% 候选变好), test 期结果**方向完全翻转**
+  (excess>0 候选 96/96 → 20/96), 最优参数也换了人。位移(7-34pp 累计
+  超额, 0.06-1.11 夏普)比项目自己判 accept/reject 的门槛(~7pp)还大。
+
+### 1.2 `cb_call` 误标为强赎, 而且没有可靠的替代事件源
+
+- `cb_call.parquet` 看起来是"强赎事件表", 实际是"含强赎条款"的名单——
+  1012 只里 997 只有记录, **包含全部 338 只仍在存续的转债**。`is_call`
+  字段是脚本里硬编码的常量字符串, 不是数据。`ann_date`/`call_date`
+  这两个字段本身**也不能保证对应"发行人决定实施强赎"这一个事件**——
+  `study/cb_exit_mode_stats.py` 自己的注释(`:797` 附近)已经写明: 这张表
+  可能混入到期赎回、回售执行、"满足条件但公告不行使"等记录, 分不出来。
+- `cb_call.expire_date` 与 `cb_basic.maturity_date` 同源(都是
+  `EXPIRE_DATE`), 逐行 100% 相等。`verifier.py` 的 `_build_call_index`
+  拿 `(ann_date, expire_date)` 当强赎窗口: 对已退市债这个窗口中位 33 天
+  (因为 expire_date 恰好被改写成了摘牌日, 碰巧对); 对存续债窗口中位
+  **1126 天**(因为这里 expire_date 是真·合同到期日, 还有好几年)。
+- 被误标为"已强赎"(期间内价格锁定 103 元、禁止买入)的存续债观测:
+  2025 年 28.1%, 2026 年 48.6%。
+- **v1 提议的修复(改用 `(ann_date, delist_date)`, 只对已退市债建索引)
+  经 codex 审查证伪, 不成立**: 真实反例——格力转债(110030.SH),
+  `value_date=2014-12-25`, 解析出的 5 年合同到期日也是 2019-12-25,
+  `delist_date=2019-12-25`(贴着合同到期日正常到期), 但 `cb_call.parquet`
+  里它有 `ann_date=2019-02-15`。改用 `(ann_date, delist_date)` 会把
+  2019-02-15 到 2019-12-25 这将近十个月**正常到期退出前的区间**错标成
+  "已强赎"。当前数据里"推定到期日落在 delist_date ±30 天内、但同时有
+  `ann_date`"的记录**至少 100 条**, 不是孤例。更深一层: 用"这只债后来
+  有没有 `delist_date`"来决定要不要把它的 `ann_date` 算进强赎窗口,
+  本身就是按**最终结局**筛选历史事件, 是换了一种形式的前视偏差——即使
+  窗口端点本身准确, 这个筛选逻辑仍然不 point-in-time-valid。
+
+### 1.3 两个问题不能用同一个补丁修, 强赎标记也不能用猜的方式修
+
+如果把 `expire_date` 也"修正"成合同到期日, 已退市债的窗口会从 33 天
+暴涨到几年, 回测彻底毁掉。1.1 和 1.2 必须分开修——而且 1.2 目前**没有
+一个 point-in-time 可靠的事件源**能确认"这只债真的被强赎了", 不能为了
+"总要有个答案"硬凑一个仍然错的规则(见第 4 节的处理方式)。
+
+### 1.4 现有的"安全网"没接住这个问题, 而且相关代码比第一次排查时找到的更多
+
+- `scripts/verify_cb_data_independent.py` 号称独立验证三个数据源的
+  `EXPIRE_DATE`, 但三个源全部同源(都是 eastmoney), 同源必然一致, 只是
+  在**给一份假通行证**——它在**取值**层有效(确实抓到过 `conv_price`
+  不一致), 失效的是**语义**层, 不知道自己比的三份数据本来就该来自不同
+  源头。
+- `test_cb_pricer.py` / `test_verifier.py` 全用合成 fixture, 不读真实
+  parquet, 这类 bug 修不修测试都是绿的。
+- `framework/autonomous/ideation_cycle.py`(具体行号见 2026-08-28 排查,
+  本 spec 未重新核实行号是否随近期改动漂移)把含错误期限的缓存路径写进了
+  自动生成的实验 spec 模板的 `required_data`——自动研究循环会继续
+  给新实验灌错误数据, 除非这条也堵住。
+- **v1 的一处错误, 如实记录**: v1 spec 说"知识库提到的 `universe_filter.py`
+  在当前代码库找不到"——**这个结论是错的**。它就是
+  `scripts/evaluate_cb_arb_universe_filter.py`(git 提交 `3ae78c8` 引入),
+  第 151 行附近直接实现了知识库描述的"训练期只要曾经距到期不足一年,
+  就永久加入排除集合"这个逻辑, 而且第 147 行用被污染的 `maturity_date`
+  算 `remaining_maturity_years`。v1 之所以没搜到, 是因为按知识库笔记
+  提到的确切文件名 `universe_filter.py` 去 `find`, 而真实文件名不同
+  ——这本身是"不要按文件名猜职责"这条规矩的一次真实违反, 已改正做法
+  (见下面第 5 节的搜索方法)。
+- **v1 的第二处错误, 如实记录**: v1 spec 把本次会话新写的
+  `study/diagnose_down_revision_pricing_signal.py` 列为"排查后确认不受
+  影响", 但它实际执行 `cb_basic["delist_date"].fillna(cb_basic["maturity_date"])`
+  (第 150 行)来确定每只债的存续期上界——是受影响文件, 不是排查漏看,
+  是压根没搜到这一行(用的是子串"maturity_date"作为排查依据, 但 v1 写
+  这条结论的时候看错了自己脚本里的另一处字段名)。已在第 5 节改正。
+
+## 2. 目标(本 spec 覆盖的范围)
+
+1. 在数据源头(`build_cb_warehouse.py`)重建正确的合同到期日, 新增一个
+   语义明确的字段, 并让"合同到期日"这个语义的**唯一权威定义**只存在
+   这一处。
+2. **停用**`verifier.py` 里依赖 `cb_call` 猜测"是否已强赎"的特殊定价
+   逻辑(锁价 103、禁止买入), 而不是用另一条同样不可靠的规则替换它——
+   见第 4 节的理由。
+3. 让 `scripts/verify_cb_data_independent.py` 不再对这个字段发出假的
+   "OK"通行证。
+4. 如实标注受影响的 WIP 基线现状, 不在本 spec 里逐个重跑——那是后续
+   步骤, 不阻塞本次修复落地。
+5. 明确"冻结的历史实验脚本"在字段改名后的处置政策(见第 5 节), 不能
+   一边说"读取点报错是刻意设计"一边对这批脚本的命运保持沉默。
+
+## 3. 明确排除的范围
+
+- `transfer_end_date` 本次实验里两侧都还是脏的, 尚未证实是否受同一个
+  污染源影响, **不在本 spec 修复范围**, 只如实记录"污染量可能比测出来的
+  更大"这个已知局限。
+- `framework/autonomous/ideation_cycle.py` 缓存路径的具体修法本次不展开
+  (需要先确认近期改动有没有动过这部分, 行号是否还准), 只在验收标准里
+  加一条"确认自动研究循环不再继承旧缓存路径", 具体怎么改留到实现阶段
+  看代码现状再定。
+- 受影响 WIP 基线的重跑/归档决定, 本 spec 不代为决定, 只记录现状。
+- 不重新设计"怎么才能可靠判断一只债是否真的被强赎"——第 4 节的立场是
+  "目前没有, 就不猜", 不是"本 spec 之外再找个办法"。如果以后找到可靠
+  事件源(比如逐券核对交易所强赎实施公告), 那是另一个独立的 spec。
+- `cb_pricer_lattice.py`(v2 格子定价器)已经有自己的、基于价格触发条件
+  (`call_condition.py`)的强赎内生建模路径, 不依赖 `cb_call.parquet`,
+  本次不受影响, 也不是本 spec 要修的对象。
+
+## 4. 权威定义(唯一来源, 不在别处重复)
+
+### 4.1 合同到期日
+
+- **`cb_basic.contract_maturity_date`**(新字段): 从 `interest_rate_explain`
+  (票面利率条款文本)解析合同年限("第六年"→6年, 复用
+  `study/cb_exit_mode_stats.py` 的 `parse_tenor()`, 不重新实现一份),
+  `value_date + 合同年限` 得到。
+  - **数据契约**(codex 审查要求补充, 不能只是"文本里找最大的中文序数"):
+    - `value_date` 必须是合法日期, 缺失或非法则整行 `contract_maturity_date`
+      留空, 不假设。
+    - 解析出的年限只接受项目已验证过的取值集合 `{5, 6}`(当前数据全部
+      落在这两个值), 出现集合之外的年限视为解析失败, 不采信, 留空并
+      计入失败统计(见下)——不能"文本里出现第几年就信第几年", 因为
+      未来新债的条款文本格式可能变化, 硬信容易引入新的静默错误。
+    - `contract_maturity_date` 生成后做一次日历合理性校验(在
+      `value_date` 之后、且不超过一个宽松上限比如 10 年), 不合理的
+      同样判解析失败。
+    - 解析失败/年限不在允许集合内的债, **不能称"完全替代", 也不能
+      不声不响留空**——单独写一份计数(多少只、哪些代码)到 warehouse
+      构建日志和一份小型审计文件里, 供后续人工核对。
+      **`115003.SH`(中兴债1)的准确描述**(第二轮 codex 审查纠正了 v2
+      的错误): 它**确实是**"认股权和债券分离交易的可转换公司债券"里的
+      债券部分, 官方上市公告明确记载期限 5 年、到期日 2013-01-30——
+      只是 `interest_rate_explain` 这一字段存的是簿记建档利率区间文字
+      (不是标准"第一年…第六年"条款文本), **从这个字段解析不出年限,
+      不代表这只债的真实期限未知**。已知的、能从外部权威来源(发行人
+      上市公告)核实到年限的个例, 允许在 warehouse 构建脚本里维护一份
+      **小型、逐条注明来源的人工核对表**, 在文本解析失败时作为兜底,
+      不强求一次性核对完全部解析失败的债。**准入规则(codex 第三轮
+      要求补齐, 不能只是自由文本, 否则重新长出一个"谁说的"隐患)**:
+      - 每条至少保存: `ts_code`、`tenor_years`、**权威到期日本身**
+        (不是只存年限再用 `value_date + tenor_years` 反推——两者都存,
+        互相校验, 见下)、来源文件标题、公告日期、来源 URL 或本地归档
+        路径、页码/章节。
+      - 每条 override 必须满足 `value_date + tenor_years == 权威到期日`,
+        构建脚本启动时自检这条一致性, 对不上直接判构建失败(报错退出,
+        不是取其中一个凑合用)。
+      - 不接受"某公司公告""网上查询"这类不可复核的来源说明。
+      - 每条 override 都要有一条对应的 fixture 测试(见第 6.6 条),
+        新增/修改/删除 override 走正常代码审查流程, 不是改个数据文件
+        就生效——构建日志里打印本次命中的 override 清单, 方便事后审计。
+      - 第一条(也是目前唯一一条): `115003.SH` -> `tenor_years=5`,
+        权威到期日 `2013-01-30`, 来源"中兴通讯 A 股可转债上市公告
+        (分离交易部分)", 到期日字段与公告记载一致。
+    - **消费者遇到 `contract_maturity_date` 缺失时的行为, 必须显式定义,
+      不能任由各处默认静默跳过**(codex 第二轮指出的 blocking 缺口:
+      `verifier.py` 现状对空到期日直接 `continue`, 会让某只债"看似
+      正常完成回测、实际被静默移出宇宙", 没有任何信号)。规则:
+      **允许排除, 但每个活跃消费者(第 5 节清单里的"核心/活跃路径")
+      在跑完之后必须报告"因缺失 `contract_maturity_date` 被排除的债
+      数量和代码"**, 不能只是内部 `continue` 掉、什么都不说。
+      `verifier.py` 具体做法: 在回测结束时的汇总输出里新增一行
+      "因合同期限缺失被排除的标的: N 只(代码...)"。
+    - 额外保存 `contract_tenor_years`(解析出的年限, 数值)和
+      `contract_tenor_parse_status`(成功/失败原因, 三态:
+      `parsed_from_text` / `manual_sourced_override` / `unresolved`)
+      两列, 方便审计, 不需要每个消费者自己重新判断"这个日期靠不靠谱"。
+  - 消费者(`verifier.py`/`cb_pricer.py`等)不各自维护一份 tenor 解析或
+    fallback 逻辑——那会制造第二个"谁说的"问题。统一在
+    `build_cb_warehouse.py` 这一层解析好, 消费者只处理"有效"或"缺失"
+    两种状态。
+- **`cb_basic.maturity_date`**(旧字段, 语义收窄): 改名为
+  `expire_date_raw`, 文档明确写清楚"这是数据源的 EXPIRE_DATE 原始值,
+  对已退市债是摘牌日不是合同到期日, 不要当合同到期日用"。这是对
+  **`cb_basic.parquet` 这个 DataFrame 的列名**做的改动, **不改动**
+  `cb_pricer.py`/`cb_pricer_lattice.py` 等函数自己的参数名
+  `maturity_date`(那是"一个正确的到期日数值"这个概念的参数名, 跟数据
+  从哪一列来是两回事, 不需要跟着改, `test_cb_pricer.py` 因此不受影响)。
+  任何还在读 `cb_basic_df["maturity_date"]` / `row.maturity_date`
+  (从 DataFrame 取这一列)的代码, 会因为找不到这一列而在读取处直接
+  报错, 不会静默拿到错值——这是刻意设计, 逼每一个调用方显式决定自己
+  到底要哪个字段, 不是疏漏。
+
+### 4.2 强赎标记: 停用, 不是替换
+
+`verifier.py::_is_force_redeemed_on_date` 目前依赖的 `cb_call` 数据
+**没有 point-in-time 可靠的方式区分"发行人真的实施了强赎"和"到期/回售/
+条件满足但未行使"**(见第 1.2 节)。codex 审查明确指出: 与其继续用一条
+同样错误、只是错误方向不同的规则替换现有规则, 不如**直接停用**这段
+特殊定价逻辑(不再对任何日期/任何债返回"已强赎", 该函数改成永远返回
+`False`, 或者干脆从主流程里删掉这个分支)——**保守、不猜, 好过继续用
+不可靠的数据编一个看似合理的答案**。
+
+**这是一个真实的行为变更, 不是"改了实现细节但结果不变"的重构**:
+删掉这段逻辑之后, `verifier.py` 的回测里不会再有任何一只债在到期日之前
+被"锁价 103、禁止买入"。这会让回测结果本身发生变化(不只是变量名换了),
+需要作为一次独立的、可追溯的改动记录进 `data/research_framework/`,
+不能悄悄含在"顺手修数据"里。
+
+如果以后要恢复"强赎内生建模"这件事, 正确的路径是 `cb_pricer_lattice.py`
+已经在用的那条(基于价格触发条件的 `call_condition.py`, 不依赖
+`cb_call.parquet`), 而不是继续修 `cb_call` 这张表。
+
+## 5. 受影响的调用方(方法已改正: 不止搜 `.maturity_date` 这一种写法)
+
+**v1 用 `grep -rln "maturity_date"` 搜索, 被 codex 指出遗漏了用
+`get("maturity_date")`/`df["maturity_date"]`/间接变量赋值等方式读取的
+文件。v2 改用以下命令重新搜索**(覆盖属性访问、字典取值、字符串字面量、
+以及 `EXPIRE_DATE`/`remaining_maturity`/`days_to_maturity`/
+`years_to_maturity` 这几个衍生概念, 实现阶段要重新跑一遍确认没有随
+本次会话之后的改动继续漂移):
+
+```
+grep -rlnE '\.maturity_date\b|\["maturity_date"\]|'"'"'maturity_date'"'"'|get\("maturity_date"|EXPIRE_DATE|remaining_maturity|days_to_maturity|years_to_maturity' --include="*.py" .
+```
+
+**核心/活跃路径, 本 spec 必须逐个改成读 `contract_maturity_date`**:
+- `strategies/cb_arb/verifier.py`
+- `strategies/cb_arb/cb_pricer.py`(只是接收 `maturity_date` 参数值,
+  函数签名不用改, 只需确认调用方传的是新字段)
+- `strategies/cb_arb/cb_pricer_lattice.py`(同上)
+- `scripts/build_cb_warehouse.py`(生成方, 见第 4 节)
+- `scripts/verify_cb_data_independent.py`(需要改成同时报告
+  `expire_date_raw` 和 `contract_maturity_date` 两个字段, 并且不能再用
+  "三个源都读同一个上游字段"来给这个字段发通行证)
+- `scripts/cb_pricer_sanity.py`
+- `scripts/evaluate_cb_arb_universe_filter.py`(v1 遗漏, 见第 1.4 节——
+  这个文件用被污染的字段算 `remaining_maturity_years` 并据此构造
+  "永久排除集合", 是**活跃、会影响回测宇宙构成**的路径, 不是历史冻结品,
+  必须修)
+- `scripts/analyze_cb_arb_repair_times.py`(v1 遗漏, 读 `row.maturity_date`
+  并据此剔除临近到期标的)
+- `scripts/analyze_cb_arb_option_false_undervaluation.py`(v1 遗漏, 直接
+  读取并计算剩余期限)
+- `study/cb_exit_mode_stats.py`(已经自己解析了一份 `parse_tenor`, 改成
+  优先读新字段 `contract_maturity_date`/`contract_tenor_years`, 自己的
+  解析逻辑删掉, 不重复维护两份)
+- `study/validate_cb_pricer_lattice.py`
+- `study/diagnose_implied_vs_realized_vol.py`
+- `study/diagnose_down_revision_pricing_signal.py`(v1 错误地列为
+  "不受影响", 实际第 150 行 `cb_basic["delist_date"].fillna(cb_basic["maturity_date"])`
+  用它当"债券存续期上界"的兜底值。本次修复顺带在这个脚本里把该处改成
+  `contract_maturity_date`, 因为这是本次会话自己写的活跃脚本)
+
+**测试文件, 不受影响, 不用改**:
+- `strategies/cb_arb/tests/test_cb_pricer.py`——用的是函数参数
+  `maturity_date`(合成 fixture 里直接给值), 跟 `cb_basic.parquet` 的
+  列名无关, 见第 4.1 节说明。
+
+**历史实验产物, 本 spec 不改代码, 但必须明确处置政策(见下)**:
+- `scripts/evaluate_cb_arb_bond_floor_entry_filter.py` 及其 `_reverse`
+  变体
+- `scripts/evaluate_cb_arb_valuation_formula.py`
+- `scripts/evaluate_cb_arb_new_valuation.py`
+- 以及 `data/cb_arb_value_gap_switch_*/generated_executor/` 下对应的
+  冻结副本
+
+**这批冻结产物的处置政策(v1 缺失, codex 指出必须补)**: 字段改名之后,
+这批脚本一旦被重新执行、读到最新的 `cb_basic.parquet`, 会立刻
+`KeyError`——这不是意外风险, 是确定会发生的事。本 spec 采用的政策是
+**声明这些产物为"仅供查阅历史结果, 不可直接重新执行"**: 不做代码迁移
+(它们对应的基线 `adopted` 全部为 0, 迁移的投入产出比不划算), 也不假装
+它们还能跑——在 `data/research_framework/` 对应记录里注明"此基线的
+executor 依赖已改名字段, 如需重新评估必须先重写 executor, 不能直接
+重跑"。如果以后有人想复活其中某一个方向, 那是一次新的、独立的迁移
+工作, 不在本 spec 范围。
+
+## 6. 验收标准
+
+1. `build_cb_warehouse.py` 重跑后, `cb_basic.parquet` 有
+   `contract_maturity_date`/`contract_tenor_years`/
+   `contract_tenor_parse_status` 三个新列。
+   **独立(不循环自证)的黄金样本核对**(codex 第二轮再次指出: "反推的
+   名义期限跟自己解析出的年限比"是循环自证, 不能证伪"5 年债被解析成
+   6 年"这类错误)——至少 3 只真实债, 到期日来自**外部权威来源**(发行人
+   上市公告/募集说明书), 不是从 `value_date + parse_tenor` 重新算出来
+   跟自己比:
+   - `115003.SH`(中兴债1): 官方上市公告记载到期日 2013-01-30(5 年期),
+     `interest_rate_explain` 解析不出年限, 应命中人工核对表(见第 4.1
+     节), `contract_tenor_parse_status = manual_sourced_override`。
+   - 另需在实现阶段补 2 只标准条款文本(能被 `parse_tenor` 正常解析)的
+     真实债——一只 5 年期、一只 6 年期各一, 到期日同样以官方公告核实
+     为准, 不接受"跟解析逻辑自己的输出比对"。
+   这 3 条断言的是"重建日期 == 外部核实的真实到期日"(容差 0 天或
+   官方文本本身的模糊度), 不是笼统的"多少比例落在 3 天以内"。
+   （原"338 只存续债里≥95%落在3天以内"这条统计性描述可以保留在实现
+   报告里当补充信息，但不能作为验收标准本身——统计比例掩盖不了个别
+   错误分类。）
+2. `cb_basic_df["maturity_date"]` / `row.maturity_date`(从 DataFrame
+   取这一列)在改名后必须报错(`KeyError`/`AttributeError`), 不是返回
+   旧值或空值。`cb_pricer.py` 等函数自己的 `maturity_date` 参数名不受
+   此条约束(见第 4.1 节)。
+3. 用第 5 节给出的正则重新跑一遍全仓搜索, 第 5 节列出的"核心/活跃路径"
+   清单里的文件全部改用新字段, 搜索结果里**这份清单之外不应该再出现
+   新的、之前没识别到的活跃调用方**——如果搜出来, 说明清单本身又不
+   完整, 要继续补, 不能假装搜过就算数(呼应 v1 在这一条上出过的真实
+   错误)。
+4. `verifier.py` 里 `_is_force_redeemed_on_date` 停用后(见第 4.2 节),
+   回测全程不会再有任何一只债被标记为"已强赎"——用一个小脚本扫一遍
+   `_build_call_index`/`_is_force_redeemed_on_date` 的调用结果, 确认
+   对任意 `(ts_code, date)` 组合都返回 `False`(或者该分支已经从主流程
+   删除, 调用不到)。**不要求"存续债误标降到接近0"这种模糊指标**——
+   直接要求"这个功能不再存在", 更容易验证也更诚实(codex 指出原第 6.4
+   条既证明不了已退市债没被错标成强赎, 又用了模糊的"接近0"）。
+5. `verify_cb_data_independent.py` 的报告里, `expire_date_raw`(如实说明
+   这是摘牌日不是到期日, 对已退市债)和 `contract_maturity_date`
+   分开展示, 不再给出笼统的"maturity_date: 10只全部一致(OK)"这种
+   掩盖问题的结论。
+6. 新增测试用**固定的、来自真实数据的最小行级 fixture**(不是整份
+   parquet, 也不是"贴近真实分布"这种无法判定的说法), 至少覆盖这几个
+   具体样本各一条: 格力转债(110030.SH, 到期退出但 cb_call 有 ann_date
+   的反例, 用来确认第 4.2 节的停用不会因为它有 ann_date 就误判)、一只
+   真实强赎退出的债、一只当前仍存续的债、`115003.SH`(解析失败但命中
+   人工核对表的例子, `manual_sourced_override`)、以及第 1 条里提到的
+   那 2 只标准 5 年/6 年条款文本的真实债(`parsed_from_text` 的成功
+   例子, 不能只测失败样本)。断言的是每个样本
+   `contract_maturity_date`/`contract_tenor_parse_status` 的具体期望值,
+   不是笼统的"看起来对"。
+7. **point-in-time 验收, 改成机械可测的不变量**(codex 第二轮指出
+   "模拟只用 T 之前的信息"没有定义具体怎么测, 不够机械; 第三轮又指出
+   "只接受 value_date/interest_rate_explain 两列"这个函数签名会导致
+   人工核对表(按 `ts_code` 查)完全用不上, 两处互相矛盾, 已改正):
+   构建函数**只接受显式的 `ts_code`、`value_date`、`interest_rate_explain`
+   三项参数**, 不接受整个 DataFrame/整行对象; 除这三项外不得读取
+   `delist_date`/`expire_date_raw` 或其他"只有债券退出之后才知道"的
+   字段。测试覆盖三种情况:
+   - 三项参数相同、只有调用方传入的其他(未来)字段不同, 结果逐字节
+     相同(证明函数根本看不到那些字段, 不是"看了但恰好没用上")。
+   - `ts_code="115003.SH"`、`interest_rate_explain` 是解析失败的簿记
+     建档文本, 命中人工核对表, 返回 `manual_sourced_override`。
+   - 同样解析失败的文本, 换成一个**没有登记在核对表里**的 `ts_code`,
+     结果是 `unresolved`, 不会被误用别的代码的 override(证明不是对
+     所有解析失败记录都套用同一个兜底值)。
+8. **缺失合同期限的消费者报告义务, 按调用层级分清责任**(codex 第二轮
+   指出的 blocking 缺口, 第三轮进一步指出"第 5 节清单里每个消费者都要
+   自己报告"这个提法混淆了库函数和顶层脚本, 已改正): `cb_pricer.py`/
+   `cb_pricer_lattice.py` 这类共享定价库函数**不承担自己打印报告的
+   责任**(它们没有"跑完之后的输出界面")——遇到缺失合同到期日, 必须
+   向调用方**返回明确的缺失状态**, 不能自己悄悄用某个默认值过滤掉。
+   `verifier.py` 这类**真正执行全量任务的顶层脚本/命令**, 才是负责
+   汇总并报告"因缺失 contract_maturity_date 被排除的债数量和代码"的
+   地方——在回测结束时的汇总输出(或者机器可读的审计产物)里体现。
+   `build_cb_warehouse.py` 继续承担"构建阶段有多少条 unresolved"这份
+   审计(第 4.1 节已有), 但这属于生成方职责, 不算这里说的"消费者报告"。
+9. 受影响的 WIP 基线在 `data/research_framework/` 对应记录里补一条
+   "使用了污染字段, 结论不可信, 待重新评估"的说明, 不删除、不悄悄
+   放着当作有效结论。第 5 节"冻结产物处置政策"里提到的记录方式在这里
+   落地——每一个被列为"冻结、不可直接重跑"的 executor, 都要能在
+   `data/research_framework/` 里找到对应的这条标记, 不是只写一句笼统
+   声明。
+10. 全仓库 schema 扫描: 确认没有第 5 节清单之外的地方仍然假设
+    `cb_basic.parquet` 有 `maturity_date` 这一列——**不只是 `.py`
+    文件**, 也要覆盖 YAML/spec 里声明的 `required_data` 契约(第二轮
+    审查已经确认 `executor_registry.yaml`/`hermes_executor_handoffs.yaml`
+    以及多个历史实验的 `spec.yaml`/`proposal.yaml` 里还有这个字段名,
+    实现阶段要逐个分类处置, 不能只跑 Python grep 就算完成这条)。
+
+## 7. 本 spec 完成之后, 还没解决的问题
+
+- `transfer_end_date` 是否受同一污染源影响, 需要单独排查。
+- 受影响 WIP 基线要不要重新评估、评估后如果结论变了要不要归档, 是后续
+  决定, 本 spec 只负责让"数据层是对的"这件事先落地。
+- `framework/autonomous/ideation_cycle.py` 的具体修法, 留到实现阶段
+  现场核对代码现状。
+- 停用强赎标记之后, `verifier.py` 的回测结果会发生真实变化(不只是
+  字段名换了), 需要重新走一遍现有基线的评估流程——这不是本 spec 要
+  代为决定的事, 只是如实提醒: 修复落地之后, 之前所有依赖
+  `verifier.py` 的基线结论都需要视为待重新验证, 不是自动继承有效性。
+- 如果以后要恢复强赎内生建模, 参照 `cb_pricer_lattice.py` 已经验证过的
+  基于价格触发条件的路径, 不是修 `cb_call.parquet`——这是另一个独立的
+  研究方向, 不在本 spec 里展开。
+- dgx 上 `~/projects/quant` 当前有未提交的 `cb_basic.parquet` /
+  `cb_call.parquet` / `cb_daily.parquet` 改动(本次会话之前刷新
+  `cb_daily.parquet` 时顺带跑出来的), 跟本 spec 无关, 如实记录, 不在
+  本次修复里处理或提交。

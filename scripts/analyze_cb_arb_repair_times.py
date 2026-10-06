@@ -33,11 +33,13 @@ from strategies.cb_arb.verifier import (  # noqa: E402
     _compute_avg_amount_window,
     _compute_realized_vol_window,
     _is_force_redeemed_on_date,
-    _load_cb_basic,
-    _load_cb_call,
-    _load_cb_daily,
-    _load_stk_daily,
-    _load_trading_days,
+)
+from strategies.cb_arb.warehouse_access import (  # noqa: E402
+    load_cb_basic as _load_cb_basic,
+    load_cb_call as _load_cb_call,
+    load_cb_daily as _load_cb_daily,
+    load_stk_daily as _load_stk_daily,
+    load_trading_days as _load_trading_days,
     point_in_time_conv_price,
 )
 

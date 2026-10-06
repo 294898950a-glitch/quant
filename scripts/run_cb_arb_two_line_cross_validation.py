@@ -27,7 +27,8 @@ from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
     _load_or_build_value_ranks,
     _run_value_gap_backtest,
 )
-from strategies.cb_arb.verifier import _load_trading_days, run_backtest  # noqa: E402
+from strategies.cb_arb.verifier import run_backtest  # noqa: E402
+from strategies.cb_arb.warehouse_access import load_trading_days  # noqa: E402
 
 
 YEARS = [2019, 2020, 2021, 2022, 2023, 2024]
@@ -71,7 +72,7 @@ def _metrics(prefix: str, metrics: dict[str, Any]) -> dict[str, Any]:
 
 
 def _trading_days_between(start: str, end: str) -> list[str]:
-    return [d for d in _load_trading_days() if start <= d <= end]
+    return [d for d in load_trading_days() if start <= d <= end]
 
 
 def _pool_rows(

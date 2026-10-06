@@ -19,7 +19,7 @@ from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
     _load_or_build_value_ranks,
     _run_value_gap_backtest,
 )
-from strategies.cb_arb.verifier import _load_cb_daily  # noqa: E402
+from strategies.cb_arb.warehouse_access import load_cb_daily  # noqa: E402
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -142,7 +142,7 @@ def main() -> int:
     trades["cb_code"] = trades["cb_code"].astype(str)
     stop_trades = trades[trades["exit_reason"].astype(str).str.startswith("stop_loss")].copy()
 
-    cb_daily = _load_cb_daily()
+    cb_daily = load_cb_daily()
     cb_daily["trade_date"] = cb_daily["trade_date"].astype(str)
     cb_daily = cb_daily[(cb_daily["trade_date"] >= args.start) & (cb_daily["trade_date"] <= args.end)]
     close_by_ts = {

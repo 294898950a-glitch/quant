@@ -97,6 +97,7 @@ def _sync_constants_from_verifier() -> str:
     global VOL_WINDOW_DAYS, VOL_MIN_PERIODS, VOL_MULTIPLIER, VOL_CAP, RATING_TO_INT
     try:
         from strategies.cb_arb import verifier as V  # noqa: N812
+        from strategies.cb_arb import warehouse_access as WA  # noqa: N812
     except Exception as exc:  # pragma: no cover - 环境缺依赖时降级
         return f"fallback_hardcoded ({type(exc).__name__})"
     cfg = V.CBArbConfig()
@@ -108,7 +109,7 @@ def _sync_constants_from_verifier() -> str:
     RATING_FLOOR_INT = int(cfg.rating_floor_int)
     CREDIT_SPREAD_BP = {k: float(v) for k, v in cfg.credit_spread_dict().items()}
     DEFAULT_SPREAD_BP = CREDIT_SPREAD_BP["AA"]
-    RATING_TO_INT = dict(V.RATING_TO_INT)
+    RATING_TO_INT = dict(WA.RATING_TO_INT)
     return "from strategies.cb_arb.verifier"
 
 

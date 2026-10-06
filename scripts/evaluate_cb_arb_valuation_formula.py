@@ -346,7 +346,11 @@ def _recompute_ranks_tf(
     # Lazy project imports — deferred to avoid import-time hang in compliance probe
     from strategies.cb_arb.verifier import (  # noqa: E402
         _build_call_index, _is_force_redeemed_on_date,
-        _load_cb_call, _load_stk_daily, _load_trading_days,
+    )
+    from strategies.cb_arb.warehouse_access import (  # noqa: E402
+        load_cb_call as _load_cb_call,
+        load_stk_daily as _load_stk_daily,
+        load_trading_days as _load_trading_days,
     )
     from scripts.evaluate_cb_arb_daily_regime_switch import _build_daily_features  # noqa: E402
     from scripts.evaluate_cb_arb_value_gap_switch import _base_configs as _base_regime_configs  # noqa: E402
@@ -507,7 +511,7 @@ def _run_tf_grid_search(
     """Run grid search across TF model parameters and evaluate best candidate."""
     # Lazy project imports
     from scripts.evaluate_cb_arb_value_gap_switch import _score, _run_value_gap_backtest  # noqa: E402
-    from strategies.cb_arb.verifier import _load_stk_daily  # noqa: E402
+    from strategies.cb_arb.warehouse_access import load_stk_daily as _load_stk_daily  # noqa: E402
 
     cs_multipliers = cfg.get("cs_multipliers", [0.8, 1.0, 1.2, 1.5])
     term_weights = cfg.get("term_weights", [0.0, 0.3, 0.5, 0.7])
@@ -849,8 +853,11 @@ def _write_outputs(
 
 def main() -> None:
     # Lazy project imports for main() — only needed in fallback path
-    # and for data loading functions from verifier.
-    from strategies.cb_arb.verifier import _load_cb_basic, _load_stk_daily  # noqa: E402
+    # and for data loading functions from warehouse_access.
+    from strategies.cb_arb.warehouse_access import (  # noqa: E402
+        load_cb_basic as _load_cb_basic,
+        load_stk_daily as _load_stk_daily,
+    )
     pd = _get_pd()
 
     args = _parse_args()

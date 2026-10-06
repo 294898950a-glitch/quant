@@ -26,10 +26,10 @@ if str(_REPO_ROOT) not in sys.path:
 
 from strategies.cb_arb.verifier import (  # noqa: E402
     CBArbConfig,
-    _load_cb_daily,
     _unpack_config,
     run_backtest_dynamic,
 )
+from strategies.cb_arb.warehouse_access import load_cb_daily  # noqa: E402
 
 DEFAULT_FIXED_FIELDS = (
     "vol_window_days",
@@ -151,7 +151,7 @@ def _classify(features: dict[str, Any], rule: str) -> str:
 
 
 def _build_daily_features(lookback_days: int, rule: str) -> dict[str, dict[str, Any]]:
-    daily = _load_cb_daily()
+    daily = load_cb_daily()
     daily = daily.sort_values(["ts_code", "trade_date"]).copy()
     daily["prev_close"] = daily.groupby("ts_code")["close"].shift(1)
     daily["up"] = daily["close"] > daily["prev_close"]

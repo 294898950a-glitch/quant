@@ -110,11 +110,13 @@ def _lazy_heavy_imports() -> None:
     from strategies.cb_arb.verifier import (  # noqa: E402
         _build_call_index as _bci,
         _is_force_redeemed_on_date as _ifrod,
-        _load_cb_basic as _lcb,
-        _load_cb_call as _lcc,
-        _load_cb_daily as _lcd,
-        _load_stk_daily as _lsd,
-        _load_trading_days as _ltd,
+    )
+    from strategies.cb_arb.warehouse_access import (  # noqa: E402
+        load_cb_basic as _lcb,
+        load_cb_call as _lcc,
+        load_cb_daily as _lcd,
+        load_stk_daily as _lsd,
+        load_trading_days as _ltd,
     )
     _build_call_index = _bci
     _is_force_redeemed_on_date = _ifrod

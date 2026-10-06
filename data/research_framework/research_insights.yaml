@@ -629,12 +629,13 @@ key_insights:
       validation: "For all 307 listed bonds contract maturity is within 3 days of maturity_date. For bonds that stopped trading, 77% have a contract maturity more than 30 days later; median 2.9 years later."
       rerun_with_four_fixes:
         note: "Frozen parameters, one-day delay, costs on. Fixes: point-in-time conversion value, return benchmark, real-call table, contract maturity. Run after the verdict; not pre-registered."
-        equal_weight_market_return: {train_2019_2024: 0.990, test_2025_01_to_2026_05: 0.356, holdout_2026_05_to_09: -0.082}
-        model: {train: {total_return: 2.237, beta: 1.42, alpha: 0.044, t: 1.02}, test: {total_return: 0.198, beta: 1.33, alpha: -0.163, t: -1.68}, holdout: {total_return: -0.111, beta: 0.97, alpha: -0.075, t: -0.43}}
-        low_premium: {train: {total_return: 3.568, beta: 1.50, alpha: 0.100, t: 1.75}, test: {total_return: 0.328, beta: 1.34, alpha: -0.080, t: -0.61}, holdout: {total_return: -0.234, beta: 1.13, alpha: -0.408, t: -1.63}}
-        double_low: {train: {total_return: 1.929, beta: 0.88, alpha: 0.084, t: 2.55}, test: {total_return: 0.109, beta: 0.33, alpha: 0.003, t: 0.05}, holdout: {total_return: -0.055, beta: 0.26, alpha: -0.080, t: -0.66}}
+        equal_weight_market_return: {train_2019_2024: 0.990, test_2025_01_to_2026_05: 0.356, holdout_2026_05_to_09: -0.081}
+        model: {train: {total_return: 2.237, beta: 1.42, alpha: 0.044, t: 1.02}, test: {total_return: 0.198, beta: 1.33, alpha: -0.163, t: -1.68}, holdout: {total_return: -0.097, beta: 0.93, alpha: -0.049, t: -0.28}}
+        low_premium: {train: {total_return: 3.568, beta: 1.50, alpha: 0.100, t: 1.75}, test: {total_return: 0.328, beta: 1.34, alpha: -0.080, t: -0.61}, holdout: {total_return: -0.192, beta: 1.11, alpha: -0.282, t: -1.07}}
+        double_low: {train: {total_return: 1.929, beta: 0.88, alpha: 0.084, t: 2.55}, test: {total_return: 0.109, beta: 0.33, alpha: 0.003, t: 0.05}, holdout: {total_return: -0.052, beta: 0.25, alpha: -0.078, t: -0.64}}
         model_yearly_return: {"2019": 0.342, "2020": 0.670, "2021": 0.608, "2022": -0.126, "2023": -0.018, "2024": 0.047, "2025": 0.091, "2026": -0.019}
         years_model_beats_both_styles: "2 of 8"
+        holdout_rerun_note: "Holdout figures are from the rerun after three bonds listed 2026-05-11..13 were added to cb_daily (the refresh had skipped them). Train and test are identical to the first run, trade for trade; holdout moved by up to 4 points (model -0.111 -> -0.097, low_premium -0.234 -> -0.192)."
       sensitivity: "Computing contract maturity as value_date + years*365.25 days instead of calendar years moved the model's 2019-2024 return from +224% to +257%. Differences of this size between runs of this engine carry no information."
     limits:
       - "Not migrated: scripts/evaluate_cb_arb_valuation_formula.py, evaluate_cb_arb_new_valuation.py, evaluate_cb_arb_bond_floor_entry_filter*.py, analyze_cb_arb_option_false_undervaluation.py, cb_pricer_sanity.py and strategies/cb_arb/cb_pricer_lattice.py callers still read maturity_date."

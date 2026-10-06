@@ -32,14 +32,15 @@ from scripts.evaluate_cb_arb_valuation_switch import (  # noqa: E402
     VALUATION_FIELDS,
     _copy_fields,
 )
-from strategies.cb_arb.verifier import CBArbConfig, _load_trading_days, run_backtest_dynamic  # noqa: E402
+from strategies.cb_arb.verifier import CBArbConfig, run_backtest_dynamic  # noqa: E402
+from strategies.cb_arb.warehouse_access import load_trading_days  # noqa: E402
 
 
 REGIMES = ("weak", "flat_weak", "neutral", "strong")
 
 
 def _date_ids(start: str, end: str) -> list[str]:
-    return [d for d in _load_trading_days() if start <= d <= end]
+    return [d for d in load_trading_days() if start <= d <= end]
 
 
 def _summarise(rows: list[dict[str, Any]]) -> dict[str, Any]:

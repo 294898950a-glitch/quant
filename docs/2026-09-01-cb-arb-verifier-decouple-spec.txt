@@ -1,0 +1,235 @@
+# cb_arb/verifier.py 解耦分析
+
+## 0. 为什么现在做这个分析
+
+`strategies/cb_arb/verifier.py`(1071 行)是 cb_arb 策略回测的核心文件。当前
+同时有三条"字段时点语义"修复线在朝这个文件汇聚:
+
+1. `docs/2026-08-31-cb-maturity-date-corruption-fix-spec.txt`(v4,已收敛待
+   实现)——改 `maturity_date`/`cb_call.expire_date`,直接触及本文件的
+   `_load_cb_basic`/`_build_call_index`/`_is_force_redeemed_on_date` 和主循环
+   里的到期日过滤逻辑。
+2. 转股价(`conv_price`)时点污染——刚发现,待开 spec,会触及
+   `_load_cb_basic` 和主循环里 `basic_lookup`/`conv_price` 的取值逻辑。
+3. 评级(`rating`)字段被点名为下一个审计对象,同样会触及 `_load_cb_basic`。
+
+三条线都要在同一个文件里动手,而这个文件目前把"读仓库数据"和"策略交易
+规则"焊在一起。这份分析只回答"该不该拆、往哪拆",不改代码。
+
+## 1. 调用方清单(查出来的,不是猜的)
+
+全仓库搜索 `from strategies.cb_arb.verifier` / `from strategies.cb_arb import verifier`
+/ `strategies.cb_arb.verifier`,结果:
+
+**当前活跃、真实在用的调用方:**
+
+| 文件 | 引用的符号 |
+|---|---|
+| `strategies/cb_arb/orchestrator_main.py` | `run_backtest`(重命名为 `cb_arb_verifier`)|
+| `scripts/evaluate_cb_arb_value_gap_switch.py` | `run_backtest_dynamic`, `CBArbConfig`, **`apply_cost_model`** |
+| `scripts/search_cb_arb_time_split_grid.py` | `CBArbConfig`, `_load_trading_days`, `run_backtest_dynamic` |
+| `scripts/search_cb_arb_behavior_grid.py` | `CBArbConfig`, `run_backtest_dynamic` |
+| `scripts/search_cb_arb_behavior_regimes.py` | `run_backtest_dynamic` |
+| `scripts/run_cb_arb_two_line_cross_validation.py` | `_load_trading_days`, `run_backtest` |
+| `scripts/run_cb_arb_cost_realism.py` | (`verifier` 若干符号) |
+| `scripts/evaluate_cb_arb_cross_pools.py` | `run_backtest` |
+| `scripts/evaluate_cb_arb_regime_switch.py` | `_load_cb_daily`, `run_backtest` |
+| `scripts/evaluate_cb_arb_daily_regime_switch.py` | (`verifier` 若干符号) |
+| `scripts/evaluate_cb_arb_valuation_switch.py` | `CBArbConfig`, `run_backtest_dynamic` |
+| `scripts/evaluate_cb_arb_valuation_formula.py` | `_load_stk_daily`, `_load_cb_basic`,(其它符号)|
+| `scripts/evaluate_cb_arb_valuation_formula_momentum.py` | (`verifier` 若干符号)|
+| `scripts/analyze_cb_arb_stop_source_breakdown.py` | `_load_cb_daily` |
+| `scripts/analyze_cb_arb_repair_times.py` | (`verifier` 若干符号)|
+| `study/diagnose_implied_vs_realized_vol.py` | `verifier` 模块整体 |
+| `strategies/cb_arb/tests/test_verifier.py` | 见下方分组测试证据 |
+| `strategies/cb_arb/tests/test_cost_model.py` | `CBArbConfig`, `apply_cost_model` |
+
+**关键观察**:一半以上的外部调用方(`_load_cb_basic`/`_load_cb_daily`/
+`_load_stk_daily`/`_load_trading_days`)只想要"仓库数据加载",完全不碰
+`run_backtest` 主循环;它们把带下划线前缀的"私有"加载函数当成事实上的公开
+工具在用。这是"仓库加载"这条改变理由已经在外部独立生长的直接证据。
+
+**冻结产物(不在本次调用方清单的"真实成本"范围内)**:`data/cb_arb_value_gap_switch_*/generated_executor/*.py`
+下有 24 个 Hermes 自动生成的历史 executor 脚本,部分直接 `from strategies.cb_arb.verifier import ...`。
+`docs/2026-08-31-cb-maturity-date-corruption-fix-spec.txt` 已经就同类脚本
+(旧 `evaluate_cb_arb_*.py` WIP baseline)确立了"归档不迁移不删除"的政策 ——
+本分析沿用同一政策,这 24 个不计入下方"拆分后要改几个调用方"的成本估算。
+
+**部署/远端**:确认 hkvm、dgx 上都没有 `cb_arb/verifier.py` 的独立部署拷贝
+(找到的 `verifier.py` 是 cffi 包和其它 grid 策略各自的同名文件,无关)。
+`data/research_framework/*.yaml` 里有若干文本提及 `cb_arb/verifier.py`
+路径,均为审计记录里的说明性文本,不是 import,不会因拆分报错,但如果拆分,
+搜索一遍这些 yaml 做人工核对是分内工作,不是自动化能替代的。
+
+## 2. 改变理由分组(证据見各组)
+
+### 组 A ——「CB 仓库数据加载与派生字段」
+
+**范围**:`_load_cb_basic` / `_load_cb_daily` / `_load_cb_call` / `_load_stk_daily`
+/ `_load_trading_days` / `reset_cache` / 4 个路径常量 / 模块级缓存变量。
+
+**证据**:
+- 模块自己的 docstring 把这单独列成一条:"数据加载: cb_basic / cb_daily /
+  cb_call / stk_daily_qfq 均在模块加载时一次性 read, 缓存于模块级常量"
+  (`verifier.py:15-17`)。
+- 调用方证据(见第1节表格):8 个外部脚本/研究只 import 这一组里的函数,
+  完全不碰 `run_backtest`。
+- 这组的改变理由是"仓库 parquet 的字段/时点语义",正是本文档第0节列的三条
+  在建/待建修复线共同作用的对象。
+
+### 组 B ——「强赎窗口判定」
+
+**范围**:`_build_call_index` / `_is_force_redeemed_on_date`。
+
+**证据**:
+- 只绑定 `cb_call.parquet` 的 `ann_date`/`expire_date` 两个字段
+  (`_load_cb_call` 里显式只取这几列,`verifier.py:150`)。
+- `docs/2026-08-31-cb-maturity-date-corruption-fix-spec.txt` 第 4.2 节已经
+  裁定:这个功能设计上不可靠(格力转债 110030.SH 反例),批准的处理方式是
+  **整个停用**(`_is_force_redeemed_on_date` 改成永远 `False`),不是修一条
+  更好的规则。
+- 改变理由是"强赎事件怎么判定/要不要判定",跟定价数学、资金记账完全独立。
+
+### 组 C ——「参数/配置解析(weights/thresholds/rules → CBArbConfig)」
+
+**范围**:`CBArbConfig` / `_pick` / `_unpack_config`。
+
+**证据**:
+- `_unpack_config` docstring 显式绑定外部契约:"weights 顺序对应
+  `tunable_space.yaml` 的 `parameters` 段顺序"(`verifier.py:284-302`)——
+  这是编排层(orchestrator)的调参协议,不是仓库数据,也不是交易规则本身。
+- 改变理由是"调参框架新增/调整一个可调参数的顺序或取值范围"。
+
+### 组 D ——「交易成本模型(手续费/滑点/冲击成本/持仓成本)」
+
+**范围**:`apply_cost_model`。
+
+**证据**:
+- 独立测试文件 `strategies/cb_arb/tests/test_cost_model.py`,该文件自己的
+  docstring 写明:"Boundary tests for apply_cost_model() **added in
+  cb_arb_value_gap_switch promotion**"——即这个函数是为另一个脚本
+  (`scripts/evaluate_cb_arb_value_gap_switch.py`)加的,不是为 `verifier.py`
+  自己的回测循环加的。
+- **反证据**(关键):`_run_backtest_core` 自己的买卖结算(`verifier.py:874`,
+  `verifier.py:948`)用的是内联的 `exit_price * pos.qty * (1 - day_cfg.fee_pct)`,
+  完全没有调用 `apply_cost_model`。也就是说这个函数活在 `verifier.py` 里,
+  但 `verifier.py` 自己的主流程根本不用它——它是被物理放错了地方的独立模块,
+  真正的、唯一的消费者是 `scripts/evaluate_cb_arb_value_gap_switch.py`。
+- 改变理由是"交易摩擦成本假设",跟 `verifier.py` 自己的回测规则无关。
+
+### 组 E ——「组合回测主循环:入选过滤 + 定价调度 + 排名 + 买卖决策 + 持仓记账」
+
+**范围**:`run_backtest` / `run_backtest_dynamic` / `_run_backtest_core` /
+`_Position` / `_resolve_position_size` / `_restrict_dates_for_pool` /
+`_compute_equity` / `prev_prices` / `_equity_history_to_series`,以及组 G
+(见下)。
+
+**证据**:
+- 模块 docstring 开篇即是这组的描述:"每天对全集 CB 算理论价...排名最低
+  的进入买入候选,排名最高的从持仓里卖掉"(`verifier.py:3-6`)——这是本文件
+  真正的存在理由。
+- 唯一真正把 `run_backtest`/`run_backtest_dynamic` 当"策略入口"用的调用方
+  (`orchestrator_main.py`、各 `scripts/search_cb_arb_*`、
+  `scripts/evaluate_cb_arb_*_switch.py`)都不关心内部怎么读数据、怎么算
+  cost model,只关心这一层的输入输出契约(weights/thresholds/rules →
+  BacktestResult)。
+- **组内部本身还有一层未命名的耦合**:`_run_backtest_core` 第 694-791 行
+  把"仓库字段转 spec 字典"(`basic_lookup` 构造)、"入选池规则"(评级/规模/
+  流动性/到期日缓冲/强赎排除)、"定价调度"(构造 `CBSpec` 调 `price_cb`)三件
+  事内联揉在一个循环体里,没有各自的函数名——这正是本文档第0节提到的三条
+  point-in-time 修复线会实际去动手的地方,风险是"为了修转股价顺手改坏了
+  排名逻辑"。这一层内联本身值不值得拆,见第 3 节结论。
+
+### 组 F ——「业绩指标与基准计算」
+
+**范围**:`_compute_metrics` / `_get_cb_index` / `_index_total_return`。
+
+**证据**:
+- `_compute_metrics` 只吃 `equity_curve`/`trades`/`initial_capital`,不碰
+  `holdings`/`cash`/仓库字段,输出 sharpe/drawdown/excess_return——纯粹是
+  "回测结果怎么汇总报告"这条改变理由,换一个业绩指标公式(比如加 Calmar
+  比率)不需要动组 E 的任何交易决策代码。
+- `_get_cb_index`/`_index_total_return` 明确写在 `__all__` 里
+  (`verifier.py:1068-1069`),说明作者本身就把它们当独立可复用的东西对待,
+  只是还没有外部调用方来用。
+
+### 组 G ——「特征窗口计算(流动性/波动率滚动统计)」
+
+**范围**:`_compute_avg_amount_window` / `_compute_realized_vol_window`。
+
+**证据**:
+- 两者都是纯数值滚动窗口变换,唯一调用方是 `_run_backtest_core` 准备阶段
+  (`verifier.py:664`, `680`),且窗口大小(`vol_window_days`)来自
+  `CBArbConfig`——是策略自己定义的输入特征,不是仓库原始字段(`amount_yuan`/
+  `close` 已经在组 A 里算好),换一种波动率估计方法(比如从 close-to-close
+  换成 Parkinson 估计量)不影响组 A 的仓库加载逻辑。
+- 没有独立测试文件,只在 `test_verifier.py` 的整体 smoke/集成测试里被间接
+  覆盖(搜了 `test_verifier.py` 全文,没有 `test_compute_avg_amount_window`
+  或 `test_compute_realized_vol_window` 这类单测)。
+
+## 3. 结论:建议部分拆
+
+不是所有分出来的组都值得现在物理搬家。逐组过一遍"拆不拆"的判据
+(见 `change-reason-analysis.md`「什么时候不该拆」):
+
+### 建议拆出去:组 A、组 D
+
+- **组 A(仓库加载)**:调用方证据最强——8 个外部脚本已经把它当独立模块用;
+  未来几周内至少 3 条 point-in-time 修复线(到期日已批准、转股价待开、评级
+  待查)都要反复修改这组代码。留在 1071 行的 `verifier.py` 里,每次修复都要
+  在同一个文件里跟组 E 的交易规则代码"打照面",越改越容易手滑碰坏排名逻辑。
+  拆出去后,这三条修复线的典型改动会变成"改仓库模块 + 在 verifier.py 里把
+  静态字典查找换成 as-of 查询调用"两处,而不是在同一个 1071 行文件内部
+  改多处不相邻的代码。
+- **组 D(cost model)**:证据最直接——它已经不是"verifier.py 自己要用的
+  东西",而是寄居在这里的另一个脚本(`evaluate_cb_arb_value_gap_switch.py`)
+  的私有依赖,还带着自己独立的测试文件。留在 `verifier.py` 只会让人误以为
+  它是核心回测循环会用到的成本模型(实际上核心循环完全绕开了它,用的是内联
+  的简化版),这本身就是一个"两份实现各说各话"的隐患。搬到它真正所属的地方
+  (或者独立成 `strategies/cb_arb/cost_model.py`),`verifier.py` 里只保留
+  它自己真正在用的那份内联成本计算。
+
+### 建议维持现状:组 B、组 C、组 E+G
+
+- **组 B(强赎窗口判定)**:改变理由确实独立,但它已经被上一份已批准的 spec
+  判了"死刑"(直接停用,不是重写)。现在专门为一个即将被砍掉的函数搬家,
+  没有意义——等 `maturity_date` 修复 spec 落地时,这里大概率只剩
+  `return False` 一行,那时候是要留在 `verifier.py` 里当一行注释说明"历史
+  上这里有一段已停用的逻辑",还是彻底删掉,应该由那份 spec 的实现阶段决定,
+  不属于这次解耦分析的范围。
+- **组 C(参数解析)**:改变理由独立,但和组 E 调用密集——`CBArbConfig` 的
+  每一个字段最终都要在 `_run_backtest_core` 里被读取消费,新增一个可调
+  参数天然需要同时改"怎么从 weights 解出来"和"怎么在主循环里用",拆开后
+  反而是把同一次改动拆成两个文件跑,不是解耦,是制造对跑关系。
+- **组 E+G(核心回测循环 + 特征窗口)**:这是文件的主体存在理由,唯一
+  调用方就是"把它当策略引擎用"的那批脚本。组 G 的两个函数除了服务组 E
+  没有第二个理由存在,按"胶水代码跟着它服务的理由走"的原则,应该继续
+  留在同一个边界里,不需要单独抽出。
+
+### 未采纳的候选:组 F 单独拆分
+
+`_compute_metrics`/`_get_cb_index`/`_index_total_return` 改变理由是干净的
+(纯函数,不碰交易状态),但目前**零个**外部调用方(全仓库搜索确认,只有
+`__all__` 里预留了导出位,没人真正 import),而且这类指标公式本身改动频率
+低。现在拆出去成本(多一层目录、多几处 import)大于收益(没有实际调用方
+在因为耦合受苦)。保留在 `verifier.py` 里,等真的出现第二个消费者
+(比如别的策略也想用同一套 sharpe/超额收益口径)时再拆,证据会更充分。
+
+## 4. 如果后续决定动手拆,大致边界(仅供实现阶段参考,不是本次任务范围)
+
+- `strategies/cb_arb/warehouse_access.py`(或类似命名):组 A 全部内容,
+  对外保留原函数名(`_load_cb_basic` 等改成公开名,去掉下划线前缀——反正
+  外部已经在用,不如把"事实公开"改成"名义公开")。
+- `strategies/cb_arb/cost_model.py`:组 D(`apply_cost_model`),
+  `verifier.py` 不再 import 它;`test_cost_model.py` 相应改 import 路径。
+- `verifier.py` 保留组 B/C/E/F/G,`__all__` 相应精简。
+- 需要同步改 import 的活跃调用方:第 1 节表格里列出的全部文件(24 个
+  `generated_executor` 冻结产物按既定政策不改)。
+- 不留兼容层/re-export shim——直接改每个活跃调用方的 import 语句,这也是
+  验证"调用方清单是否真的穷尽"的过程本身。
+
+## 5. 本次分析产出
+
+只有这一份 spec 文件(`docs/2026-09-01-cb-arb-verifier-decouple-spec.md`)。
+没有创建或修改任何代码文件。是否动手拆、什么时候拆(比如是现在拆,还是
+等转股价/评级两条 point-in-time 修复线落地后再拆),需要用户确认。

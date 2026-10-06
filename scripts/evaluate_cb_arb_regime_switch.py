@@ -13,7 +13,8 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from strategies.cb_arb.verifier import _load_cb_daily, run_backtest
+from strategies.cb_arb.verifier import run_backtest
+from strategies.cb_arb.warehouse_access import load_cb_daily
 
 
 def _read_json(path: Path) -> dict[str, Any]:
@@ -37,7 +38,7 @@ def _percentile(value: float, sample: list[float]) -> float:
 
 
 def _market_features(start_date: str, lookback_days: int) -> dict[str, Any]:
-    daily = _load_cb_daily()
+    daily = load_cb_daily()
     days = sorted(set(daily["trade_date"].astype(str).tolist()))
     try:
         idx = days.index(start_date)
@@ -83,7 +84,7 @@ def _market_features(start_date: str, lookback_days: int) -> dict[str, Any]:
 
 
 def _percentile_features(start_date: str, lookback_days: int) -> dict[str, Any]:
-    daily = _load_cb_daily()
+    daily = load_cb_daily()
     by_day = daily.groupby("trade_date").agg(
         index_level=("close", "mean"),
         amount=("amount_yuan", "sum"),

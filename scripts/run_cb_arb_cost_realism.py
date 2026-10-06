@@ -23,9 +23,9 @@ from scripts.evaluate_cb_arb_value_gap_switch import (  # noqa: E402
 )
 from strategies.cb_arb.verifier import (  # noqa: E402
     _index_total_return,
-    _load_trading_days,
     run_backtest,
 )
+from strategies.cb_arb.warehouse_access import load_trading_days  # noqa: E402
 
 
 YEARS = [2019, 2020, 2021, 2022, 2023, 2024]
@@ -44,7 +44,7 @@ def _load_yaml_current(path: Path) -> tuple[list[float], dict[str, Any]]:
 def _date_pool(year: int) -> set[str]:
     start = f"{year}0101"
     end = f"{year}1231"
-    return {d for d in _load_trading_days() if start <= d <= end}
+    return {d for d in load_trading_days() if start <= d <= end}
 
 
 def _pool_bounds(pool: set[str]) -> tuple[str, str]:

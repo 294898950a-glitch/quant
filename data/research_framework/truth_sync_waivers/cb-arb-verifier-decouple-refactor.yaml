@@ -1,0 +1,39 @@
+schema_version: 1
+date: '2026-09-01'
+decision: no_truth_change
+reason: >-
+  纯物理拆分重构, 不改变任何回测/定价逻辑。按
+  docs/2026-09-01-cb-arb-verifier-decouple-spec.txt 的分析结论, 把
+  strategies/cb_arb/verifier.py(原1071行)里两组独立改变理由的代码搬到
+  各自的新文件: 仓库数据加载(cb_basic/cb_daily/cb_call/stk_daily_qfq/
+  交易日历 + RATING_TO_INT)搬到新文件 warehouse_access.py, 交易成本模型
+  (apply_cost_model)搬到新文件 cost_model.py。搬动函数体逐字节未变
+  (codex review 用 AST 归一化比对确认 AST_EQUAL), 只是物理位置和部分
+  函数改名(去掉表示"私有"的下划线前缀, 因为已有 8 个外部脚本把它们当
+  公开工具在用)。~15 个活跃调用方的 import 语句相应更新, 不留
+  re-export shim。24 个 data/*/generated_executor/*.py 冻结产物按既定
+  归档政策不改动。
+  验证: strategies/cb_arb/tests/ 全量测试(除环境缺 ruamel 包的
+  test_bootstrap.py, 与本次改动无关)111 passed; 真实数据30天OOS
+  smoke test 1 passed; 全仓库grep确认无遗留旧import/裸属性访问。
+  经 codex code review ACCEPT(7项核查全部通过, 逐项复现验证)。
+  current.yaml / baseline_registry 指标不受影响, 因为策略入口
+  (strategies/cb_arb/verifier.py::run_backtest)对外行为完全不变。
+changed_paths:
+  - strategies/cb_arb/verifier.py
+  - strategies/cb_arb/cost_model.py
+  - strategies/cb_arb/warehouse_access.py
+  - strategies/cb_arb/tests/test_verifier.py
+  - strategies/cb_arb/tests/test_cost_model.py
+  - scripts/evaluate_cb_arb_value_gap_switch.py
+  - scripts/analyze_cb_arb_repair_times.py
+  - scripts/analyze_cb_arb_stop_source_breakdown.py
+  - scripts/evaluate_cb_arb_daily_regime_switch.py
+  - scripts/evaluate_cb_arb_regime_switch.py
+  - scripts/evaluate_cb_arb_valuation_formula.py
+  - scripts/evaluate_cb_arb_valuation_formula_momentum.py
+  - scripts/run_cb_arb_cost_realism.py
+  - scripts/run_cb_arb_two_line_cross_validation.py
+  - scripts/search_cb_arb_time_split_grid.py
+  - study/diagnose_implied_vs_realized_vol.py
+reviewer: claude

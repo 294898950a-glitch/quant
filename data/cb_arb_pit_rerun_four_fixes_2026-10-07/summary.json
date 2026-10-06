@@ -1,5 +1,5 @@
 {
-  "run_id": "cb_arb_pit_rerun_four_fixes_2026-10-07",
+  "run_id": "holdout_merged",
   "scope": "local diagnostic only; no VM/spot; no strategy or truth change",
   "frozen_params": {
     "min_gap_pct": 0.0,
@@ -41,11 +41,11 @@
         "equal_weight_return": 0.3557
       },
       "model|holdout": {
-        "beta": 0.969,
-        "alpha_annual": -0.075,
-        "alpha_t": -0.43,
-        "total_return": -0.1105,
-        "equal_weight_return": -0.0824
+        "beta": 0.935,
+        "alpha_annual": -0.0494,
+        "alpha_t": -0.28,
+        "total_return": -0.0974,
+        "equal_weight_return": -0.0809
       },
       "low_premium|train": {
         "beta": 1.501,
@@ -62,11 +62,11 @@
         "equal_weight_return": 0.3557
       },
       "low_premium|holdout": {
-        "beta": 1.132,
-        "alpha_annual": -0.4076,
-        "alpha_t": -1.63,
-        "total_return": -0.2339,
-        "equal_weight_return": -0.0824
+        "beta": 1.106,
+        "alpha_annual": -0.2823,
+        "alpha_t": -1.07,
+        "total_return": -0.1919,
+        "equal_weight_return": -0.0809
       },
       "double_low|train": {
         "beta": 0.879,
@@ -83,11 +83,11 @@
         "equal_weight_return": 0.3557
       },
       "double_low|holdout": {
-        "beta": 0.26,
-        "alpha_annual": -0.0804,
-        "alpha_t": -0.66,
-        "total_return": -0.0549,
-        "equal_weight_return": -0.0824
+        "beta": 0.247,
+        "alpha_annual": -0.0778,
+        "alpha_t": -0.64,
+        "total_return": -0.0525,
+        "equal_weight_return": -0.0809
       }
     },
     "holdout": {
@@ -95,29 +95,29 @@
         "20260511",
         "20260930"
       ],
-      "model_total_return": -0.110514,
-      "model_excess_vs_index": -0.028137,
-      "equal_weight_return": -0.08237694168115017,
-      "model_excess_vs_equal_weight": -0.026535511340856632,
-      "model_beta_to_equal_weight": 0.9686258111873892,
-      "model_alpha_annual": -0.07501789251000122,
-      "model_alpha_t": -0.427503522075528,
+      "model_total_return": -0.097368,
+      "model_excess_vs_index": -0.016509,
+      "equal_weight_return": -0.08085928932515163,
+      "model_excess_vs_equal_weight": -0.014884354500242614,
+      "model_beta_to_equal_weight": 0.9348133506454316,
+      "model_alpha_annual": -0.04936108538698838,
+      "model_alpha_t": -0.27598323841372674,
       "model_avg_positions": 21.524752475247524,
-      "low_premium_avg_positions": 24.435643564356436,
-      "double_low_avg_positions": 20.554455445544555,
-      "low_premium_total_return": -0.233941,
-      "double_low_total_return": -0.05494,
-      "random_total_return_median": -0.31169800000000003,
-      "random_total_return_max": -0.204465,
+      "low_premium_avg_positions": 23.128712871287128,
+      "double_low_avg_positions": 20.742574257425744,
+      "low_premium_total_return": -0.191878,
+      "double_low_total_return": -0.052496,
+      "random_total_return_median": -0.3119925,
+      "random_total_return_max": -0.23553,
       "model_rank_among_random": 1,
       "falsifier_1_excess_le_0": true
     },
     "style_control": {
       "pooled_return_2019_to_end": {
-        "model": 2.4633433310352326,
-        "low_premium": 3.66431693702293,
-        "double_low": 2.0817810625486874,
-        "random_median": -0.8461762957814452
+        "model": 2.514522681428316,
+        "low_premium": 3.9204283771773243,
+        "double_low": 2.089749485490376,
+        "random_median": -0.8428984215897275
       },
       "years_model_beats_both_styles": 2,
       "years_total": 8,

@@ -2,15 +2,16 @@
 """Build cb_events.parquet: every dated down-revision and call event per bond.
 
 Sources:
-  --announcements  cninfo archive collected on hkvm (cb_announcements.jsonl), keywords 下修 and 赎回
-  --adj-logs       Jisilu down-revision log collected daily on hkvm (cb_conv_price_adj_jisilu.jsonl)
+  --announcements  cninfo archive collected on hkvm (cb_announcements.jsonl), keyword 下修
+  cb_conv_price_history.parquet   one row per down-revision meeting, deduplicated from the Jisilu log by
+                   strategies/cb_arb/build_cb_conv_price_history.py (run it first)
   cb_call.parquet, cb_redemption_notices.parquet   forced calls and every dated redemption notice,
                    both written by scripts/build_cb_call_history.py (run it first)
 
 Announcements whose title cannot be classified are kept as "unclassified".
 
 跑法:
-    python scripts/build_cb_events.py --announcements <jsonl> --adj-logs <jsonl>
+    python scripts/build_cb_events.py --announcements <jsonl>
 """
 
 from __future__ import annotations
@@ -37,7 +38,6 @@ _REDEMPTION_KIND = {"no_call": ev.NO_CALL, "may_trigger": ev.CALL_MAY_TRIGGER}
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--announcements", type=Path, required=True)
-    p.add_argument("--adj-logs", type=Path, required=True)
     args = p.parse_args()
 
     daily = pd.read_parquet(WAREHOUSE_DIR / "cb_daily.parquet", columns=["ts_code", "trade_date"])
@@ -57,22 +57,16 @@ def main() -> int:
         "event_type": redemption["kind"].map(_REDEMPTION_KIND), "source": "cninfo", "detail": redemption["title"],
     }))
 
-    latest: dict[str, dict] = {}
-    with args.adj_logs.open(encoding="utf-8") as f:
-        for line in f:
-            rec = json.loads(line)
-            if rec.get("status") == "ok":
-                latest[rec["bond_id"]] = rec  # append-only file: the last ok line per bond wins
+    # which meetings happened and how they ended is decided once, in cb_conv_price_history.parquet
+    history = pd.read_parquet(WAREHOUSE_DIR / "cb_conv_price_history.parquet")
     rows = []
-    for code, rec in latest.items():
-        ts = code_to_ts_code(code)
-        for r in rec["records"]:
-            outcome = r.get("outcome") or ("approved" if r.get("approved") else "rejected")
-            if r.get("meeting_date"):
-                rows.append((ts, r["meeting_date"].replace("-", ""), ev.REVISION_MEETING, outcome))
-            if outcome == "approved" and r.get("effective_date"):
-                rows.append((ts, r["effective_date"].replace("-", ""), ev.REVISION_EFFECTIVE,
-                             f"{r.get('old_conv_price')}->{r.get('new_conv_price')}"))
+    for r in history.itertuples(index=False):
+        ts = code_to_ts_code(r.bond_id)
+        if isinstance(r.meeting_date, str) and r.meeting_date:
+            rows.append((ts, r.meeting_date.replace("-", ""), ev.REVISION_MEETING, r.outcome))
+        if r.outcome == "approved" and isinstance(r.effective_date, str) and r.effective_date:
+            rows.append((ts, r.effective_date.replace("-", ""), ev.REVISION_EFFECTIVE,
+                         f"{r.old_conv_price}->{r.new_conv_price}"))
     frames.append(pd.DataFrame(rows, columns=["ts_code", "event_date", "event_type", "detail"]).assign(source="jisilu"))
 
     calls = pd.read_parquet(WAREHOUSE_DIR / "cb_call.parquet")

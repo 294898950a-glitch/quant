@@ -12,7 +12,8 @@ from __future__ import annotations
 
 import pytest
 
-from strategies.cb_arb.verifier import CBArbConfig, apply_cost_model
+from strategies.cb_arb.cost_model import apply_cost_model
+from strategies.cb_arb.verifier import CBArbConfig
 
 
 @pytest.fixture

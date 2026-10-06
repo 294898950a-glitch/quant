@@ -37,19 +37,19 @@
 ----------------------------------------
 
 [I1_return_decomposition] 转债的收益恒等于三项之和: 正股涨跌 + 转股价变动 + 溢价变动。
-    样本 706020, 20190102 ~ 20260930
-    equal_weight_log_return: 0.6036
-    from_stock: 0.3927
-    from_conversion_price_change: 0.3669
-    from_premium_change: -0.1561
+    样本 706318, 20190102 ~ 20260930
+    equal_weight_log_return: 0.6047
+    from_stock: 0.392
+    from_conversion_price_change: 0.3665
+    from_premium_change: -0.1538
     identity_max_residual: 0.0
     days_with_conv_price_change_over_3pct_share: 0.0008
     those_days_share_of_conv_price_term: 1.0095
     注: 全部在市券等权、每日再平衡的对数收益。下修当天转股价值上跳、溢价同步压缩, 两项此消彼长, 不能把转股价一项单独读成因果。
 
 [I2_time_value] 价格高出 max(转股价值, 纯债价值) 的部分是时间价值, 是市场唯一能自由定价的部分; 它偶尔为负, 说明两个下限不是硬的。
-    样本 713623, 20190102 ~ 20260930
-    median: 14.7583
+    样本 713924, 20190102 ~ 20260930
+    median: 14.7651
     share_below_minus_1_yuan: 0.0501
     share_price_below_bond_value: 0.0351
     注: 纯债价值是东财给的估值, 不是合同量; 按哪条收益率曲线折现它没说明。
@@ -58,14 +58,14 @@
     样本 612832, 20190102 ~ 20260930
     in_conversion_share_below_minus_1pct: 0.0039
     in_conversion_share_below_minus_3pct: 0.0006
-    before_conversion_share_below_minus_1pct: 0.0478
+    before_conversion_share_below_minus_1pct: 0.0477
     longest_run_days_p95: 4.0
     注: 已公告强赎的券不计入。转股当天卖不出正股, 所以 1% 以内的负溢价不算违反。
 
 [I4_mean_price_is_not_return] "所有在市券的平均价"不是持有转债的收益: 赢家被强赎离场、新券按面值附近进场, 平均价被持续拉低。
-    样本 713648, 20190102 ~ 20260930
-    mean_price_log_change: 0.4382
-    equal_weight_log_return: 0.5873
+    样本 713949, 20190102 ~ 20260930
+    mean_price_log_change: 0.4389
+    equal_weight_log_return: 0.5884
 
 三、行为: 发行人和市场实际怎么做 (会变, 要重测)
 ----------------------------------------
@@ -90,7 +90,7 @@
     t 6..20: -1.5289
     vs_market 0..0: -0.0346
     vs_market 1..5: -0.0077
-    vs_market 6..20: -0.0226
+    vs_market 6..20: -0.0227
     stock -20..-6: 0.1316
     stock 1..5: -0.0144
     stock 6..20: -0.0153
@@ -110,8 +110,8 @@
     t 1..5: 7.4937
     t 6..20: 6.973
     vs_market 0..0: 0.0165
-    vs_market 1..5: 0.0107
-    vs_market 6..20: -0.0012
+    vs_market 1..5: 0.0106
+    vs_market 6..20: -0.0013
     stock -20..-6: 0.0797
     stock 1..5: -0.0018
     stock 6..20: -0.0175
@@ -121,11 +121,11 @@
     注: net_of_stock = 转债对数收益 − 正股对数收益 (溢价变动 + 转股价变动), 相当于按 1:1 对冲正股; 转债对正股的弹性小于 1, 所以正股下跌的窗口里这个数会机械地偏正, 上涨的窗口里偏负, 要和同一窗口的 stock 一起读。vs_market = 转债收益 − 全市场转债等权收益。
 
 [B4_revision_decision] 公司提示"预计触发下修"之后, 多数时候选择不下修。
-    样本 1095, 20220802 ~ 20260817
-    warnings: 1095
-    share_no_revision: 0.7397
-    share_revision_proposal: 0.1781
-    share_none: 0.0822
+    样本 1096, 20220802 ~ 20260817
+    warnings: 1096
+    share_no_revision: 0.74
+    share_revision_proposal: 0.1779
+    share_none: 0.0821
     meetings_approved: 477
     meetings_rejected: 20
     注: 一次"提示"指距同一只券上一条提示超过 45 天的提示公告; 结果看此后 30 个交易日内最先出现的公告。巨潮档案 2018 年起才有量, 止于 2026-08-29。
@@ -142,7 +142,7 @@
     t 6..20: 2.6166
     vs_market 0..0: 0.0193
     vs_market 1..5: -0.0031
-    vs_market 6..20: 0.0204
+    vs_market 6..20: 0.0203
     stock -20..-6: -0.0485
     stock 1..5: 0.0096
     stock 6..20: 0.009
@@ -152,66 +152,66 @@
     注: net_of_stock = 转债对数收益 − 正股对数收益 (溢价变动 + 转股价变动), 相当于按 1:1 对冲正股; 转债对正股的弹性小于 1, 所以正股下跌的窗口里这个数会机械地偏正, 上涨的窗口里偏负, 要和同一窗口的 stock 一起读。vs_market = 转债收益 − 全市场转债等权收益。 第 0 天是董事会提议公告日。
 
 [B6_no_revision_reaction] 公告不下修时, 转债相对正股的反应。
-    样本 2181, 20211019 ~ 20260829
-    net_of_stock -20..-6: 0.0241
-    net_of_stock -5..-1: 0.0061
+    样本 2182, 20211019 ~ 20260829
+    net_of_stock -20..-6: 0.024
+    net_of_stock -5..-1: 0.0062
     net_of_stock 0..0: -0.0042
     net_of_stock 1..5: -0.0059
-    net_of_stock 6..20: -0.0035
-    t 0..0: -7.1183
-    t 1..5: -5.1256
-    t 6..20: -1.8338
+    net_of_stock 6..20: -0.0036
+    t 0..0: -7.1263
+    t 1..5: -5.1293
+    t 6..20: -1.8699
     vs_market 0..0: -0.0026
     vs_market 1..5: -0.0018
     vs_market 6..20: 0.0014
-    stock -20..-6: -0.0339
+    stock -20..-6: -0.0338
     stock 1..5: 0.0054
-    stock 6..20: 0.007
-    n 6..20: 2167
-    price_before_median: 113.7
+    stock 6..20: 0.0071
+    n 6..20: 2168
+    price_before_median: 113.705
     premium_before_median: 0.6569
     注: net_of_stock = 转债对数收益 − 正股对数收益 (溢价变动 + 转股价变动), 相当于按 1:1 对冲正股; 转债对正股的弹性小于 1, 所以正股下跌的窗口里这个数会机械地偏正, 上涨的窗口里偏负, 要和同一窗口的 stock 一起读。vs_market = 转债收益 − 全市场转债等权收益。
 
 [B7_time_value_by_state] 市场给时间价值定多少, 主要看转股价值离面值多远: 平价附近最高, 两头都低。
-    样本 704815, 20190102 ~ 20260930
+    样本 705116, 20190102 ~ 20260930
     <60: 6.3046
-    60-80: 12.2489
-    80-95: 18.4441
-    95-105: 20.0749
-    105-120: 16.9644
-    120-140: 10.5273
-    >140: 12.1578
+    60-80: 12.2525
+    80-95: 18.4527
+    95-105: 20.082
+    105-120: 16.9725
+    120-140: 10.5358
+    >140: 12.1625
     注: 单位: 元。按转股价值分档的时间价值中位数。
 
 四、环境: 规则、供给、成交
 ----------------------------------------
 
 [E1_supply] 在市转债的数量由新发和退出决定, 2024 年之后在收缩。
-    样本 972, 20190102 ~ 20260930
-    listed_latest: 307
+    样本 975, 20190102 ~ 20260930
+    listed_latest: 310
     listed_peak: 542
     peak_year: 2023
     注: 2017 年之前上市的券, 上市年份记在面板起点。余额 (金额) 没有数据, 见 N2。
 
 [E2_valuation_level] 全市场的价格和时间价值有一个共同的水位, 各年差别很大。
-    样本 713623, 20190102 ~ 20260930
+    样本 713924, 20190102 ~ 20260930
     median_price_first_year: 108.0
-    median_price_last_year: 136.471
+    median_price_last_year: 136.571
     share_above_130_first_year: 0.0688
-    share_above_130_last_year: 0.6545
+    share_above_130_last_year: 0.6562
 
 [E3_price_limits] 2022-08-01 起转债有 ±20% 涨跌幅限制 (上市首日除外); 此前没有。
-    样本 734980, 20170103 ~ 20260930
+    样本 735278, 20170103 ~ 20260930
     days_over_20pct_before: 359
     days_over_20pct_after: 1
-    limit_hits_after: 444
-    limit_hit_share_after: 0.0009
-    next_day_return_after_up_limit: 0.0144
+    limit_hits_after: 447
+    limit_hit_share_after: 0.001
+    next_day_return_after_up_limit: 0.0151
     注: 生效日是从数据里读出来的: 该日之后单日涨跌超过 20.5% 的券日数应为 0。
 
 [E4_liquidity] 多数转债一天的成交额不大, 这决定了任何策略的容量。
-    样本 709782, 20190102 ~ 20260930
-    median_daily_amount_yi_last_year: 0.8334
+    样本 710071, 20190102 ~ 20260930
+    median_daily_amount_yi_last_year: 0.8377
     share_below_1000wan_last_year: 0.0038
     注: 成交额 = 收盘价 × 成交张数, 20 日均值。
 
