@@ -38,6 +38,7 @@ from strategies.cb_arb.verifier import (  # noqa: E402
     _load_cb_daily,
     _load_stk_daily,
     _load_trading_days,
+    point_in_time_conv_price,
 )
 
 
@@ -204,7 +205,7 @@ def _compute_daily_ranks(
             vol = vol_maps.get(day_cfg.vol_window_days, {}).get((spec_d["stk_code"], date))
             if vol is None or not math.isfinite(vol) or vol <= 0:
                 continue
-            conv_price = spec_d["conv_price"]
+            conv_price = point_in_time_conv_price(ts, date, stock_price)
             if not math.isfinite(conv_price) or conv_price <= 0:
                 continue
             try:

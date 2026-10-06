@@ -54,6 +54,7 @@ _REPO_ROOT = _HERE.parent.parent
 CB_BASIC_PARQUET = _REPO_ROOT / "data" / "cb_warehouse" / "cb_basic.parquet"
 CB_DAILY_PARQUET = _REPO_ROOT / "data" / "cb_warehouse" / "cb_daily.parquet"
 CB_CALL_PARQUET = _REPO_ROOT / "data" / "cb_warehouse" / "cb_call.parquet"
+CB_CONV_VALUE_PIT_PARQUET = _REPO_ROOT / "data" / "cb_warehouse" / "cb_conv_value_pit.parquet"
 STK_DAILY_QFQ_PARQUET = _REPO_ROOT / "data" / "cb_warehouse" / "stk_daily_qfq.parquet"
 
 DEFAULT_YAML_PATH = _HERE / "tunable_space.yaml"
@@ -109,6 +110,7 @@ _CB_CALL_CACHE: pd.DataFrame | None = None
 _STK_DAILY_CACHE: pd.DataFrame | None = None
 _TRADING_DAYS_CACHE: list[str] | None = None
 _CB_INDEX_CACHE: pd.Series | None = None
+_CONV_VALUE_PIT_CACHE: dict[tuple[str, str], float] | None = None
 
 
 def _load_cb_basic() -> pd.DataFrame:
@@ -162,6 +164,30 @@ def _load_stk_daily() -> pd.DataFrame:
     return _STK_DAILY_CACHE
 
 
+def _load_conv_value_pit() -> dict[tuple[str, str], float]:
+    """{(ts_code, trade_date): 当日真实转股价值}. 来源 scripts/build_cb_conv_value_pit.py."""
+    global _CONV_VALUE_PIT_CACHE
+    if _CONV_VALUE_PIT_CACHE is None:
+        df = pd.read_parquet(CB_CONV_VALUE_PIT_PARQUET, columns=["ts_code", "trade_date", "conv_value"])
+        df = df[df["conv_value"] > 0]
+        _CONV_VALUE_PIT_CACHE = dict(
+            zip(zip(df["ts_code"], df["trade_date"]), df["conv_value"].astype(float))
+        )
+    return _CONV_VALUE_PIT_CACHE
+
+
+def point_in_time_conv_price(ts_code: str, date: str, stock_price: float) -> float:
+    """当日有效转股价 = 100 * 正股价 / 当日真实转股价值; 查不到返回 NaN (调用方跳过该券当日).
+
+    cb_basic.conv_price 是最新转股价 (含之后所有下修), 不能用于历史日期的估值.
+    理论价只通过 正股价/转股价 这个比值依赖两者, 所以这样换算与正股价是否复权无关.
+    """
+    conv_value = _load_conv_value_pit().get((ts_code, date))
+    if conv_value is None or stock_price is None or stock_price <= 0:
+        return float("nan")
+    return 100.0 * float(stock_price) / conv_value
+
+
 def _load_trading_days() -> list[str]:
     """全市场交易日, 升序."""
     global _TRADING_DAYS_CACHE
@@ -173,17 +199,21 @@ def _load_trading_days() -> list[str]:
 
 
 def _get_cb_index() -> pd.Series:
-    """全市场 CB 等权日均价序列, index by trade_date.
+    """全市场 CB 等权收益指数, index by trade_date, 起点 1.0.
 
-    用作"持有 CB 不动"的基准曲线 — 每日全集 close 的算术均值.
+    每日取所有在市 CB 当日涨跌幅的算术均值再累乘 — 即"等权持有全部 CB、每日再平衡"的
+    净值曲线. 2026-10-07 之前这里是每日 close 的算术均值, 那是价格水平不是收益:
+    新券按面值附近进入、强赎的高价券退出, 均价被持续拉低 (2019-2024 均价 +27%,
+    等权收益 +99%), 所有 excess_return 因此被高估.
     模块级缓存, 启动时一次性计算.
     """
     global _CB_INDEX_CACHE
     if _CB_INDEX_CACHE is not None:
         return _CB_INDEX_CACHE
-    daily = _load_cb_daily()
-    avg = daily.groupby("trade_date")["close"].mean()
-    _CB_INDEX_CACHE = avg.sort_index()
+    daily = _load_cb_daily()  # sorted by (ts_code, trade_date)
+    ret = daily.groupby("ts_code")["close"].pct_change()
+    avg_ret = ret.groupby(daily["trade_date"]).mean().sort_index().fillna(0.0)
+    _CB_INDEX_CACHE = (1.0 + avg_ret).cumprod()
     return _CB_INDEX_CACHE
 
 
@@ -213,13 +243,14 @@ def _index_total_return(start_date: str, end_date: str) -> float:
 def reset_cache() -> None:
     """主要给测试用 — 强制重新读取."""
     global _CB_BASIC_CACHE, _CB_DAILY_CACHE, _CB_CALL_CACHE
-    global _STK_DAILY_CACHE, _TRADING_DAYS_CACHE, _CB_INDEX_CACHE
+    global _STK_DAILY_CACHE, _TRADING_DAYS_CACHE, _CB_INDEX_CACHE, _CONV_VALUE_PIT_CACHE
     _CB_BASIC_CACHE = None
     _CB_DAILY_CACHE = None
     _CB_CALL_CACHE = None
     _STK_DAILY_CACHE = None
     _TRADING_DAYS_CACHE = None
     _CB_INDEX_CACHE = None
+    _CONV_VALUE_PIT_CACHE = None
 
 
 # --------------------------------------------------------------------------- #
@@ -786,7 +817,7 @@ def _run_backtest_core(
                 continue
             vol_use = min(_VOL_CAP, vol * day_cfg.vol_multiplier)
 
-            conv_price = spec_d["conv_price"]
+            conv_price = point_in_time_conv_price(ts, date, stock_price)
             if not math.isfinite(conv_price) or conv_price <= 0:
                 continue
 
@@ -1066,6 +1097,7 @@ __all__ = [
     "DEFAULT_YAML_PATH",
     "reset_cache",
     "_get_cb_index",
+    "point_in_time_conv_price",
     "_index_total_return",
     "apply_cost_model",
 ]

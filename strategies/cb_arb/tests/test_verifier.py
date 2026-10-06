@@ -296,6 +296,13 @@ def _install_synthetic_caches(monkeypatch):
     monkeypatch.setattr(v, "_CB_CALL_CACHE", cb_call)
     monkeypatch.setattr(v, "_STK_DAILY_CACHE", stk_daily_proc)
     monkeypatch.setattr(v, "_TRADING_DAYS_CACHE", days)
+    # 当日真实转股价值: 合成数据里转股价恒为 cb_basic.conv_price, 没有下修
+    stk_of = dict(zip(cb_basic["ts_code"], cb_basic["stk_code"]))
+    conv_price_of = dict(zip(cb_basic["ts_code"], cb_basic["conv_price"]))
+    stk_close = {(r.stk_code, r.trade_date): r.close for r in stk_daily_proc.itertuples(index=False)}
+    monkeypatch.setattr(v, "_CONV_VALUE_PIT_CACHE", {
+        (ts, d): 100.0 * stk_close[(stk_of[ts], d)] / conv_price_of[ts] for ts in cb_codes for d in days
+    })
     return cb_codes, days
 
 
@@ -523,3 +530,27 @@ def test_real_data_30day_smoke():
     assert result.oos_metrics["n_days"] <= 30
     # 至少有些交易 — 30 天偶尔 0 是可能的, 但通常 > 0
     assert result.all_metrics["total_trades"] >= 0
+
+
+def test_valuation_uses_point_in_time_conv_price(monkeypatch):
+    """估值必须用当日真实转股价值, 不能用 cb_basic.conv_price (最新值, 含之后的下修)."""
+    cb_codes, days = _install_synthetic_caches(monkeypatch)
+    ts, day = cb_codes[0], days[10]
+    # 当日真实转股价值 50 → 有效转股价 = 100 * 正股价 / 50, 与 cb_basic 里的 10.0 无关
+    v._CONV_VALUE_PIT_CACHE[(ts, day)] = 50.0
+    assert v.point_in_time_conv_price(ts, day, 8.0) == pytest.approx(16.0)
+    # 查不到当日值 → NaN, 调用方跳过该券当日 (缺证据不估值)
+    assert math.isnan(v.point_in_time_conv_price(ts, "19990101", 8.0))
+
+
+def test_cb_index_is_a_return_index_not_a_price_level(monkeypatch):
+    """新券按面值进入不应拉低基准: 两只券当日都没涨跌, 指数必须不变."""
+    daily = pd.DataFrame({
+        "ts_code": ["A", "A", "A", "B", "B"],
+        "trade_date": ["20240102", "20240103", "20240104", "20240103", "20240104"],
+        "close": [200.0, 200.0, 200.0, 100.0, 100.0],
+    })
+    monkeypatch.setattr(v, "_CB_DAILY_CACHE", daily)
+    monkeypatch.setattr(v, "_CB_INDEX_CACHE", None)
+    # 均价从 200 掉到 150 (-25%), 但持有人一分钱没亏
+    assert _index_total_return("20240102", "20240104") == pytest.approx(0.0)

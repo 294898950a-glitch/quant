@@ -5,7 +5,7 @@ build_cb_warehouse.py rebuilds everything and overwrites cb_basic, including
 the conv_price repairs made afterwards. This script only appends:
 
   cb_basic   existing rows kept as they are; newly listed bonds appended
-  cb_call    existing rows kept; notices dated after the current last date appended
+  cb_call    not touched here; rebuild it with scripts/build_cb_call_history.py
   cb_daily   rows after the current last date, for bonds still trading then,
              plus full history of newly listed bonds
   stk_daily  raw rows after the current last date
@@ -64,7 +64,6 @@ def main() -> int:
     args = p.parse_args()
 
     basic = pd.read_parquet(WAREHOUSE_DIR / "cb_basic.parquet")
-    call = pd.read_parquet(WAREHOUSE_DIR / "cb_call.parquet")
     daily = pd.read_parquet(WAREHOUSE_DIR / "cb_daily.parquet")
     raw = pd.read_parquet(WAREHOUSE_DIR / "stk_daily.parquet")
     qfq = pd.read_parquet(WAREHOUSE_DIR / "stk_daily_qfq.parquet")
@@ -74,7 +73,7 @@ def main() -> int:
     if universe.empty:
         print("FATAL: empty universe", flush=True)
         return 1
-    fresh_basic, fresh_call = build_cb_basic_and_call(universe)
+    fresh_basic, _ = build_cb_basic_and_call(universe)
     em_rows = dict(zip(universe["code"], universe["_em_row"]))
 
     new_basic = fresh_basic[~fresh_basic["code"].isin(basic["code"])].copy()
@@ -87,18 +86,6 @@ def main() -> int:
     ]
     new_basic = new_basic[new_basic["list_date"].notna()]
     basic_out = pd.concat([basic, new_basic[basic.columns]], ignore_index=True)
-    # cb_call keeps one row per notice. eastmoney only exposes each bond's latest notice, so a bond that
-    # already has a row gets a second one when a newer notice appears; earlier dates keep the old row.
-    seen = set(zip(call["ts_code"], call["ann_date"]))
-    is_new_notice = pd.Series(
-        [(t, a) not in seen for t, a in zip(fresh_call["ts_code"], fresh_call["ann_date"])], index=fresh_call.index
-    )
-    new_call = fresh_call[
-        fresh_call["ann_date"].notna() & is_new_notice
-        & ((fresh_call["ann_date"] > old_end) | ~fresh_call["ts_code"].isin(call["ts_code"]))
-    ]
-    call_out = pd.concat([call, new_call[call.columns]], ignore_index=True)
-
     last_by_bond = daily.groupby("ts_code")["trade_date"].max()
     alive = set(last_by_bond[last_by_bond >= old_end].index)
     bond_codes = sorted(basic.loc[basic["ts_code"].isin(alive), "code"].astype(str)) + sorted(new_basic["code"].astype(str))
@@ -126,7 +113,6 @@ def main() -> int:
     qfq_out = qfq_out.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
 
     basic_out.to_parquet(WAREHOUSE_DIR / "cb_basic.parquet", index=False)
-    call_out.to_parquet(WAREHOUSE_DIR / "cb_call.parquet", index=False)
     daily_out.to_parquet(WAREHOUSE_DIR / "cb_daily.parquet", index=False)
     raw_out.to_parquet(WAREHOUSE_DIR / "stk_daily.parquet", index=False)
     qfq_out.to_parquet(WAREHOUSE_DIR / "stk_daily_qfq.parquet", index=False)
@@ -138,7 +124,6 @@ def main() -> int:
         "previous_end": old_end,
         "new_end": new_end,
         "new_bonds": int(len(new_basic)),
-        "new_calls": int(len(new_call)),
         "bonds_requested": len(bond_codes),
         "bonds_with_new_rows": int(len(reached)),
         "cb_daily_rows_added": int(len(daily_out) - len(daily)),

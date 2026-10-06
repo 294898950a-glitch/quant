@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-05-22T13:30:00+08:00'
+updated_at: '2026-10-07T05:00:00+08:00'
 trigger: user approved promoting absolute value-gap switch to current main strategy
 summary:
   deployable_strategies: 0
@@ -38,6 +38,12 @@ summary:
       alpha against an equal-weight return benchmark in 2019-2024. The project CB
       index used for every excess figure is a mean price level, not a return
       (cb_index_benchmark_is_price_level_2026_10_07). Archiving is a user decision.
+    measurement_change_2026_10_07: strategies/cb_arb/verifier.py now prices on
+      point-in-time conversion value and reports excess against an equal-weight
+      return index, and cb_call.parquet holds real forced calls only
+      (cb_measurement_fixes_2026_10_07). The metrics, baseline rows and falsifier
+      results recorded below were produced by the old measurement and have not
+      been recomputed. No status, baseline or promotion was changed.
   cost_realism_wall:
     applies_to:
     - cb_arb

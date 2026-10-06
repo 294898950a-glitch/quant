@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-10-07T04:00:00+08:00"
+updated_at: "2026-10-07T05:00:00+08:00"
 authority: machine
 source_migration:
   legacy_markdown_removed: true
@@ -583,6 +583,41 @@ key_insights:
       - replace_cb_benchmark_with_return_index
       - rebuild_cb_call_as_dated_notice_history
       - wire_pit_conversion_value_into_verifier
+
+  - id: cb_measurement_fixes_2026_10_07
+    priority: critical
+    summary: "The three measurement defects are fixed in code and data: valuations read point-in-time conversion value, the benchmark is an equal-weight return index, and cb_call holds real forced calls only. Rerun with all three fixed, the value-gap model has negative alpha in 2019-2024 and in the 2026-05..09 holdout. Numbers produced before this date are not comparable with numbers produced after it."
+    source: "strategies/cb_arb/verifier.py (point_in_time_conv_price, _get_cb_index), scripts/analyze_cb_arb_repair_times.py, scripts/build_cb_call_history.py, data/cb_arb_pit_rerun_fixed_measurement_2026-10-07/"
+    facts:
+      conversion_price: "verifier main loop and _compute_daily_ranks call point_in_time_conv_price(ts_code, date, stock_price); a bond-day without a point-in-time value is skipped."
+      benchmark: "verifier._get_cb_index is the compounded daily mean return of all listed CBs. _index_total_return: 2019-2024 +106.4% (was +26.9%), 2025-01..2026-05-08 +35.6%, 2026-05-11..09-30 -8.2%."
+      call_table:
+        rule: "forced call = eastmoney EXECUTE_REASON 4, or trading stopped more than 90 days before scheduled maturity with a cninfo call announcement in the preceding 120 days; ann_date is the earliest such notice."
+        forced_calls: 591
+        by_source: {eastmoney+cninfo: 387, cninfo: 113, eastmoney: 82, inferred: 9}
+        hidden_calls_recovered: "113 bonds whose eastmoney 'latest notice' was a put had no call record before; their call dates now come from cninfo."
+        eastmoney_vs_cninfo_notice_date: "same day for 80% of the 391 bonds present in both"
+        notice_to_last_trade_days: {p5: 14, median: 22, p95: 41}
+        share_of_listed_bonds_flagged_called: {"2019-01": 0.000, "2021-01": 0.015, "2023-01": 0.004, "2025-01": 0.012, "2026-05": 0.027}
+        previous_share_flagged: {"2019-01": 0.036, "2021-01": 0.048, "2023-01": 0.088, "2025-01": 0.249, "2026-05": 0.582}
+        all_notices: "data/cb_warehouse/cb_redemption_notices.parquet keeps every dated redemption announcement with its kind (call, call_late, no_call, may_trigger, other)."
+      rerun_all_fixed:
+        note: "Same frozen parameters, engine, costs and one-day delay as pit_value_gap_holdout_verdict_2026_10_07. Not pre-registered: run after that verdict, as a check of the fixes."
+        equal_weight_market_return: {train_2019_2024: 0.990, test_2025_01_to_2026_05: 0.356, holdout_2026_05_to_09: -0.082}
+        model: {train: {total_return: 0.874, beta: 1.28, alpha: -0.037, t: -1.03}, test: {total_return: 0.607, beta: 1.26, alpha: 0.083, t: 0.84}, holdout: {total_return: -0.111, beta: 0.97, alpha: -0.075, t: -0.43}}
+        low_premium: {train: {total_return: 2.832, beta: 1.52, alpha: 0.069, t: 1.16}, test: {total_return: 0.531, beta: 1.34, alpha: 0.029, t: 0.23}, holdout: {total_return: -0.183, beta: 1.15, alpha: -0.239, t: -0.92}}
+        double_low: {train: {total_return: 1.783, beta: 0.86, alpha: 0.077, t: 2.35}, test: {total_return: 0.088, beta: 0.31, alpha: -0.005, t: -0.08}, holdout: {total_return: -0.071, beta: 0.25, alpha: -0.124, t: -0.99}}
+        years_model_beats_both_styles: "2 of 8"
+    limits:
+      - "scripts/evaluate_cb_arb_valuation_formula.py and scripts/evaluate_cb_arb_new_valuation.py have their own pricing code and still read cb_basic.conv_price."
+      - "strategies/cb_redemption/benchmarks.py and data/benchmarks/cb_equal.parquet still use the mean price level; that strategy is archived."
+      - "The cninfo archive on hkvm ends 2026-08-29 and has no 2016 rows; 9 calls have an inferred date (last trade - 30 days)."
+      - "cb_basic.rating is still the latest rating."
+      - "The benchmark has no costs and rebalances daily; it is a reference return, not an investable one."
+    decision_use: |
+      Use these code paths for any new CB evaluation. Do not compare an excess_return computed after this
+      date with one computed before it. The verdict on the value-gap ranking is unchanged and stronger:
+      no edge. Nothing in the rerun is tradeable.
 
 open_threads:
   - id: pit_value_gap_incremental_edge

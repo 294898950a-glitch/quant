@@ -858,11 +858,14 @@ the evidence is `data/cb_arb_conv_price_lookahead_2026-10-07/`.
   falsified the same day (`pit_value_gap_holdout_verdict_2026_10_07`,
   `data/cb_arb_pit_holdout_2026-10-07/`): on clean data the value-gap ranking
   does not beat a plain low-premium ordering.
-- The project CB index behind every `excess_return` is a mean price level, not a
-  return (`cb_index_benchmark_is_price_level_2026_10_07`). State any edge
-  against an equal-weight CB return series, with beta.
-- `cb_call` treats every redemption-related notice, including no-call notices,
-  as a call. By 2026-05 this excludes 58% of listed bonds.
+- Until 2026-10-07 the CB index behind every `excess_return` was a mean price
+  level, not a return (`cb_index_benchmark_is_price_level_2026_10_07`), and
+  `cb_call` treated every redemption-related notice as a call. Both are fixed
+  (`cb_measurement_fixes_2026_10_07`): `verifier._get_cb_index` is an
+  equal-weight return index, `cb_call.parquet` holds real forced calls only
+  (`scripts/build_cb_call_history.py`), and valuations read point-in-time
+  conversion value through `verifier.point_in_time_conv_price`. Numbers from
+  before and after that date are not comparable.
 - `scripts/refresh_cb_warehouse.py` extends the warehouse without rewriting
   history; it reached 2026-09-30 on 2026-10-07.
 - The orchestrator has been paused since 2026-05-27 and all ten legacy families
