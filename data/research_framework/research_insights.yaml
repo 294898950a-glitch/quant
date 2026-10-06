@@ -21,8 +21,9 @@ key_insights:
   - id: main_vs_value_gap_distinction
     summary: "Main cb_arb and value-gap switch are distinct; rejection of panic-detector internals does not reject absolute value-gap ranking."
     facts:
-      main_strategy_logic: "market price / theoretical value percentage deviation ranking"
-      value_gap_logic: "absolute theoretical-minus-market value gap ranking, plus optional panic detector"
+      main_strategy_logic: "ranks by (price - theoretical) / theoretical; buys the cheapest percentile, sells on rank percentile, stop-loss, max holding days"
+      value_gap_logic: "ranks by (theoretical - price) * floor(fixed position cash / price); holds until a new candidate's gap beats the weakest holding's gap by a hurdle"
+      ranking_is_the_same: "Checked 2026-10-07 on 664k bond-days: the daily Spearman correlation between the two rankings is 1.0000 (minimum 0.9999). Position cash is one constant per regime-day, so the 'absolute amount' is the percentage gap times a constant. The two strategies differ only in their trading rules (percentile buy/sell versus hurdle switching), not in what they consider cheap."
       main_2019_excess: -0.0985
       value_gap_2019_excess: 0.161
       gap_pp: 25.95

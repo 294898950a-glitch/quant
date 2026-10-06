@@ -1,0 +1,97 @@
+转债市场事实层 spec
+====================
+
+状态: 已实现 (2026-10-07)
+入口: scripts/build_cb_market_facts.py    产出页面: docs/cb-market-structure.txt
+
+0. 一句话
+---------
+
+把"转债市场是什么样"和"某个策略灵不灵"分开。事实层只量前者: 每条事实 = 一句陈述 +
+一个测量函数 + 带来历的数值。它不回测, 不出信号。信号层和策略层只读它, 不重算它。
+
+1. 事实按"会不会变"分四类
+-------------------------
+
+推导起点: 转债是一份合同。价格 = 转股价值 × (1 + 溢价), 转股价值 = 100 × 正股价 / 转股价。
+
+  contract     合同: 发行时写死。强赎、回售的触发条件, 到期赎回价, 票息。
+  identity     恒等式与边界: 收益三项分解; 价格的两个下限 (转股价值、纯债价值)。
+               要么恒成立, 要么可以数出违反了多少次。
+  behaviour    行为: 发行人在每个决策点怎么选, 市场给时间价值定多少。会变, 要重测。
+               信号只可能出在这一类。
+  environment  环境: 交易规则及其生效日、供给、成交额。
+
+前两类量一次长期有效; 第三类是研究对象; 第四类决定时期怎么切 —— 时期按规则生效日切,
+不由人挑 (目前从数据读出的断点: 2022-08-01 涨跌幅限制)。
+
+2. 产物表
+---------
+
+(1) cb_contract_terms.parquet (+ .json)      写: scripts/build_cb_contract_terms.py
+    每只券一行: 强赎 (窗口 / 至少几天 / 触发比例)、条件回售、到期赎回价、票息、转股起始日,
+    以及解析所依据的条款原文。
+    来历: 原文与解析值同行存放; .json 记各字段 parsed / no_clause / unparsed / no_source 的只数。
+    谁读: cb_market/panel.py (逐券判断是否满足强赎条件); 人 (核对任一行)。
+    答不出来: 字段为空 + 对应 *_status 写明原因。不回退到"市场通行条款"。
+              下修条款没有数据源, 全部 no_source。
+
+(2) cb_events.parquet (+ .json)              写: scripts/build_cb_events.py
+    一行一个带日期的发行人事件: 下修提议 / 不下修 / 预计触发 / 股东大会 / 生效,
+    公告强赎 / 公告不强赎 / 提示可能满足强赎。
+    来历: source 列 (cninfo / jisilu / cb_call:<来源>) + detail (公告原标题或新旧转股价);
+          .json 记档案起止日和各类型数量。
+    谁读: cb_market/facts.py 的行为类测量; 之后的信号层。
+    答不出来: 标题分不出类型的记为 unclassified 并保留 (当前 9 条, 占 0.18%)。
+
+(3) 日频面板 (内存, 不落盘)                   写: cb_market/panel.py::load_panel()
+    每券每日: 价格、成交额、当日真实转股价值、溢价、纯债价值、时间价值、收益三项分解、
+    是否在转股期、是否已公告强赎、按本券合同算的强赎触发天数与是否满足。
+    来历: panel.attrs["inputs"] 每个输入文件的大小和内容指纹; attrs["end"] 数据截止日。
+    谁读: 每个测量函数; 之后的信号层。
+    答不出来: 缺输入的格子是 NaN; 条款没解析出来的券 call_eligible 为 False, 要配合 call_status 读。
+
+(4) data/cb_market_facts/facts.yaml + <id>.csv  写: scripts/build_cb_market_facts.py (整份重写)
+    每条事实: id, 类别, 陈述, status, 数值, 样本量, 日期范围, 口径说明, 明细文件名。
+    来历: 文件头记生成时间、代码 commit 及是否有未提交改动、数据截止日、(3) 的输入指纹。
+    谁读: 人, 在提出任何策略设想之前; 知识库笔记引用它作证据;
+          cb_market/tests/test_facts.py。
+    答不出来: status = not_measured + reason。没有数据的事实照样在表里;
+              测量函数抛异常或样本为空, 也写成 not_measured, 不会消失, 也不会被写成 measured。
+
+(5) docs/cb-market-structure.txt             写: 同 (4), 由 facts.yaml 渲染, 不手写
+    谁读: 人。not_measured 的条目单列在最后一节 "没有数据, 不能当事实用"。
+
+事实的陈述和测量函数写在 cb_market/facts.py (一条事实一个函数), 数值只由脚本写。
+
+3. 步骤
+-------
+
+build_cb_contract_terms.py   读 东财条款原文                      写 (1)
+build_cb_call_history.py     读 东财执行原因 + 巨潮公告            写 cb_call.parquet
+build_cb_events.py           读 巨潮公告 + 集思录下修记录 + cb_call  写 (2)
+build_cb_market_facts.py     读 仓库 + (1)(2), 经 load_panel()     写 (4)(5)
+
+判断不重复: 强赎触发天数只在 load_panel() 里按合同算; 公告归属到券和标题分类只在
+build_cb_call_history.load_notices() 与 cb_market/events.py; 三项分解只在 panel + identities。
+
+巨潮公告档案和集思录下修记录在 hkvm (~/.hermes/shared/cb_announcement/), 重建 (2) 时
+要把两份 jsonl 的路径传给脚本; 重建 (4) 不需要它们。
+
+4. 检查
+-------
+
+cb_market/tests/test_facts.py 保护的后果: 某条事实悄悄从表里消失或被空结果冒充。
+  - 登记的每条事实都在 facts.yaml 里; not_measured 必须有原因; measured 必须有样本量和数值。
+  - 测量函数抛异常、或返回空样本 → 记为 not_measured (有专门的测试让它红)。
+cb_market/tests/test_contracts.py 保护的后果: 条款解析抓错数字
+  (到期赎回价被当成强赎触发比例 —— 2026-10-07 第一版正则真犯过这个错)。
+
+5. 已知的缺口
+-------------
+
+  - 下修条款 (触发比例和天数): 没有数据源, 要从募集说明书取。
+  - 持有人结构、剩余规模、日内数据: 没有数据。
+  - 纯债价值用的是东财的估值, 不是按合同现金流自己算的; 到期赎回价已经有了, 可以自己算。
+  - 强赎的赎回价 (面值加应计利息, 少数老券是固定 103-105) 没有解析。
+  - 披露规则的生效日 (2020-2021 年"不强赎"公告开始大量出现) 没有核实出处。

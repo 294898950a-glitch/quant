@@ -1,0 +1,405 @@
+schema_version: 1
+generated_at: '2026-10-06T21:17:08.270846+00:00'
+code_commit: e20cfe3
+code_dirty: true
+warehouse_end: '20260930'
+study_start: '20190101'
+inputs:
+  cb_daily.parquet:
+    bytes: 12932243
+    sha256_16: dd4df287b943de92
+  cb_conv_value_pit.parquet:
+    bytes: 28802691
+    sha256_16: 90b53c35944e2d71
+  cb_basic.parquet:
+    bytes: 104312
+    sha256_16: e3037b6717204744
+  stk_daily_qfq.parquet:
+    bytes: 40505115
+    sha256_16: 7936150816dd9cae
+  cb_contract_terms.parquet:
+    bytes: 454804
+    sha256_16: 3a72f34a1e12c716
+  cb_call.parquet:
+    bytes: 23429
+    sha256_16: 9889983d1c33cc28
+  cb_events.parquet:
+    bytes: 88538
+    sha256_16: bb39ef3def1e3505
+facts:
+- id: C1_call_terms
+  kind: contract
+  statement: '发行人什么时候有权强赎, 是逐券写在合同里的: 多数券是 30 个交易日里 15 天正股不低于转股价的 130%, 但不是全部。'
+  status: measured
+  values:
+    bonds_parsed: 1043
+    bonds_not_parsed: 16
+    share_30_15_130: 0.9233
+    distinct_term_sets: 12
+    bonds_with_other_terms: 80
+  n: 1043
+  date_range:
+  - ''
+  - ''
+  notes: 条款原文与解析值都在 cb_contract_terms.parquet; 与集思录在市券逐只核对一致。
+  detail: C1_call_terms.csv
+- id: C2_put_terms
+  kind: contract
+  statement: '持有人的回售权有期限和门槛: 多数券只在最后两个计息年度、正股连续 30 天低于转股价 70% 时才有; 一部分券没有条件回售。'
+  status: measured
+  values:
+    bonds_with_conditional_put: 989
+    bonds_without: 53
+    bonds_not_parsed: 17
+    share_last_two_years_70pct: 0.9525
+  n: 989
+  date_range:
+  - ''
+  - ''
+  notes: ''
+  detail: C2_put_terms.csv
+- id: C3_maturity_redemption_price
+  kind: contract
+  statement: 到期不转股, 公司按约定价赎回, 这个价不是 100 元面值, 而是 103 到 130 元, 中位 110 元。
+  status: measured
+  values:
+    median: 110.0
+    p5: 106.0
+    p95: 118.0
+    min: 101.6
+    max: 130.0
+    bonds_not_parsed: 43
+  n: 1016
+  date_range:
+  - ''
+  - ''
+  notes: 含最后一期利息。strategies/cb_arb/cb_pricer.py 的债底按面值 100 加票息算, 没有用这个价。
+  detail: C3_maturity_redemption_price.csv
+- id: C4_down_revision_terms
+  kind: contract
+  statement: 发行人什么时候有权提议下修 (触发比例和天数)。
+  status: not_measured
+  reason: '没有数据源给出下修条款: 东财的条款字段只有赎回和回售, 集思录公开接口也没有。需要从募集说明书取。'
+- id: I1_return_decomposition
+  kind: identity
+  statement: '转债的收益恒等于三项之和: 正股涨跌 + 转股价变动 + 溢价变动。'
+  status: measured
+  values:
+    equal_weight_log_return: 0.6036
+    from_stock: 0.3927
+    from_conversion_price_change: 0.3669
+    from_premium_change: -0.1561
+    identity_max_residual: 0.0
+    days_with_conv_price_change_over_3pct_share: 0.0008
+    those_days_share_of_conv_price_term: 1.0095
+  n: 706020
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: 全部在市券等权、每日再平衡的对数收益。下修当天转股价值上跳、溢价同步压缩, 两项此消彼长, 不能把转股价一项单独读成因果。
+  detail: I1_return_decomposition.csv
+- id: I2_time_value
+  kind: identity
+  statement: 价格高出 max(转股价值, 纯债价值) 的部分是时间价值, 是市场唯一能自由定价的部分; 它偶尔为负, 说明两个下限不是硬的。
+  status: measured
+  values:
+    median: 14.7583
+    share_below_minus_1_yuan: 0.0501
+    share_price_below_bond_value: 0.0351
+  n: 713623
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: 纯债价值是东财给的估值, 不是合同量; 按哪条收益率曲线折现它没说明。
+  detail: I2_time_value.csv
+- id: I3_negative_premium
+  kind: identity
+  statement: 进入转股期后可以转股套利, 价格不该长期低于转股价值。
+  status: measured
+  values:
+    in_conversion_share_below_minus_1pct: 0.0039
+    in_conversion_share_below_minus_3pct: 0.0006
+    before_conversion_share_below_minus_1pct: 0.0478
+    longest_run_days_p95: 4.0
+  n: 612832
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: 已公告强赎的券不计入。转股当天卖不出正股, 所以 1% 以内的负溢价不算违反。
+  detail: I3_negative_premium.csv
+- id: I4_mean_price_is_not_return
+  kind: identity
+  statement: '"所有在市券的平均价"不是持有转债的收益: 赢家被强赎离场、新券按面值附近进场, 平均价被持续拉低。'
+  status: measured
+  values:
+    mean_price_log_change: 0.4382
+    equal_weight_log_return: 0.5873
+  n: 713648
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: ''
+  detail: I4_mean_price_is_not_return.csv
+- id: B1_call_decision
+  kind: behaviour
+  statement: '满足强赎条件之后, 发行人并不总是强赎: 一部分公告不赎, 一部分什么都不说。'
+  status: measured
+  values:
+    episodes: 862
+    share_call_announced: 0.4559
+    share_no_call: 0.406
+    share_none: 0.1381
+  n: 862
+  date_range:
+  - '20190228'
+  - '20260703'
+  notes: 条件按每只券自己的合同算。一次"满足"指此前 30 个交易日都不满足之后的第一天; 结果看此后 60 个交易日 (及此前 5 日) 内最先出现的公告。
+  detail: B1_call_decision.csv
+- id: B2_call_announcement_reaction
+  kind: behaviour
+  statement: '公告强赎时, 转债相对正股下跌: 时间价值被收走。'
+  status: measured
+  values:
+    net_of_stock -20..-6: -0.0649
+    net_of_stock -5..-1: -0.0157
+    net_of_stock 0..0: -0.0234
+    net_of_stock 1..5: 0.0065
+    net_of_stock 6..20: -0.0034
+    t 0..0: -9.9126
+    t 1..5: 4.6709
+    t 6..20: -1.5289
+    vs_market 0..0: -0.0346
+    vs_market 1..5: -0.0077
+    vs_market 6..20: -0.0226
+    stock -20..-6: 0.1316
+    stock 1..5: -0.0144
+    stock 6..20: -0.0153
+    n 6..20: 122
+    price_before_median: 149.884
+    premium_before_median: -0.0003
+  n: 532
+  date_range:
+  - '20190123'
+  - '20260910'
+  notes: net_of_stock = 转债对数收益 − 正股对数收益 (溢价变动 + 转股价变动), 相当于按 1:1 对冲正股; 转债对正股的弹性小于 1, 所以正股下跌的窗口里这个数会机械地偏正, 上涨的窗口里偏负, 要和同一窗口的
+    stock 一起读。vs_market = 转债收益 − 全市场转债等权收益。
+  detail: B2_call_announcement_reaction.csv
+- id: B3_no_call_announcement_reaction
+  kind: behaviour
+  statement: '公告不强赎时, 转债相对正股上涨: 封顶暂时解除。'
+  status: measured
+  values:
+    net_of_stock -20..-6: -0.0343
+    net_of_stock -5..-1: -0.0013
+    net_of_stock 0..0: 0.0156
+    net_of_stock 1..5: 0.0124
+    net_of_stock 6..20: 0.0176
+    t 0..0: 12.5532
+    t 1..5: 7.4937
+    t 6..20: 6.973
+    vs_market 0..0: 0.0165
+    vs_market 1..5: 0.0107
+    vs_market 6..20: -0.0012
+    stock -20..-6: 0.0797
+    stock 1..5: -0.0018
+    stock 6..20: -0.0175
+    n 6..20: 741
+    price_before_median: 166.0595
+    premium_before_median: 0.0516
+  n: 744
+  date_range:
+  - '20190418'
+  - '20260828'
+  notes: net_of_stock = 转债对数收益 − 正股对数收益 (溢价变动 + 转股价变动), 相当于按 1:1 对冲正股; 转债对正股的弹性小于 1, 所以正股下跌的窗口里这个数会机械地偏正, 上涨的窗口里偏负, 要和同一窗口的
+    stock 一起读。vs_market = 转债收益 − 全市场转债等权收益。
+  detail: B3_no_call_announcement_reaction.csv
+- id: B4_revision_decision
+  kind: behaviour
+  statement: 公司提示"预计触发下修"之后, 多数时候选择不下修。
+  status: measured
+  values:
+    warnings: 1095
+    share_no_revision: 0.7397
+    share_revision_proposal: 0.1781
+    share_none: 0.0822
+    meetings_approved: 477
+    meetings_rejected: 20
+  n: 1095
+  date_range:
+  - '20220802'
+  - '20260817'
+  notes: 一次"提示"指距同一只券上一条提示超过 45 天的提示公告; 结果看此后 30 个交易日内最先出现的公告。巨潮档案 2018 年起才有量, 止于 2026-08-29。
+  detail: B4_revision_decision.csv
+- id: B5_revision_proposal_reaction
+  kind: behaviour
+  statement: 董事会提议下修的公告日转债上涨; 公告之后到股东大会之间 (约 16 天) 还在涨。
+  status: measured
+  values:
+    net_of_stock -20..-6: 0.0351
+    net_of_stock -5..-1: 0.013
+    net_of_stock 0..0: 0.0166
+    net_of_stock 1..5: -0.003
+    net_of_stock 6..20: 0.0103
+    t 0..0: 10.9595
+    t 1..5: -1.0027
+    t 6..20: 2.6166
+    vs_market 0..0: 0.0193
+    vs_market 1..5: -0.0031
+    vs_market 6..20: 0.0204
+    stock -20..-6: -0.0485
+    stock 1..5: 0.0096
+    stock 6..20: 0.009
+    n 6..20: 457
+    price_before_median: 111.859
+    premium_before_median: 0.6452
+  n: 463
+  date_range:
+  - '20190116'
+  - '20260828'
+  notes: net_of_stock = 转债对数收益 − 正股对数收益 (溢价变动 + 转股价变动), 相当于按 1:1 对冲正股; 转债对正股的弹性小于 1, 所以正股下跌的窗口里这个数会机械地偏正, 上涨的窗口里偏负, 要和同一窗口的
+    stock 一起读。vs_market = 转债收益 − 全市场转债等权收益。 第 0 天是董事会提议公告日。
+  detail: B5_revision_proposal_reaction.csv
+- id: B6_no_revision_reaction
+  kind: behaviour
+  statement: 公告不下修时, 转债相对正股的反应。
+  status: measured
+  values:
+    net_of_stock -20..-6: 0.0241
+    net_of_stock -5..-1: 0.0061
+    net_of_stock 0..0: -0.0042
+    net_of_stock 1..5: -0.0059
+    net_of_stock 6..20: -0.0035
+    t 0..0: -7.1183
+    t 1..5: -5.1256
+    t 6..20: -1.8338
+    vs_market 0..0: -0.0026
+    vs_market 1..5: -0.0018
+    vs_market 6..20: 0.0014
+    stock -20..-6: -0.0339
+    stock 1..5: 0.0054
+    stock 6..20: 0.007
+    n 6..20: 2167
+    price_before_median: 113.7
+    premium_before_median: 0.6569
+  n: 2181
+  date_range:
+  - '20211019'
+  - '20260829'
+  notes: net_of_stock = 转债对数收益 − 正股对数收益 (溢价变动 + 转股价变动), 相当于按 1:1 对冲正股; 转债对正股的弹性小于 1, 所以正股下跌的窗口里这个数会机械地偏正, 上涨的窗口里偏负, 要和同一窗口的
+    stock 一起读。vs_market = 转债收益 − 全市场转债等权收益。
+  detail: B6_no_revision_reaction.csv
+- id: B7_time_value_by_state
+  kind: behaviour
+  statement: '市场给时间价值定多少, 主要看转股价值离面值多远: 平价附近最高, 两头都低。'
+  status: measured
+  values:
+    <60: 6.3046
+    60-80: 12.2489
+    80-95: 18.4441
+    95-105: 20.0749
+    105-120: 16.9644
+    120-140: 10.5273
+    '>140': 12.1578
+  n: 704815
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: '单位: 元。按转股价值分档的时间价值中位数。'
+  detail: B7_time_value_by_state.csv
+- id: E1_supply
+  kind: environment
+  statement: 在市转债的数量由新发和退出决定, 2024 年之后在收缩。
+  status: measured
+  values:
+    listed_latest: 307
+    listed_peak: 542
+    peak_year: '2023'
+  n: 972
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: 2017 年之前上市的券, 上市年份记在面板起点。余额 (金额) 没有数据, 见 N2。
+  detail: E1_supply.csv
+- id: E2_valuation_level
+  kind: environment
+  statement: 全市场的价格和时间价值有一个共同的水位, 各年差别很大。
+  status: measured
+  values:
+    median_price_first_year: 108.0
+    median_price_last_year: 136.471
+    share_above_130_first_year: 0.0688
+    share_above_130_last_year: 0.6545
+  n: 713623
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: ''
+  detail: E2_valuation_level.csv
+- id: E3_price_limits
+  kind: environment
+  statement: 2022-08-01 起转债有 ±20% 涨跌幅限制 (上市首日除外); 此前没有。
+  status: measured
+  values:
+    days_over_20pct_before: 359
+    days_over_20pct_after: 1
+    limit_hits_after: 444
+    limit_hit_share_after: 0.0009
+    next_day_return_after_up_limit: 0.0144
+  n: 734980
+  date_range:
+  - '20170103'
+  - '20260930'
+  notes: '生效日是从数据里读出来的: 该日之后单日涨跌超过 20.5% 的券日数应为 0。'
+  detail: null
+- id: E4_liquidity
+  kind: environment
+  statement: 多数转债一天的成交额不大, 这决定了任何策略的容量。
+  status: measured
+  values:
+    median_daily_amount_yi_last_year: 0.8334
+    share_below_1000wan_last_year: 0.0038
+  n: 709782
+  date_range:
+  - '20190102'
+  - '20260930'
+  notes: 成交额 = 收盘价 × 成交张数, 20 日均值。
+  detail: E4_liquidity.csv
+- id: E5_no_call_notices_begin
+  kind: environment
+  statement: '"公告不强赎"从 2020 年起才大量出现; 此前满足条件而不赎, 公司多半不出声。'
+  status: measured
+  values:
+    '2019': 7
+    '2020': 82
+    '2021': 118
+    '2022': 131
+    '2023': 95
+    '2024': 77
+    '2025': 142
+    '2026': 96
+  n: 748
+  date_range:
+  - '20190418'
+  - '20260828'
+  notes: '数量来自巨潮档案。对照 B1: 满足条件后既不赎也不公告的比例从 2019-2021 年的约 28% 降到 2024 年后的 5% 上下。背后的披露规则及其生效日没有在本仓库内核实。'
+  detail: E5_no_call_notices_begin.csv
+- id: N1_holders
+  kind: environment
+  statement: 谁持有转债、他们受什么约束 (评级下限、回撤线), 被迫卖出时价格怎样。
+  status: not_measured
+  reason: 没有持有人数据; 评级只有最新值, 没有调级历史。
+- id: N2_outstanding_balance
+  kind: environment
+  statement: 每只券还剩多少没转股, 以及转股进度。
+  status: not_measured
+  reason: cb_basic.remain_size 全空; 集思录只给当前值, 没有历史。
+- id: N3_intraday
+  kind: environment
+  statement: T+0 之下的日内行为。
+  status: not_measured
+  reason: 没有日内数据。
+- id: N4_no_short_selling
+  kind: environment
+  statement: 转债不能做空, 高估的券没有人能压下来。
+  status: not_measured
+  reason: 这是制度事实, 无法直接测量; 它的后果 (高价高溢价券长期跑输) 属于信号层。

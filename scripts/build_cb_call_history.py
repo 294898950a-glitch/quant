@@ -64,12 +64,13 @@ def classify_title(title: str) -> str:
     return "other"
 
 
-def load_notices(path: Path, life: pd.DataFrame) -> pd.DataFrame:
+def load_notices(path: Path, life: pd.DataFrame, keyword: str = "赎回", classify=classify_title) -> pd.DataFrame:
+    """Announcements of one search keyword, attributed to a bond and classified by title."""
     rows = []
     with path.open(encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
-            if r.get("record_type") != "announcement" or r.get("keyword") != "赎回":
+            if r.get("record_type") != "announcement" or r.get("keyword") != keyword:
                 continue
             title = str(r.get("ann_title") or "").replace("<em>", "").replace("</em>", "")
             day = str(r.get("ann_datetime") or "")[:10].replace("-", "")
@@ -77,7 +78,7 @@ def load_notices(path: Path, life: pd.DataFrame) -> pd.DataFrame:
             codes = r.get("candidate_ts_codes") or []
             named = [ts for ts, n in zip(codes, names) if n and (n in title or n[:-1] in title)]
             for ts in named or codes:
-                rows.append({"ts_code": ts, "ann_date": day, "kind": classify_title(title),
+                rows.append({"ts_code": ts, "ann_date": day, "kind": classify(title),
                              "named_in_title": bool(named), "title": title, "url": r.get("ann_url")})
     notices = pd.DataFrame(rows).merge(life, on="ts_code", how="inner")
     # An issuer's archive covers all of its bonds; keep a notice only inside the bond's own listed life.

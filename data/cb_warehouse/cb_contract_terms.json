@@ -1,0 +1,128 @@
+{
+  "name": "cb_contract_terms",
+  "built_at": "2026-10-06T21:12:13.468942+00:00",
+  "source": "eastmoney RPT_BOND_CB_LIST clause text (REDEEM_CLAUSE, RESALE_CLAUSE, INTEREST_RATE_EXPLAIN)",
+  "bonds": 1059,
+  "status_counts": {
+    "call_status": {
+      "parsed": 1043,
+      "no_clause": 15,
+      "unparsed": 1
+    },
+    "maturity_redemption_status": {
+      "parsed": 1016,
+      "no_clause": 27,
+      "unparsed": 16
+    },
+    "put_status": {
+      "parsed": 989,
+      "no_clause": 53,
+      "unparsed": 17
+    },
+    "coupon_status": {
+      "parsed": 1039,
+      "unparsed": 19,
+      "no_clause": 1
+    },
+    "down_revision_status": {
+      "no_source": 1059
+    }
+  },
+  "call_terms": [
+    {
+      "window": 30,
+      "required_days": 15,
+      "trigger_pct": 130.0,
+      "bonds": 963
+    },
+    {
+      "window": 30,
+      "required_days": 20,
+      "trigger_pct": 130.0,
+      "bonds": 49
+    },
+    {
+      "window": 30,
+      "required_days": 15,
+      "trigger_pct": 120.0,
+      "bonds": 10
+    },
+    {
+      "window": 20,
+      "required_days": 20,
+      "trigger_pct": 130.0,
+      "bonds": 7
+    },
+    {
+      "window": 30,
+      "required_days": 30,
+      "trigger_pct": 130.0,
+      "bonds": 4
+    },
+    {
+      "window": 30,
+      "required_days": 15,
+      "trigger_pct": 125.0,
+      "bonds": 3
+    },
+    {
+      "window": 20,
+      "required_days": 10,
+      "trigger_pct": 130.0,
+      "bonds": 2
+    },
+    {
+      "window": 20,
+      "required_days": 20,
+      "trigger_pct": 125.0,
+      "bonds": 1
+    },
+    {
+      "window": 30,
+      "required_days": 10,
+      "trigger_pct": 125.0,
+      "bonds": 1
+    },
+    {
+      "window": 30,
+      "required_days": 10,
+      "trigger_pct": 130.0,
+      "bonds": 1
+    },
+    {
+      "window": 30,
+      "required_days": 20,
+      "trigger_pct": 120.0,
+      "bonds": 1
+    },
+    {
+      "window": 30,
+      "required_days": 20,
+      "trigger_pct": 150.0,
+      "bonds": 1
+    }
+  ],
+  "put_trigger_pct": {
+    "70.0": 975,
+    "60.0": 7,
+    "80.0": 5,
+    "75.0": 1,
+    "50.0": 1
+  },
+  "put_period": {
+    "last_n_years": 972,
+    "conversion_period": 12,
+    "after_lockup": 5
+  },
+  "maturity_redemption_price_quantiles": {
+    "0.05": 106.0,
+    "0.25": 108.0,
+    "0.5": 110.0,
+    "0.75": 115.0,
+    "0.95": 118.0
+  },
+  "not_available": {
+    "down_revision_clause": "no data source carries the down-revision trigger; every bond is no_source",
+    "call_redemption_price": "not parsed; most bonds pay par plus accrued interest, some older ones a fixed 103-105"
+  }
+}

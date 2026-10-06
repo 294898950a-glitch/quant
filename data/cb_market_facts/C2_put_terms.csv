@@ -1,0 +1,10 @@
+put_trigger_pct,put_period,put_last_years,bonds
+50.0,last_n_years,2.0,1
+60.0,last_n_years,1.0,2
+60.0,last_n_years,2.0,5
+70.0,after_lockup,,5
+70.0,conversion_period,,11
+70.0,last_n_years,1.0,17
+70.0,last_n_years,2.0,942
+75.0,conversion_period,,1
+80.0,last_n_years,2.0,5
