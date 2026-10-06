@@ -554,3 +554,24 @@ def test_cb_index_is_a_return_index_not_a_price_level(monkeypatch):
     monkeypatch.setattr(v, "_CB_INDEX_CACHE", None)
     # 均价从 200 掉到 150 (-25%), 但持有人一分钱没亏
     assert _index_total_return("20240102", "20240104") == pytest.approx(0.0)
+
+
+def test_valuation_reads_contract_maturity_not_the_rewritten_field(monkeypatch, tmp_path):
+    """已退市转债的 maturity_date 被数据源改写成摘牌日; 估值必须读合同到期日."""
+    cb_basic, *_ = _make_synthetic_data(n_cb=2, n_days=5)
+    cb_basic["maturity_date"] = ["20220318", "20280101"]            # 第一只: 被改写成 2022 年的摘牌日
+    cb_basic["contract_maturity_date"] = ["20260101", None]          # 合同上到 2026; 第二只解析不出
+    path = tmp_path / "cb_basic.parquet"
+    cb_basic.to_parquet(path, index=False)
+    monkeypatch.setattr(v, "CB_BASIC_PARQUET", path)
+    monkeypatch.setattr(v, "_CB_BASIC_CACHE", None)
+    df = v._load_cb_basic()
+    assert df.loc["CB001.SH", "valuation_maturity_date"] == "20260101"
+    assert df.loc["CB002.SH", "valuation_maturity_date"] == "20280101"  # 退回原字段
+
+
+def test_contract_maturity_date_is_parsed_from_coupon_terms():
+    from scripts.build_cb_warehouse import contract_maturity_date
+    terms = "第一年0.4%、第二年0.6%、第三年1.0%、第四年1.5%、第五年1.8%、第六年2.0%。"
+    assert contract_maturity_date("20200318", terms) == "20260318"
+    assert contract_maturity_date("20200318", "") is None

@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: '2026-10-07T05:00:00+08:00'
+updated_at: '2026-10-07T08:00:00+08:00'
 trigger: user approved promoting absolute value-gap switch to current main strategy
 summary:
   deployable_strategies: 0
@@ -44,6 +44,10 @@ summary:
       (cb_measurement_fixes_2026_10_07). The metrics, baseline rows and falsifier
       results recorded below were produced by the old measurement and have not
       been recomputed. No status, baseline or promotion was changed.
+    maturity_fix_2026_10_07: the core valuation paths now read contract maturity
+      instead of cb_basic.maturity_date, which is the delisting date for bonds
+      that have left the market (maturity_date_lookahead_fixed_2026_10_07). No
+      status, baseline or promotion was changed.
   cost_realism_wall:
     applies_to:
     - cb_arb

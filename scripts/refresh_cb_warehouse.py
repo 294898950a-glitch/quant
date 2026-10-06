@@ -4,7 +4,8 @@
 build_cb_warehouse.py rebuilds everything and overwrites cb_basic, including
 the conv_price repairs made afterwards. This script only appends:
 
-  cb_basic   existing rows kept as they are; newly listed bonds appended
+  cb_basic   existing rows kept as they are; newly listed bonds appended;
+             contract_maturity_date recomputed for every row
   cb_call    not touched here; rebuild it with scripts/build_cb_call_history.py
   cb_daily   rows after the current last date, for bonds still trading then,
              plus full history of newly listed bonds
@@ -34,6 +35,7 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts.build_cb_warehouse import (  # noqa: E402
     WAREHOUSE_DIR,
     build_cb_basic_and_call,
+    contract_maturity_date,
     collect_cb_universe,
     fetch_cb_daily_one,
     fetch_stock_daily_one,
@@ -85,6 +87,10 @@ def main() -> int:
         for c in new_basic["code"]
     ]
     new_basic = new_basic[new_basic["list_date"].notna()]
+    for frame in (basic, new_basic):
+        frame["contract_maturity_date"] = [
+            contract_maturity_date(v, t) for v, t in zip(frame["value_date"], frame["interest_rate_explain"])
+        ]
     basic_out = pd.concat([basic, new_basic[basic.columns]], ignore_index=True)
     last_by_bond = daily.groupby("ts_code")["trade_date"].max()
     alive = set(last_by_bond[last_by_bond >= old_end].index)

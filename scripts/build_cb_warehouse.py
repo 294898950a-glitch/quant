@@ -67,6 +67,28 @@ def parse_coupon_explain(text: Optional[str]) -> Optional[float]:
     return sum(vals) / len(vals) if vals else None
 
 
+_CN_DIGITS = "一二三四五六七八九十"
+
+
+def contract_maturity_date(value_date: Optional[str], interest_rate_explain: Optional[str]) -> Optional[str]:
+    """合同到期日 = 起息日 + 合同年限 (从票面利率条款 "第一年…第六年…" 解析).
+
+    eastmoney EXPIRE_DATE 对已退市转债被改写成实际兑付/摘牌日, 历史回测读它等于提前知道
+    这只债哪天退市. 合同到期日不会因为退市而改变. 解析不出年限时返回 None.
+    """
+    if not value_date or not isinstance(interest_rate_explain, str):
+        return None
+    years = [_CN_DIGITS.index(x) + 1 for x in re.findall(r"第([一二三四五六七八九十])年", interest_rate_explain)]
+    years += [int(x) for x in re.findall(r"第(\d+)年", interest_rate_explain)]
+    if not years:
+        return None
+    try:
+        start = pd.to_datetime(str(value_date), format="%Y%m%d")
+    except Exception:
+        return None
+    return (start + pd.DateOffset(years=max(years))).strftime("%Y%m%d")
+
+
 def to_ymd(dt) -> Optional[str]:
     """各种日期格式 -> YYYYMMDD 字符串."""
     if dt is None:
@@ -224,6 +246,9 @@ def build_cb_basic_and_call(
             "list_date": to_ymd(info.get("LISTING_DATE")),
             "delist_date": to_ymd(info.get("DELIST_DATE")),
             "maturity_date": to_ymd(info.get("EXPIRE_DATE")),
+            "contract_maturity_date": contract_maturity_date(
+                to_ymd(info.get("VALUE_DATE")), info.get("INTEREST_RATE_EXPLAIN")
+            ),
             "transfer_start_date": to_ymd(info.get("TRANSFER_START_DATE")),
             "transfer_end_date": to_ymd(info.get("TRANSFER_END_DATE")),
             "rating": rating or "AA",

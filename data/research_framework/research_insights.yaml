@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-10-07T05:00:00+08:00"
+updated_at: "2026-10-07T08:00:00+08:00"
 authority: machine
 source_migration:
   legacy_markdown_removed: true
@@ -618,6 +618,32 @@ key_insights:
       Use these code paths for any new CB evaluation. Do not compare an excess_return computed after this
       date with one computed before it. The verdict on the value-gap ranking is unchanged and stronger:
       no edge. Nothing in the rerun is tradeable.
+
+  - id: maturity_date_lookahead_fixed_2026_10_07
+    priority: critical
+    summary: "cb_basic.maturity_date is the actual delisting date for bonds that have left the market (eastmoney rewrites EXPIRE_DATE), so a historical valuation that reads it already knows when a bond will be called. Found in 2026-08 (knowledge base: 退市转债的到期日字段被数据源改写) but never fixed in code. The core valuation paths now read contract maturity. With it fixed, the value-gap model's 2025-01..2026-05 return falls from +61% to +20% (market +36%, alpha -16%/yr) and its 2019-2024 return rises from +87% to +224%."
+    source: "scripts/build_cb_warehouse.py::contract_maturity_date, strategies/cb_arb/verifier.py (valuation_maturity_date), data/cb_arb_pit_rerun_four_fixes_2026-10-07/"
+    facts:
+      fix: "cb_basic gains contract_maturity_date = value_date + contract years parsed from the coupon text. verifier._load_cb_basic exposes valuation_maturity_date (contract, falling back to maturity_date for 15 old bonds with no parsable term); the verifier main loop and _compute_daily_ranks price on it. maturity_date itself and cb_call.expire_date are unchanged."
+      validation: "For all 307 listed bonds contract maturity is within 3 days of maturity_date. For bonds that stopped trading, 77% have a contract maturity more than 30 days later; median 2.9 years later."
+      rerun_with_four_fixes:
+        note: "Frozen parameters, one-day delay, costs on. Fixes: point-in-time conversion value, return benchmark, real-call table, contract maturity. Run after the verdict; not pre-registered."
+        equal_weight_market_return: {train_2019_2024: 0.990, test_2025_01_to_2026_05: 0.356, holdout_2026_05_to_09: -0.082}
+        model: {train: {total_return: 2.237, beta: 1.42, alpha: 0.044, t: 1.02}, test: {total_return: 0.198, beta: 1.33, alpha: -0.163, t: -1.68}, holdout: {total_return: -0.111, beta: 0.97, alpha: -0.075, t: -0.43}}
+        low_premium: {train: {total_return: 3.568, beta: 1.50, alpha: 0.100, t: 1.75}, test: {total_return: 0.328, beta: 1.34, alpha: -0.080, t: -0.61}, holdout: {total_return: -0.234, beta: 1.13, alpha: -0.408, t: -1.63}}
+        double_low: {train: {total_return: 1.929, beta: 0.88, alpha: 0.084, t: 2.55}, test: {total_return: 0.109, beta: 0.33, alpha: 0.003, t: 0.05}, holdout: {total_return: -0.055, beta: 0.26, alpha: -0.080, t: -0.66}}
+        model_yearly_return: {"2019": 0.342, "2020": 0.670, "2021": 0.608, "2022": -0.126, "2023": -0.018, "2024": 0.047, "2025": 0.091, "2026": -0.019}
+        years_model_beats_both_styles: "2 of 8"
+      sensitivity: "Computing contract maturity as value_date + years*365.25 days instead of calendar years moved the model's 2019-2024 return from +224% to +257%. Differences of this size between runs of this engine carry no information."
+    limits:
+      - "Not migrated: scripts/evaluate_cb_arb_valuation_formula.py, evaluate_cb_arb_new_valuation.py, evaluate_cb_arb_bond_floor_entry_filter*.py, analyze_cb_arb_option_false_undervaluation.py, cb_pricer_sanity.py and strategies/cb_arb/cb_pricer_lattice.py callers still read maturity_date."
+      - "transfer_end_date has the same origin and is not corrected."
+    decision_use: |
+      The positive 2025-2026 numbers in conv_price_lookahead_contamination_2026_10_07,
+      pit_value_gap_holdout_verdict_2026_10_07 and cb_measurement_fixes_2026_10_07 were produced on the
+      rewritten maturity field and are superseded by this entry. What survives all four fixes: the model beats
+      both style controls in 2 of 8 years; model and low-premium are high-beta exposures whose return is
+      concentrated in 2019-2021; double_low has alpha in 2019-2024 (8.4%/yr, t 2.6) and none after.
 
 open_threads:
   - id: pit_value_gap_incremental_edge

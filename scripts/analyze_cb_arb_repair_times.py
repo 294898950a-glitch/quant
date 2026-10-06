@@ -151,7 +151,7 @@ def _compute_daily_ranks(
             if row.conv_price is not None and math.isfinite(row.conv_price)
             else float("nan"),
             "list_date": row.list_date or "",
-            "maturity_date": row.maturity_date or "",
+            "maturity_date": getattr(row, "valuation_maturity_date", None) or row.maturity_date or "",
             "coupon_rate": float(row.coupon_rate) if math.isfinite(row.coupon_rate) else 0.01,
             "rating": row.rating or "AA",
             "rating_int": int(row.rating_int),

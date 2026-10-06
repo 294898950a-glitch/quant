@@ -123,6 +123,12 @@ def _load_cb_basic() -> pd.DataFrame:
             lambda r: RATING_TO_INT.get(r, 0) if isinstance(r, str) else 0
         ).astype(int)
         df["issue_size_yuan"] = df["issue_size"].astype(float) * 1e8  # 单位是亿
+        # 估值用合同到期日. maturity_date 对已退市转债是实际摘牌日 (数据源事后改写),
+        # 历史日期读它等于提前知道这只债哪天退市. 解析不出合同年限的老券退回原字段.
+        if "contract_maturity_date" in df.columns:
+            df["valuation_maturity_date"] = df["contract_maturity_date"].fillna(df["maturity_date"])
+        else:
+            df["valuation_maturity_date"] = df["maturity_date"]
         # set ts_code as index for fast lookup
         df = df.set_index("ts_code", drop=False)
         _CB_BASIC_CACHE = df
@@ -734,7 +740,7 @@ def _run_backtest_core(
                 if (row.conv_price is not None and math.isfinite(row.conv_price))
                 else float("nan"),
             "list_date": row.list_date or "",
-            "maturity_date": row.maturity_date or "",
+            "maturity_date": getattr(row, "valuation_maturity_date", None) or row.maturity_date or "",
             "coupon_rate": float(row.coupon_rate) if math.isfinite(row.coupon_rate) else 0.01,
             "rating": row.rating or "AA",
             "rating_int": int(row.rating_int),
