@@ -94,7 +94,13 @@ def main() -> int:
     basic_out = pd.concat([basic, new_basic[basic.columns]], ignore_index=True)
     last_by_bond = daily.groupby("ts_code")["trade_date"].max()
     alive = set(last_by_bond[last_by_bond >= old_end].index)
-    bond_codes = sorted(basic.loc[basic["ts_code"].isin(alive), "code"].astype(str)) + sorted(new_basic["code"].astype(str))
+    # A bond can be in cb_basic before it lists (the basic table carries future listing dates). It has no
+    # daily rows yet, so it is neither "alive at the last date" nor "new to cb_basic": ask for it explicitly.
+    never_priced = basic.loc[~basic["ts_code"].isin(set(daily["ts_code"])) & (basic["list_date"] > old_end), "code"]
+    bond_codes = sorted(
+        set(basic.loc[basic["ts_code"].isin(alive), "code"].astype(str))
+        | set(never_priced.astype(str)) | set(new_basic["code"].astype(str))
+    )
     cb_frames, cb_failed = _fetch_all(fetch_cb_daily_one, bond_codes, args.workers, "cb_daily")
     known = set(daily["ts_code"])
     added = []
