@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-10-07T02:00:00+08:00"
+updated_at: "2026-10-07T04:00:00+08:00"
 authority: machine
 source_migration:
   legacy_markdown_removed: true
@@ -489,6 +489,7 @@ key_insights:
         - "'value gap rank is anti-alpha' and 'reverse rank wins': the largest gaps were the largest data errors; the smallest positive gaps were the least wrong rows."
         - "'train fails, test passes' across all rejected families: the error is large in 2019-2024 and close to zero in 2025-2026, because the stored price is the current one."
         - "'far above bond floor / deep in the money option exposure loses' (option_false_undervalue_attribution): a bond priced near par with static moneyness above 1.5 is the signature of a later down-revision, not of a real deep-in-the-money bond."
+    correction_2026_10_07: "Every 'excess' in this insight is measured against the project CB index, which is a mean price level and understates the equal-weight return of holding CBs by about 70 points over 2019-2024 (see cb_index_benchmark_is_price_level_2026_10_07). The static-versus-point-in-time contrast stands; the claim that the point-in-time strategy beats the market does not (see pit_value_gap_holdout_verdict_2026_10_07)."
     limits:
       - "Not a deployment or promotion claim. The clean-data strategy is long-only with beta about 1.0-1.1 to cb_equal; absolute max drawdown is -25% to -35% in train, and 2022-2024 Sharpe is below 0.5 (the any_holdout_year_sharpe_lt_0_5 falsifier still fires)."
       - "2019-2024 excess is statistically explained by low-premium / double-low style exposure. Excess beyond those styles appears only in 2025-2026 (17 months, t about 1.5-2.2)."
@@ -508,17 +509,89 @@ key_insights:
          data/cb_warehouse/cb_conv_value_pit.parquet. A ranks file whose top-10 picks show conversion value
          above 110% of market price on more than a few percent of rows is a data error and must fail integrity.
       4. Do not archive cb_arb_value_gap_switch on the expired kill_date: the falsifiers were evaluated on
-         invalid data. Do not promote it either. The next work is the open thread
-         pit_value_gap_incremental_edge.
+         invalid data. Do not promote it either. The open thread pit_value_gap_incremental_edge was
+         tested and closed the same day; see pit_value_gap_holdout_verdict_2026_10_07.
     follow_ups:
       - pit_value_gap_incremental_edge
+
+  - id: cb_index_benchmark_is_price_level_2026_10_07
+    priority: critical
+    summary: "The benchmark behind every reported excess_return (verifier._get_cb_index, data/benchmarks/cb_equal.parquet) is the mean close of all listed CBs. That is a price level, not a return: new issues enter near par and called bonds leave near their highs, so the series sags. Over 2019-2024 it gains 27% while the equal-weight return of holding every listed CB compounds to 87%-99%."
+    source: "data/cb_arb_pit_holdout_2026-10-07/ (scripts/evaluate_cb_arb_pit_holdout.py::_equal_weight_return)"
+    facts:
+      yearly_return:
+        project_index_mean_price: {"2019": 0.204, "2020": 0.118, "2021": 0.139, "2022": -0.157, "2023": -0.016, "2024": -0.003, "2025": 0.231}
+        equal_weight_daily_rebalanced: {"2019": 0.276, "2020": 0.183, "2021": 0.351, "2022": -0.070, "2023": 0.011, "2024": 0.035, "2025": 0.233}
+      compounded_2019_2024:
+        project_index_mean_price: 0.269
+        equal_weight_daily_rebalanced: 0.985
+        equal_weight_liquid_only: 0.948
+        equal_weight_weekly_buy_and_hold: 0.870
+      note: "The gap is largest in 2019-2021, the same years in which cb_arb variants showed their largest 'excess'."
+    decision_use: |
+      An excess_return computed by the existing evaluators is not evidence of beating the market. Any claim of
+      edge must be stated against an equal-weight (or investable) CB return series, with beta. Do not use
+      data/benchmarks/cb_equal.parquet or verifier._index_total_return as the comparator for a promotion decision.
+    follow_ups:
+      - replace_cb_benchmark_with_return_index
+
+  - id: pit_value_gap_holdout_verdict_2026_10_07
+    priority: critical
+    summary: "The frozen point-in-time value-gap candidate was run once on a never-seen window (2026-05-11..2026-09-30) and against matched style controls. It does not beat a plain low-conversion-premium or double-low ordering (2 of 8 years; pooled below low-premium), and against an equal-weight return benchmark it has no alpha in 2019-2024. The pre-registered falsifier fired; the value-gap ranking is not an edge."
+    source: "data/cb_arb_pit_holdout_2026-10-07/ (scripts/evaluate_cb_arb_pit_holdout.py); warehouse extended to 2026-09-30 by scripts/refresh_cb_warehouse.py"
+    facts:
+      scope: "Local diagnostic only; no VM/spot; no strategy or truth change."
+      frozen_before_run: "signal pit_norating_lag1, params min_gap_pct 0 / sell_gap_pct 0 / switch_hurdle_pct 0.03 / max_hold_days 180 / stop_gap_ratio_floor 0, falsifiers as written in the open thread (commit cecae06)"
+      controls: "Same engine, parameters, costs, universe and one-day delay. Each day the model's signal values are handed to bonds in order of lowest conversion premium (low_premium) or lowest price+premium (double_low) instead of in model order."
+      falsifier_1_holdout_excess_vs_project_index_le_0:
+        fired: false
+        model_total_return: -0.003
+        project_index_return: -0.098
+        equal_weight_return: -0.082
+      falsifier_2_model_beats_both_style_controls:
+        fired: true
+        years_model_beats_both: 2
+        years_total: 8
+        yearly_total_return:
+          model: {"2019": 0.277, "2020": 0.459, "2021": 0.323, "2022": -0.186, "2023": 0.013, "2024": 0.018, "2025": 0.365, "2026": 0.182}
+          low_premium: {"2019": 0.243, "2020": 1.005, "2021": 0.538, "2022": -0.082, "2023": -0.052, "2024": 0.060, "2025": 0.264, "2026": 0.010}
+          double_low: {"2019": 0.332, "2020": 0.279, "2021": 0.305, "2022": -0.017, "2023": 0.049, "2024": 0.158, "2025": 0.128, "2026": -0.017}
+        pooled_return_2019_to_2026_09: {model: 2.337, low_premium: 3.514, double_low: 1.946}
+        holdout_total_return: {model: -0.003, low_premium: -0.006, double_low: 0.006}
+      alpha_vs_equal_weight_return:
+        note: "daily regression on the equal-weight return of all listed CBs; alpha annualized"
+        model: {train: {beta: 1.27, alpha: -0.018, t: -0.51}, test: {beta: 1.28, alpha: 0.081, t: 0.83}, holdout: {beta: 0.74, alpha: 0.161, t: 0.95}}
+        low_premium: {train: {beta: 1.49, alpha: 0.055, t: 1.05}, test: {beta: 1.25, alpha: -0.090, t: -0.69}, holdout: {beta: 0.15, alpha: 0.020, t: 0.19}}
+        double_low: {train: {beta: 0.85, alpha: 0.069, t: 2.30}, test: {beta: 0.59, alpha: -0.064, t: -0.98}, holdout: {beta: 0.18, alpha: 0.057, t: 0.55}}
+      holdout_exposure: "average open positions: model 15.8, low_premium 3.9, double_low 6.9 (train: about 28 each). The controls' flat holdout return is mostly cash in a falling market."
+      run_to_run_noise: "Refreshing forward-adjusted stock prices moved theoretical values by under 1% on 3% of rows, and that alone moved the model's 2025-01..2026-05 excess from 0.334 to 0.260 and train excess from 0.820 to 0.797. Differences of a few points between variants of this engine are not meaningful."
+      random_controls_not_a_fair_null: "20 random orderings lose 14%-18% in the holdout because a non-persistent signal makes the engine switch daily and pay costs."
+      redemption_flag_defect:
+        finding: "cb_call holds each bond's latest redemption-related notice, and _is_force_redeemed_on_date treats every notice as a call from its date to maturity, including announcements that the issuer will NOT redeem. The share of listed bonds excluded this way rises from 4% (2019) to 25% (2025-01) and 58% (2026-05)."
+        effect: "From 2025 the engine trades only bonds that never met a call trigger. Not corrected here, to keep the frozen candidate unchanged; the model and both controls share the restriction."
+    decision_use: |
+      1. Close pit_value_gap_incremental_edge as falsified. Do not propose further value-gap variants (filters,
+         exits, scaling, valuation tweaks) on the grounds that the point-in-time rerun 'beat the index': it beat
+         a biased index, and a plain low-premium ordering does as well or better.
+      2. cb_arb_value_gap_switch has no demonstrated edge on clean data. Archiving it is the user's decision.
+      3. Nothing here is an edge to trade. double_low shows alpha 6.9%/yr (t 2.3) in 2019-2024 and negative
+         alpha in 2025-01..2026-05; low_premium has higher beta, not alpha.
+      4. Before any new CB strategy is evaluated, fix the three measurement defects: point-in-time conversion
+         price (done as a data table, not yet wired into verifier), return-based benchmark, and a call table
+         that separates real calls from no-call notices and keeps every notice with its date.
+    follow_ups:
+      - replace_cb_benchmark_with_return_index
+      - rebuild_cb_call_as_dated_notice_history
+      - wire_pit_conversion_value_into_verifier
 
 open_threads:
   - id: pit_value_gap_incremental_edge
     priority: critical
-    status: open
+    status: closed_falsified
     opened_at: "2026-10-07"
+    closed_at: "2026-10-07"
     evidence: conv_price_lookahead_contamination_2026_10_07
+    result: "fresh_holdout: falsifier not fired against the project index (model -0.3% vs index -9.8%), but alpha vs equal-weight return is not significant (t 0.95) and both style controls returned the same. matched_style_control: falsifier fired (model beats both controls in 2 of 8 years; pooled below low_premium). flat_years_diagnosis: not run. See pit_value_gap_holdout_verdict_2026_10_07."
     summary: "On point-in-time data the value-gap ranking earns positive excess over cb_equal in 7 of 8 years even with a one-day delay and no rating information. Open question: does the theoretical-value gap add anything beyond a plain low-conversion-premium / double-low rotation, net of costs?"
     frozen_candidate:
       label: pit_norating_lag1

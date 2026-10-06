@@ -108,8 +108,8 @@ def _build_ranks(task: tuple[str, dict[str, Any]]) -> str:
 
             repair_times._load_cb_basic = load_basic_no_rating
     value_gap._load_or_build_value_ranks(
-        ctx["data_root"], SPLITS["train"][0], SPLITS["test"][1], ctx["fixed_source"], ctx["rule"],
-        _ranks_path(ctx["output_dir"], label), ctx["reuse_ranks"],
+        ctx["data_root"], ctx.get("start", SPLITS["train"][0]), ctx.get("end", SPLITS["test"][1]),
+        ctx["fixed_source"], ctx["rule"], _ranks_path(ctx["output_dir"], label), ctx["reuse_ranks"],
     )
     return label
 

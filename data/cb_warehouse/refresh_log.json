@@ -1,0 +1,16 @@
+{
+  "refreshed_at": "2026-10-06T18:37:30.373462+00:00",
+  "previous_end": "20260508",
+  "new_end": "20260930",
+  "new_bonds": 40,
+  "new_calls": 92,
+  "bonds_requested": 370,
+  "bonds_with_new_rows": 370,
+  "cb_daily_rows_added": 31189,
+  "stocks_requested": 367,
+  "failed": {
+    "cb_daily": [],
+    "stk_daily": [],
+    "stk_daily_qfq": []
+  }
+}

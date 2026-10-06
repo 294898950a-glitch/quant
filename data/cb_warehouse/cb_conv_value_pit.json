@@ -1,9 +1,9 @@
 {
   "name": "cb_conv_value_pit",
-  "created_at": "2026-10-06T17:34:28.576718+00:00",
+  "created_at": "2026-10-06T18:40:01.484718+00:00",
   "source": "eastmoney bond_zh_cov_value_analysis via akshare",
-  "rows": 794629,
-  "bonds": 996,
+  "rows": 796898,
+  "bonds": 1036,
   "start": "20070702",
   "end": "20260930",
   "missing_codes": {

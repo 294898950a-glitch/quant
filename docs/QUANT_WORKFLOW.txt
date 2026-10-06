@@ -854,9 +854,17 @@ the evidence is `data/cb_arb_conv_price_lookahead_2026-10-07/`.
 - Historical valuations must read point-in-time conversion value from
   `data/cb_warehouse/cb_conv_value_pit.parquet`
   (`scripts/build_cb_conv_value_pit.py`), never `cb_basic.conv_price`.
-- The active research question is the open thread
-  `pit_value_gap_incremental_edge`: its frozen candidate and three required
-  tests are defined there and must run before any new overlay is proposed.
+- The follow-up thread `pit_value_gap_incremental_edge` was tested and closed as
+  falsified the same day (`pit_value_gap_holdout_verdict_2026_10_07`,
+  `data/cb_arb_pit_holdout_2026-10-07/`): on clean data the value-gap ranking
+  does not beat a plain low-premium ordering.
+- The project CB index behind every `excess_return` is a mean price level, not a
+  return (`cb_index_benchmark_is_price_level_2026_10_07`). State any edge
+  against an equal-weight CB return series, with beta.
+- `cb_call` treats every redemption-related notice, including no-call notices,
+  as a call. By 2026-05 this excludes 58% of listed bonds.
+- `scripts/refresh_cb_warehouse.py` extends the warehouse without rewriting
+  history; it reached 2026-09-30 on 2026-10-07.
 - The orchestrator has been paused since 2026-05-27 and all ten legacy families
   are still in `forbidden_families`. They were closed on contaminated evidence,
   which makes them untested, not validated.

@@ -1,0 +1,48 @@
+schema_version: 1
+run_id: cb_arb_pit_holdout_2026-10-07
+date: '2026-10-07'
+strategy_id: cb_arb_value_gap_switch
+l6_exit_decision: reject
+three_exits_section:
+  adoption_pass: false
+  review_summary: Pre-registered holdout and matched style controls for the frozen
+    point-in-time candidate.
+  review_main_reason: falsifier fired
+compute_cost_yuan: 0.0
+confirmed_invalid_directions:
+- point-in-time value-gap ranking as an edge over low-premium / double-low rotation
+learnings:
+- '{"alpha_vs_equal_weight_return": {"model|train": {"beta": 1.268, "alpha_annual":
+  -0.0185, "alpha_t": -0.51, "total_return": 1.0688, "equal_weight_return": 0.9899},
+  "model|test": {"beta": 1.277, "alpha_annual": 0.0807, "alpha_t": 0.83, "total_return":
+  0.6122, "equal_weight_return": 0.3557}, "model|holdout": {"beta": 0.743, "alpha_annual":
+  0.1612, "alpha_t": 0.95, "total_return": -0.0032, "equal_weight_return": -0.0824},
+  "low_premium|train": {"beta": 1.493, "alpha_annual": 0.0552, "alpha_t": 1.05, "total_return":
+  2.5366, "equal_weight_return": 0.9899}, "low_premium|test": {"beta": 1.253, "alpha_annual":
+  -0.0898, "alpha_t": -0.69, "total_return": 0.2803, "equal_weight_return": 0.3557},
+  "low_premium|holdout": {"beta": 0.147, "alpha_annual": 0.0204, "alpha_t": 0.19,
+  "total_return": -0.0056, "equal_weight_return": -0.0824}, "double_low|train": {"beta":
+  0.849, "alpha_annual": 0.0694, "alpha_t": 2.3, "total_return": 1.6552, "equal_weight_return":
+  0.9899}, "double_low|test": {"beta": 0.59, "alpha_annual": -0.0644, "alpha_t": -0.98,
+  "total_return": 0.1, "equal_weight_return": 0.3557}, "double_low|holdout": {"beta":
+  0.182, "alpha_annual": 0.0573, "alpha_t": 0.55, "total_return": 0.0058, "equal_weight_return":
+  -0.0824}}, "holdout": {"window": ["20260511", "20260930"], "model_total_return":
+  -0.003198, "model_excess_vs_index": 0.094776, "equal_weight_return": -0.08237694168115017,
+  "model_excess_vs_equal_weight": 0.0809734443293022, "model_beta_to_equal_weight":
+  0.7433637039176079, "model_alpha_annual": 0.16117041031889043, "model_alpha_t":
+  0.9463312970449899, "model_avg_positions": 15.762376237623762, "low_premium_avg_positions":
+  3.891089108910891, "double_low_avg_positions": 6.891089108910891, "low_premium_total_return":
+  -0.005567, "double_low_total_return": 0.005849, "random_total_return_median": -0.178866,
+  "random_total_return_max": -0.139391, "model_rank_among_random": 1, "falsifier_1_excess_le_0":
+  false}, "style_control": {"pooled_return_2019_to_end": {"model": 2.336676239036063,
+  "low_premium": 3.514088853714247, "double_low": 1.9461071215437609, "random_median":
+  -0.8847186552351891}, "years_model_beats_both_styles": 2, "years_total": 8, "falsifier_2_fails_to_beat_styles":
+  true}}'
+follow_up_actions:
+- Evidence-only record; do not promote to truth without user approval.
+status: COMPLETE
+notes: Local diagnostic only; no VM/spot; no strategy or truth change.
+references:
+- data/research_framework/research_insights.yaml#pit_value_gap_incremental_edge
+related_reports:
+- data/cb_arb_conv_price_lookahead_2026-10-07/report.yaml

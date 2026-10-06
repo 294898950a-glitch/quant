@@ -31,8 +31,13 @@ summary:
       cost-wall number in this file was computed with cb_basic.conv_price (the latest
       conversion price) applied to all history. They are invalid as evidence.
     effect_on_decisions: Do not archive or promote either strategy on these numbers
-      or on the expired kill_date. Status fields below are unchanged pending the
-      open thread pit_value_gap_incremental_edge.
+      or on the expired kill_date. Status fields below are unchanged.
+    follow_up_2026_10_07: The point-in-time rerun was tested on a fresh holdout and
+      against matched style controls (pit_value_gap_holdout_verdict_2026_10_07).
+      The value-gap ranking does not beat a plain low-premium ordering and has no
+      alpha against an equal-weight return benchmark in 2019-2024. The project CB
+      index used for every excess figure is a mean price level, not a return
+      (cb_index_benchmark_is_price_level_2026_10_07). Archiving is a user decision.
   cost_realism_wall:
     applies_to:
     - cb_arb
