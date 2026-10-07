@@ -11,7 +11,7 @@ Sources:
 Announcements whose title cannot be classified are kept as "unclassified".
 
 跑法:
-    python scripts/build_cb_events.py --announcements <jsonl>
+    python scripts/build_cb_events.py --announcements <jsonl> [<incremental.jsonl> ...]
 """
 
 from __future__ import annotations
@@ -37,7 +37,8 @@ _REDEMPTION_KIND = {"no_call": ev.NO_CALL, "may_trigger": ev.CALL_MAY_TRIGGER}
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--announcements", type=Path, required=True)
+    p.add_argument("--announcements", type=Path, nargs="+", required=True,
+                   help="cninfo archive, plus incremental files")
     args = p.parse_args()
 
     daily = pd.read_parquet(WAREHOUSE_DIR / "cb_daily.parquet", columns=["ts_code", "trade_date"])

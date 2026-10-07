@@ -58,10 +58,10 @@ def main():
         if jsl_price is None:
             no_record += 1
         else:
-            old = float(row.conv_price) if pd.notna(row.conv_price) else None
+            old = float(row.conv_price_latest) if pd.notna(row.conv_price_latest) else None
             if old is None or abs(old - jsl_price) > 0.01:
                 # 真的改了
-                df.loc[df["ts_code"] == row.ts_code, "conv_price"] = jsl_price
+                df.loc[df["ts_code"] == row.ts_code, "conv_price_latest"] = jsl_price
                 updated += 1
             else:
                 same_as_original += 1

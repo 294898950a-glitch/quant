@@ -6,9 +6,12 @@ data/cb_warehouse/*.parquet 读什么、派生哪些字段、怎么缓存",不�
 怎么被回测规则消费——那是 verifier.py 的事。
 
 哪些字段是"当前快照覆盖了历史时点值", 以及这里怎么处理:
-- conv_price(最新转股价): 历史估值不许读它, 用 point_in_time_conv_price()。
-- maturity_date(已退市券是摘牌日): 估值读 load_cb_basic() 派生的 valuation_maturity_date。
+- 最新转股价: 仓库里叫 conv_price_latest, 历史估值不许读它, 用 point_in_time_conv_price()。
+- 已退市券的"到期日"其实是摘牌日: 仓库里叫 expire_date_raw; 估值读 contract_maturity_date,
+  解析不出合同年限的券该列为空, 消费方排除并报告, 不退回 expire_date_raw。
 - rating(最新评级): 还没有时点数据, 原样返回, 消费方自己处理。
+
+估值循环跳过一只券时, 用 ExclusionLog 记下原因, 跑完打印 —— 被静默移出宇宙的券要看得见。
 """
 
 from __future__ import annotations
@@ -41,6 +44,33 @@ RATING_TO_INT: dict[str, int] = {
     "AAA": 5,
 }
 
+class ExclusionLog:
+    """Why bond-days were left out of a valuation pass. Reported at the end of the pass, never silent."""
+
+    def __init__(self) -> None:
+        self.no_contract_maturity: set[str] = set()
+        self.no_conv_value_bond_days = 0
+        self.no_conv_value_bonds: set[str] = set()
+
+    def summary(self) -> dict[str, object]:
+        return {
+            "no_contract_maturity_bonds": len(self.no_contract_maturity),
+            "no_contract_maturity_codes": sorted(self.no_contract_maturity),
+            "no_point_in_time_conv_value_bond_days": self.no_conv_value_bond_days,
+            "no_point_in_time_conv_value_bonds": len(self.no_conv_value_bonds),
+        }
+
+    def report(self, label: str) -> None:
+        s = self.summary()
+        if s["no_contract_maturity_bonds"] or s["no_point_in_time_conv_value_bond_days"]:
+            print(
+                f"[{label}] 被排除: 合同到期日缺失 {s['no_contract_maturity_bonds']} 只 {s['no_contract_maturity_codes']}; "
+                f"当日转股价值缺失 {s['no_point_in_time_conv_value_bond_days']} 个券日 "
+                f"({s['no_point_in_time_conv_value_bonds']} 只)",
+                flush=True,
+            )
+
+
 _CB_BASIC_CACHE: pd.DataFrame | None = None
 _CB_DAILY_CACHE: pd.DataFrame | None = None
 _CB_CALL_CACHE: pd.DataFrame | None = None
@@ -59,12 +89,6 @@ def load_cb_basic() -> pd.DataFrame:
             lambda r: RATING_TO_INT.get(r, 0) if isinstance(r, str) else 0
         ).astype(int)
         df["issue_size_yuan"] = df["issue_size"].astype(float) * 1e8  # 单位是亿
-        # 估值用合同到期日. maturity_date 对已退市转债是实际摘牌日 (数据源事后改写),
-        # 历史日期读它等于提前知道这只债哪天退市. 解析不出合同年限的老券退回原字段.
-        if "contract_maturity_date" in df.columns:
-            df["valuation_maturity_date"] = df["contract_maturity_date"].fillna(df["maturity_date"])
-        else:
-            df["valuation_maturity_date"] = df["maturity_date"]
         # set ts_code as index for fast lookup
         df = df.set_index("ts_code", drop=False)
         _CB_BASIC_CACHE = df
@@ -164,6 +188,7 @@ __all__ = [
     "load_stk_daily",
     "load_trading_days",
     "load_conv_value_pit",
+    "ExclusionLog",
     "point_in_time_conv_price",
     "reset_cache",
 ]

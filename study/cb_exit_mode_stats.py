@@ -70,8 +70,6 @@ EN = {LBL_CALL: "forced call", LBL_MAT: "held to maturity",
       LBL_DEF: "default / stock delisted", LBL_EARLY_UNK: "early exit, unclassified",
       LBL_NO_TENOR: "tenor unknown", LBL_ANOM: "anomaly", LBL_ALIVE: "alive"}
 
-ORDINALS = ["第一年", "第二年", "第三年", "第四年", "第五年",
-            "第六年", "第七年", "第八年", "第九年", "第十年"]
 
 
 def log(msg: object = "") -> None:
@@ -125,22 +123,14 @@ def md_table(df: pd.DataFrame, fmt: str = "{:.3f}", index_name: str | None = Non
     return "\n".join(lines)
 
 
-def parse_tenor(text: object) -> float:
-    """从票面利率条款文本解析合同年限: 出现 '第六年' -> 6 年."""
-    if not isinstance(text, str):
-        return np.nan
-    n = np.nan
-    for i, o in enumerate(ORDINALS):
-        if o in text:
-            n = i + 1
-    return float(n) if n == n else np.nan
-
-
 # ===========================================================================
 # 0. 载入 + schema 探查
 # ===========================================================================
 def load_and_probe() -> tuple[pd.DataFrame, pd.DataFrame]:
     basic = pd.read_parquet(WAREHOUSE / "cb_basic.parquet")
+    # 本脚本研究的正是东财 EXPIRE_DATE 这个原始字段。2026-10-07 起它在仓库里叫 expire_date_raw
+    # (改名是为了让把它当合同到期日读的代码报错); 脚本内部仍沿用当时的叫法 maturity_date。
+    basic = basic.rename(columns={"expire_date_raw": "maturity_date"})
     call = pd.read_parquet(WAREHOUSE / "cb_call.parquet")
 
     log("=" * 82)
@@ -200,6 +190,9 @@ def build_master(basic: pd.DataFrame, call: pd.DataFrame) -> pd.DataFrame:
     log("\n" + "=" * 82)
     log("SECTION 0b  cb_call 到底是什么表 (决定能不能拿它当 '强赎标记')")
     log("=" * 82)
+    log("\n[2026-10-07 注] 本节的结论是针对当时那张表写的: 每只券一条东财'最新公告', 997 行, 含全部存续券。")
+    log("cb_call.parquet 此后已由 scripts/build_cb_call_history.py 重建为只含真强赎 (见")
+    log("data/cb_warehouse/cb_call.json)。下面的数字是对**现在这张表**算的, 文字说明描述的是旧表。")
     log("\n来源 (scripts/build_cb_warehouse.py, build_cb_basic_and_call, L237-254):")
     log("对 eastmoney RPT_BOND_CB_LIST 中 IS_REDEEM=='是' 的转债写一行, 字段映射为")
     log("  ann_date   <- NOTICE_DATE_HS / NOTICE_DATE_SH   (赎回相关公告日)")
@@ -241,7 +234,8 @@ def build_master(basic: pd.DataFrame, call: pd.DataFrame) -> pd.DataFrame:
 # ===========================================================================
 def derive_nominal_term(m: pd.DataFrame) -> pd.DataFrame:
     m = m.copy()
-    m["tenor_years"] = m["interest_rate_explain"].map(parse_tenor)
+    # 合同年限只在 scripts/build_cb_warehouse.py 解析一次, 这里读结果, 不再自己解析一遍
+    m["tenor_years"] = m["contract_tenor_years"].astype("float64")
     m["nominal_maturity"] = [
         (v + pd.DateOffset(years=int(t))) if (pd.notna(v) and pd.notna(t)) else pd.NaT
         for v, t in zip(m["value_date"], m["tenor_years"])

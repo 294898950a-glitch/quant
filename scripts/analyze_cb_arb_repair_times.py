@@ -40,6 +40,7 @@ from strategies.cb_arb.warehouse_access import (  # noqa: E402
     load_cb_daily as _load_cb_daily,
     load_stk_daily as _load_stk_daily,
     load_trading_days as _load_trading_days,
+    ExclusionLog,
     point_in_time_conv_price,
 )
 
@@ -150,7 +151,7 @@ def _compute_daily_ranks(
             if math.isfinite(row.issue_size_yuan)
             else 0.0,
             "list_date": row.list_date or "",
-            "maturity_date": getattr(row, "valuation_maturity_date", None) or row.maturity_date or "",
+            "maturity_date": row.contract_maturity_date if isinstance(row.contract_maturity_date, str) else "",
             "coupon_rate": float(row.coupon_rate) if math.isfinite(row.coupon_rate) else 0.01,
             "rating": row.rating or "AA",
             "rating_int": int(row.rating_int),
@@ -167,6 +168,7 @@ def _compute_daily_ranks(
         return credit_cache[key]
 
     rows_out: list[dict[str, Any]] = []
+    exclusions = ExclusionLog()
     for idx, date in enumerate(trading_days, 1):
         day_cfg = config_by_date.get(date, cfgs["neutral"])
         rows_today = daily_by_date.get(date)
@@ -187,6 +189,7 @@ def _compute_daily_ranks(
                 continue
             mat = spec_d["maturity_date"]
             if not mat or len(mat) != 8:
+                exclusions.no_contract_maturity.add(ts)
                 continue
             try:
                 tdy_dt = today_dt_cache.get(date)
@@ -206,6 +209,8 @@ def _compute_daily_ranks(
                 continue
             conv_price = point_in_time_conv_price(ts, date, stock_price)
             if not math.isfinite(conv_price) or conv_price <= 0:
+                exclusions.no_conv_value_bond_days += 1
+                exclusions.no_conv_value_bonds.add(ts)
                 continue
             try:
                 val = price_cb(
@@ -268,6 +273,7 @@ def _compute_daily_ranks(
             )
         if idx % 100 == 0:
             print(f"[repair] ranked {idx}/{len(trading_days)} {date}", flush=True)
+    exclusions.report("daily_ranks")
     return pd.DataFrame(rows_out)
 
 

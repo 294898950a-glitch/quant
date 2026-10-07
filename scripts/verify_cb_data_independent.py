@@ -296,7 +296,7 @@ def verify_one(ts_code, code, name, note, parq_row):
     A_conv = a["conv_price"] if a else None  # zh_cov 给的"转股价"
     B_conv = (b["transfer_price"] or b["init_transfer_price"]) if b else None
     C_conv = (c["transfer_price"] or c["init_transfer_price"]) if c else None
-    parq_conv = f_or_none(parq_row.get("conv_price"))
+    parq_conv = f_or_none(parq_row.get("conv_price_latest"))
 
     return {
         "ts_code": ts_code,
@@ -415,16 +415,13 @@ def render_one(res):
                  b["list_date"] if b else None,
                  c["list_date"] if c else None, "OK" if cons else "DIFF"))
 
-    # maturity_date / EXPIRE_DATE
-    mds = [to_ymd(parq.get("maturity_date")),
-           None,  # A 不给
-           b["expire_date"] if b else None,
-           c["expire_date"] if c else None]
-    valid = [v for v in mds if v is not None]
-    cons = len(set(valid)) <= 1
-    rows.append(("maturity_date", to_ymd(parq.get("maturity_date")),
+    # expire_date_raw: the three sources all read eastmoney EXPIRE_DATE, so agreement proves nothing about
+    # its meaning. For a bond that has left the market it is the delisting date, not contract maturity.
+    rows.append(("expire_date_raw", to_ymd(parq.get("expire_date_raw")),
                  None, b["expire_date"] if b else None,
-                 c["expire_date"] if c else None, "OK" if cons else "DIFF"))
+                 c["expire_date"] if c else None, "SAME_SOURCE"))
+    # contract_maturity_date has no second source here; it is checked in cb_basic_contract_maturity.json
+    rows.append(("contract_maturity_date", to_ymd(parq.get("contract_maturity_date")), None, None, None, "NOT_CHECKED"))
 
     # delist_date
     dds = [to_ymd(parq.get("delist_date")),
@@ -533,7 +530,8 @@ def main():
     md.append(f"### 按字段统计")
     md.append("")
     md.append(f"- **conv_price**: 10 只里 **{len(bad_conv)} 只严重不一致** (差 >0.5%)")
-    md.append(f"- **issue_size / rating / list_date / maturity_date / delist_date / par_value / issue_price / coupon_rate**: 10 只全部一致 (各源比对 OK)")
+    md.append(f"- **issue_size / rating / list_date / delist_date / par_value / issue_price / coupon_rate**: 10 只全部一致 (各源比对 OK)")
+    md.append("- **expire_date_raw**: 三个源读的是同一个上游字段, 一致不说明含义正确; 已退市券它是摘牌日。合同到期日见 contract_maturity_date, 本脚本没有第二来源可核。")
     md.append("")
     md.append("### conv_price 不一致明细 (按差幅排序)")
     md.append("")

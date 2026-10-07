@@ -135,6 +135,22 @@ def parse_put_clause(text: Any) -> dict[str, Any]:
     return out
 
 
+ALLOWED_TENOR_YEARS = (5, 6)
+
+
+def parse_tenor_years(text: Any) -> int | None:
+    """Contract life in years from the coupon text: the highest '第N年' it mentions.
+
+    Only tenors seen and checked in this market (5 and 6 years) are accepted; anything else is treated as
+    a parse failure rather than believed, because a new wording could otherwise slip in a wrong tenor silently.
+    """
+    s = _clean(text)
+    years = [cn_int(y) for y in re.findall(rf"第({_NUM})年", s)]
+    years = [y for y in years if y]
+    tenor = max(years) if years else None
+    return tenor if tenor in ALLOWED_TENOR_YEARS else None
+
+
 def parse_coupons(text: Any) -> dict[str, Any]:
     """Coupon schedule: '第一年0.20%、…第六年2.00%' -> [0.2, …, 2.0]."""
     s = _clean(text)
@@ -158,6 +174,7 @@ NO_SOURCE = "no_source"
 def parse_terms(redeem_clause: Any, resale_clause: Any, coupon_text: Any) -> dict[str, Any]:
     """All terms of one bond. The down-revision clause has no data source yet and says so."""
     out = {**parse_call_clause(redeem_clause), **parse_put_clause(resale_clause), **parse_coupons(coupon_text)}
+    out["term_years"] = parse_tenor_years(coupon_text)  # the one reading of the tenor; cb_basic uses the same
     # '票面面值加最后一期利息' : redemption at par plus the final coupon
     if (
         out["maturity_redemption_status"] == UNPARSED and out["coupons_pct"]

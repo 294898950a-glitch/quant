@@ -32,13 +32,8 @@
 - 假阳性率检验按**债券**为单位算首次触发(不按每一次独立的"触发区间"算),
   简化了"同一只债多次穿越阈值"的情况——本脚本只关心"这只债有没有在
   历史上某个时点满足过条件、之后有没有真的下修过", 不做更细的时间对齐。
-- 转股价时间序列用 `cb_conv_price_history.parquet` 里已确认的 `approved`
-  事件重建分段历史, 首段(第一次下修前)用该债第一次下修事件的
-  `old_conv_price`(如果这只债从未下修过, 全程用 `cb_basic.parquet` 的
-  静态 `conv_price`)——继承了 `cb_conv_price_history.parquet` 已知的
-  "old_conv_price 偶尔因未记录的除权除息调整而失真"这个局限(2.6% 的
-  历史事件受影响, 见 `docs/2026-08-31-cb-conv-price-history-spec.txt`
-  第 1 节), 本脚本不重新修正。
+- 正股价/转股价这个比值直接取逐日真实转股价值表 (`cb_conv_value_pit.parquet`, 东财),
+  已包含下修和分红调整; 该表没有值的日子不计入触发天数。
 
 只读数据, 不写 data/research_framework/。输出落在
 study/down_revision_signal/。
@@ -112,34 +107,14 @@ def event_price_reaction(hist: pd.DataFrame, cb_daily: pd.DataFrame) -> pd.DataF
 # 2. 假阳性率: 触发条件 vs 真的跟进下修
 # ----------------------------------------------------------------------
 
-def build_conv_price_segments(bond_id: str, hist: pd.DataFrame, static_price: float):
-    """返回 [(生效起始日期 或 None, 转股价)] 按时间正序的分段序列。
-    `None` 起始日期表示"从最早开始适用", 直到下一段的起始日期。
-    """
-    events = hist[(hist["bond_id"] == bond_id) & (hist["outcome"] == "approved")]
-    events = events.dropna(subset=["effective_date", "old_conv_price", "new_conv_price"])
-    events = events.sort_values("effective_date")
-    if events.empty:
-        return [(None, static_price)]
-    segments = [(None, float(events.iloc[0]["old_conv_price"]))]
-    for _, ev in events.iterrows():
-        segments.append((ev["effective_date"], float(ev["new_conv_price"])))
-    return segments
-
-
-def conv_price_on(segments, date) -> float:
-    price = segments[0][1]
-    for start, p in segments:
-        if start is not None and start <= date:
-            price = p
-        elif start is not None and start > date:
-            break
-    return price
-
-
 def false_positive_rate(cb_basic: pd.DataFrame, hist: pd.DataFrame, stk: pd.DataFrame) -> pd.DataFrame:
     bond_to_stk = dict(zip(cb_basic["code"].astype(str), cb_basic["stk_code"].astype(str)))
-    bond_to_static_price = dict(zip(cb_basic["code"].astype(str), cb_basic["conv_price"]))
+    # 正股价 / 当日转股价 = 当日真实转股价值 / 100。2026-10-07 之前这里用下修记录拼分段转股价,
+    # 没下修过的券用 cb_basic 的最新转股价; 现在统一读逐日转股价值表, 分红调整也包含在内。
+    pit = pd.read_parquet(ROOT / "data/cb_warehouse/cb_conv_value_pit.parquet", columns=["code", "trade_date", "conv_value"])
+    pit = pit[pit["conv_value"] > 0]
+    pit["trade_date"] = pd.to_datetime(pit["trade_date"], format="%Y%m%d")
+    ratio_by_bond = {code: g.set_index("trade_date")["conv_value"] / 100.0 for code, g in pit.groupby("code")}
     # 债券存续期上下界——之前的版本漏了这个, 直接拿正股的全部历史价格去跑
     # 触发条件, 会把债券根本还不存在的年份(比如正股 2000 年的价格)也算
     # 进去, 产生毫无意义的"触发日"(人工核对特发转2/127021 时发现"首次
@@ -147,7 +122,7 @@ def false_positive_rate(cb_basic: pd.DataFrame, hist: pd.DataFrame, stk: pd.Data
     cb_basic = cb_basic.copy()
     cb_basic["_value_date"] = pd.to_datetime(cb_basic["value_date"], format="%Y%m%d", errors="coerce")
     cb_basic["_end_date"] = pd.to_datetime(
-        cb_basic["delist_date"].fillna(cb_basic["maturity_date"]), format="%Y%m%d", errors="coerce",
+        cb_basic["delist_date"].fillna(cb_basic["contract_maturity_date"]), format="%Y%m%d", errors="coerce",
     )
     bond_lifetime = {
         row["code"]: (row["_value_date"], row["_end_date"] if pd.notna(row["_end_date"]) else pd.Timestamp.today())
@@ -159,9 +134,8 @@ def false_positive_rate(cb_basic: pd.DataFrame, hist: pd.DataFrame, stk: pd.Data
 
     rows = []
     for bond_id, stk_code in bond_to_stk.items():
-        static_price = bond_to_static_price.get(bond_id)
         lifetime = bond_lifetime.get(bond_id)
-        if pd.isna(stk_code) or static_price is None or pd.isna(static_price):
+        if pd.isna(stk_code) or bond_id not in ratio_by_bond:
             continue
         if lifetime is None or pd.isna(lifetime[0]):
             continue
@@ -174,13 +148,9 @@ def false_positive_rate(cb_basic: pd.DataFrame, hist: pd.DataFrame, stk: pd.Data
         if len(sub) < TRAILING_WINDOW:
             continue
 
-        segments = build_conv_price_segments(bond_id, hist, float(static_price))
         dates = sub["trade_date"].to_numpy()
-        closes = sub["close"].to_numpy()
-        conv_prices = np.array([conv_price_on(segments, pd.Timestamp(d)) for d in dates])
-        with np.errstate(divide="ignore", invalid="ignore"):
-            ratio = closes / conv_prices
-        hit = (ratio <= TRAILING_THRESHOLD).astype(float)
+        ratio = ratio_by_bond[bond_id].reindex(pd.DatetimeIndex(dates)).to_numpy()
+        hit = (ratio <= TRAILING_THRESHOLD).astype(float)  # NaN (no value that day) compares False
         trailing = pd.Series(hit).rolling(TRAILING_WINDOW).sum().to_numpy()
         eligible = trailing >= TRAILING_REQUIRED_DAYS
 

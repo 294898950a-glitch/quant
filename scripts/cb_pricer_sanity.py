@@ -42,10 +42,10 @@ from strategies.cb_arb.cb_pricer import (  # noqa: E402
     price_cb,
     realized_vol,
 )
+from strategies.cb_arb.warehouse_access import point_in_time_conv_price  # noqa: E402
 
 WAREHOUSE = ROOT / "data" / "cb_warehouse"
 REPORTS = ROOT / "reports"
-REPORTS.mkdir(exist_ok=True)
 
 
 # =============================================================================
@@ -73,16 +73,30 @@ def load_warehouse() -> dict:
 
 
 def make_spec_from_basic(row: pd.Series) -> CBSpec:
-    """cb_basic 一行 -> CBSpec."""
+    """cb_basic 一行 -> CBSpec, 不含转股价 (转股价随日期变, 定价前用 spec_on_date 填).
+
+    合同到期日缺失的券 maturity_date 为空串, 调用方要跳过它; 不退回 expire_date_raw。
+    """
+    maturity = row.get("contract_maturity_date")
     return CBSpec(
         ts_code=str(row["ts_code"]),
         face_value=float(row.get("par_value") or 100.0),
-        conv_price=float(row["conv_price"]) if pd.notna(row.get("conv_price")) else 100.0,
+        conv_price=float("nan"),
         list_date=str(row.get("list_date") or "20180101"),
-        maturity_date=str(row.get("maturity_date") or "20300101"),
+        maturity_date=maturity if isinstance(maturity, str) else "",
         coupon_rate=float(row.get("coupon_rate") or 0.01),
         rating=str(row.get("rating") or "AA"),
     )
+
+
+def spec_on_date(spec: CBSpec, date: str, stock_price: float) -> Optional[CBSpec]:
+    """当日有效转股价填进 spec; 查不到当日转股价值或没有合同到期日时返回 None."""
+    from dataclasses import replace
+
+    conv_price = point_in_time_conv_price(spec.ts_code, date, stock_price)
+    if not spec.maturity_date or not math.isfinite(conv_price) or conv_price <= 0:
+        return None
+    return replace(spec, conv_price=conv_price)
 
 
 def get_stock_close(stk_qfq: pd.DataFrame, stk_code: str, date: str) -> Optional[float]:
@@ -196,8 +210,11 @@ def verify_redemption_convergence(data: dict, n_events: int = 30) -> dict:
             if sp is None or sv is None or math.isnan(sv) or sv <= 0:
                 continue
 
+            dated = spec_on_date(spec, d, sp)
+            if dated is None:
+                continue
             v = price_cb(
-                spec=spec,
+                spec=dated,
                 valuation_date=d,
                 stock_price=sp,
                 stock_vol=sv,
@@ -251,8 +268,7 @@ def verify_single_point(data: dict) -> dict:
 
     # 优先选 AAA / AA+, 次选 AA, 已退市的优先 (历史完整)
     candidates = cb_basic[cb_basic["rating"].isin(["AAA", "AA+", "AA"])].copy()
-    candidates = candidates[candidates["conv_price"].notna()]
-    candidates = candidates[candidates["maturity_date"].notna()]
+    candidates = candidates[candidates["contract_maturity_date"].notna()]
     candidates = candidates[candidates["list_date"].notna()]
     if candidates.empty:
         return {"ok": False, "reason": "no AAA/AA+ candidate"}
@@ -263,7 +279,7 @@ def verify_single_point(data: dict) -> dict:
     for _, row in candidates.iterrows():
         spec = make_spec_from_basic(row)
         # 必须距到期 > 30 天 且 list_date < test_date < maturity
-        if not (spec.list_date <= test_date <= spec.maturity_date):
+        if not spec.maturity_date or not (spec.list_date <= test_date <= spec.maturity_date):
             continue
         # cb_daily 该天必须有
         cb_close = get_cb_close(cb_daily, spec.ts_code, test_date)
@@ -277,8 +293,11 @@ def verify_single_point(data: dict) -> dict:
         sv = get_stock_vol(stk_qfq, str(row.get("stk_code") or ""), test_date, window=60)
         if sv is None or math.isnan(sv):
             continue
+        dated = spec_on_date(spec, test_date, stk_close)
+        if dated is None:
+            continue
         chosen = {
-            "spec": spec,
+            "spec": dated,
             "row": row,
             "cb_close": cb_close,
             "stk_close": stk_close,
@@ -413,8 +432,12 @@ def verify_cross_section(data: dict, target_date: Optional[str] = None) -> dict:
             n_skip_no_stk += 1
             continue
 
+        dated = spec_on_date(spec, target_date, sp)
+        if dated is None:
+            n_skip_invalid += 1
+            continue
         v = price_cb(
-            spec=spec,
+            spec=dated,
             valuation_date=target_date,
             stock_price=sp,
             stock_vol=sv,
@@ -479,6 +502,7 @@ def verify_cross_section(data: dict, target_date: Optional[str] = None) -> dict:
     )
     ax.legend(loc="upper left")
     ax.grid(True, alpha=0.3)
+    REPORTS.mkdir(exist_ok=True)
     out_path = REPORTS / "cb_pricer_sanity_check_3.png"
     fig.tight_layout()
     fig.savefig(out_path, dpi=120)
@@ -504,6 +528,10 @@ def verify_cross_section(data: dict, target_date: Optional[str] = None) -> dict:
 # =============================================================================
 
 def main():
+    import argparse
+
+    # no options; parsing only so that --help prints the usage instead of running the checks
+    argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter).parse_args()
     print("=" * 70)
     print("CB 定价引擎 sanity check (3 个验证)")
     print("=" * 70)

@@ -24,23 +24,31 @@
 
 ## 实施状态 (2026-10-07, 与下文设计的差异)
 
-本 spec 写完后没有实施。2026-10-07 另一条线在不知道它存在的情况下做了一个更小的版本,
-已合并。对照下文各节:
+本 spec 写完后没有实施。2026-10-07 另一条线先在不知道它存在的情况下做了一个更小的版本,
+合并之后当天按本文设计补齐。对照下文各节:
 
-- 4.1 合同到期日: **部分实施**。`cb_basic.contract_maturity_date` 已加
-  (`scripts/build_cb_warehouse.py::contract_maturity_date`), 核心估值路径经
-  `warehouse_access.load_cb_basic()` 派生的 `valuation_maturity_date` 读它。
-  **没做的**: 旧列没有改名为 `expire_date_raw` (所以没迁移的读取点不会报错, 会静默读到旧值);
-  年限没有限制在 {5, 6}; 没有人工核对表 (115003.SH 等 15 只解析不出的老券退回旧字段,
-  而不是留空并报告); 没有 `contract_tenor_years` / `contract_tenor_parse_status` 两列;
-  消费者不报告因缺失被排除的券。这几条仍按下文设计待做。
+- 4.1 合同到期日: **已实施** (`scripts/build_cb_warehouse.py::resolve_contract_maturity` /
+  `finalize_cb_basic`)。旧列改名为 `expire_date_raw`; 新增 `contract_maturity_date`、
+  `contract_tenor_years`、`contract_tenor_parse_status`; 年限只接受 {5, 6}
+  (`cb_market/contracts.py::parse_tenor_years`, 全仓唯一的年限解析); 解析函数只接受
+  ts_code / value_date / interest_rate_explain 三项; 不退回旧字段; 估值循环用
+  `warehouse_access.ExclusionLog` 记下并打印被排除的券, 结果留在 `verifier.LAST_RUN_EXCLUSIONS`;
+  未解析名单写在 `data/cb_warehouse/cb_basic_contract_maturity.json` (15 只, 都是 2007-2009 年的券)。
+  同样的理由把 `conv_price` 也改名为 `conv_price_latest`。
+  **与设计不同的两处**: (a) 人工核对表的机制和自检都在 (`CONTRACT_MATURITY_OVERRIDES`), 但表是空的 ——
+  115003.SH 的到期日本文只给了来源名称, 没有 URL 和页码, 按本文自己的准入规则不够格, 没有硬填;
+  (b) 黄金样本没有用"发行人公告"逐只核, 而是拿集思录在市券的到期日整体对照 (另一个数据源, 不是东财)。
 - 4.2 强赎标记: **没有按"停用"做, 改成了重建**。停用的前提是"没有 point-in-time 可靠的
   事件源"; 2026-10-07 找到了两个: 东财 `EXECUTE_REASON` (4 = 强赎, 已摘牌的 468 只执行日到
   摘牌都在 0-19 天内) 和 hkvm 上的巨潮公告档案。`cb_call.parquet` 现在只含真强赎 591 只,
   窗口终点是最后交易日 (`scripts/build_cb_call_history.py`)。下文 1.2 的反例格力转债
   (110030.SH) 不在新表里; 新表中最后交易日落在合同到期前 90 天内的只有 5 只。
   **仍然成立的顾虑**: 仅靠巨潮公告认定的 113 只, 用了"提前停止交易"这个事后结果来筛公告。
-- 第 5 节调用方清单: 只迁了 `verifier.py` 和 `analyze_cb_arb_repair_times.py`, 其余未迁。
+- 第 5 节调用方清单: 已迁 `verifier.py`、`warehouse_access.py`、`analyze_cb_arb_repair_times.py`、
+  `cb_pricer_sanity.py`、`verify_cb_data_independent.py`、`repair_data_quality.py`、
+  `build_cb_call_history.py`、`refresh_cb_warehouse.py`, 以及 `study/` 下五个脚本。
+  `evaluate_cb_arb_universe_filter.py` 本文列为活跃路径, 但它所属的方向族在 forbidden_families 里,
+  按冻结产物处理, 没有迁。冻结的 executor 现在读旧列名会直接报错, 这是本文要的效果。
 
 ## 0. 一句话
 

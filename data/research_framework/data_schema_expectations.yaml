@@ -14,7 +14,10 @@ warehouse_files:
       - bond_short_name
       - issue_size
       - remain_size
-      - conv_price
+      - conv_price_latest        # today's conversion price; never read it for a historical date
+      - expire_date_raw          # eastmoney EXPIRE_DATE; the delisting date once a bond has left
+      - contract_maturity_date   # value_date + contract tenor; empty when the tenor cannot be read
+      - contract_tenor_parse_status
       - rating
     expected_min_rows: 700  # ~ 活跃转债数
 

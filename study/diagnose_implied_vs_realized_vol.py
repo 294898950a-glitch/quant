@@ -309,11 +309,9 @@ def load_panel(min_amount: float, start_date: str | None, end_date: str | None):
     diag["cb_daily_date_range"] = (
         f'{cb_daily["trade_date"].min()}~{cb_daily["trade_date"].max()}'
     )
-    # conv_price 是否为静态单值 (已知局限)
-    diag["conv_price_is_static_scalar_per_bond"] = bool(
-        cb_basic.groupby("ts_code")["conv_price"].nunique().max() <= 1
-    )
-    diag["cb_daily_has_conv_price_col"] = bool("conv_price" in cb_daily.columns)
+    # 转股价: 2026-10-07 起用当日真实转股价值反推 (见下方 merge), 不再是 cb_basic 的静态单值
+    diag["conv_price_is_static_scalar_per_bond"] = False
+    diag["cb_daily_has_conv_price_col"] = False
     diag["par_value_unique"] = sorted(
         pd.Series(cb_basic["par_value"]).dropna().unique().tolist()
     )[:5]
@@ -345,7 +343,7 @@ def load_panel(min_amount: float, start_date: str | None, end_date: str | None):
         cb_daily = cb_daily[cb_daily["trade_date"] <= end_date]
 
     basic_cols = [
-        "ts_code", "stk_code", "conv_price", "list_date", "maturity_date",
+        "ts_code", "stk_code", "list_date", "contract_maturity_date",
         "coupon_rate", "rating", "issue_size", "remain_size", "par_value",
     ]
     b = cb_basic[basic_cols].drop_duplicates("ts_code").copy()
@@ -358,6 +356,15 @@ def load_panel(min_amount: float, start_date: str | None, end_date: str | None):
     df = df.merge(
         stk, on=["stk_code", "trade_date"], how="left", suffixes=("", "_stk")
     ).rename(columns={"close_stk": "stk_close", "vol_ann": "sigma_realized_raw"})
+
+    # Conversion price on each day = 100 * stock price / that day's true conversion value. cb_basic only
+    # has the latest conversion price (conv_price_latest), which is wrong before every down-revision.
+    # Maturity is contract maturity; expire_date_raw is the delisting date for bonds that have left.
+    pit = pd.read_parquet(WAREHOUSE / "cb_conv_value_pit.parquet", columns=["ts_code", "trade_date", "conv_value"])
+    df = df.merge(pit.rename(columns={"conv_value": "conv_value_pit"}), on=["ts_code", "trade_date"], how="left")
+    df["conv_price"] = 100.0 * df["stk_close"].astype(float) / df["conv_value_pit"].where(df["conv_value_pit"] > 0)
+    df = df.rename(columns={"contract_maturity_date": "maturity_date"})
+    df = df[df["conv_price"].notna() & df["maturity_date"].notna()].reset_index(drop=True)
 
     n0 = len(df)
     diag["rows_after_merge"] = int(n0)

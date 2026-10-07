@@ -11,7 +11,8 @@
   - stock_zh_a_daily          正股日线 (含 qfq 前复权)
 
 输出 (data/cb_warehouse/):
-  - cb_basic.parquet            CB 基础 (面值/利率/到期/转股价/评级/上市日/正股代码)
+  - cb_basic.parquet            CB 基础 (面值/利率/评级/上市日/正股代码; conv_price_latest 和 expire_date_raw
+                                是"今天的值", 历史日期不能读; 合同到期日见 contract_maturity_date)
   - cb_daily.parquet            CB 日线
   - (cb_call.parquet 不由本脚本写, 见 scripts/build_cb_call_history.py)
   - cb_price_chg.parquet        转股价调整历史 (合并自 bond_cb_adj_logs_jsl)
@@ -67,26 +68,81 @@ def parse_coupon_explain(text: Optional[str]) -> Optional[float]:
     return sum(vals) / len(vals) if vals else None
 
 
-_CN_DIGITS = "一二三四五六七八九十"
+PARSED_FROM_TEXT = "parsed_from_text"
+MANUAL_OVERRIDE = "manual_sourced_override"
+UNRESOLVED = "unresolved"
+
+# Bonds whose coupon text does not give the tenor but whose maturity is known from an authoritative
+# document. Admission rule (docs/2026-08-31-cb-maturity-date-corruption-fix-spec.txt, 4.1): each entry
+# carries tenor_years, the authoritative maturity date itself, and a checkable source (document title,
+# date, URL or archived path, page). "some announcement" is not a source. Empty until such a citation
+# is in hand: 115003.SH is the known candidate (5 years, 2013-01-30 per the spec) but no URL/page yet.
+CONTRACT_MATURITY_OVERRIDES: dict[str, dict] = {}
 
 
-def contract_maturity_date(value_date: Optional[str], interest_rate_explain: Optional[str]) -> Optional[str]:
-    """合同到期日 = 起息日 + 合同年限 (从票面利率条款 "第一年…第六年…" 解析).
+def resolve_contract_maturity(
+    ts_code: str, value_date: Optional[str], interest_rate_explain: Optional[str]
+) -> tuple[Optional[str], Optional[int], str]:
+    """(contract maturity YYYYMMDD, tenor years, status) from these three inputs and nothing else.
 
-    eastmoney EXPIRE_DATE 对已退市转债被改写成实际兑付/摘牌日, 历史回测读它等于提前知道
-    这只债哪天退市. 合同到期日不会因为退市而改变. 解析不出年限时返回 None.
+    eastmoney EXPIRE_DATE is rewritten to the actual delisting date once a bond leaves the market, so a
+    historical valuation that reads it knows when the bond will be called. Contract maturity does not
+    change when a bond leaves. The function sees no field that is only known after the bond's exit.
     """
-    if not value_date or not isinstance(interest_rate_explain, str):
-        return None
-    years = [_CN_DIGITS.index(x) + 1 for x in re.findall(r"第([一二三四五六七八九十])年", interest_rate_explain)]
-    years += [int(x) for x in re.findall(r"第(\d+)年", interest_rate_explain)]
-    if not years:
-        return None
+    from cb_market.contracts import parse_tenor_years
+
     try:
         start = pd.to_datetime(str(value_date), format="%Y%m%d")
     except Exception:
-        return None
-    return (start + pd.DateOffset(years=max(years))).strftime("%Y%m%d")
+        return None, None, UNRESOLVED
+    if pd.isna(start):
+        return None, None, UNRESOLVED
+    tenor = parse_tenor_years(interest_rate_explain)
+    if tenor is not None:
+        return (start + pd.DateOffset(years=tenor)).strftime("%Y%m%d"), tenor, PARSED_FROM_TEXT
+    override = CONTRACT_MATURITY_OVERRIDES.get(ts_code)
+    if override is not None:
+        derived = (start + pd.DateOffset(years=int(override["tenor_years"]))).strftime("%Y%m%d")
+        if derived != override["maturity_date"]:
+            raise ValueError(f"override for {ts_code} is inconsistent: value_date + tenor = {derived}, "
+                             f"stated maturity = {override['maturity_date']}")
+        return derived, int(override["tenor_years"]), MANUAL_OVERRIDE
+    return None, None, UNRESOLVED
+
+
+def finalize_cb_basic(df: pd.DataFrame) -> pd.DataFrame:
+    """Give cb_basic its published column names and the contract-maturity columns.
+
+    Two eastmoney fields hold "the value as of today" and must not be read for a historical date. They are
+    stored under names that say so, so that code written against the old names fails instead of silently
+    reading them: conv_price -> conv_price_latest, maturity_date -> expire_date_raw.
+    """
+    out = df.rename(columns={"conv_price": "conv_price_latest", "maturity_date": "expire_date_raw"}).copy()
+    resolved = [
+        resolve_contract_maturity(t, v, e)
+        for t, v, e in zip(out["ts_code"], out["value_date"], out["interest_rate_explain"])
+    ]
+    out["contract_maturity_date"] = [r[0] for r in resolved]
+    out["contract_tenor_years"] = pd.array([r[1] for r in resolved], dtype="Int64")
+    out["contract_tenor_parse_status"] = [r[2] for r in resolved]
+    return out
+
+
+def write_contract_maturity_audit(basic: pd.DataFrame) -> dict:
+    """Who has no contract maturity, on disk next to the table, so an exclusion downstream can be traced."""
+    import json
+
+    unresolved = basic.loc[basic["contract_tenor_parse_status"] == UNRESOLVED, "ts_code"].tolist()
+    audit = {
+        "status_counts": {k: int(v) for k, v in basic["contract_tenor_parse_status"].value_counts().items()},
+        "unresolved": sorted(unresolved),
+        "overrides_used": sorted(basic.loc[basic["contract_tenor_parse_status"] == MANUAL_OVERRIDE, "ts_code"]),
+    }
+    (WAREHOUSE_DIR / "cb_basic_contract_maturity.json").write_text(
+        json.dumps(audit, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    print(f"[basic] contract maturity: {audit['status_counts']}; unresolved {len(unresolved)}: {unresolved}", flush=True)
+    return audit
 
 
 def to_ymd(dt) -> Optional[str]:
@@ -246,9 +302,6 @@ def build_cb_basic_and_call(
             "list_date": to_ymd(info.get("LISTING_DATE")),
             "delist_date": to_ymd(info.get("DELIST_DATE")),
             "maturity_date": to_ymd(info.get("EXPIRE_DATE")),
-            "contract_maturity_date": contract_maturity_date(
-                to_ymd(info.get("VALUE_DATE")), info.get("INTEREST_RATE_EXPLAIN")
-            ),
             "transfer_start_date": to_ymd(info.get("TRANSFER_START_DATE")),
             "transfer_end_date": to_ymd(info.get("TRANSFER_END_DATE")),
             "rating": rating or "AA",
@@ -543,6 +596,8 @@ def main():
     # 阶段 2: cb_basic + cb_call
     df_basic, df_call = build_cb_basic_and_call(universe, max_bonds=args.max_bonds)
     if not df_basic.empty:
+        df_basic = finalize_cb_basic(df_basic)
+        write_contract_maturity_audit(df_basic)
         df_basic.to_parquet(WAREHOUSE_DIR / "cb_basic.parquet", index=False)
         print(f"  -> cb_basic.parquet ({len(df_basic)} 条)", flush=True)
     # cb_call.parquet is not written here. df_call is eastmoney's one "latest notice" per bond, which mixes

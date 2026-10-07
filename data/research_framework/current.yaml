@@ -48,6 +48,14 @@ summary:
       instead of cb_basic.maturity_date, which is the delisting date for bonds
       that have left the market (maturity_date_lookahead_fixed_2026_10_07). No
       status, baseline or promotion was changed.
+    field_rename_2026_10_07: cb_basic.conv_price is now conv_price_latest and
+      cb_basic.maturity_date is now expire_date_raw, so code that reads either for
+      a historical date fails instead of silently using today's value. The
+      valuation code reads point-in-time conversion value and
+      contract_maturity_date; a bond with neither is excluded and the exclusion is
+      printed and kept in verifier.LAST_RUN_EXCLUSIONS. The recorded metrics below
+      were produced before these changes and their executors no longer run
+      unchanged. No status, baseline or promotion was changed.
   cost_realism_wall:
     applies_to:
     - cb_arb

@@ -601,8 +601,15 @@ def test_warehouse_column_repair_writes_run_local_data(tmp_path, monkeypatch):
         pool.mkdir(parents=True)
         (pool / "best_params.json").write_text('{"params": {}}\n', encoding="utf-8")
     pd.DataFrame(
-        [{"ts_code": "113001.SH", "stk_code": "600001.SH", "conv_price": 10.0}]
+        [{"ts_code": "113001.SH", "stk_code": "600001.SH", "conv_price_latest": 10.0}]
     ).to_parquet(warehouse / "cb_basic.parquet", index=False)
+    # the day's true conversion value: the latest conversion price above (10.0) would give 100 and 110
+    pd.DataFrame(
+        [
+            {"ts_code": "113001.SH", "trade_date": "20200101", "conv_value": 50.0},
+            {"ts_code": "113001.SH", "trade_date": "20200102", "conv_value": 50.5},
+        ]
+    ).to_parquet(warehouse / "cb_conv_value_pit.parquet", index=False)
     pd.DataFrame(
         [
             {"ts_code": "113001.SH", "trade_date": "20200101", "open": 100.0, "high": 101.0, "low": 99.0, "close": 100.0, "vol": 10},
@@ -662,6 +669,8 @@ def test_warehouse_column_repair_writes_run_local_data(tmp_path, monkeypatch):
 
     assert report["mode"] == "deterministic_warehouse_column_derivation"
     assert {"pct_chg", "cb_over_rate"} <= set(repaired_daily.columns)
+    # premium is measured against that day's conversion value, not the latest conversion price
+    assert repaired_daily["cb_over_rate"].round(3).tolist() == [100.0, 100.0]
     assert "call_type" in repaired_call.columns
     for pool_id in (0, 2, 4, 6):
         assert (prepared_root / f"pool_{pool_id}" / "best_params.json").exists()

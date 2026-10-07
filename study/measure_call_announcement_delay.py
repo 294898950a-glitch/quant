@@ -47,7 +47,6 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from strategies.cb_arb.call_condition import is_call_eligible  # noqa: E402
 
 WAREHOUSE = REPO_ROOT / "data" / "cb_warehouse"
 OUT = REPO_ROOT / "study" / "call_announcement_delay"
@@ -55,16 +54,14 @@ OUT.mkdir(parents=True, exist_ok=True)
 
 
 def load_moneyness_panel() -> pd.DataFrame:
-    cb_basic = pd.read_parquet(WAREHOUSE / "cb_basic.parquet")
-    cb_daily = pd.read_parquet(WAREHOUSE / "cb_daily.parquet")
-    stk = pd.read_parquet(WAREHOUSE / "stk_daily_qfq.parquet")[
-        ["stk_code", "trade_date", "close"]
-    ]
-    b = cb_basic[["ts_code", "stk_code", "conv_price"]].drop_duplicates("ts_code")
-    df = cb_daily[["ts_code", "trade_date"]].merge(b, on="ts_code", how="inner")
-    df = df.merge(stk, on=["stk_code", "trade_date"], how="left")
-    df["moneyness"] = df["close"] / df["conv_price"]
-    return df.sort_values(["ts_code", "trade_date"]).reset_index(drop=True)
+    """Each bond-day with `eligible`: the call condition by that bond's own contract terms, on that day's
+    true conversion value. Built by cb_market.panel; this script no longer computes moneyness itself
+    (it used to divide by cb_basic's latest conversion price, which is wrong for every date before a
+    down-revision)."""
+    from cb_market.panel import load_panel
+
+    p = load_panel(start="20070101")
+    return p[["ts_code", "trade_date", "call_eligible"]].rename(columns={"call_eligible": "eligible"})
 
 
 def last_eligible_run_start(dates: np.ndarray, elig: np.ndarray, ann_date: str):
@@ -102,7 +99,7 @@ def main() -> int:
             skipped_no_history += 1
             continue
         dates = g["trade_date"].values
-        elig = is_call_eligible(g["moneyness"].values)
+        elig = g["eligible"].to_numpy(dtype=bool)
         result = last_eligible_run_start(dates, elig, r["ann_date"])
         if result is None:
             skipped_bad_order += 1

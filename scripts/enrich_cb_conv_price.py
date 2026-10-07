@@ -184,7 +184,7 @@ def main():
 
     # 如果仍 None, 保留原 conv_price
     df["conv_price_new"] = df["code"].map(new_prices)
-    df["conv_price"] = df["conv_price_new"].fillna(df["conv_price"])
+    df["conv_price_latest"] = df["conv_price_new"].fillna(df["conv_price_latest"])
     df = df.drop(columns=["conv_price_new"])
 
     # ------------------------------------------------------------------
@@ -197,7 +197,7 @@ def main():
     print(f"  step 1+2 都失败 -> step 3 (用初始值): {n3} 只 (这些可能仍错, 但没办法)")
     if n_unfilled:
         print(f"  3 步全失败 (保留原值): {n_unfilled} 只")
-    print(f"NaN conv_price: {df['conv_price'].isna().sum()}/{len(df)}")
+    print(f"NaN conv_price: {df['conv_price_latest'].isna().sum()}/{len(df)}")
     print("=" * 60)
 
     df.to_parquet(path, index=False)

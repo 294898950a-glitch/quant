@@ -406,16 +406,17 @@ def _copy_or_enrich_warehouse(source_root: Path, prepared_data_root: Path) -> di
         )
         written.setdefault("cb_daily", []).append("pct_chg")
     if "cb_over_rate" not in daily.columns:
-        basic_small = basic[["ts_code", "stk_code", "conv_price"]].copy()
-        basic_small["conv_price"] = pd.to_numeric(basic_small["conv_price"], errors="coerce")
-        stock_small = stock[["stk_code", "trade_date", "close"]].copy()
-        stock_small["trade_date"] = stock_small["trade_date"].astype(str)
-        stock_small = stock_small.rename(columns={"close": "stock_close"})
-        merged = daily[["ts_code", "trade_date", "close"]].merge(basic_small, on="ts_code", how="left")
-        merged = merged.merge(stock_small, on=["stk_code", "trade_date"], how="left")
-        conv_value = pd.to_numeric(merged["stock_close"], errors="coerce") / merged["conv_price"] * 100.0
+        # Premium on a past day needs that day's conversion value. cb_basic only has the latest conversion
+        # price, so the value comes from the point-in-time table; without it the column cannot be derived.
+        pit_src = warehouse_source(source_root, "data/cb_warehouse/cb_conv_value_pit.parquet")
+        if pit_src is None:
+            raise ValueError("cannot derive cb_over_rate; missing source file: cb_conv_value_pit")
+        pit = pd.read_parquet(pit_src, columns=["ts_code", "trade_date", "conv_value"])
+        pit["trade_date"] = pit["trade_date"].astype(str)
+        merged = daily[["ts_code", "trade_date", "close"]].merge(pit, on=["ts_code", "trade_date"], how="left")
+        conv_value = pd.to_numeric(merged["conv_value"], errors="coerce").where(lambda s: s > 0)
         cb_close = pd.to_numeric(merged["close"], errors="coerce")
-        daily["cb_over_rate"] = ((cb_close / conv_value) - 1.0).replace([float("inf"), -float("inf")], pd.NA) * 100.0
+        daily["cb_over_rate"] = ((cb_close / conv_value) - 1.0).to_numpy() * 100.0
         written.setdefault("cb_daily", []).append("cb_over_rate")
 
     call = call.copy()

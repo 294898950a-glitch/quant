@@ -198,11 +198,12 @@ def _make_synthetic_data(n_cb: int = 5, n_days: int = 60):
         "stk_code": stk_codes,
         "issue_size": [10.0] * n_cb,  # 10 亿
         "remain_size": [None] * n_cb,
-        "conv_price": [10.0] * n_cb,
+        "conv_price_latest": [10.0] * n_cb,
         "value_date": ["20200101"] * n_cb,
         "list_date": ["20210101"] * n_cb,
         "delist_date": [""] * n_cb,
-        "maturity_date": ["20280101"] * n_cb,
+        "expire_date_raw": ["20280101"] * n_cb,
+        "contract_maturity_date": ["20280101"] * n_cb,
         "transfer_start_date": ["20210701"] * n_cb,
         "transfer_end_date": ["20280101"] * n_cb,
         "rating": ["AA+"] * n_cb,
@@ -299,7 +300,7 @@ def _install_synthetic_caches(monkeypatch):
     monkeypatch.setattr(wa, "_TRADING_DAYS_CACHE", days)
     # 当日真实转股价值: 合成数据里转股价恒为 cb_basic.conv_price, 没有下修
     stk_of = dict(zip(cb_basic["ts_code"], cb_basic["stk_code"]))
-    conv_price_of = dict(zip(cb_basic["ts_code"], cb_basic["conv_price"]))
+    conv_price_of = dict(zip(cb_basic["ts_code"], cb_basic["conv_price_latest"]))
     stk_close = {(r.stk_code, r.trade_date): r.close for r in stk_daily_proc.itertuples(index=False)}
     monkeypatch.setattr(wa, "_CONV_VALUE_PIT_CACHE", {
         (ts, d): 100.0 * stk_close[(stk_of[ts], d)] / conv_price_of[ts] for ts in cb_codes for d in days
@@ -558,22 +559,57 @@ def test_cb_index_is_a_return_index_not_a_price_level(monkeypatch):
     assert _index_total_return("20240102", "20240104") == pytest.approx(0.0)
 
 
-def test_valuation_reads_contract_maturity_not_the_rewritten_field(monkeypatch, tmp_path):
-    """已退市转债的 maturity_date 被数据源改写成摘牌日; 估值必须读合同到期日."""
-    cb_basic, *_ = _make_synthetic_data(n_cb=2, n_days=5)
-    cb_basic["maturity_date"] = ["20220318", "20280101"]            # 第一只: 被改写成 2022 年的摘牌日
-    cb_basic["contract_maturity_date"] = ["20260101", None]          # 合同上到 2026; 第二只解析不出
-    path = tmp_path / "cb_basic.parquet"
-    cb_basic.to_parquet(path, index=False)
-    monkeypatch.setattr(wa, "CB_BASIC_PARQUET", path)
-    monkeypatch.setattr(wa, "_CB_BASIC_CACHE", None)
-    df = wa.load_cb_basic()
-    assert df.loc["CB001.SH", "valuation_maturity_date"] == "20260101"
-    assert df.loc["CB002.SH", "valuation_maturity_date"] == "20280101"  # 退回原字段
+def test_bond_without_contract_maturity_is_excluded_and_reported(monkeypatch):
+    """合同到期日解析不出来的券: 不退回被改写的 expire_date_raw, 排除掉, 并且说出来."""
+    cb_codes, days = _install_synthetic_caches(monkeypatch)
+    basic = wa._CB_BASIC_CACHE.copy()
+    basic["contract_maturity_date"] = basic["contract_maturity_date"].astype(object)
+    basic.loc["CB001.SH", "contract_maturity_date"] = None   # expire_date_raw 仍是一个看着合法的日期
+    monkeypatch.setattr(wa, "_CB_BASIC_CACHE", basic)
+    rules = {"rating_floor_int": 0, "fee_pct": 0.0001, "initial_capital": 1_000_000.0}
+    weights = [20, 1.0, 0.50, 0.99, 0.10, 30, 90, -0.30, 1e6, 1e3, 50, 150]
+    result = run_backtest(weights, {}, rules, oos_event_ids=None)
+    assert all(t.cb_code != "CB001.SH" for t in result.trades)
+    assert v.LAST_RUN_EXCLUSIONS["no_contract_maturity_codes"] == ["CB001.SH"]
 
 
-def test_contract_maturity_date_is_parsed_from_coupon_terms():
-    from scripts.build_cb_warehouse import contract_maturity_date
+def test_bond_day_without_conv_value_is_counted(monkeypatch):
+    cb_codes, days = _install_synthetic_caches(monkeypatch)
+    for d in days:
+        wa._CONV_VALUE_PIT_CACHE.pop(("CB002.SH", d))
+    rules = {"rating_floor_int": 0, "fee_pct": 0.0001, "initial_capital": 1_000_000.0}
+    weights = [20, 1.0, 0.50, 0.99, 0.10, 30, 90, -0.30, 1e6, 1e3, 50, 150]
+    run_backtest(weights, {}, rules, oos_event_ids=None)
+    assert v.LAST_RUN_EXCLUSIONS["no_point_in_time_conv_value_bonds"] == 1
+    assert v.LAST_RUN_EXCLUSIONS["no_point_in_time_conv_value_bond_days"] > 0
+
+
+def test_contract_maturity_is_resolved_from_three_inputs_only():
+    from scripts.build_cb_warehouse import PARSED_FROM_TEXT, UNRESOLVED, resolve_contract_maturity
     terms = "第一年0.4%、第二年0.6%、第三年1.0%、第四年1.5%、第五年1.8%、第六年2.0%。"
-    assert contract_maturity_date("20200318", terms) == "20260318"
-    assert contract_maturity_date("20200318", "") is None
+    assert resolve_contract_maturity("113001.SH", "20200318", terms) == ("20260318", 6, PARSED_FROM_TEXT)
+    # 簿记建档文字解析不出年限: 留空并标明, 不猜
+    assert resolve_contract_maturity("115003.SH", "20080130", "票面利率预设区间为0.8%-1.5%。") == (None, None, UNRESOLVED)
+    # 年限不在核对过的 {5, 6} 里: 视为解析失败, 不采信
+    assert resolve_contract_maturity("113002.SH", "20200318", "第一年1%、第二年2%、第三年3%。")[2] == UNRESOLVED
+    assert resolve_contract_maturity("113003.SH", None, terms)[2] == UNRESOLVED
+
+
+def test_manual_override_must_agree_with_value_date_plus_tenor(monkeypatch):
+    import scripts.build_cb_warehouse as bw
+    monkeypatch.setattr(bw, "CONTRACT_MATURITY_OVERRIDES", {"115003.SH": {"tenor_years": 5, "maturity_date": "20130130"}})
+    assert bw.resolve_contract_maturity("115003.SH", "20080130", "簿记建档")[::2] == ("20130130", bw.MANUAL_OVERRIDE)
+    assert bw.resolve_contract_maturity("126006.SZ", "20080130", "簿记建档")[2] == bw.UNRESOLVED  # 别的券不沾光
+    monkeypatch.setattr(bw, "CONTRACT_MATURITY_OVERRIDES", {"115003.SH": {"tenor_years": 5, "maturity_date": "20130201"}})
+    with pytest.raises(ValueError):
+        bw.resolve_contract_maturity("115003.SH", "20080130", "簿记建档")
+
+
+def test_published_cb_basic_has_no_column_named_like_a_historical_value():
+    from scripts.build_cb_warehouse import finalize_cb_basic
+    raw = pd.DataFrame({"ts_code": ["113001.SH"], "value_date": ["20200318"], "interest_rate_explain": ["第一年1%、第五年2%"],
+                        "conv_price": [10.0], "maturity_date": ["20220101"]})
+    out = finalize_cb_basic(raw)
+    assert "conv_price" not in out.columns and "maturity_date" not in out.columns
+    assert out.loc[0, "conv_price_latest"] == 10.0 and out.loc[0, "expire_date_raw"] == "20220101"
+    assert out.loc[0, "contract_maturity_date"] == "20250318" and out.loc[0, "contract_tenor_years"] == 5

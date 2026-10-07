@@ -78,7 +78,7 @@ def load_panel() -> pd.DataFrame:
     )
 
     basic_cols = [
-        "ts_code", "stk_code", "conv_price", "list_date", "maturity_date",
+        "ts_code", "stk_code", "list_date", "contract_maturity_date",
         "coupon_rate", "rating",
     ]
     b = cb_basic[basic_cols].drop_duplicates("ts_code").copy()
@@ -90,6 +90,15 @@ def load_panel() -> pd.DataFrame:
     df = df.merge(
         stk, on=["stk_code", "trade_date"], how="left", suffixes=("", "_stk")
     ).rename(columns={"close_stk": "stk_close", "vol_ann": "sigma_realized_raw"})
+
+    # Conversion price on each day = 100 * stock price / that day's true conversion value. cb_basic only
+    # has the latest conversion price (conv_price_latest), which is wrong before every down-revision.
+    # Maturity is contract maturity; expire_date_raw is the delisting date for bonds that have left.
+    pit = pd.read_parquet(WAREHOUSE / "cb_conv_value_pit.parquet", columns=["ts_code", "trade_date", "conv_value"])
+    df = df.merge(pit.rename(columns={"conv_value": "conv_value_pit"}), on=["ts_code", "trade_date"], how="left")
+    df["conv_price"] = 100.0 * df["stk_close"].astype(float) / df["conv_value_pit"].where(df["conv_value_pit"] > 0)
+    df = df.rename(columns={"contract_maturity_date": "maturity_date"})
+    df = df[df["conv_price"].notna() & df["maturity_date"].notna()].reset_index(drop=True)
 
     d_mat = pd.to_datetime(df["maturity_date"], format="%Y%m%d", errors="coerce")
     d_now = pd.to_datetime(df["trade_date"], format="%Y%m%d", errors="coerce")

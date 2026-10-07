@@ -25,7 +25,7 @@ recorded with source "inferred" and ann_date = last trade - 30 days, provided
 its last close is at least 100 (a bond delisted far below par was not called).
 
 跑法:
-    python scripts/build_cb_call_history.py --announcements <cb_announcements.jsonl>
+    python scripts/build_cb_call_history.py --announcements <cb_announcements.jsonl> [<incremental.jsonl> ...]
 """
 
 from __future__ import annotations
@@ -49,7 +49,6 @@ from scripts.build_cb_warehouse import WAREHOUSE_DIR, code_to_ts_code, fetch_cb_
 EARLY_DAYS = 90
 NOTICE_TO_LAST_TRADE_DAYS = 60
 INFERRED_LEAD_DAYS = 30
-_CN_DIGITS = "一二三四五六七八九十"
 
 
 def classify_title(title: str) -> str:
@@ -66,15 +65,20 @@ def classify_title(title: str) -> str:
     return "other"
 
 
-def load_notices(path: Path, life: pd.DataFrame, keyword: str = "赎回", classify=classify_title) -> pd.DataFrame:
+def load_notices(
+    paths: list[Path], life: pd.DataFrame, keyword: str = "赎回", classify=classify_title
+) -> pd.DataFrame:
     """Announcements of one search keyword, attributed to a bond and classified by title.
 
+    paths: the full archive and any incremental files (same record format); duplicates are dropped.
     life: ts_code, first_trade, last_trade, bond_short_name.
     """
     short_name = dict(zip(life["ts_code"], life["bond_short_name"]))
     rows = []
-    with path.open(encoding="utf-8") as f:
-        for line in f:
+    for path in paths:
+        with path.open(encoding="utf-8") as f:
+            lines = f.readlines()
+        for line in lines:
             r = json.loads(line)
             if r.get("record_type") != "announcement" or r.get("keyword") != keyword:
                 continue
@@ -97,21 +101,14 @@ def load_notices(path: Path, life: pd.DataFrame, keyword: str = "赎回", classi
     return notices.sort_values(["ts_code", "ann_date"]).reset_index(drop=True)
 
 
-def _term_years(text: object) -> float:
-    if not isinstance(text, str):
-        return np.nan
-    years = [_CN_DIGITS.index(x) + 1 for x in re.findall(r"第([一二三四五六七八九十])年", text)]
-    years += [int(x) for x in re.findall(r"第(\d+)年", text)]
-    return float(max(years)) if years else np.nan
-
-
 def _ymd(series: pd.Series) -> pd.Series:
     return pd.to_datetime(series, errors="coerce").dt.strftime("%Y%m%d")
 
 
 def main() -> int:
     p = argparse.ArgumentParser(description=__doc__)
-    p.add_argument("--announcements", type=Path, required=True)
+    p.add_argument("--announcements", type=Path, nargs="+", required=True,
+                   help="cninfo archive, plus incremental files from fetch_cb_announcements_incremental.py")
     args = p.parse_args()
 
     daily = pd.read_parquet(WAREHOUSE_DIR / "cb_daily.parquet", columns=["ts_code", "trade_date", "close"])
@@ -138,7 +135,7 @@ def main() -> int:
     b = basic.merge(life.drop(columns="bond_short_name"), on="ts_code", how="inner").merge(
         em[["ts_code", "reason", "em_ann", "em_call_date", "em_call_price"]], on="ts_code", how="left"
     )
-    scheduled = pd.to_datetime(b["value_date"]) + pd.to_timedelta(b["interest_rate_explain"].map(_term_years) * 365.25, unit="D")
+    scheduled = pd.to_datetime(b["contract_maturity_date"])  # NaT where unresolved: such a bond is never "early"
     b["stopped"] = b["last_trade"] < warehouse_end
     b["early"] = b["stopped"] & ((scheduled - pd.to_datetime(b["last_trade"])).dt.days > EARLY_DAYS)
     b["cn_ann"] = b["ts_code"].map(first_notice)
@@ -163,7 +160,7 @@ def main() -> int:
         "call_date": calls["em_call_date"].where(from_em), "call_price": calls["em_call_price"].where(from_em),
         "is_call": "公告实施强赎",
         # consumers read [ann_date, expire_date] as the called interval; it ends when trading ends
-        "expire_date": np.where(calls["stopped"], calls["last_trade"], calls["maturity_date"]),
+        "expire_date": np.where(calls["stopped"], calls["last_trade"], calls["contract_maturity_date"]),
         "call_type": "forced_call", "source": calls["source"],
     }).sort_values("ts_code").reset_index(drop=True)
 

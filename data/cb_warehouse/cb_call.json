@@ -1,16 +1,16 @@
 {
-  "built_at": "2026-10-06T23:51:55.265330+00:00",
+  "built_at": "2026-10-07T00:57:51.039060+00:00",
   "warehouse_end": "20260930",
   "bonds": 1033,
-  "forced_calls": 594,
+  "forced_calls": 595,
   "by_source": {
-    "eastmoney+cninfo": 412,
-    "cninfo": 122,
-    "eastmoney": 57,
+    "eastmoney+cninfo": 413,
+    "cninfo": 123,
+    "eastmoney": 56,
     "inferred": 3
   },
   "stopped_early_bonds": 596,
-  "pending_calls_on_listed_bonds": 0,
+  "pending_calls_on_listed_bonds": 1,
   "days_from_notice_to_last_trade": {
     "count": 594.0,
     "mean": 28.1,
@@ -22,11 +22,11 @@
     "max": 1255.0
   },
   "notices": {
-    "call": 4846,
-    "call_late": 3299,
-    "may_trigger": 1057,
-    "no_call": 780,
+    "call": 4867,
+    "call_late": 3313,
+    "may_trigger": 1068,
+    "no_call": 787,
     "other": 155
   },
-  "notice_archive_end": "20260829"
+  "notice_archive_end": "20261001"
 }

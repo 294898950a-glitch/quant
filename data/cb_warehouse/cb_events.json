@@ -1,23 +1,23 @@
 {
   "name": "cb_events",
-  "built_at": "2026-10-06T23:51:55.811106+00:00",
-  "events": 8696,
-  "bonds": 962,
+  "built_at": "2026-10-07T00:57:51.506198+00:00",
+  "events": 8767,
+  "bonds": 966,
   "by_type": {
-    "no_revision": 2353,
-    "revision_may_trigger": 1905,
-    "call_may_trigger": 1057,
-    "no_call": 774,
-    "call_announced": 594,
+    "no_revision": 2371,
+    "revision_may_trigger": 1923,
+    "call_may_trigger": 1068,
+    "no_call": 781,
+    "call_announced": 595,
     "revision_meeting": 528,
-    "revision_proposal": 505,
+    "revision_proposal": 512,
     "revision_effective": 500,
-    "revision_decided": 471,
+    "revision_decided": 480,
     "unclassified": 9
   },
   "cninfo_archive_range": [
     "20081020",
-    "20260829"
+    "20261001"
   ],
   "cninfo_events_by_year": {
     "2008": 1,
@@ -31,7 +31,7 @@
     "2023": 1199,
     "2024": 2325,
     "2025": 1527,
-    "2026": 831
+    "2026": 901
   },
   "unclassified_share_of_revision_notices": 0.0017
 }

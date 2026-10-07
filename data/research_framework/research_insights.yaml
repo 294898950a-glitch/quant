@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-10-07T08:00:00+08:00"
+updated_at: "2026-10-07T10:00:00+08:00"
 authority: machine
 source_migration:
   legacy_markdown_removed: true
@@ -646,6 +646,53 @@ key_insights:
       rewritten maturity field and are superseded by this entry. What survives all four fixes: the model beats
       both style controls in 2 of 8 years; model and low-premium are high-beta exposures whose return is
       concentrated in 2019-2021; double_low has alpha in 2019-2024 (8.4%/yr, t 2.6) and none after.
+
+  - id: cb_data_layer_second_pass_2026_10_07
+    priority: critical
+    summary: "Second pass on the CB data layer the same day: the two 'today's value' columns of cb_basic were renamed so stale readers fail, announcements were re-attributed to the right bond, the call rule no longer uses the eventual outcome, and the three August study scripts were rerun on point-in-time inputs. Three August conclusions do not survive: the 22-point 'near-call bonds look cheap' gap, the 42-day 'call announcement delay', and the claim that the model systematically undervalues the conversion option."
+    source: "scripts/build_cb_warehouse.py (finalize_cb_basic), strategies/cb_arb/warehouse_access.py, scripts/build_cb_call_history.py, scripts/build_cb_events.py, study/*.py, data/cb_arb_pit_rerun_four_fixes_2026-10-07/"
+    facts:
+      field_rename: "cb_basic.conv_price -> conv_price_latest; cb_basic.maturity_date -> expire_date_raw. New columns contract_tenor_years and contract_tenor_parse_status. Contract maturity agrees with Jisilu's maturity date to within one day for all 310 listed bonds matched. 15 bonds from 2007-2009 are unresolved and are excluded, not defaulted."
+      exclusions_are_visible: "A valuation pass prints and keeps (verifier.LAST_RUN_EXCLUSIONS) the bonds dropped for a missing contract maturity or a missing point-in-time conversion value. Final rerun: 1 bond (115003.SH) and 8 bond-days."
+      announcement_attribution: "The cninfo archive lists an issuer's candidate bond codes and candidate bond names as two separately sorted lists. Pairing them by position gave one bond's notices to its sibling when an issuer had several bonds. Attribution now uses each bond's own short name. Effect on cb_events: 140 wrong events removed, 445 lost ones restored; then +376 from extending the archive from 2026-08-29 to 2026-10-01."
+      call_table:
+        rule: "forced call = eastmoney EXECUTE_REASON 4, or an explicit call announcement naming the bond followed by the end of trading within 60 days. ann_date is the earliest such announcement. The rule no longer asks whether the bond 'delisted early'."
+        forced_calls: 595
+        by_source: {eastmoney+cninfo: 413, cninfo: 123, eastmoney: 56, inferred: 3}
+        check: "For the 113 calls previously identified from cninfo alone, the old and new rules give the same date for every one. Three calls shortly before contract maturity were missing under the old rule and are now included."
+      august_studies_rerun:
+        implied_vs_realized_vol:
+          median_implied_minus_realized: {then: 0.120, now: 0.048}
+          theoretical_minus_market_pct_median: {then: -0.044, now: -0.018}
+          near_call_group_gap: {then: 0.170, now: 0.018}
+          not_near_call_group_gap: {then: -0.054, now: -0.023}
+          verdict_of_the_script_itself: "sign of the vol gap flips within a +-100bp credit-spread shift; the script now reports 'cannot tell'"
+        lattice_pricer_validation:
+          old_model_gap_call_eligible_group: {then: 0.207, now: 0.013}
+          lattice_model_gap_call_eligible_group: {then: 0.105, now: -0.075}
+          reading: "The overvaluation the lattice pricer was built to remove was mostly a data error. On clean data the lattice pricer undervalues call-eligible bonds, consistent with issuers calling in under half of eligible episodes."
+        call_announcement_delay:
+          out_of_order_share: {then: 0.48, now: 0.012}
+          median_delay_trading_days: {then: 42, now: 1}
+          within_one_trading_day: {then: 0.206, now: 0.646}
+          reading: "Issuers that do call announce almost at once. The earlier 'delay' came from treating put and no-call notice dates as call dates and from moneyness computed on the latest conversion price."
+      final_rerun_all_fixes:
+        note: "Frozen parameters, one-day delay, costs on; supersedes the figures in maturity_date_lookahead_fixed_2026_10_07."
+        equal_weight_market_return: {train_2019_2024: 0.990, test_2025_01_to_2026_05: 0.356, holdout_2026_05_to_09: -0.081}
+        model: {train: {total_return: 1.936, beta: 1.43, alpha: 0.027, t: 0.62}, test: {total_return: 0.160, beta: 1.32, alpha: -0.188, t: -1.93}, holdout: {total_return: -0.097, beta: 0.93, alpha: -0.049, t: -0.27}}
+        low_premium: {train: {total_return: 2.803, beta: 1.50, alpha: 0.068, t: 1.23}, test: {total_return: 0.376, beta: 1.36, alpha: -0.059, t: -0.50}, holdout: {total_return: -0.191, beta: 1.11, alpha: -0.281, t: -1.06}}
+        double_low: {train: {total_return: 1.715, beta: 0.85, alpha: 0.074, t: 2.54}, test: {total_return: 0.105, beta: 0.36, alpha: -0.005, t: -0.07}, holdout: {total_return: -0.051, beta: 0.24, alpha: -0.074, t: -0.60}}
+        years_model_beats_both_styles: "2 of 8"
+      merged_from_jay_wsl: "Nine unpushed commits (Jisilu fetch scripts, cb_conv_price_history, down-revision diagnosis) and an uncommitted verifier decouple refactor (warehouse_access.py, cost_model.py) were merged; cb_events reads cb_conv_price_history for down-revision meetings."
+    limits:
+      - "Executors written before this date read the old column names and fail; they are records, not tools."
+      - "cb_basic.rating is still the latest rating; cb_basic.delist_date is not refreshed for bonds that left after 2026-05; transfer_end_date is uncorrected."
+      - "The bond floor in cb_pricer uses par, not the contract's maturity redemption price (median 110); the effect is unmeasured."
+      - "No data: down-revision clause terms, holders, outstanding balance, intraday."
+      - "The incremental cninfo fetch was run from a workstation because hkvm no longer has akshare installed; the archive is not on a schedule."
+    decision_use: |
+      Before citing any August 2026 finding about cb_arb pricing, check it against this entry. Three are withdrawn.
+      The measured facts to build on are in data/cb_market_facts/facts.yaml.
 
 open_threads:
   - id: pit_value_gap_incremental_edge

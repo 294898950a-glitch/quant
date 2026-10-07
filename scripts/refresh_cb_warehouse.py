@@ -2,7 +2,7 @@
 """Extend the CB warehouse to the latest trading day without rewriting history.
 
 build_cb_warehouse.py rebuilds everything and overwrites cb_basic, including
-the conv_price repairs made afterwards. This script only appends:
+the conv_price_latest repairs made afterwards. This script only appends:
 
   cb_basic   existing rows kept as they are; newly listed bonds appended;
              contract_maturity_date recomputed for every row
@@ -35,7 +35,8 @@ if str(_REPO_ROOT) not in sys.path:
 from scripts.build_cb_warehouse import (  # noqa: E402
     WAREHOUSE_DIR,
     build_cb_basic_and_call,
-    contract_maturity_date,
+    finalize_cb_basic,
+    write_contract_maturity_audit,
     collect_cb_universe,
     fetch_cb_daily_one,
     fetch_stock_daily_one,
@@ -78,20 +79,18 @@ def main() -> int:
     fresh_basic, _ = build_cb_basic_and_call(universe)
     em_rows = dict(zip(universe["code"], universe["_em_row"]))
 
-    new_basic = fresh_basic[~fresh_basic["code"].isin(basic["code"])].copy()
+    new_basic = finalize_cb_basic(fresh_basic[~fresh_basic["code"].isin(basic["code"])])
     # build_cb_basic_and_call reads CONVERT_STOCK_PRICE, which is the stock price.
-    new_basic["conv_price"] = [
+    new_basic["conv_price_latest"] = [
         pd.to_numeric((em_rows.get(c) or {}).get("TRANSFER_PRICE"), errors="coerce")
         if (em_rows.get(c) or {}).get("TRANSFER_PRICE") is not None
         else pd.to_numeric((em_rows.get(c) or {}).get("INITIAL_TRANSFER_PRICE"), errors="coerce")
         for c in new_basic["code"]
     ]
     new_basic = new_basic[new_basic["list_date"].notna()]
-    for frame in (basic, new_basic):
-        frame["contract_maturity_date"] = [
-            contract_maturity_date(v, t) for v, t in zip(frame["value_date"], frame["interest_rate_explain"])
-        ]
+    basic = finalize_cb_basic(basic)
     basic_out = pd.concat([basic, new_basic[basic.columns]], ignore_index=True)
+    write_contract_maturity_audit(basic_out)
     last_by_bond = daily.groupby("ts_code")["trade_date"].max()
     alive = set(last_by_bond[last_by_bond >= old_end].index)
     # A bond can be in cb_basic before it lists (the basic table carries future listing dates). It has no

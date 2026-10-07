@@ -89,6 +89,8 @@ _VOL_CAP = 1.5
 # --------------------------------------------------------------------------- #
 
 _CB_INDEX_CACHE: pd.Series | None = None
+#: 最近一次回测里因数据缺失被排除的券 (warehouse_access.ExclusionLog.summary()), 供调用方核对
+LAST_RUN_EXCLUSIONS: dict[str, object] = {}
 
 
 def _get_cb_index() -> pd.Series:
@@ -583,11 +585,8 @@ def _run_backtest_core(
             "stk_code": row.stk_code,
             "issue_size_yuan": float(row.issue_size_yuan)
                 if math.isfinite(row.issue_size_yuan) else 0.0,
-            "conv_price": float(row.conv_price)
-                if (row.conv_price is not None and math.isfinite(row.conv_price))
-                else float("nan"),
             "list_date": row.list_date or "",
-            "maturity_date": getattr(row, "valuation_maturity_date", None) or row.maturity_date or "",
+            "maturity_date": row.contract_maturity_date if isinstance(row.contract_maturity_date, str) else "",
             "coupon_rate": float(row.coupon_rate) if math.isfinite(row.coupon_rate) else 0.01,
             "rating": row.rating or "AA",
             "rating_int": int(row.rating_int),
@@ -597,6 +596,8 @@ def _run_backtest_core(
     daily_by_date = {
         d: g for d, g in cb_daily_sub.groupby("trade_date")
     }
+
+    exclusions = warehouse_access.ExclusionLog()
 
     # ---- 状态 ----
     cash = cfg.initial_capital
@@ -644,6 +645,7 @@ def _run_backtest_core(
                 continue
             mat = spec_d["maturity_date"]
             if not mat or len(mat) != 8:
+                exclusions.no_contract_maturity.add(ts)
                 continue
             try:
                 mat_dt = datetime.strptime(mat, "%Y%m%d")
@@ -672,6 +674,8 @@ def _run_backtest_core(
 
             conv_price = warehouse_access.point_in_time_conv_price(ts, date, stock_price)
             if not math.isfinite(conv_price) or conv_price <= 0:
+                exclusions.no_conv_value_bond_days += 1
+                exclusions.no_conv_value_bonds.add(ts)
                 continue
 
             spec = CBSpec(
@@ -897,6 +901,9 @@ def _run_backtest_core(
         index_dates=cumulative_dates,
     )
     equity_series = _equity_history_to_series(equity_history)
+    global LAST_RUN_EXCLUSIONS
+    LAST_RUN_EXCLUSIONS = exclusions.summary()
+    exclusions.report("cb_arb")
 
     return BacktestResult(
         trades=trades,
