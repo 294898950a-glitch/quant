@@ -78,6 +78,10 @@ def main() -> int:
         "source": "cb_call:" + calls["source"], "detail": "",
     }))
 
+    # the rating table is parsed once, by build_cb_ths_tables.py; what counts as a cut is ev.rating_downgrades
+    cuts = ev.rating_downgrades(pd.read_parquet(WAREHOUSE_DIR / "cb_rating_history.parquet"))
+    frames.append(cuts.assign(event_type=ev.RATING_DOWNGRADE, source="ths"))
+
     out = pd.concat(frames, ignore_index=True)[["ts_code", "event_date", "event_type", "source", "detail"]]
     out = out[out["ts_code"].isin(set(life["ts_code"]))]
     out = out.drop_duplicates(["ts_code", "event_date", "event_type"]).sort_values(["ts_code", "event_date"]).reset_index(drop=True)

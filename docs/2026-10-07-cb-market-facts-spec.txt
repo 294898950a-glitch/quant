@@ -29,20 +29,38 @@
 ---------
 
 (1) cb_contract_terms.parquet (+ .json)      写: scripts/build_cb_contract_terms.py
-    每只券一行: 强赎 (窗口 / 至少几天 / 触发比例)、条件回售、到期赎回价、票息、转股起始日,
-    以及解析所依据的条款原文。
+    每只券一行: 强赎 (窗口 / 至少几天 / 触发比例)、条件回售、下修 (窗口 / 至少几天 / 触发比例)、
+    到期赎回价、票息、转股起始日, 以及解析所依据的条款原文。
     来历: 原文与解析值同行存放; .json 记各字段 parsed / no_clause / unparsed / no_source 的只数。
     谁读: cb_market/panel.py (逐券判断是否满足强赎条件); 人 (核对任一行)。
     答不出来: 字段为空 + 对应 *_status 写明原因。不回退到"市场通行条款"。
-              下修条款没有数据源, 全部 no_source。
+    下修条款东财没有字段, 走另一条路: scripts/fetch_cb_revision_clause_text.py 从发行人自己的文件里
+    取那一句条款原文, 存 cb_revision_clause_text.jsonl (只追加; 每行有原句、出处 PDF、试过哪些文件)。
+    两个来源: 下修相关公告 (会复述条款); 没有这类公告的券, 取它上市前两周内的《上市公告书》。
+    只认"…低于当期转股价格的 X% 时, 公司董事会有权…"这种句子。公告里另有两种长得一样的句子不是条款:
+    "连续 16 个交易日中已有 15 个交易日低于 85%, 触发…" (进度) 和 "若未来连续二十个交易日内有五个
+    交易日低于…将触发" (预告)。第一版把它们当成了条款, 552 只里有 284 只是这样读错的。
 
 (2) cb_events.parquet (+ .json)              写: scripts/build_cb_events.py
-    一行一个带日期的发行人事件: 下修提议 / 不下修 / 预计触发 / 股东大会 / 生效,
-    公告强赎 / 公告不强赎 / 提示可能满足强赎。
-    来历: source 列 (cninfo / jisilu / cb_call:<来源>) + detail (公告原标题或新旧转股价);
+    一行一个带日期的事件: 下修提议 / 不下修 / 预计触发 / 股东大会 / 生效,
+    公告强赎 / 公告不强赎 / 提示可能满足强赎, 债项评级下调。
+    来历: source 列 (cninfo / jisilu / cb_call:<来源> / ths) + detail (公告原标题或新旧转股价);
           .json 记档案起止日和各类型数量。
     谁读: cb_market/facts.py 的行为类测量; 之后的信号层。
     答不出来: 标题分不出类型的记为 unclassified 并保留 (当前 9 条, 占 0.18%)。
+
+(1b) cb_holders_top10 / cb_rating_history / cb_balance_history .parquet (+ cb_ths_tables.json)
+    写: scripts/build_cb_ths_tables.py, 读 scripts/fetch_cb_ths_f10.py 下载的同花顺 F10 原始页面
+        (data/cb_raw/ths_f10/, 不进 git, 可重抓)。
+    前十大持有人 (每个披露日一组)、每一次评级动作及其发布日、每个付息日的未转股余额。
+    来历: .json 记抓取日期、用了多少只、哪些券没用及原因。
+    身份核对: 同花顺的页面只按 6 位数字取, 沪市转债和深市老债撞号时两只债混在一页
+        (118004 既是 2022 年的转债, 也是 2012 年的私募债)。页面显示的是本券 → 全用;
+        显示的是别的债, 但那只债在本券起息前已到期、且页面上起息日之后的票息与本券合同票息逐年相同
+        → 只取起息日之后的行, 不取主体评级和当前余额; 其余 → 记入 identity_failed, 一行不取。
+    谁读: build_cb_events.py (评级下调事件); cb_market/facts.py 的 E6、E7。
+    答不出来: 没用上的券在这三张表里没有行, 名单和原因在 .json。
+    局限: 持有人只有前十大、只在披露日; 余额每年只有付息日一个点; 主体评级含本券存在之前的记录。
 
 (3) 日频面板 (内存, 不落盘)                   写: cb_market/panel.py::load_panel()
     每券每日: 价格、成交额、当日真实转股价值、溢价、纯债价值、时间价值、收益三项分解、
@@ -67,9 +85,12 @@
 3. 步骤
 -------
 
-build_cb_contract_terms.py   读 东财条款原文                      写 (1)
+fetch_cb_revision_clause_text.py  读 巨潮公告 PDF / 上市公告书    写 cb_revision_clause_text.jsonl
+build_cb_contract_terms.py   读 东财条款原文 + 上面这份           写 (1)
+fetch_cb_ths_f10.py          下载同花顺 F10 页面                  写 data/cb_raw/ths_f10/
+build_cb_ths_tables.py       读 上面的原始页面 + (1) 的票息        写 (1b)
 build_cb_call_history.py     读 东财执行原因 + 巨潮公告            写 cb_call.parquet
-build_cb_events.py           读 巨潮公告 + 集思录下修记录 + cb_call  写 (2)
+build_cb_events.py           读 巨潮公告 + 集思录下修记录 + cb_call + (1b) 评级  写 (2)
 build_cb_market_facts.py     读 仓库 + (1)(2), 经 load_panel()     写 (4)(5)
 
 判断不重复: "是否满足强赎条件"的规则只在 strategies/cb_arb/call_condition.py, load_panel() 只负责
@@ -91,8 +112,15 @@ cb_market/tests/test_contracts.py 保护的后果: 条款解析抓错数字
 5. 已知的缺口
 -------------
 
-  - 下修条款 (触发比例和天数): 没有数据源, 要从募集说明书取。
-  - 持有人结构、剩余规模、日内数据: 没有数据。
+  - 下修条款: 修正后转股价的下限、股东大会表决规则没有解析。
+  - 持有人: 只有前十大; 其余持有人、机构的评级下限和回撤线没有数据。
+  - 未转股余额: 每年只有付息日一个点。季度的"转股结果公告"里有更密的数, 没有取。
+  - 日内数据: 免费源只留最近 320 根 (1 分钟线约 1.3 天, 5 分钟线约 6.7 天), 历史取不回来。
+    hkvm 从 2026-10-07 起每个交易日 16:10 积累 (strategies/cb_arb/fetch_cb_intraday_bars.py,
+    登记在 ~/projects/cron-registry 的 CB_INTRADAY_BARS_FETCH; 输出在 hkvm 的
+    ~/projects/cb_announcement_fetch/out/intraday/)。最早的一天: 5 分钟线 2026-09-22, 1 分钟线 2026-09-30。
+    还没有读它的代码, 也没有事实。
+  - 同花顺撞号页面里无法确认身份的券 (名单在 cb_ths_tables.json) 没有持有人、评级、余额。
   - 纯债价值用的是东财的估值, 不是按合同现金流自己算的; 到期赎回价已经有了, 可以自己算。
   - 强赎的赎回价 (面值加应计利息, 少数老券是固定 103-105) 没有解析。
   - 披露规则的生效日 (2020-2021 年"不强赎"公告开始大量出现) 没有核实出处。

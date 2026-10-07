@@ -59,3 +59,17 @@ def test_titles_are_classified_by_what_they_announce():
     assert ev.classify_revision_title("关于不向下修正“韦尔转债”转股价格的公告") == ev.NO_REVISION
     assert ev.classify_revision_title("关于天赐转债预计触发转股价格向下修正条件的提示性公告") == ev.REVISION_MAY_TRIGGER
     assert ev.classify_revision_title("关于向下修正万青转债转股价格的公告") == ev.REVISION_DECIDED
+
+
+def test_a_rating_cut_is_an_event_and_an_unknown_rating_is_not_guessed():
+    ratings = pd.DataFrame({
+        "ts_code": ["A"] * 4 + ["B"] * 3 + ["C"] * 2,
+        "scope": ["bond", "bond", "bond", "issuer", "bond", "bond", "bond", "issuer", "issuer"],
+        "ann_date": ["20200601", "20210601", "20220601", "20220701", "20200101", "20210101", "20220101", "20200101", "20210101"],
+        # A: AA -> AA (affirmed) -> AA- (cut); its issuer row is ignored
+        # B: AA -> a code outside the scale -> A+: the unknown step breaks the chain, no cut is invented
+        # C: only issuer rows, which mix agencies
+        "rating": ["AA", "AA", "AA-", "A", "AA", "AApi", "A+", "AA", "A"],
+    })
+    cuts = ev.rating_downgrades(ratings)
+    assert cuts.to_dict("records") == [{"ts_code": "A", "event_date": "20220601", "detail": "AA->AA-"}]

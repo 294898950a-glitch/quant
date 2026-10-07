@@ -1,7 +1,7 @@
 {
   "name": "cb_events",
-  "built_at": "2026-10-07T00:57:51.506198+00:00",
-  "events": 8767,
+  "built_at": "2026-10-07T03:54:02.954641+00:00",
+  "events": 9024,
   "bonds": 966,
   "by_type": {
     "no_revision": 2371,
@@ -13,6 +13,7 @@
     "revision_proposal": 512,
     "revision_effective": 500,
     "revision_decided": 480,
+    "rating_downgrade": 257,
     "unclassified": 9
   },
   "cninfo_archive_range": [

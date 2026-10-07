@@ -56,6 +56,10 @@ summary:
       printed and kept in verifier.LAST_RUN_EXCLUSIONS. The recorded metrics below
       were produced before these changes and their executors no longer run
       unchanged. No status, baseline or promotion was changed.
+    data_collection_added_2026_10_07: strategies/cb_arb/fetch_cb_intraday_bars.py
+      was added. It only downloads 1-minute and 5-minute bars on hkvm; no
+      strategy, valuation or backtest code reads it. No status, baseline or
+      promotion was changed.
   cost_realism_wall:
     applies_to:
     - cb_arb

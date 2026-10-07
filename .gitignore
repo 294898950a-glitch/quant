@@ -91,3 +91,6 @@ logs/research_queue_status.json
 # 脚本本身，不 commit 产出。注意 scripts/validate_entrypoints.py 是扫文件系统而不是扫 git，
 # 所以 gitignore 挡不住 markdown 禁令：study 下的散文一律用 .txt（同 docs/QUANT_WORKFLOW.txt）。
 study/*/
+
+# Raw third-party pages (rebuildable by scripts/fetch_*.py; parsed tables are tracked)
+data/cb_raw/

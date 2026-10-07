@@ -885,6 +885,15 @@ the evidence is `data/cb_arb_conv_price_lookahead_2026-10-07/`.
 - Scheduler: on 2026-10-07 neither jay-wsl nor dgx had a
   `QUANT_INTERNAL_CRON_TICK` crontab entry, and `~/projects/cron-registry` lists
   none. The scheduler description in the 2026-05-22 snapshot above is historical.
+- Convertible-bond data collected off this repo's machines: hkvm runs two
+  scheduled fetches from `~/projects/cb_announcement_fetch/` (hand-copied
+  scripts; masters in `strategies/cb_arb/`), both registered in
+  `~/projects/cron-registry`: `JISILU_ADJ_LOGS_FETCH` (00:30 daily,
+  down-revision history) and `CB_INTRADAY_BARS_FETCH` (16:10 on trading days,
+  1-minute and 5-minute bars of every listed bond and its stock into
+  `out/intraday/`). Intraday bars cannot be refetched later: the source keeps
+  320 bars. Both read hkvm's own copy of `cb_basic.parquet`, which must be
+  refreshed by hand when bonds are listed.
 - `scripts/refresh_cb_warehouse.py` extends the warehouse without rewriting
   history; it reached 2026-09-30 on 2026-10-07.
 - The orchestrator has been paused since 2026-05-27 and all ten legacy families

@@ -1,6 +1,6 @@
 """Dated issuer events: down-revision and call decisions.
 
-One row per event. The file is built by scripts/build_cb_events.py from three
+One row per event. The file is built by scripts/build_cb_events.py from four
 sources and is the only place that says "on this date the issuer did X".
 """
 
@@ -22,7 +22,28 @@ REVISION_EFFECTIVE = "revision_effective"    # new conversion price takes effect
 CALL_ANNOUNCED = "call_announced"            # forced call (cb_call.parquet)
 NO_CALL = "no_call"                          # issuer announces it will not call (cninfo)
 CALL_MAY_TRIGGER = "call_may_trigger"        # notice that the call trigger is about to be met (cninfo)
+RATING_DOWNGRADE = "rating_downgrade"        # the bond's own rating is cut; detail = 'AA->AA-' (cb_rating_history)
 UNCLASSIFIED = "unclassified"
+
+RATING_SCALE = ["AAA", "AA+", "AA", "AA-", "A+", "A", "A-", "BBB+", "BBB", "BBB-", "BB+", "BB", "BB-",
+                "B+", "B", "B-", "CCC", "CC", "C"]
+
+
+def rating_downgrades(ratings: pd.DataFrame) -> pd.DataFrame:
+    """ts_code, event_date, detail for each cut of a bond's own rating.
+
+    ratings: cb_rating_history rows. Only scope == 'bond' is read: issuer rows mix several agencies,
+    some unsolicited. A rating outside RATING_SCALE breaks the comparison chain rather than being guessed.
+    """
+    rank = {r: i for i, r in enumerate(RATING_SCALE)}
+    bond = ratings[ratings["scope"] == "bond"].assign(rank=lambda d: d["rating"].map(rank))
+    # several actions on one day: keep the worst
+    bond = bond.sort_values(["ts_code", "ann_date", "rank"]).drop_duplicates(["ts_code", "ann_date"], keep="last")
+    prev_rank = bond.groupby("ts_code")["rank"].shift()
+    prev_rating = bond.groupby("ts_code")["rating"].shift()
+    cut = bond[bond["rank"].notna() & prev_rank.notna() & (bond["rank"] > prev_rank)]
+    return pd.DataFrame({"ts_code": cut["ts_code"], "event_date": cut["ann_date"],
+                         "detail": prev_rating[cut.index] + "->" + cut["rating"]}).reset_index(drop=True)
 
 
 def classify_revision_title(title: str) -> str:

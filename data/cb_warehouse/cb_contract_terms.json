@@ -1,7 +1,7 @@
 {
   "name": "cb_contract_terms",
-  "built_at": "2026-10-06T21:12:13.468942+00:00",
-  "source": "eastmoney RPT_BOND_CB_LIST clause text (REDEEM_CLAUSE, RESALE_CLAUSE, INTEREST_RATE_EXPLAIN)",
+  "built_at": "2026-10-07T03:54:00.635581+00:00",
+  "source": "eastmoney RPT_BOND_CB_LIST clause text (REDEEM_CLAUSE, RESALE_CLAUSE, INTEREST_RATE_EXPLAIN); down-revision clause from issuer notices on cninfo (cb_revision_clause_text.jsonl)",
   "bonds": 1059,
   "status_counts": {
     "call_status": {
@@ -25,7 +25,9 @@
       "no_clause": 1
     },
     "down_revision_status": {
-      "no_source": 1059
+      "parsed": 1009,
+      "no_source": 49,
+      "unparsed": 1
     }
   },
   "call_terms": [
@@ -121,8 +123,100 @@
     "0.75": 115.0,
     "0.95": 118.0
   },
+  "down_revision_terms": [
+    {
+      "window": 30,
+      "required_days": 15,
+      "trigger_pct": 85.0,
+      "bonds": 591
+    },
+    {
+      "window": 30,
+      "required_days": 15,
+      "trigger_pct": 80.0,
+      "bonds": 178
+    },
+    {
+      "window": 30,
+      "required_days": 15,
+      "trigger_pct": 90.0,
+      "bonds": 98
+    },
+    {
+      "window": 20,
+      "required_days": 10,
+      "trigger_pct": 90.0,
+      "bonds": 70
+    },
+    {
+      "window": 20,
+      "required_days": 10,
+      "trigger_pct": 85.0,
+      "bonds": 24
+    },
+    {
+      "window": 30,
+      "required_days": 20,
+      "trigger_pct": 85.0,
+      "bonds": 15
+    },
+    {
+      "window": 30,
+      "required_days": 10,
+      "trigger_pct": 90.0,
+      "bonds": 10
+    },
+    {
+      "window": 30,
+      "required_days": 20,
+      "trigger_pct": 80.0,
+      "bonds": 8
+    },
+    {
+      "window": 30,
+      "required_days": 10,
+      "trigger_pct": 85.0,
+      "bonds": 4
+    },
+    {
+      "window": 30,
+      "required_days": 20,
+      "trigger_pct": 90.0,
+      "bonds": 4
+    },
+    {
+      "window": 20,
+      "required_days": 10,
+      "trigger_pct": 80.0,
+      "bonds": 2
+    },
+    {
+      "window": 30,
+      "required_days": 20,
+      "trigger_pct": 70.0,
+      "bonds": 2
+    },
+    {
+      "window": 15,
+      "required_days": 10,
+      "trigger_pct": 90.0,
+      "bonds": 1
+    },
+    {
+      "window": 30,
+      "required_days": 10,
+      "trigger_pct": 80.0,
+      "bonds": 1
+    },
+    {
+      "window": 30,
+      "required_days": 15,
+      "trigger_pct": 75.0,
+      "bonds": 1
+    }
+  ],
   "not_available": {
-    "down_revision_clause": "no data source carries the down-revision trigger; every bond is no_source",
+    "down_revision_clause": "read only for bonds whose issuer published a notice restating it (possible or declined revision); the rest are no_source. The floor on the new price and the shareholder-vote rule are not parsed.",
     "call_redemption_price": "not parsed; most bonds pay par plus accrued interest, some older ones a fixed 103-105"
   }
 }

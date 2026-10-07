@@ -26,8 +26,11 @@ _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from cb_market.contracts import parse_terms  # noqa: E402
+from cb_market.contracts import parse_down_revision_clause, parse_terms  # noqa: E402
 from scripts.build_cb_warehouse import WAREHOUSE_DIR, code_to_ts_code, fetch_cb_universe_em, to_ymd  # noqa: E402
+
+# written by scripts/fetch_cb_revision_clause_text.py: per bond, the clause sentence from an issuer notice
+REVISION_CLAUSE_TEXT = WAREHOUSE_DIR / "cb_revision_clause_text.jsonl"
 
 STATUS_COLUMNS = ["call_status", "maturity_redemption_status", "put_status", "coupon_status", "down_revision_status"]
 
@@ -52,6 +55,21 @@ def main() -> int:
             "coupon_text": r.get("INTEREST_RATE_EXPLAIN"),
         })
     out = pd.DataFrame(rows).drop_duplicates("ts_code").sort_values("ts_code").reset_index(drop=True)
+
+    # down-revision clause: a bond with no notice restating it is no_source, never a market default
+    clause = {}
+    with REVISION_CLAUSE_TEXT.open(encoding="utf-8") as f:
+        for line in f:
+            rec = json.loads(line)
+            if rec.get("sentence") or rec["ts_code"] not in clause:  # append-only file: a found sentence wins
+                clause[rec["ts_code"]] = rec
+    revision = pd.DataFrame([
+        {**parse_down_revision_clause((clause.get(ts) or {}).get("sentence")),
+         "down_revision_clause_text": (clause.get(ts) or {}).get("sentence"),
+         "down_revision_clause_source": (clause.get(ts) or {}).get("pdf_url")}
+        for ts in out["ts_code"]
+    ])
+    out = pd.concat([out, revision], axis=1)
     out.to_parquet(WAREHOUSE_DIR / "cb_contract_terms.parquet", index=False)
 
     call = out[out["call_status"] == "parsed"]
@@ -60,7 +78,8 @@ def main() -> int:
     meta = {
         "name": "cb_contract_terms",
         "built_at": datetime.now(timezone.utc).isoformat(),
-        "source": "eastmoney RPT_BOND_CB_LIST clause text (REDEEM_CLAUSE, RESALE_CLAUSE, INTEREST_RATE_EXPLAIN)",
+        "source": "eastmoney RPT_BOND_CB_LIST clause text (REDEEM_CLAUSE, RESALE_CLAUSE, INTEREST_RATE_EXPLAIN); "
+                  "down-revision clause from issuer notices on cninfo (cb_revision_clause_text.jsonl)",
         "bonds": int(len(out)),
         "status_counts": {c: {k: int(v) for k, v in out[c].value_counts().items()} for c in STATUS_COLUMNS},
         "call_terms": [
@@ -72,13 +91,21 @@ def main() -> int:
         "maturity_redemption_price_quantiles": {
             str(q): float(v) for q, v in out["maturity_redemption_price"].quantile([0.05, 0.25, 0.5, 0.75, 0.95]).items()
         },
+        "down_revision_terms": [
+            {"window": int(w), "required_days": int(n), "trigger_pct": float(t), "bonds": int(v)}
+            for (w, n, t), v in out[out["down_revision_status"] == "parsed"]
+            .groupby(["revision_window", "revision_required_days", "revision_trigger_pct"]).size()
+            .sort_values(ascending=False).items()
+        ],
         "not_available": {
-            "down_revision_clause": "no data source carries the down-revision trigger; every bond is no_source",
+            "down_revision_clause": "read only for bonds whose issuer published a notice restating it (possible or "
+                                    "declined revision); the rest are no_source. The floor on the new price and the "
+                                    "shareholder-vote rule are not parsed.",
             "call_redemption_price": "not parsed; most bonds pay par plus accrued interest, some older ones a fixed 103-105",
         },
     }
     (WAREHOUSE_DIR / "cb_contract_terms.json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
-    print(json.dumps({k: meta[k] for k in ("bonds", "status_counts", "call_terms")}, ensure_ascii=False, indent=1))
+    print(json.dumps({k: meta[k] for k in ("bonds", "status_counts", "call_terms", "down_revision_terms")}, ensure_ascii=False, indent=1))
     return 0
 
 

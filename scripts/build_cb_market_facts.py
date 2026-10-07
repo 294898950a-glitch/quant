@@ -45,7 +45,9 @@ KIND_TITLES = {
 
 def run() -> dict:
     panel = load_panel()
-    inputs = F.Inputs(panel=panel, events=load_events(), terms=pd.read_parquet(WAREHOUSE / "cb_contract_terms.parquet"))
+    inputs = F.Inputs(panel=panel, events=load_events(), terms=pd.read_parquet(WAREHOUSE / "cb_contract_terms.parquet"),
+                      holders=pd.read_parquet(WAREHOUSE / "cb_holders_top10.parquet"),
+                      balances=pd.read_parquet(WAREHOUSE / "cb_balance_history.parquet"))
     OUT_DIR.mkdir(parents=True, exist_ok=True)
     for old in OUT_DIR.glob("*.csv"):
         old.unlink()

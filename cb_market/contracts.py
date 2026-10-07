@@ -16,7 +16,7 @@ _CN = {"零": 0, "一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5, "�
 _NUM = r"[0-9一二两三四五六七八九十]+"
 _PCT = r"([0-9]+(?:\.[0-9]+)?)\s*[%％]"
 
-PARSED, NO_CLAUSE, UNPARSED = "parsed", "no_clause", "unparsed"
+PARSED, NO_CLAUSE, UNPARSED, NO_SOURCE = "parsed", "no_clause", "unparsed", "no_source"
 
 
 def cn_int(text: str) -> int | None:
@@ -135,6 +135,50 @@ def parse_put_clause(text: Any) -> dict[str, Any]:
     return out
 
 
+# '连续三十个交易日中至少有十五个交易日的收盘价低于当期转股价格的85%时，公司董事会有权提出…'.
+# The same shape appears in three other places and none of them is the clause:
+#   - a notice's count so far: '连续16个交易日中已有15个交易日…低于…85%，触发…' (reads as a 16-day window)
+#   - a notice's projection: '若在未来连续二十个交易日内有五个交易日…低于…85%，将触发…'
+#   - the call clause: '…不低于当期转股价格的130%'
+# So the sentence must go on to give the board its right ('有权'), and '已' / '不低于' do not match.
+# Wordings seen: '二十个连续交易日', '不高于', '有至少10个'.
+_DOWN_REVISION = re.compile(
+    rf"(?:连续({_NUM})个?交易日|({_NUM})个?连续交易日)[内中里]?有?(?:至少|不少于)?有?({_NUM})个?交易日"
+    rf"[^。；;]{{0,30}}?(?:(?<!不)低于|不高于).{{0,20}}?转股价格?的?" + _PCT
+)
+
+
+def find_down_revision_sentence(text: Any) -> str | None:
+    """The sentence of a document that states the down-revision trigger, or None."""
+    s = _clean(text)
+    for m in _DOWN_REVISION.finditer(s):
+        start = max(s.rfind("。", 0, m.start()) + 1, m.start() - 80)
+        sentence = s[start: m.end() + 60]
+        if "有权" in s[m.end(): m.end() + 60] and "修正" in s[max(0, m.start() - 200): m.end() + 120]:
+            return sentence
+    return None
+
+
+def parse_down_revision_clause(sentence: Any) -> dict[str, Any]:
+    """Window, required days and trigger ratio of the issuer's right to propose a lower conversion price."""
+    out: dict[str, Any] = {"revision_window": None, "revision_required_days": None, "revision_trigger_pct": None,
+                           "down_revision_status": NO_SOURCE}
+    s = _clean(sentence)
+    if not s:
+        return out
+    m = _DOWN_REVISION.search(s)
+    if not m or "有权" not in s[m.end(): m.end() + 60]:
+        out["down_revision_status"] = UNPARSED
+        return out
+    window, days, pct = cn_int(m.group(1) or m.group(2)), cn_int(m.group(3)), float(m.group(4))
+    if window and days and days <= window and 50.0 <= pct < 100.0:
+        out.update(revision_window=window, revision_required_days=days, revision_trigger_pct=pct,
+                   down_revision_status=PARSED)
+    else:
+        out["down_revision_status"] = UNPARSED
+    return out
+
+
 ALLOWED_TENOR_YEARS = (5, 6)
 
 
@@ -168,11 +212,12 @@ def parse_coupons(text: Any) -> dict[str, Any]:
     return {"coupons_pct": [by_year[y] for y in years], "term_years": len(years), "coupon_status": PARSED}
 
 
-NO_SOURCE = "no_source"
-
-
 def parse_terms(redeem_clause: Any, resale_clause: Any, coupon_text: Any) -> dict[str, Any]:
-    """All terms of one bond. The down-revision clause has no data source yet and says so."""
+    """Call, put and coupon terms of one bond, from the Eastmoney clause fields.
+
+    Eastmoney has no down-revision field: that clause is read separately, from the issuer's notices
+    (parse_down_revision_clause), and merged in by scripts/build_cb_contract_terms.py.
+    """
     out = {**parse_call_clause(redeem_clause), **parse_put_clause(resale_clause), **parse_coupons(coupon_text)}
     out["term_years"] = parse_tenor_years(coupon_text)  # the one reading of the tenor; cb_basic uses the same
     # '票面面值加最后一期利息' : redemption at par plus the final coupon
@@ -182,5 +227,4 @@ def parse_terms(redeem_clause: Any, resale_clause: Any, coupon_text: Any) -> dic
     ):
         out["maturity_redemption_price"] = 100.0 + out["coupons_pct"][-1]
         out["maturity_redemption_status"] = PARSED
-    out["down_revision_status"] = NO_SOURCE
     return out

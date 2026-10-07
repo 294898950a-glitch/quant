@@ -51,6 +51,8 @@ class Inputs:
     panel: pd.DataFrame
     events: pd.DataFrame
     terms: pd.DataFrame
+    holders: pd.DataFrame | None = None    # cb_holders_top10
+    balances: pd.DataFrame | None = None   # cb_balance_history
     study_start: str = "20190101"
     _cache: dict[str, Any] = field(default_factory=dict)
 
@@ -128,9 +130,25 @@ def _c3(x: Inputs):
                     "含最后一期利息。strategies/cb_arb/cb_pricer.py 的债底按面值 100 加票息算, 没有用这个价。")
 
 
-@fact("C4_down_revision_terms", "contract", "发行人什么时候有权提议下修 (触发比例和天数)。")
+@fact("C4_down_revision_terms", "contract", "发行人什么时候有权提议下修, 各券不一样: 六成是 30 天里 15 天低于转股价的 85%, 其余分散在 80% 和 90%、20 天里 10 天等十几种写法。")
 def _c4(x: Inputs):
-    return NotMeasured("没有数据源给出下修条款: 东财的条款字段只有赎回和回售, 集思录公开接口也没有。需要从募集说明书取。")
+    if "revision_trigger_pct" not in x.terms:
+        return NotMeasured("cb_contract_terms 里没有下修条款列: 先跑 fetch_cb_revision_clause_text.py 再重建条款表。")
+    t = x.terms[x.terms["down_revision_status"] == "parsed"]
+    if t.empty:
+        return NotMeasured("没有一只券的下修条款被解析出来。")
+    combos = t.groupby(["revision_window", "revision_required_days", "revision_trigger_pct"]).size().sort_values(ascending=False)
+    pct = t["revision_trigger_pct"].value_counts(normalize=True)
+    status = x.terms["down_revision_status"].value_counts()
+    return Measured({
+        "bonds_parsed": len(t), "bonds_no_source": int(status.get("no_source", 0)), "bonds_unparsed": int(status.get("unparsed", 0)),
+        "share_trigger_85": float(pct.get(85.0, 0)), "share_trigger_80": float(pct.get(80.0, 0)),
+        "share_trigger_90": float(pct.get(90.0, 0)), "share_most_common_term_set": combos.iloc[0] / len(t),
+        "distinct_term_sets": len(combos),
+    }, len(t), ("", ""), combos.rename("bonds").reset_index(),
+        "条款句子取自发行人自己的文件: 下修相关公告里复述的条款, 没有这类公告的券取上市公告书; 原句和出处 PDF 与解析值同行存放。"
+        "只认'…低于当期转股价格的 X% 时, 公司董事会有权…'这种句子; 公告里'已有 15 个交易日低于'的进度句和'未来若有 5 个交易日低于'的预告句不算。"
+        "抽 36 只同时取两个来源, 34 只两边都取到, 全部一致。修正后转股价的下限、股东大会表决规则没有解析。")
 
 
 # --------------------------------------------------------------------------- identity
@@ -288,6 +306,13 @@ _NET_NOTE = ("net_of_stock = 转债对数收益 − 正股对数收益 (溢价�
              "vs_market = 转债收益 − 全市场转债等权收益。")
 
 
+@fact("B8_rating_downgrade_reaction", "behaviour", "债项评级被下调当天转债比市场多跌约 1.5%, 之后 20 个交易日没有继续跌。")
+def _b8(x: Inputs):
+    return _event_fact(x, [ev.RATING_DOWNGRADE],
+                       "评级历史来自同花顺, 只取债项评级 (主体评级混着多家机构)。下调往往跟着正股的坏消息一起来, "
+                       "所以 net_of_stock 才是'评级本身'的那部分; 样本集中在 2021 年以后。" + _NET_NOTE)
+
+
 @fact("B2_call_announcement_reaction", "behaviour", "公告强赎时, 转债相对正股下跌: 时间价值被收走。")
 def _b2(x: Inputs):
     return _event_fact(x, [ev.CALL_ANNOUNCED], _NET_NOTE)
@@ -407,21 +432,60 @@ def _e5(x: Inputs):
                     "背后的披露规则及其生效日没有在本仓库内核实。")
 
 
+@fact("E6_top10_holders", "environment", "前十大持有人上市时合计持有近一半, 一年后降到三分之一多并稳定在那里; 前十大里八成是机构和基金。")
+def _e6(x: Inputs):
+    if x.holders is None or x.holders.empty:
+        return NotMeasured("没有 cb_holders_top10.parquet: 先跑 fetch_cb_ths_f10.py 和 build_cb_ths_tables.py。")
+    h = x.holders[x.holders["report_date"] >= x.study_start]
+    by_report = h.groupby(["ts_code", "report_date"]).agg(top10_pct=("hold_pct", "sum"), holders=("rank", "size")).reset_index()
+    by_report["nth_report"] = by_report.groupby("ts_code").cumcount()  # 0 = the listing announcement
+    typed = h.assign(holder_type=h["holder_type"].fillna("未标注 (多为个人)")).groupby("holder_type")["hold_pct"].sum()
+    detail = by_report.groupby(by_report["nth_report"].clip(upper=6))["top10_pct"].agg(["median", "count"]).reset_index()
+    first, later = by_report[by_report["nth_report"] == 0]["top10_pct"], by_report[by_report["nth_report"] >= 2]["top10_pct"]
+    return Measured({
+        "bonds": int(h["ts_code"].nunique()), "reports": len(by_report),
+        "top10_pct_median_at_listing": first.median(), "top10_pct_median_third_report_on": later.median(),
+        "share_of_top10_holdings_by_type": {k: _r(v / typed.sum()) for k, v in typed.sort_values(ascending=False).head(6).items()},
+    }, len(by_report), (str(h["report_date"].min()), str(h["report_date"].max())), detail,
+        "来自同花顺 F10, 发行人只在上市公告、半年报、年报披露前十大。hold_pct 是占当时未转股余额的比例。"
+        "第 0 次披露是上市公告 (原股东配售刚结束), 之后是定期报告。持有人类型是同花顺的标注, 个人多数没有标注。")
+
+
+@fact("E7_outstanding_balance", "environment", "转股不是匀速发生的: 前三年付息日的未转股余额中位数仍在 99% 以上, 但每年都有一批券已经转掉大半。")
+def _e7(x: Inputs):
+    if x.balances is None or x.balances.empty:
+        return NotMeasured("没有 cb_balance_history.parquet: 先跑 fetch_cb_ths_f10.py 和 build_cb_ths_tables.py。")
+    b = x.balances[x.balances["source"] == "ths_coupon_date"].merge(
+        x.terms[["ts_code", "issue_size_yi", "value_date"]].dropna(), on="ts_code")
+    b["left"] = b["balance_wan_yuan"] / (b["issue_size_yi"] * 10000.0)
+    b = b[(b["left"] > 0) & (b["left"] <= 1.02)]
+    b["year"] = ((pd.to_datetime(b["date"]) - pd.to_datetime(b["value_date"])).dt.days / 365.25).round().astype(int)
+    b = b[b["year"].between(1, 6)]
+    if b.empty:
+        return NotMeasured("付息日余额与发行规模对不上, 没有可用样本。")
+    detail = b.groupby("year")["left"].agg(median="median", p10=lambda s: s.quantile(0.1),
+                                             share_above_90pct=lambda s: (s > 0.9).mean(), bonds="count").reset_index()
+    pick = detail.set_index("year")
+    vals = {f"median_left_year_{y}": pick.loc[y, "median"] for y in pick.index}
+    vals.update({f"share_above_90pct_year_{y}": pick.loc[y, "share_above_90pct"] for y in pick.index})
+    vals["bonds"] = int(b["ts_code"].nunique())
+    return Measured(vals, len(b), (str(b["date"].min()), str(b["date"].max())), detail,
+                    "left = 付息日未转股余额 / 发行规模。余额来自同花顺 F10 的付息现金流表, 每只券每年只有付息日这一个观测; "
+                    "已经退市的券只留下它活着时的付息日, 所以越往后的年份越偏向没被强赎掉的券。日度余额没有数据。")
+
+
 # --------------------------------------------------------------------------- no data
 
-@fact("N1_holders", "environment", "谁持有转债、他们受什么约束 (评级下限、回撤线), 被迫卖出时价格怎样。")
+@fact("N1_holders", "environment", "谁持有转债、他们受什么约束 (评级下限、回撤线)。")
 def _n1(x: Inputs):
-    return NotMeasured("没有持有人数据; 评级只有最新值, 没有调级历史。")
-
-
-@fact("N2_outstanding_balance", "environment", "每只券还剩多少没转股, 以及转股进度。")
-def _n2(x: Inputs):
-    return NotMeasured("cb_basic.remain_size 全空; 集思录只给当前值, 没有历史。")
+    return NotMeasured("只有前十大持有人 (E6, 合计约三到五成), 其余持有人是谁没有数据; 机构的评级下限、回撤线是各家内部规定, 不公开。"
+                       "评级被下调时价格怎样见 B8。")
 
 
 @fact("N3_intraday", "environment", "T+0 之下的日内行为。")
 def _n3(x: Inputs):
-    return NotMeasured("没有日内数据。")
+    return NotMeasured("日内数据从 2026-09-22 (5 分钟线) / 2026-09-30 (1 分钟线) 才开始有: 免费源只留最近 320 根, 更早的历史取不回来。"
+                       "现在由 hkvm 每个交易日收盘后积累 (out/intraday/), 还不够长, 也还没有定下量什么。")
 
 
 @fact("N4_no_short_selling", "environment", "转债不能做空, 高估的券没有人能压下来。")

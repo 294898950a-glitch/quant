@@ -1,4 +1,4 @@
-from cb_market.contracts import NO_CLAUSE, NO_SOURCE, PARSED, UNPARSED, cn_int, parse_call_clause, parse_coupons, parse_put_clause, parse_terms
+from cb_market.contracts import NO_CLAUSE, NO_SOURCE, PARSED, UNPARSED, cn_int, parse_call_clause, parse_coupons, parse_down_revision_clause, find_down_revision_sentence, parse_put_clause, parse_terms
 
 CALL = ("(1)到期赎回条款在本次发行的可转债期满后五个交易日内,公司将以本次发行的可转债债券面值的107%(含最后一期年度利息)的价格"
         "向投资者赎回全部未转股的可转债。(2)有条件赎回条款在本次发行可转债的转股期内,如果公司A股股票连续三十个交易日中至少有"
@@ -50,5 +50,44 @@ def test_coupons_and_par_plus_last_coupon():
     assert terms["maturity_redemption_price"] == 101.7
 
 
-def test_down_revision_clause_says_it_has_no_source():
-    assert parse_terms(CALL, PUT, None)["down_revision_status"] == NO_SOURCE
+CLAUSE = "在本次发行的可转换公司债券存续期间，当公司股票在任意连续三十个交易日中至少有十五个交易日的收盘价低于当期转股价格的85%时，公司董事会有权提出转股价格向下修正方案"
+STATUS_LINE = "自2024年6月17日至2024年6月28日，公司股票已连续10个交易日的收盘价格低于当期转股价格32.07元/股的85%（即27.26元/股），预计后续有可能触发转股价格向下修正条件。"
+
+
+def test_down_revision_clause_is_read_from_the_clause_sentence():
+    got = parse_down_revision_clause(find_down_revision_sentence("前文。" + CLAUSE + "并提交股东大会表决。"))
+    assert (got["revision_window"], got["revision_required_days"], got["revision_trigger_pct"]) == (30, 15, 85.0)
+    assert got["down_revision_status"] == PARSED
+
+
+def test_down_revision_clause_wordings_seen_in_listing_documents():
+    for text, want in [
+        ("当公司股票在任意二十个连续交易日中至少十个交易日的收盘价低于当期转股价格85%时，公司董事会有权提出转股价格向下修正方案", (20, 10, 85.0)),
+        ("当本公司股票在任意连续30个交易日中有15个交易日的收盘价不高于当期转股价格的85%时，公司董事会有权提出转股价格向下修正方案", (30, 15, 85.0)),
+        ("当公司A股股票在任意连续20个交易日中有至少10个交易日的收盘价低于当期转股价格的85%时，公司董事会有权提出转股价格向下修正方案", (20, 10, 85.0)),
+    ]:
+        got = parse_down_revision_clause(find_down_revision_sentence(text))
+        assert (got["revision_window"], got["revision_required_days"], got["revision_trigger_pct"]) == want, text
+
+
+def test_a_notice_status_line_is_not_mistaken_for_the_clause():
+    # '已连续10个交易日…低于…85%' counts days so far; reading it as the clause would give a 10-day window
+    assert find_down_revision_sentence(STATUS_LINE) is None
+    # these two have both day counts and still are not the clause: a count so far, and a projection
+    so_far = "在连续16个交易日中，公司股票已有15个交易日的收盘价低于当期转股价格的85%（即5.24元/股），触发“旗滨转债”的转股价格向下修正条件。"
+    projection = "若在未来连续二十个交易日内，公司股票有五个交易日的收盘价低于当期转股价格的85%，将触发“寿22转债”的转股价格向下修正条款。"
+    assert find_down_revision_sentence(so_far) is None and find_down_revision_sentence(projection) is None
+    assert parse_down_revision_clause(projection)["down_revision_status"] == UNPARSED
+    assert find_down_revision_sentence(STATUS_LINE + CLAUSE) is not None
+
+
+def test_the_call_clause_is_not_taken_for_the_down_revision_clause():
+    call = "在转股期内，公司股票在任何连续30个交易日中至少20个交易日的收盘价格不低于当期转股价格的130%，公司有权赎回。转股价格修正条款见下。"
+    assert find_down_revision_sentence(call) is None
+    assert parse_down_revision_clause(find_down_revision_sentence(call + CLAUSE))["revision_trigger_pct"] == 85.0
+
+
+def test_a_bond_with_no_clause_text_is_no_source_not_a_default():
+    got = parse_down_revision_clause(None)
+    assert got["down_revision_status"] == NO_SOURCE and got["revision_trigger_pct"] is None
+    assert parse_down_revision_clause("公司董事会有权提出转股价格向下修正方案")["down_revision_status"] == UNPARSED

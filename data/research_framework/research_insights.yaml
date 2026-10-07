@@ -1,5 +1,5 @@
 schema_version: 1
-updated_at: "2026-10-07T10:00:00+08:00"
+updated_at: "2026-10-07T13:00:00+08:00"
 authority: machine
 source_migration:
   legacy_markdown_removed: true
@@ -688,11 +688,42 @@ key_insights:
       - "Executors written before this date read the old column names and fail; they are records, not tools."
       - "cb_basic.rating is still the latest rating; cb_basic.delist_date is not refreshed for bonds that left after 2026-05; transfer_end_date is uncorrected."
       - "The bond floor in cb_pricer uses par, not the contract's maturity redemption price (median 110); the effect is unmeasured."
-      - "No data: down-revision clause terms, holders, outstanding balance, intraday."
+      - "Recorded here as 'no data': down-revision clause terms, holders, outstanding balance, intraday. That was wrong for all four; see cb_missing_data_sources_found_2026_10_07."
       - "The incremental cninfo fetch was run from a workstation because hkvm no longer has akshare installed; the archive is not on a schedule."
     decision_use: |
       Before citing any August 2026 finding about cb_arb pricing, check it against this entry. Three are withdrawn.
       The measured facts to build on are in data/cb_market_facts/facts.yaml.
+
+  - id: cb_missing_data_sources_found_2026_10_07
+    priority: high
+    summary: "Four things recorded earlier the same day as 'no data source' had sources; they had not been looked for beyond the functions already in use. Down-revision clause, ten largest holders, rating history and outstanding balance are now tables in cb_warehouse; intraday bars cannot be had for the past and are collected from now on."
+    source: "scripts/fetch_cb_revision_clause_text.py, scripts/fetch_cb_ths_f10.py, scripts/build_cb_ths_tables.py, strategies/cb_arb/fetch_cb_intraday_bars.py, data/cb_market_facts/facts.yaml (C4, B8, E6, E7)"
+    facts:
+      down_revision_clause:
+        source: "the issuer's own documents on cninfo: notices that restate the clause, else the listing announcement published in the two weeks before listing"
+        bonds_parsed: 1009
+        bonds_without: 50
+        terms: {"30/15/85%": 591, "30/15/80%": 178, "30/15/90%": 98, "20/10/90%": 70, "other (11 sets)": 72}
+        check: "36 bonds sampled for both sources; 34 had both, all 34 identical"
+        error_caught: "The first version read 552 clauses from notices; 284 of them were not the clause but the notice's running count ('15 of the last 16 trading days below 85%') or projection ('if 5 of the next 20 days...'), which have the same shape. Only sentences that go on to give the board its right now count."
+      tonghuashun_f10:
+        tables: {cb_holders_top10: "60759 rows, 935 bonds", cb_rating_history: "11988 rows, 937 bonds", cb_balance_history: "3749 rows, 894 bonds"}
+        identity: "Pages are keyed by six digits, shared by a Shanghai convertible and an older Shenzhen bond in 235 cases. 129 were recovered by requiring the other bond to have matured first and the page's coupons to equal the contract's; 106 bonds are left out and listed in cb_ths_tables.json."
+      measured:
+        C4: "down-revision trigger is 85% for 63% of bonds, 80% for 19%, 90% for 18%; 15 distinct term sets"
+        B8_rating_downgrade: "231 cuts of a bond's own rating since 2019: on the day the bond falls 1.46% more than the market (t -2.1) and 0.49% net of its stock (t -2.4); no further fall over the next 20 trading days (vs market +0.9%, t 1.6). The stock had fallen 2.7% over the three weeks before."
+        E6_top10_holders: "ten largest holders own a median 48% at listing and 36% from the third report on; of top-ten holdings, institutions 45%, funds 34%, unlabelled (mostly individuals) 21%"
+        E7_balance: "median share unconverted on coupon dates: 99.98% / 99.9% / 99.1% / 91.8% / 70.8% in years 1-5; share of bonds still above 90%: 82% / 66% / 60% / 52% / 38%"
+      intraday:
+        finding: "Free sources keep only a trailing window (Tencent: 320 bars; Eastmoney longer but drops connections), so past intraday data cannot be obtained."
+        collection: "hkvm cron CB_INTRADAY_BARS_FETCH, 16:10 on trading days, registered in ~/projects/cron-registry; first days 2026-09-22 (5-minute) and 2026-09-30 (1-minute); about 750 securities"
+    limits:
+      - "Holders: ten largest only, on reporting dates. Balance: coupon dates only. Neither is daily."
+      - "B8 uses publication dates from Tonghuashun; they were not checked against the rating agencies' own notices."
+      - "Nothing reads the intraday files yet."
+      - "Still without any source: institutions' rating floors and drawdown limits; holders outside the ten largest."
+    decision_use: |
+      'No data source' in this repo's records should be read as 'none among the functions tried' unless the entry lists what was searched.
 
 open_threads:
   - id: pit_value_gap_incremental_edge

@@ -1,16 +1,16 @@
 schema_version: 1
-generated_at_utc: '2026-10-07T01:01:23.518951+00:00'
+generated_at_utc: '2026-10-07T03:56:02.912265+00:00'
 purpose: Machine-readable local data inventory for strategy ideation, proposal gating,
   and data-quality planning. This file is descriptive; it does not approve runs.
 repo_root: /Users/chen/projects/quant
 summary:
-  file_count: 13
+  file_count: 16
   category_counts:
     benchmark: 1
-    core_warehouse: 12
+    core_warehouse: 15
   format_counts:
     csv: 1
-    parquet: 12
+    parquet: 15
   unreadable_count: 0
   scope: core_database_only
 files:
@@ -28,6 +28,22 @@ files:
     trade_date:
       min: '2007-07-12'
       max: '2026-05-08'
+- path: data/cb_warehouse/cb_balance_history.parquet
+  category: core_warehouse
+  size_bytes: 45025
+  mtime_utc: '2026-10-07T03:54:02.510224+00:00'
+  readable: true
+  format: parquet
+  rows: 3749
+  columns:
+  - ts_code
+  - date
+  - balance_wan_yuan
+  - source
+  date_ranges:
+    date:
+      min: '2009-08-21'
+      max: '2026-10-07'
 - path: data/cb_warehouse/cb_basic.parquet
   category: core_warehouse
   size_bytes: 105879
@@ -99,8 +115,8 @@ files:
       max: '2027-03-22'
 - path: data/cb_warehouse/cb_contract_terms.parquet
   category: core_warehouse
-  size_bytes: 454804
-  mtime_utc: '2026-10-06T22:11:10.272828+00:00'
+  size_bytes: 534628
+  mtime_utc: '2026-10-07T03:54:00.631933+00:00'
   readable: true
   format: parquet
   rows: 1059
@@ -129,10 +145,15 @@ files:
   - coupons_pct
   - term_years
   - coupon_status
-  - down_revision_status
   - redeem_clause_text
   - resale_clause_text
   - coupon_text
+  - revision_window
+  - revision_required_days
+  - revision_trigger_pct
+  - down_revision_status
+  - down_revision_clause_text
+  - down_revision_clause_source
   date_ranges:
     value_date:
       min: '2007-07-02'
@@ -206,11 +227,11 @@ files:
       max: '2026-09-30'
 - path: data/cb_warehouse/cb_events.parquet
   category: core_warehouse
-  size_bytes: 92008
-  mtime_utc: '2026-10-07T00:57:51.505514+00:00'
+  size_bytes: 95390
+  mtime_utc: '2026-10-07T03:54:02.953990+00:00'
   readable: true
   format: parquet
-  rows: 8767
+  rows: 9024
   columns:
   - ts_code
   - event_date
@@ -221,6 +242,43 @@ files:
     event_date:
       min: '2008-02-27'
       max: '2026-10-14'
+- path: data/cb_warehouse/cb_holders_top10.parquet
+  category: core_warehouse
+  size_bytes: 606549
+  mtime_utc: '2026-10-07T03:54:02.501068+00:00'
+  readable: true
+  format: parquet
+  rows: 60759
+  columns:
+  - ts_code
+  - report_date
+  - rank
+  - holder_name
+  - holder_type
+  - hold_wan
+  - hold_pct
+  date_ranges:
+    report_date:
+      min: '2007-07-12'
+      max: '2026-09-23'
+- path: data/cb_warehouse/cb_rating_history.parquet
+  category: core_warehouse
+  size_bytes: 57170
+  mtime_utc: '2026-10-07T03:54:02.507569+00:00'
+  readable: true
+  format: parquet
+  rows: 11988
+  columns:
+  - ts_code
+  - ann_date
+  - scope
+  - rating
+  - rating_type
+  - agency
+  date_ranges:
+    ann_date:
+      min: '2006-02-13'
+      max: '2026-09-30'
 - path: data/cb_warehouse/cb_redemption_notices.parquet
   category: core_warehouse
   size_bytes: 379993
