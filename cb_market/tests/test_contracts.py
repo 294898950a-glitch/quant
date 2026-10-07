@@ -78,6 +78,11 @@ def test_a_notice_status_line_is_not_mistaken_for_the_clause():
     projection = "若在未来连续二十个交易日内，公司股票有五个交易日的收盘价低于当期转股价格的85%，将触发“寿22转债”的转股价格向下修正条款。"
     assert find_down_revision_sentence(so_far) is None and find_down_revision_sentence(projection) is None
     assert parse_down_revision_clause(projection)["down_revision_status"] == UNPARSED
+    # worded exactly like the clause, but it reports what happened; only the grant of the board's right marks the clause
+    happened = "公司股票在连续三十个交易日中有二十个交易日的收盘价低于当期转股价格的85%，已触发“某某转债”转股价格向下修正条件。"
+    assert find_down_revision_sentence(happened) is None
+    assert parse_down_revision_clause(happened)["down_revision_status"] == UNPARSED
+    assert parse_down_revision_clause(find_down_revision_sentence(happened + CLAUSE))["revision_required_days"] == 15
     assert find_down_revision_sentence(STATUS_LINE + CLAUSE) is not None
 
 
