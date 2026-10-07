@@ -29,7 +29,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 from scripts.build_cb_warehouse import WAREHOUSE_DIR  # noqa: E402
-from scripts.fetch_cb_ths_f10 import PAGES, RAW_DIR, raw_path  # noqa: E402
+from scripts.fetch_cb_ths_f10 import PAGES, raw_path  # noqa: E402
 
 RATING_LEAD_DAYS = 550  # an issue is rated before it is sold; earlier bond ratings belong to a previous user of the code
 
